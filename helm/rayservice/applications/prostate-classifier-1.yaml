@@ -20,6 +20,9 @@
             MLFLOW_TRACKING_URI: http://mlflow.rationai-mlflow:5000
       user_config:
         tile_size: 512
+        output_tile_size: 1
+        n_channels: 1
+        mpp: 0.468
         max_batch_size: 256
         batch_wait_timeout_s: 0.05
         intra_op_num_threads: 4

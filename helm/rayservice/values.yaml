@@ -5,6 +5,7 @@ workers:
 applications:
   - episeg-1
   - heatmap-builder
+  - prostate-heatmap
   - prostate-classifier-1
   - prov-gigapath
   - virchow2

@@ -1,0 +1,19 @@
+- name: prostate-heatmap
+  import_path: workflow_execution.prostate_heatmap_serve:app
+  route_prefix: /workflows/prostate-heatmap
+  runtime_env:
+    working_dir: https://github.com/RationAI/model-service/archive/refs/heads/main.zip
+  deployments:
+    - name: ProstateHeatmapApplication
+      max_ongoing_requests: 16
+      max_queued_requests: 128
+      autoscaling_config:
+        min_replicas: 0
+        max_replicas: 4
+        target_ongoing_requests: 8
+      ray_actor_options:
+        num_cpus: 8
+        memory: 12884901888
+      user_config:
+        num_threads: 8
+        max_concurrent_tasks: 16

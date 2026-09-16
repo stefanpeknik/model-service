@@ -10,6 +10,9 @@ from ray import serve
 
 class Config(TypedDict):
     tile_size: int
+    output_tile_size: int
+    n_channels: int
+    mpp: float
     model: dict[str, Any]
     max_batch_size: int
     batch_wait_timeout_s: float
@@ -29,6 +32,9 @@ class BinaryClassifier:
     """Binary classifier for tissue tiles using ONNX Runtime with GPU support."""
 
     tile_size: int
+    output_tile_size: int
+    n_channels: int
+    mpp: float
 
     def __init__(self) -> None:
         import lz4.frame
@@ -42,6 +48,9 @@ class BinaryClassifier:
         import onnxruntime as ort
 
         self.tile_size = config["tile_size"]
+        self.output_tile_size = config["output_tile_size"]
+        self.n_channels = config["n_channels"]
+        self.mpp = config["mpp"]
 
         cache_path = config["trt_cache_path"]
         os.makedirs(cache_path, exist_ok=True)
@@ -114,6 +123,14 @@ class BinaryClassifier:
 
         self.predict.set_max_batch_size(config["max_batch_size"])  # type: ignore[attr-defined]
         self.predict.set_batch_wait_timeout_s(config["batch_wait_timeout_s"])  # type: ignore[attr-defined]
+
+    def get_config(self) -> dict[str, float | int]:
+        return {
+            "tile_size": self.tile_size,
+            "output_tile_size": self.output_tile_size,
+            "n_channels": self.n_channels,
+            "mpp": self.mpp,
+        }
 
     @serve.batch
     async def predict(self, images: list[NDArray[np.uint8]]) -> list[float]:
