@@ -74,22 +74,15 @@ class ProstateHeatmapWorkflow:
         )
 
 
-class _ProstateConfiguration:
-    def __init__(
-        self,
-        *,
-        output_path: str,
-        stride_fraction: float,
-        output_tile_height: int,
-        output_tile_width: int,
-    ) -> None:
-        self.output_path = output_path
-        self.stride_fraction = stride_fraction
-        self.output_tile_height = output_tile_height
-        self.output_tile_width = output_tile_width
+@dataclass(frozen=True, slots=True)
+class ProstateConfiguration:
+    output_path: str
+    stride_fraction: float
+    output_tile_height: int
+    output_tile_width: int
 
 
-def validate_configuration(value: Mapping[str, object]) -> _ProstateConfiguration:
+def validate_configuration(value: Mapping[str, object]) -> ProstateConfiguration:
     expected = {
         "output_path",
         "stride_fraction",
@@ -123,7 +116,7 @@ def validate_configuration(value: Mapping[str, object]) -> _ProstateConfiguratio
         raise InvalidWorkflowInvocation(
             "output tile dimensions must be positive integers"
         )
-    return _ProstateConfiguration(
+    return ProstateConfiguration(
         output_path=output_path,
         stride_fraction=float(stride_fraction),
         output_tile_height=output_tile_height,
