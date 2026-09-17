@@ -3,7 +3,13 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+
+    from workflow_execution.contracts import JsonValue
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -43,30 +49,72 @@ class MissingWorkflowApplicationsError(RuntimeError):
 
 
 class WorkflowCatalog:
-    def __init__(self, definitions: tuple[WorkflowDefinition, ...]) -> None:
+    def __init__(
+        self,
+        definitions: tuple[WorkflowDefinition, ...],
+        *,
+        configuration_validators: Mapping[
+            str,
+            Callable[[Mapping[str, JsonValue]], object],
+        ]
+        | None = None,
+    ) -> None:
         by_id = {definition.identifier: definition for definition in definitions}
         if len(by_id) != len(definitions):
             raise ValueError("workflow identifiers must be unique")
         self._definitions = by_id
+        self._configuration_validators = dict(configuration_validators or {})
 
     @classmethod
     def default(cls) -> WorkflowCatalog:
-        return cls.from_directory(ROOT / "workflow-definitions")
+        from workflow_execution.prostate_heatmap import validate_configuration
+
+        return cls.from_directory(
+            ROOT / "workflow-definitions",
+            configuration_validators={
+                "prostate-heatmap": validate_configuration,
+            },
+        )
 
     @classmethod
-    def from_directory(cls, directory: Path) -> WorkflowCatalog:
+    def from_directory(
+        cls,
+        directory: Path,
+        *,
+        configuration_validators: Mapping[
+            str,
+            Callable[[Mapping[str, JsonValue]], object],
+        ]
+        | None = None,
+    ) -> WorkflowCatalog:
         definitions = tuple(
             _load_definition(path) for path in sorted(directory.glob("*.yaml"))
         )
         if not definitions:
             raise ValueError(f"no workflow definitions found in {directory}")
-        return cls(definitions)
+        return cls(
+            definitions,
+            configuration_validators=configuration_validators,
+        )
 
     def get(self, workflow_id: str) -> WorkflowDefinition:
         try:
             return self._definitions[workflow_id]
         except KeyError as error:
             raise UnknownWorkflow(workflow_id) from error
+
+    @property
+    def identifiers(self) -> frozenset[str]:
+        return frozenset(self._definitions)
+
+    def validate_configuration(
+        self,
+        workflow_id: str,
+        configuration: Mapping[str, JsonValue],
+    ) -> None:
+        validator = self._configuration_validators.get(workflow_id)
+        if validator is not None:
+            validator(configuration)
 
     def validate_deployed(self, deployed_workflow_ids: set[str]) -> None:
         missing = tuple(sorted(self._definitions.keys() - deployed_workflow_ids))

@@ -5,7 +5,7 @@ metadata:
   namespace: {{ .Release.Namespace | default "rationai-jobs-ns" }}
 spec:
   rayClusterConfig:
-    rayVersion: 2.53.0
+    rayVersion: 2.58.0
     enableInTreeAutoscaling: true
     autoscalerOptions:
       idleTimeoutSeconds: 60
@@ -27,7 +27,7 @@ spec:
               type: RuntimeDefault
           containers:
             - name: ray-head
-              image: rayproject/ray:2.53.0-py312
+              image: rayproject/ray:2.58.0-py312
               imagePullPolicy: Always
               resources:
                 limits:
@@ -55,7 +55,7 @@ spec:
                   drop: ["ALL"]
     workerGroupSpecs:
 {{- range $workerName := .Values.workers }}
-{{- $workerContent := printf "workers/%s.yaml" $workerName | $.Files.Get | fromYaml }}
+{{- $workerContent := tpl (printf "workers/%s.yaml" $workerName | $.Files.Get) $ | fromYaml }}
       - {{ toYaml $workerContent | nindent 8 | trim }}
 {{- end }}
   serveConfigV2: |

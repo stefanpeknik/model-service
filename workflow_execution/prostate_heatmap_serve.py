@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TypedDict
 
 from fastapi import FastAPI, HTTPException, Request, status
@@ -73,9 +75,28 @@ class ProstateHeatmapApplication:
             num_threads=config["num_threads"],
             max_concurrent_tasks=config["max_concurrent_tasks"],
         )
+        access_adapters = None
+        gateway_factory_path = os.environ.get("EMPAIA_GATEWAY_FACTORY")
+        if gateway_factory_path:
+            from execution_scheduler.empaia import load_gateway_factory
+            from workflow_execution.empaia_access import EmpaiaInputAccessAdapter
+
+            workspace_root = Path(
+                os.environ.get(
+                    "EMPAIA_WORKSPACE_ROOT",
+                    "/mnt/model-service-executions",
+                )
+            )
+            access_adapters = {
+                "empaia": EmpaiaInputAccessAdapter(
+                    load_gateway_factory(gateway_factory_path),
+                    workspace_root,
+                )
+            }
         self._application = WorkflowApplication(
             definition,
             ProstateHeatmapWorkflow(processor),
+            access_adapters=access_adapters,
         )
 
     @fastapi.post(

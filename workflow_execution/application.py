@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
@@ -22,7 +23,7 @@ from workflow_execution.contracts import (
 
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Awaitable, Mapping
 
     from workflow_execution.catalog import WorkflowDefinition
 
@@ -40,7 +41,10 @@ class WorkflowInputAccess(Protocol):
 
 
 class WorkflowInputAccessAdapter(Protocol):
-    def create(self, invocation: WorkflowInvocation) -> WorkflowInputAccess: ...
+    def create(
+        self,
+        invocation: WorkflowInvocation,
+    ) -> WorkflowInputAccess | Awaitable[WorkflowInputAccess]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,8 +144,8 @@ class WorkflowApplication:
             self._access_adapters.update(access_adapters)
 
     async def run(self, invocation: WorkflowInvocation) -> WorkflowResult:
-        self._validate_invocation(invocation)
-        access = self._create_access(invocation)
+        validate_workflow_invocation(self._definition, invocation)
+        access = await self._create_access(invocation)
         context = WorkflowContext(
             inputs=access,
             configuration=invocation.resolved_configuration,
@@ -172,27 +176,23 @@ class WorkflowApplication:
                 safe_message="workflow failed unexpectedly",
                 retryable=True,
             ) from error
+        finally:
+            close = getattr(access, "aclose", None)
+            if close is not None:
+                await close()
         return result
 
-    def _validate_invocation(self, invocation: WorkflowInvocation) -> None:
-        deadline = invocation.deadline_at
-        if deadline.tzinfo is None or deadline.utcoffset() is None:
-            raise InvalidWorkflowInvocation("deadline_at must include a timezone")
-        if deadline <= datetime.now(UTC):
-            raise InvalidWorkflowInvocation("deadline_at must be in the future")
-        if set(invocation.inputs) != set(self._definition.inputs):
-            raise InvalidWorkflowInvocation("inputs do not match workflow definition")
-        for name, definition in self._definition.inputs.items():
-            if invocation.inputs[name].kind not in definition.kinds:
-                raise InvalidWorkflowInvocation(
-                    f"input {name!r} does not match workflow definition"
-                )
-
-    def _create_access(self, invocation: WorkflowInvocation) -> WorkflowInputAccess:
+    async def _create_access(
+        self,
+        invocation: WorkflowInvocation,
+    ) -> WorkflowInputAccess:
         adapter = self._access_adapters.get(invocation.input_access.kind)
         if adapter is None:
             raise InvalidWorkflowInvocation("unsupported input access kind")
-        return adapter.create(invocation)
+        access = adapter.create(invocation)
+        if inspect.isawaitable(access):
+            return await access
+        return access
 
     def _validate_result(
         self,
@@ -230,3 +230,23 @@ class WorkflowApplication:
                 raise WorkflowContractViolation(
                     f"inline output {name!r} is not JSON-compatible"
                 )
+
+
+def validate_workflow_invocation(
+    definition: WorkflowDefinition,
+    invocation: WorkflowInvocation,
+    *,
+    now: datetime | None = None,
+) -> None:
+    deadline = invocation.deadline_at
+    if deadline.tzinfo is None or deadline.utcoffset() is None:
+        raise InvalidWorkflowInvocation("deadline_at must include a timezone")
+    if deadline <= (now or datetime.now(UTC)):
+        raise InvalidWorkflowInvocation("deadline_at must be in the future")
+    if set(invocation.inputs) != set(definition.inputs):
+        raise InvalidWorkflowInvocation("inputs do not match workflow definition")
+    for name, input_definition in definition.inputs.items():
+        if invocation.inputs[name].kind not in input_definition.kinds:
+            raise InvalidWorkflowInvocation(
+                f"input {name!r} does not match workflow definition"
+            )

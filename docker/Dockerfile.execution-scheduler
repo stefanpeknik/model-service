@@ -1,0 +1,22 @@
+FROM ghcr.io/astral-sh/uv:0.8.15 AS uv
+
+FROM python:3.12-slim
+
+COPY --from=uv /uv /usr/local/bin/uv
+
+RUN uv pip install --system --no-cache \
+    "cryptography>=45.0.0" \
+    "fastapi>=0.115.0" \
+    "httpx>=0.27.0" \
+    "psycopg[binary]>=3.2.0" \
+    "uvicorn>=0.30.0"
+
+WORKDIR /app
+COPY execution_scheduler execution_scheduler
+COPY workflow_execution workflow_execution
+COPY workflow-definitions workflow-definitions
+
+USER 10001:10001
+EXPOSE 8080
+
+CMD ["uvicorn", "execution_scheduler.main:app", "--host", "0.0.0.0", "--port", "8080"]

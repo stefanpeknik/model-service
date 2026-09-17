@@ -40,7 +40,7 @@ class ProstateHeatmapWorkflow:
         self._processor = processor
 
     async def run(self, context: WorkflowContext) -> WorkflowResult:
-        configuration = _configuration(context.configuration)
+        configuration = validate_configuration(context.configuration)
         final_path = context.output_path(configuration.output_path)
         final_path.parent.mkdir(parents=True, exist_ok=True)
         temporary_path = final_path.with_name(
@@ -89,7 +89,7 @@ class _ProstateConfiguration:
         self.output_tile_width = output_tile_width
 
 
-def _configuration(value: Mapping[str, object]) -> _ProstateConfiguration:
+def validate_configuration(value: Mapping[str, object]) -> _ProstateConfiguration:
     expected = {
         "output_path",
         "stride_fraction",

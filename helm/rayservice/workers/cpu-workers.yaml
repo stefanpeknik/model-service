@@ -11,7 +11,7 @@ template:
         type: RuntimeDefault
     containers:
       - name: ray-worker
-        image: cerit.io/rationai/model-service:2.55.0
+        image: cerit.io/rationai/model-service:2.58.0
         imagePullPolicy: Always
         resources:
           limits:
@@ -23,6 +23,12 @@ template:
         env:
           - name: HTTPS_PROXY
             value: http://proxy.ics.muni.cz:3128
+{{- if .Values.executionScheduler.empaia.enabled }}
+          - name: EMPAIA_GATEWAY_FACTORY
+            value: {{ .Values.executionScheduler.empaia.gatewayFactory | quote }}
+          - name: EMPAIA_WORKSPACE_ROOT
+            value: {{ .Values.executionScheduler.empaia.workspaceRoot | quote }}
+{{- end }}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -45,6 +51,10 @@ template:
             mountPath: /mnt/cache
           - name: huggingface-cache
             mountPath: /mnt/huggingface_cache
+{{- if .Values.executionScheduler.empaia.enabled }}
+          - name: empaia-workspace
+            mountPath: {{ .Values.executionScheduler.empaia.workspaceRoot | quote }}
+{{- end }}
     volumes:
       - name: data
         persistentVolumeClaim:
@@ -64,3 +74,8 @@ template:
       - name: huggingface-cache
         persistentVolumeClaim:
           claimName: huggingface-cache-pvc
+{{- if .Values.executionScheduler.empaia.enabled }}
+      - name: empaia-workspace
+        persistentVolumeClaim:
+          claimName: {{ .Values.executionScheduler.empaia.workspaceClaim | quote }}
+{{- end }}

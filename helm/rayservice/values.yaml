@@ -9,3 +9,39 @@ applications:
   - prostate-classifier-1
   - prov-gigapath
   - virchow2
+
+executionScheduler:
+  enabled: false
+  replicas: 2
+  image:
+    repository: cerit.io/rationai/model-service-execution-scheduler
+    tag: ""
+    pullPolicy: IfNotPresent
+  database:
+    existingSecret: ""
+    urlKey: database-url
+  encryption:
+    existingSecret: ""
+    keyKey: provider-context-key
+  rayServeOrigin: ""
+  leaseSeconds: 60
+  workerPollSeconds: 0.5
+  processingAttempts: 3
+  providerFinishAttempts: 3
+  initialBackoffSeconds: 5
+  maximumBackoffSeconds: 300
+  defaultDeadlineSeconds: 21600
+  maximumDeadlineSeconds: 86400
+  perWorkflowLimit: 1
+  empaia:
+    enabled: false
+    gatewayFactory: ""
+    workspaceRoot: /mnt/model-service-executions
+    workspaceClaim: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 1
+      memory: 512Mi

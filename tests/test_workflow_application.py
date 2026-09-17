@@ -26,6 +26,8 @@ from workflow_execution.contracts import (
     WorkflowInvocation,
     WorkflowResult,
     invocation_from_dict,
+    invocation_to_dict,
+    result_from_dict,
     result_to_dict,
 )
 from workflow_execution.prostate_heatmap import (
@@ -437,19 +439,27 @@ class WorkflowApplicationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(invocation.inputs["slide"].kind, "shared_path")
         self.assertEqual(
+            invocation_from_dict(invocation_to_dict(invocation)), invocation
+        )
+        serialized_result = {
+            "outputs": {
+                "label": {
+                    "kind": "inline",
+                    "value": "outputs/heatmap.tiff",
+                }
+            }
+        }
+        self.assertEqual(
             result_to_dict(
                 WorkflowResult(
                     outputs={"label": InlineOutput(value="outputs/heatmap.tiff")}
                 )
             ),
-            {
-                "outputs": {
-                    "label": {
-                        "kind": "inline",
-                        "value": "outputs/heatmap.tiff",
-                    }
-                }
-            },
+            serialized_result,
+        )
+        self.assertEqual(
+            result_from_dict(serialized_result),
+            WorkflowResult(outputs={"label": InlineOutput("outputs/heatmap.tiff")}),
         )
 
     @staticmethod

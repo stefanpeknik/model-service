@@ -31,7 +31,7 @@ RUN cd /tmp && \
     ninja -C builddir install
 
 
-FROM rayproject/ray:2.53.0-py312
+FROM rayproject/ray:2.58.0-py312
 
 COPY --from=builder /usr/local/ /usr/local/
 

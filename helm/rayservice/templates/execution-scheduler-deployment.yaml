@@ -1,0 +1,114 @@
+{{- if .Values.executionScheduler.enabled }}
+{{- $imageTag := required "executionScheduler.image.tag is required" .Values.executionScheduler.image.tag }}
+{{- $databaseSecret := required "executionScheduler.database.existingSecret is required" .Values.executionScheduler.database.existingSecret }}
+{{- $encryptionSecret := required "executionScheduler.encryption.existingSecret is required" .Values.executionScheduler.encryption.existingSecret }}
+{{- if .Values.executionScheduler.empaia.enabled }}
+{{- $gatewayFactory := required "executionScheduler.empaia.gatewayFactory is required" .Values.executionScheduler.empaia.gatewayFactory }}
+{{- $workspaceClaim := required "executionScheduler.empaia.workspaceClaim is required" .Values.executionScheduler.empaia.workspaceClaim }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-execution-scheduler
+  namespace: {{ .Release.Namespace | default "rationai-jobs-ns" }}
+  labels:
+    app.kubernetes.io/name: model-service-execution-scheduler
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.executionScheduler.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: model-service-execution-scheduler
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: model-service-execution-scheduler
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: execution-scheduler
+          image: "{{ .Values.executionScheduler.image.repository }}:{{ $imageTag }}"
+          imagePullPolicy: {{ .Values.executionScheduler.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $databaseSecret }}
+                  key: {{ .Values.executionScheduler.database.urlKey }}
+            - name: PROVIDER_CONTEXT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $encryptionSecret }}
+                  key: {{ .Values.executionScheduler.encryption.keyKey }}
+            - name: RAY_SERVE_ORIGIN
+              value: {{ default (printf "http://%s-serve-svc.%s.svc.cluster.local:8000" .Release.Name (.Release.Namespace | default "rationai-jobs-ns")) .Values.executionScheduler.rayServeOrigin | quote }}
+            - name: LEASE_SECONDS
+              value: {{ .Values.executionScheduler.leaseSeconds | quote }}
+            - name: WORKER_POLL_SECONDS
+              value: {{ .Values.executionScheduler.workerPollSeconds | quote }}
+            - name: PROCESSING_ATTEMPTS
+              value: {{ .Values.executionScheduler.processingAttempts | quote }}
+            - name: PROVIDER_FINISH_ATTEMPTS
+              value: {{ .Values.executionScheduler.providerFinishAttempts | quote }}
+            - name: INITIAL_BACKOFF_SECONDS
+              value: {{ .Values.executionScheduler.initialBackoffSeconds | quote }}
+            - name: MAXIMUM_BACKOFF_SECONDS
+              value: {{ .Values.executionScheduler.maximumBackoffSeconds | quote }}
+            - name: DEFAULT_DEADLINE_SECONDS
+              value: {{ .Values.executionScheduler.defaultDeadlineSeconds | quote }}
+            - name: MAXIMUM_DEADLINE_SECONDS
+              value: {{ .Values.executionScheduler.maximumDeadlineSeconds | quote }}
+            - name: PER_WORKFLOW_LIMIT
+              value: {{ .Values.executionScheduler.perWorkflowLimit | quote }}
+            {{- if .Values.executionScheduler.empaia.enabled }}
+            - name: EMPAIA_GATEWAY_FACTORY
+              value: {{ .Values.executionScheduler.empaia.gatewayFactory | quote }}
+            - name: EMPAIA_WORKSPACE_ROOT
+              value: {{ .Values.executionScheduler.empaia.workspaceRoot | quote }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.executionScheduler.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsUser: 10001
+            runAsGroup: 10001
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.executionScheduler.empaia.enabled }}
+            - name: empaia-workspace
+              mountPath: {{ .Values.executionScheduler.empaia.workspaceRoot | quote }}
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.executionScheduler.empaia.enabled }}
+        - name: empaia-workspace
+          persistentVolumeClaim:
+            claimName: {{ .Values.executionScheduler.empaia.workspaceClaim | quote }}
+        {{- end }}
+{{- end }}

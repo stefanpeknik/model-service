@@ -112,10 +112,27 @@ def invocation_from_dict(value: object) -> WorkflowInvocation:
     )
 
 
+def invocation_to_dict(invocation: WorkflowInvocation) -> dict[str, object]:
+    return {
+        "inputs": {name: asdict(value) for name, value in invocation.inputs.items()},
+        "resolved_configuration": invocation.resolved_configuration,
+        "input_access": asdict(invocation.input_access),
+        "deadline_at": invocation.deadline_at.isoformat(),
+    }
+
+
 def result_to_dict(result: WorkflowResult) -> dict[str, object]:
     return {
         "outputs": {name: asdict(output) for name, output in result.outputs.items()}
     }
+
+
+def result_from_dict(value: object) -> WorkflowResult:
+    mapping = _mapping(value, "workflow result")
+    raw_outputs = _mapping(mapping.get("outputs"), "outputs")
+    return WorkflowResult(
+        outputs={name: _output(output) for name, output in raw_outputs.items()}
+    )
 
 
 def is_json_value(value: object) -> bool:
@@ -148,6 +165,24 @@ def _input(value: object) -> WorkflowInput:
             raise ValueError("provider input requires a non-empty name")
         return ProviderInput(name=name)
     raise ValueError("workflow input has an unknown kind")
+
+
+def _output(value: object) -> WorkflowOutput:
+    mapping = _mapping(value, "workflow output")
+    kind = mapping.get("kind")
+    if kind == "inline":
+        inline_value = mapping.get("value")
+        _ensure_json(inline_value, "inline output")
+        return InlineOutput(value=inline_value)
+    if kind == "shared_artifact":
+        path = mapping.get("path")
+        media_type = mapping.get("media_type")
+        if not isinstance(path, str) or not path:
+            raise ValueError("shared artifact requires a non-empty path")
+        if media_type is not None and not isinstance(media_type, str):
+            raise ValueError("shared artifact media_type must be a string or null")
+        return SharedArtifact(path=path, media_type=media_type)
+    raise ValueError("workflow output has an unknown kind")
 
 
 def _mapping(value: object, name: str) -> dict[str, Any]:
