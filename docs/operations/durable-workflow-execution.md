@@ -4,6 +4,14 @@ The execution scheduler accepts workflow requests, stores them in PostgreSQL,
 and dispatches due work to Ray Serve. It is a long-lived deployment. It does
 not create a Kubernetes pod for each execution.
 
+The same public service also exposes synchronous workflow execution at
+`POST /v1/workflows/{workflow_id}/run`. Scheduling uses the separate
+`POST /v1/workflows/{workflow_id}/schedule` operation. Both paths dispatch the
+same workflow invocation to the same Ray Serve application, so clients need
+one model-service origin and synchronous processing cannot drift from scheduled
+processing. A synchronous request is never converted into a durable execution;
+cancelling the caller's request cancels its in-flight HTTP dispatch.
+
 ## Initial operating values
 
 | Setting | Default | Purpose |

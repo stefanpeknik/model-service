@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import unittest
 from datetime import UTC, datetime, timedelta
 
 from httpx import ASGITransport, AsyncClient
+from starlette.types import Message, Scope
 
 from execution_scheduler.api import create_execution_app
 from execution_scheduler.contracts import (
@@ -12,18 +15,27 @@ from execution_scheduler.contracts import (
     ScheduleResult,
     SchedulingUnavailableError,
 )
-from execution_scheduler.dispatch import InMemoryWorkflowDispatch
+from execution_scheduler.dispatch import (
+    ConfirmedDispatchRejectionError,
+    InMemoryWorkflowDispatch,
+)
 from execution_scheduler.repository import InMemoryExecutionRepository
 from execution_scheduler.scheduler import ExecutionScheduler, ExecutionWorker
+from execution_scheduler.synchronous import SynchronousWorkflowService
 from tests.test_execution_scheduler import StandaloneProvider
-from workflow_execution.contracts import SharedArtifact, WorkflowResult
+from workflow_execution.catalog import WorkflowCatalog
+from workflow_execution.contracts import (
+    InlineOutput,
+    SharedArtifact,
+    WorkflowResult,
+)
 
 
 class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         now = datetime(2026, 9, 17, 8, tzinfo=UTC)
         provider = StandaloneProvider()
-        scheduler = ExecutionScheduler(
+        self.scheduler = ExecutionScheduler(
             repository=InMemoryExecutionRepository(clock=lambda: now),
             providers={provider.name: provider},
             known_workflows={"prostate-heatmap"},
@@ -32,7 +44,7 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
             clock=lambda: now,
         )
         self.client = AsyncClient(
-            transport=ASGITransport(app=create_execution_app(scheduler)),
+            transport=ASGITransport(app=create_execution_app(self.scheduler)),
             base_url="http://model-service",
         )
 
@@ -141,6 +153,192 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
             },
         )
 
+    async def test_synchronous_workflow_runs_through_the_same_public_origin(
+        self,
+    ) -> None:
+        result = WorkflowResult(outputs={"score": InlineOutput(value=0.9)})
+        runner = SynchronousWorkflowService(
+            WorkflowCatalog.default(),
+            InMemoryWorkflowDispatch({"prostate-heatmap": lambda _invocation: result}),
+        )
+        async with AsyncClient(
+            transport=ASGITransport(
+                app=create_execution_app(
+                    self.scheduler,
+                    workflow_runner=runner,
+                )
+            ),
+            base_url="http://model-service",
+        ) as client:
+            response = await client.post(
+                "/v1/workflows/prostate-heatmap/run",
+                json=self._workflow_invocation(),
+            )
+            unknown = await client.post(
+                "/v1/workflows/missing/run",
+                json=self._workflow_invocation(),
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {"outputs": {"score": {"kind": "inline", "value": 0.9}}},
+        )
+        self.assertEqual(unknown.status_code, 404)
+        self.assertEqual(unknown.json()["detail"]["code"], "unknown_workflow")
+
+    async def test_synchronous_workflow_validates_before_dispatch(self) -> None:
+        async def reject_dispatch(_invocation: object) -> WorkflowResult:
+            raise AssertionError("invalid invocation was dispatched")
+
+        runner = SynchronousWorkflowService(
+            WorkflowCatalog.default(),
+            InMemoryWorkflowDispatch({"prostate-heatmap": reject_dispatch}),
+        )
+        body = self._workflow_invocation()
+        body["resolved_configuration"] = {}
+        async with AsyncClient(
+            transport=ASGITransport(
+                app=create_execution_app(
+                    self.scheduler,
+                    workflow_runner=runner,
+                )
+            ),
+            base_url="http://model-service",
+        ) as client:
+            response = await client.post(
+                "/v1/workflows/prostate-heatmap/run",
+                json=body,
+            )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.json()["detail"]["code"],
+            "invalid_workflow_invocation",
+        )
+
+    async def test_synchronous_backpressure_preserves_retry_after(self) -> None:
+        async def reject_for_capacity(_invocation: object) -> WorkflowResult:
+            raise ConfirmedDispatchRejectionError(timedelta(seconds=7))
+
+        runner = SynchronousWorkflowService(
+            WorkflowCatalog.default(),
+            InMemoryWorkflowDispatch({"prostate-heatmap": reject_for_capacity}),
+        )
+        async with AsyncClient(
+            transport=ASGITransport(
+                app=create_execution_app(
+                    self.scheduler,
+                    workflow_runner=runner,
+                )
+            ),
+            base_url="http://model-service",
+        ) as client:
+            response = await client.post(
+                "/v1/workflows/prostate-heatmap/run",
+                json=self._workflow_invocation(),
+            )
+
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.headers["retry-after"], "7")
+        self.assertEqual(
+            response.json()["detail"]["code"],
+            "workflow_backpressure",
+        )
+        self.assertTrue(response.json()["detail"]["retryable"])
+
+    async def test_synchronous_caller_cancellation_cancels_dispatch(self) -> None:
+        started = asyncio.Event()
+        cancelled = asyncio.Event()
+
+        async def wait_for_cancellation(_invocation: object) -> WorkflowResult:
+            started.set()
+            try:
+                await asyncio.Event().wait()
+                raise AssertionError("dispatch unexpectedly completed")
+            finally:
+                cancelled.set()
+
+        runner = SynchronousWorkflowService(
+            WorkflowCatalog.default(),
+            InMemoryWorkflowDispatch({"prostate-heatmap": wait_for_cancellation}),
+        )
+        async with AsyncClient(
+            transport=ASGITransport(
+                app=create_execution_app(
+                    self.scheduler,
+                    workflow_runner=runner,
+                )
+            ),
+            base_url="http://model-service",
+        ) as client:
+            request = asyncio.create_task(
+                client.post(
+                    "/v1/workflows/prostate-heatmap/run",
+                    json=self._workflow_invocation(),
+                )
+            )
+            await asyncio.wait_for(started.wait(), timeout=1)
+            request.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await request
+            await asyncio.wait_for(cancelled.wait(), timeout=1)
+
+    async def test_synchronous_asgi_disconnect_cancels_dispatch(self) -> None:
+        started = asyncio.Event()
+        cancelled = asyncio.Event()
+
+        async def wait_for_disconnect(_invocation: object) -> WorkflowResult:
+            started.set()
+            try:
+                await asyncio.Event().wait()
+                raise AssertionError("dispatch unexpectedly completed")
+            finally:
+                cancelled.set()
+
+        runner = SynchronousWorkflowService(
+            WorkflowCatalog.default(),
+            InMemoryWorkflowDispatch({"prostate-heatmap": wait_for_disconnect}),
+        )
+        app = create_execution_app(self.scheduler, workflow_runner=runner)
+        body = json.dumps(self._workflow_invocation()).encode()
+        request_sent = False
+
+        async def receive() -> Message:
+            nonlocal request_sent
+            if not request_sent:
+                request_sent = True
+                return {"type": "http.request", "body": body, "more_body": False}
+            await started.wait()
+            return {"type": "http.disconnect"}
+
+        async def send(_message: Message) -> None:
+            pass
+
+        scope: Scope = {
+            "type": "http",
+            "asgi": {"version": "3.0"},
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "http",
+            "path": "/v1/workflows/prostate-heatmap/run",
+            "raw_path": b"/v1/workflows/prostate-heatmap/run",
+            "query_string": b"",
+            "root_path": "",
+            "headers": [
+                (b"host", b"model-service"),
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(body)).encode()),
+            ],
+            "client": ("127.0.0.1", 12345),
+            "server": ("model-service", 80),
+            "state": {},
+        }
+
+        with self.assertRaises(asyncio.CancelledError):
+            await app(scope, receive, send)
+        await asyncio.wait_for(cancelled.wait(), timeout=1)
+
     async def test_unknown_workflow_and_execution_have_distinct_errors(self) -> None:
         unknown_workflow = await self.client.post(
             "/v1/workflows/missing/schedule",
@@ -229,6 +427,29 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json()["detail"]["code"], "scheduling_unavailable")
         self.assertTrue(response.json()["detail"]["retryable"])
+
+    @staticmethod
+    def _workflow_invocation() -> dict[str, object]:
+        return {
+            "inputs": {
+                "slide": {"kind": "shared_path", "path": "slide.svs"},
+                "region_of_interest": {
+                    "kind": "shared_path",
+                    "path": "roi.tiff",
+                },
+            },
+            "resolved_configuration": {
+                "output_path": "outputs/heatmap.tiff",
+                "stride_fraction": 0.5,
+                "output_tile_height": 256,
+                "output_tile_width": 256,
+            },
+            "input_access": {
+                "kind": "shared_storage",
+                "state": {"root": "/shared"},
+            },
+            "deadline_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+        }
 
 
 if __name__ == "__main__":

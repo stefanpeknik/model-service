@@ -22,6 +22,7 @@ from execution_scheduler.scheduler import (
 from execution_scheduler.security import ProtectedContextCipher
 from execution_scheduler.settings import SchedulerSettings
 from execution_scheduler.standalone import StandaloneProviderAdapter
+from execution_scheduler.synchronous import SynchronousWorkflowService
 from workflow_execution.catalog import WorkflowCatalog
 
 
@@ -62,6 +63,7 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
         providers[empaia_provider.name] = empaia_provider
     active_work = ActiveWorkRegistry()
     client = httpx.AsyncClient()
+    dispatch = HTTPWorkflowDispatch(client, origin=config.ray_serve_origin)
     scheduler = ExecutionScheduler(
         repository=repository,
         providers=providers,
@@ -73,7 +75,7 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
     worker = ExecutionWorker(
         repository=repository,
         providers=providers,
-        dispatch=HTTPWorkflowDispatch(client, origin=config.ray_serve_origin),
+        dispatch=dispatch,
         owner=f"execution-scheduler-{uuid4()}",
         lease_duration=config.lease_duration,
         active_work=active_work,
@@ -96,6 +98,7 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
 
     return create_execution_app(
         scheduler,
+        workflow_runner=SynchronousWorkflowService(catalog, dispatch),
         lifespan=lifespan,
         deployment_health=WorkflowDeploymentHealth(
             client,
