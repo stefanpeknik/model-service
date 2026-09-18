@@ -38,7 +38,7 @@ class WorkflowDeploymentHealth:
             if response.status_code != 200:
                 return tuple(sorted(self._workflow_ids))
             routes = response.json()
-        except Exception:  # noqa: BLE001 - readiness must fail closed
+        except Exception:
             return tuple(sorted(self._workflow_ids))
         if not isinstance(routes, dict):
             return tuple(sorted(self._workflow_ids))

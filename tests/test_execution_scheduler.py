@@ -7,10 +7,12 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
+from execution_scheduler.active_work import ActiveWorkRegistry
 from execution_scheduler.contracts import (
     InvalidScheduleRequestError,
     ScheduleConflictError,
     ScheduleRequest,
+    SchedulingUnavailableError,
 )
 from execution_scheduler.dispatch import (
     ConfirmedDispatchRejectionError,
@@ -29,13 +31,13 @@ from execution_scheduler.providers import (
     ProviderFinishFailureError,
     ProviderSuccess,
 )
-from execution_scheduler.repository import InMemoryExecutionRepository
-from execution_scheduler.scheduler import (
-    ActiveWorkRegistry,
-    ExecutionScheduler,
-    ExecutionWorker,
+from execution_scheduler.repository import (
+    ExecutionRepositoryUnavailableError,
+    InMemoryExecutionRepository,
 )
+from execution_scheduler.scheduler import ExecutionScheduler
 from execution_scheduler.standalone import StandaloneProviderAdapter
+from execution_scheduler.worker import ExecutionWorker
 from workflow_execution.catalog import WorkflowCatalog
 from workflow_execution.contracts import (
     InputAccessContext,
@@ -132,7 +134,28 @@ class MutableClock:
         self.now += duration
 
 
+class UnavailableExecutionRepository(InMemoryExecutionRepository):
+    async def find_submission(
+        self,
+        _identity: SubmissionIdentity,
+    ) -> None:
+        raise ExecutionRepositoryUnavailableError("database unavailable")
+
+
 class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_repository_failure_is_translated_by_the_scheduler(self) -> None:
+        provider = StandaloneProvider()
+        scheduler = ExecutionScheduler(
+            repository=UnavailableExecutionRepository(),
+            providers={provider.name: provider},
+            known_workflows={"prostate-heatmap"},
+            default_timeout=timedelta(hours=1),
+            maximum_timeout=timedelta(hours=6),
+        )
+
+        with self.assertRaises(SchedulingUnavailableError):
+            await scheduler.schedule(self._request())
+
     async def test_provider_finish_retry_uses_stored_result_without_redispatch(
         self,
     ) -> None:
@@ -717,6 +740,38 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
 
             (root / "slide.svs").touch()
             admitted = await scheduler.schedule(request)
+            self.assertTrue(admitted.created)
+
+    async def test_invalid_standalone_configuration_creates_no_execution(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "slide.svs").touch()
+            (root / "roi.tiff").touch()
+            clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
+            repository = InMemoryExecutionRepository(clock=clock)
+            provider = StandaloneProviderAdapter(WorkflowCatalog.default())
+            scheduler = ExecutionScheduler(
+                repository=repository,
+                providers={provider.name: provider},
+                known_workflows={"prostate-heatmap"},
+                default_timeout=timedelta(hours=1),
+                maximum_timeout=timedelta(hours=6),
+                clock=clock,
+            )
+            valid_request = self._standalone_request(root)
+            invalid_body = dict(valid_request.body)
+            invalid_body["resolved_configuration"] = {"output_path": "heatmap.tiff"}
+            invalid_request = ScheduleRequest(
+                workflow_id=valid_request.workflow_id,
+                provider=valid_request.provider,
+                body=invalid_body,
+                idempotency_key=valid_request.idempotency_key,
+            )
+
+            with self.assertRaises(InvalidScheduleRequestError):
+                await scheduler.schedule(invalid_request)
+
+            admitted = await scheduler.schedule(valid_request)
             self.assertTrue(admitted.created)
 
     @staticmethod

@@ -67,6 +67,10 @@ class ExecutionRepository(Protocol):
     ) -> ExecutionRecord: ...
 
 
+class ExecutionRepositoryUnavailableError(RuntimeError):
+    pass
+
+
 class InMemoryExecutionRepository:
     def __init__(
         self,

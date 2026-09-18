@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import importlib
 import json
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Protocol
+from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from execution_scheduler.contracts import (
     InvalidScheduleRequestError,
@@ -21,55 +21,23 @@ from execution_scheduler.providers import (
     ProviderFinishOutcome,
     ProviderSuccess,
 )
+from integrations.empaia.gateway import EmpaiaGatewayError, EmpaiaGatewayFactory
 from workflow_execution.application import validate_workflow_invocation
 from workflow_execution.contracts import (
     InputAccessContext,
     ProviderInput,
     WorkflowInvocation,
-    is_json_value,
 )
+from workflow_execution.serialization import is_json_value
 
 
 if TYPE_CHECKING:
     from workflow_execution.catalog import WorkflowCatalog
-    from workflow_execution.contracts import JsonValue, WorkflowOutput
+    from workflow_execution.contracts import JsonValue
 
 
-class EmpaiaGatewayError(RuntimeError):
-    def __init__(
-        self,
-        safe_message: str,
-        *,
-        retryable: bool,
-        outcome_unknown: bool = False,
-    ) -> None:
-        super().__init__(safe_message)
-        self.safe_message = safe_message
-        self.retryable = retryable
-        self.outcome_unknown = outcome_unknown
-
-
-class EmpaiaGateway(Protocol):
-    async def get_configuration(self) -> dict[str, JsonValue]: ...
-
-    async def materialize_input(self, name: str, destination: str) -> None: ...
-
-    async def publish_output(self, name: str, output: WorkflowOutput) -> None: ...
-
-    async def finalize(self) -> None: ...
-
-    async def report_failure(self, message: str) -> None: ...
-
-    async def close(self) -> None: ...
-
-
-class EmpaiaGatewayFactory(Protocol):
-    def __call__(
-        self,
-        api_url: str,
-        job_id: str,
-        credential: str,
-    ) -> EmpaiaGateway: ...
+class EmpaiaErrorCode(StrEnum):
+    FINISH_FAILED = "empaia_finish_failed"
 
 
 class EmpaiaProviderAdapter:
@@ -185,7 +153,7 @@ class EmpaiaProviderAdapter:
                 await gateway.report_failure("workflow execution was cancelled")
         except EmpaiaGatewayError as error:
             raise ProviderFinishFailureError(
-                code="empaia_finish_failed",
+                code=EmpaiaErrorCode.FINISH_FAILED,
                 safe_message=error.safe_message,
                 retryable=error.retryable,
                 outcome_unknown=error.outcome_unknown or mutation_completed,
@@ -214,14 +182,3 @@ def _credential_expiry(credential: str) -> datetime:
         raise InvalidScheduleRequestError(
             "EMPAIA credential does not contain a valid expiry"
         ) from error
-
-
-def load_gateway_factory(import_path: str) -> EmpaiaGatewayFactory:
-    module_name, separator, attribute_name = import_path.partition(":")
-    if not separator or not module_name or not attribute_name:
-        raise ValueError("EMPAIA gateway factory must use module:attribute syntax")
-    module = importlib.import_module(module_name)
-    factory = getattr(module, attribute_name, None)
-    if not callable(factory):
-        raise TypeError("EMPAIA gateway factory is not callable")
-    return factory

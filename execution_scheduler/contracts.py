@@ -14,6 +14,13 @@ class ExecutionStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class ExecutionErrorCode(StrEnum):
+    WORKFLOW_OUTCOME_UNKNOWN = "workflow_outcome_unknown"
+    PROCESSING_ATTEMPTS_EXHAUSTED = "processing_attempts_exhausted"
+    PROVIDER_FINISH_ATTEMPTS_EXHAUSTED = "provider_finish_attempts_exhausted"
+    DEADLINE_EXCEEDED = "execution_deadline_exceeded"
+
+
 @dataclass(frozen=True, slots=True)
 class ScheduleRequest:
     workflow_id: str

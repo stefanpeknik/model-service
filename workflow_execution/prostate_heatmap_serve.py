@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict
 
@@ -19,6 +18,7 @@ from workflow_execution.contracts import (
     WorkflowInvocation,
     WorkflowResult,
 )
+from workflow_execution.http import WorkflowErrorResponse, WorkflowHTTPErrorCode
 from workflow_execution.prostate_heatmap import (
     ProstateHeatmapWorkflow,
     RayProstateHeatmapProcessor,
@@ -28,18 +28,6 @@ from workflow_execution.prostate_heatmap import (
 class Config(TypedDict):
     num_threads: int
     max_concurrent_tasks: int
-
-
-@dataclass(frozen=True, slots=True)
-class WorkflowErrorDetail:
-    code: str
-    message: str
-    retryable: bool
-
-
-@dataclass(frozen=True, slots=True)
-class WorkflowErrorResponse:
-    detail: WorkflowErrorDetail
 
 
 fastapi = FastAPI()
@@ -54,7 +42,7 @@ async def invalid_request(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content={
             "detail": {
-                "code": "invalid_workflow_invocation",
+                "code": WorkflowHTTPErrorCode.INVALID_INVOCATION,
                 "message": "workflow invocation is invalid",
                 "retryable": False,
             }
@@ -78,8 +66,8 @@ class ProstateHeatmapApplication:
         access_adapters = None
         gateway_factory_path = os.environ.get("EMPAIA_GATEWAY_FACTORY")
         if gateway_factory_path:
-            from execution_scheduler.empaia import load_gateway_factory
-            from workflow_execution.empaia_access import EmpaiaInputAccessAdapter
+            from integrations.empaia.gateway import load_gateway_factory
+            from integrations.empaia.input_access import EmpaiaInputAccessAdapter
 
             workspace_root = Path(
                 os.environ.get(
@@ -113,7 +101,7 @@ class ProstateHeatmapApplication:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail={
-                    "code": "workflow_unavailable",
+                    "code": WorkflowHTTPErrorCode.UNAVAILABLE,
                     "message": "workflow application is not configured",
                     "retryable": True,
                 },
@@ -124,7 +112,7 @@ class ProstateHeatmapApplication:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail={
-                    "code": "invalid_workflow_invocation",
+                    "code": WorkflowHTTPErrorCode.INVALID_INVOCATION,
                     "message": str(error),
                     "retryable": False,
                 },
@@ -133,7 +121,7 @@ class ProstateHeatmapApplication:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail={
-                    "code": "workflow_contract_violation",
+                    "code": WorkflowHTTPErrorCode.CONTRACT_VIOLATION,
                     "message": "deployed workflow violated its contract",
                     "retryable": False,
                 },

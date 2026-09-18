@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Protocol
 
 import httpx
 
-from workflow_execution.contracts import invocation_to_dict, result_from_dict
+from workflow_execution.serialization import invocation_to_dict, result_from_dict
 
 
 if TYPE_CHECKING:

@@ -4,7 +4,7 @@ import asyncio
 import inspect
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from workflow_execution.contracts import (
@@ -12,14 +12,14 @@ from workflow_execution.contracts import (
     InvalidWorkflowInvocation,
     JsonValue,
     SharedArtifact,
-    SharedPathInput,
     WorkflowContractViolation,
     WorkflowFailure,
-    WorkflowInput,
+    WorkflowFailureCode,
     WorkflowInvocation,
     WorkflowResult,
-    is_json_value,
 )
+from workflow_execution.serialization import is_json_value
+from workflow_execution.shared_storage import SharedStorageAccessAdapter
 
 
 if TYPE_CHECKING:
@@ -60,73 +60,6 @@ class WorkflowContext:
         return self.inputs.output_path(relative_path)
 
 
-class SharedStorageAccess:
-    def __init__(self, root: Path, inputs: dict[str, WorkflowInput]) -> None:
-        try:
-            self._root = root.resolve(strict=True)
-        except OSError as error:
-            raise InvalidWorkflowInvocation(
-                "shared storage root is unavailable"
-            ) from error
-        if not self._root.is_dir():
-            raise InvalidWorkflowInvocation("shared storage root must be a directory")
-        self._inputs = inputs
-
-    def input_path(self, name: str) -> Path:
-        value = self._inputs.get(name)
-        if not isinstance(value, SharedPathInput):
-            raise InvalidWorkflowInvocation(f"input {name!r} is not a shared path")
-        path = self._resolve(value.path, must_exist=True)
-        if not path.is_file():
-            raise InvalidWorkflowInvocation(
-                f"input {name!r} must identify a regular file"
-            )
-        return path
-
-    def output_path(self, relative_path: str) -> Path:
-        return self._resolve(relative_path, must_exist=False)
-
-    def is_visible_artifact(self, path: Path) -> bool:
-        try:
-            resolved = path.resolve(strict=True)
-            resolved.relative_to(self._root)
-        except (OSError, ValueError):
-            return False
-        return resolved.is_file()
-
-    def _resolve(self, relative_path: str, *, must_exist: bool) -> Path:
-        path = PurePosixPath(relative_path)
-        if (
-            not relative_path
-            or "\\" in relative_path
-            or "\x00" in relative_path
-            or path.is_absolute()
-            or any(part in {"", ".", ".."} for part in relative_path.split("/"))
-        ):
-            raise InvalidWorkflowInvocation(
-                "shared storage paths must be traversal-free relative paths"
-            )
-        candidate = self._root.joinpath(*path.parts)
-        try:
-            resolved = candidate.resolve(strict=must_exist)
-            resolved.relative_to(self._root)
-        except (OSError, ValueError) as error:
-            raise InvalidWorkflowInvocation(
-                "shared storage path is unavailable or escapes its root"
-            ) from error
-        return resolved
-
-
-class SharedStorageAccessAdapter:
-    def create(self, invocation: WorkflowInvocation) -> SharedStorageAccess:
-        root = invocation.input_access.state.get("root")
-        if not isinstance(root, str) or not root:
-            raise InvalidWorkflowInvocation(
-                "shared storage input access requires a root"
-            )
-        return SharedStorageAccess(Path(root), invocation.inputs)
-
-
 class WorkflowApplication:
     def __init__(
         self,
@@ -145,25 +78,34 @@ class WorkflowApplication:
 
     async def run(self, invocation: WorkflowInvocation) -> WorkflowResult:
         validate_workflow_invocation(self._definition, invocation)
-        access = await self._create_access(invocation)
-        context = WorkflowContext(
-            inputs=access,
-            configuration=invocation.resolved_configuration,
-            deadline_at=invocation.deadline_at,
-        )
         try:
-            timeout_seconds = (
-                invocation.deadline_at - datetime.now(UTC)
-            ).total_seconds()
-            async with asyncio.timeout(max(0, timeout_seconds)):
-                result = await self._workflow.run(context)
-            self._validate_result(result, access)
-        except TimeoutError as error:
-            raise WorkflowFailure(
-                code="workflow_deadline_exceeded",
-                safe_message="workflow deadline was exceeded",
-                retryable=False,
-            ) from error
+            access = await self._create_access(invocation)
+            try:
+                context = WorkflowContext(
+                    inputs=access,
+                    configuration=invocation.resolved_configuration,
+                    deadline_at=invocation.deadline_at,
+                )
+                timeout_seconds = (
+                    invocation.deadline_at - datetime.now(UTC)
+                ).total_seconds()
+                timeout = asyncio.timeout(max(0, timeout_seconds))
+                try:
+                    async with timeout:
+                        result = await self._workflow.run(context)
+                except TimeoutError as error:
+                    if not timeout.expired():
+                        raise
+                    raise WorkflowFailure(
+                        code=WorkflowFailureCode.DEADLINE_EXCEEDED,
+                        safe_message="workflow deadline was exceeded",
+                        retryable=False,
+                    ) from error
+                self._validate_result(result, access)
+            finally:
+                close = getattr(access, "aclose", None)
+                if close is not None:
+                    await close()
         except (
             InvalidWorkflowInvocation,
             WorkflowContractViolation,
@@ -172,14 +114,10 @@ class WorkflowApplication:
             raise
         except Exception as error:
             raise WorkflowFailure(
-                code="workflow_internal_error",
+                code=WorkflowFailureCode.INTERNAL_ERROR,
                 safe_message="workflow failed unexpectedly",
                 retryable=True,
             ) from error
-        finally:
-            close = getattr(access, "aclose", None)
-            if close is not None:
-                await close()
         return result
 
     async def _create_access(

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
+
+import yaml  # type: ignore[import-untyped]
 
 
 if TYPE_CHECKING:
@@ -14,16 +15,19 @@ if TYPE_CHECKING:
 
 ROOT = Path(__file__).resolve().parents[1]
 
+type WorkflowInputKind = Literal["inline", "shared_path", "provider"]
+type WorkflowOutputKind = Literal["inline", "shared_artifact"]
+
 
 @dataclass(frozen=True, slots=True)
 class WorkflowInputDefinition:
-    kinds: tuple[Literal["inline", "shared_path", "provider"], ...]
+    kinds: tuple[WorkflowInputKind, ...]
     media_type: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class WorkflowValueDefinition:
-    kind: Literal["inline", "shared_artifact"]
+    kind: WorkflowOutputKind
     media_type: str | None = None
 
 
@@ -143,10 +147,7 @@ class WorkflowCatalog:
 
 
 def _load_definition(path: Path) -> WorkflowDefinition:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise ValueError(f"cannot load workflow definition {path}") from error
+    value = _load_yaml(path)
     if not isinstance(value, dict):
         raise TypeError(f"{path} must contain an object")
     identifier = value.get("identifier")
@@ -165,38 +166,38 @@ def _load_definition(path: Path) -> WorkflowDefinition:
 
 
 def _load_enabled_application_ids(path: Path) -> set[str]:
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError as error:
-        raise ValueError(f"cannot load Helm values {path}") from error
-    try:
-        start = lines.index("applications:") + 1
-    except ValueError as error:
-        raise ValueError(f"{path} has no top-level applications list") from error
-    application_ids: set[str] = set()
-    for line in lines[start:]:
-        if line and not line[0].isspace():
-            break
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if not stripped.startswith("- ") or not stripped[2:]:
-            raise ValueError(f"{path} has an invalid applications entry")
-        application_ids.add(stripped[2:])
-    return application_ids
+    values = _load_yaml(path)
+    if not isinstance(values, dict):
+        raise TypeError(f"{path} must contain an object")
+    applications = values.get("applications")
+    if not isinstance(applications, list) or any(
+        not isinstance(application, str) or not application
+        for application in applications
+    ):
+        raise ValueError(f"{path} has an invalid applications list")
+    return set(applications)
 
 
 def _load_application_name(path: Path) -> str | None:
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError:
+        application = _load_yaml(path)
+    except ValueError:
         return None
-    for line in lines:
-        if line.startswith("- name: "):
-            return line.removeprefix("- name: ").strip() or None
-        if line.strip():
-            return None
-    return None
+    if not isinstance(application, list) or not application:
+        return None
+    first = application[0]
+    if not isinstance(first, dict):
+        return None
+    name = first.get("name")
+    return name if isinstance(name, str) and name else None
+
+
+def _load_yaml(path: Path) -> object:
+    try:
+        value: object = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as error:
+        raise ValueError(f"cannot load YAML document {path}") from error
+    return value
 
 
 def _load_inputs(
@@ -206,26 +207,45 @@ def _load_inputs(
     definitions: dict[str, WorkflowInputDefinition] = {}
     for name, item, media_type in _load_entries(value, path, "inputs"):
         raw_kinds = item.get("kinds")
-        allowed_kinds = {"inline", "shared_path", "provider"}
-        if (
-            not isinstance(raw_kinds, list)
-            or not raw_kinds
-            or any(kind not in allowed_kinds for kind in raw_kinds)
-            or len(set(raw_kinds)) != len(raw_kinds)
-        ):
+        if not isinstance(raw_kinds, list) or not raw_kinds:
             raise ValueError(f"{path} inputs.{name} has invalid kinds")
-        definitions[name] = WorkflowInputDefinition(tuple(raw_kinds), media_type)
+        try:
+            kinds = tuple(_input_kind(kind) for kind in raw_kinds)
+        except ValueError as error:
+            raise ValueError(f"{path} inputs.{name} has invalid kinds") from error
+        if len(set(kinds)) != len(kinds):
+            raise ValueError(f"{path} inputs.{name} has duplicate kinds")
+        definitions[name] = WorkflowInputDefinition(kinds, media_type)
     return definitions
 
 
 def _load_outputs(value: object, path: Path) -> dict[str, WorkflowValueDefinition]:
     definitions: dict[str, WorkflowValueDefinition] = {}
     for name, item, media_type in _load_entries(value, path, "outputs"):
-        kind = item.get("kind")
-        if kind not in {"inline", "shared_artifact"}:
-            raise ValueError(f"{path} outputs.{name} has an invalid kind")
+        try:
+            kind = _output_kind(item.get("kind"))
+        except ValueError as error:
+            raise ValueError(f"{path} outputs.{name} has an invalid kind") from error
         definitions[name] = WorkflowValueDefinition(kind, media_type)
     return definitions
+
+
+def _input_kind(value: object) -> WorkflowInputKind:
+    if value == "inline":
+        return "inline"
+    if value == "shared_path":
+        return "shared_path"
+    if value == "provider":
+        return "provider"
+    raise ValueError("unknown workflow input kind")
+
+
+def _output_kind(value: object) -> WorkflowOutputKind:
+    if value == "inline":
+        return "inline"
+    if value == "shared_artifact":
+        return "shared_artifact"
+    raise ValueError("unknown workflow output kind")
 
 
 def _load_entries(

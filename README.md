@@ -7,8 +7,16 @@ This repository contains:
 - `builders/`: WSI output aggregation services (e.g., `heatmap_builder.py`).
 - `docker/`: Dockerfiles for building CPU and GPU environments.
 - `docs/`: MkDocs documentation and architecture guides.
+- `execution_scheduler/`: Durable admission, leases, retries, provider finish,
+  and the execution HTTP interface. Start with
+  [`execution_scheduler/README.md`](execution_scheduler/README.md).
 - `helm/rayservice/`: A Helm chart that renders and deploys a KubeRay `RayService`.
+- `integrations/`: External-system contracts and adapters, grouped by provider.
 - `models/`: Python entrypoints for model implementations (e.g., `binary_classifier.py`, `virchow2.py`).
+- `workflow-definitions/`: Repository-owned workflow input and output contracts.
+- `workflow_execution/`: Provider-neutral workflow execution and Ray Serve
+  applications. Start with
+  [`workflow_execution/README.md`](workflow_execution/README.md).
 
 ## Documentation
 

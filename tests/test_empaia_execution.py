@@ -11,9 +11,12 @@ from typing import TYPE_CHECKING
 from execution_scheduler.contracts import InvalidScheduleRequestError, ScheduleRequest
 from execution_scheduler.dispatch import InMemoryWorkflowDispatch
 from execution_scheduler.domain import RetryPolicy
-from execution_scheduler.empaia import EmpaiaGatewayError, EmpaiaProviderAdapter
 from execution_scheduler.repository import InMemoryExecutionRepository
-from execution_scheduler.scheduler import ExecutionScheduler, ExecutionWorker
+from execution_scheduler.scheduler import ExecutionScheduler
+from execution_scheduler.worker import ExecutionWorker
+from integrations.empaia.gateway import EmpaiaGatewayError
+from integrations.empaia.input_access import EmpaiaInputAccessAdapter
+from integrations.empaia.provider import EmpaiaProviderAdapter
 from workflow_execution.application import WorkflowApplication
 from workflow_execution.catalog import WorkflowCatalog
 from workflow_execution.contracts import (
@@ -21,7 +24,6 @@ from workflow_execution.contracts import (
     WorkflowInvocation,
     WorkflowResult,
 )
-from workflow_execution.empaia_access import EmpaiaInputAccessAdapter
 
 
 if TYPE_CHECKING:

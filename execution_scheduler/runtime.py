@@ -8,21 +8,20 @@ from uuid import uuid4
 import httpx
 from fastapi import FastAPI
 
+from execution_scheduler.active_work import ActiveWorkRegistry
 from execution_scheduler.api import create_execution_app
 from execution_scheduler.dispatch import HTTPWorkflowDispatch
 from execution_scheduler.domain import RetryPolicy
-from execution_scheduler.empaia import EmpaiaProviderAdapter, load_gateway_factory
 from execution_scheduler.health import WorkflowDeploymentHealth
 from execution_scheduler.postgres import PostgresExecutionRepository
-from execution_scheduler.scheduler import (
-    ActiveWorkRegistry,
-    ExecutionScheduler,
-    ExecutionWorker,
-)
+from execution_scheduler.scheduler import ExecutionScheduler
 from execution_scheduler.security import ProtectedContextCipher
 from execution_scheduler.settings import SchedulerSettings
 from execution_scheduler.standalone import StandaloneProviderAdapter
 from execution_scheduler.synchronous import SynchronousWorkflowService
+from execution_scheduler.worker import ExecutionWorker
+from integrations.empaia.gateway import load_gateway_factory
+from integrations.empaia.provider import EmpaiaProviderAdapter
 from workflow_execution.catalog import WorkflowCatalog
 
 

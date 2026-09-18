@@ -20,8 +20,9 @@ from execution_scheduler.dispatch import (
     InMemoryWorkflowDispatch,
 )
 from execution_scheduler.repository import InMemoryExecutionRepository
-from execution_scheduler.scheduler import ExecutionScheduler, ExecutionWorker
+from execution_scheduler.scheduler import ExecutionScheduler
 from execution_scheduler.synchronous import SynchronousWorkflowService
+from execution_scheduler.worker import ExecutionWorker
 from tests.test_execution_scheduler import StandaloneProvider
 from workflow_execution.catalog import WorkflowCatalog
 from workflow_execution.contracts import (

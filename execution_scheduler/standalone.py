@@ -10,11 +10,10 @@ from execution_scheduler.contracts import (
     ScheduleRequest,
 )
 from execution_scheduler.domain import PreparedWorkflow, SubmissionIdentity
-from workflow_execution.application import (
-    SharedStorageAccessAdapter,
-    validate_workflow_invocation,
-)
-from workflow_execution.contracts import SharedPathInput, invocation_from_dict
+from workflow_execution.application import validate_workflow_invocation
+from workflow_execution.contracts import SharedPathInput
+from workflow_execution.serialization import invocation_from_dict
+from workflow_execution.shared_storage import SharedStorageAccessAdapter
 
 
 if TYPE_CHECKING:
@@ -65,6 +64,10 @@ class StandaloneProviderAdapter:
                 {**request.body, "deadline_at": deadline_at.isoformat()}
             )
             definition = self._catalog.get(request.workflow_id)
+            self._catalog.validate_configuration(
+                request.workflow_id,
+                invocation.resolved_configuration,
+            )
             validate_workflow_invocation(
                 definition,
                 invocation,

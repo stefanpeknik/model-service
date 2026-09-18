@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, cast
 from uuid import uuid4
 
 from psycopg import AsyncConnection, sql
+from psycopg import Error as PsycopgError
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 
@@ -26,8 +28,10 @@ from execution_scheduler.domain import (
     WorkClaim,
     WorkKind,
 )
+from execution_scheduler.postgres_schema import initialize_execution_schema
+from execution_scheduler.repository import ExecutionRepositoryUnavailableError
 from execution_scheduler.transitions import ExecutionTransitions
-from workflow_execution.contracts import (
+from workflow_execution.serialization import (
     invocation_from_dict,
     invocation_to_dict,
     result_from_dict,
@@ -36,6 +40,8 @@ from workflow_execution.contracts import (
 
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
     from execution_scheduler.security import ProtectedContextCipher
 
 
@@ -75,90 +81,17 @@ class PostgresExecutionRepository:
         )
 
     async def initialize(self) -> None:
-        async with await self._connect() as connection:
-            await connection.execute(
-                "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
-                (f"model-service-schema:{self._schema}",),
-            )
-            await connection.execute(
-                sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(
-                    sql.Identifier(self._schema)
-                )
-            )
-            await connection.execute(
-                sql.SQL(
-                    """
-                    CREATE TABLE IF NOT EXISTS {} (
-                        id UUID PRIMARY KEY,
-                        provider TEXT NOT NULL,
-                        submission_key TEXT NOT NULL,
-                        request_fingerprint TEXT NOT NULL,
-                        workflow_id TEXT NOT NULL,
-                        status TEXT NOT NULL CHECK (
-                            status IN ('queued', 'running', 'succeeded', 'failed', 'cancelled')
-                        ),
-                        invocation JSONB NOT NULL,
-                        protected_context BYTEA NOT NULL,
-                        deadline_at TIMESTAMPTZ NOT NULL,
-                        work_kind TEXT CHECK (
-                            work_kind IS NULL OR work_kind IN (
-                                'processing', 'provider_finish',
-                                'provider_failure_report',
-                                'provider_cancellation_report'
-                            )
-                        ),
-                        next_attempt_at TIMESTAMPTZ,
-                        processing_attempts INTEGER NOT NULL DEFAULT 0 CHECK (processing_attempts >= 0),
-                        processing_rejections INTEGER NOT NULL DEFAULT 0 CHECK (processing_rejections >= 0),
-                        finish_attempts INTEGER NOT NULL DEFAULT 0 CHECK (finish_attempts >= 0),
-                        lease_owner TEXT,
-                        fencing_token UUID,
-                        lease_expires_at TIMESTAMPTZ,
-                        result JSONB,
-                        error_code TEXT,
-                        error_message TEXT,
-                        created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
-                        updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
-                        UNIQUE (provider, submission_key),
-                        CHECK ((error_code IS NULL) = (error_message IS NULL)),
-                        CHECK (
-                            (fencing_token IS NULL AND lease_owner IS NULL AND lease_expires_at IS NULL)
-                            OR
-                            (fencing_token IS NOT NULL AND lease_owner IS NOT NULL AND lease_expires_at IS NOT NULL)
-                        ),
-                        CHECK (
-                            result IS NULL
-                            OR work_kind = 'provider_finish'
-                            OR status IN ('succeeded', 'failed', 'cancelled')
-                        )
-                    )
-                    """
-                ).format(self._table)
-            )
-            await connection.execute(
-                sql.SQL(
-                    """
-                    CREATE INDEX IF NOT EXISTS executions_due_idx
-                    ON {} (next_attempt_at, created_at)
-                    WHERE work_kind IS NOT NULL
-                    """
-                ).format(self._table)
-            )
-            await connection.execute(
-                sql.SQL(
-                    """
-                    CREATE INDEX IF NOT EXISTS executions_active_processing_idx
-                    ON {} (workflow_id, lease_expires_at)
-                    WHERE work_kind = 'processing' AND fencing_token IS NOT NULL
-                    """
-                ).format(self._table)
+        async with self._connection() as connection:
+            await initialize_execution_schema(
+                connection,
+                schema=self._schema,
             )
 
     async def find_submission(
         self,
         identity: SubmissionIdentity,
     ) -> ExecutionRecord | None:
-        async with await self._connect() as connection:
+        async with self._connection() as connection:
             cursor = await connection.execute(
                 sql.SQL(
                     "SELECT * FROM {} WHERE provider = %s AND submission_key = %s"
@@ -174,7 +107,7 @@ class PostgresExecutionRepository:
 
     async def admit(self, admission: Admission) -> AdmissionResult:
         encrypted_context = self._cipher.encrypt(admission.protected_context)
-        async with await self._connect() as connection:
+        async with self._connection() as connection:
             cursor = await connection.execute(
                 sql.SQL(
                     """
@@ -218,12 +151,12 @@ class PostgresExecutionRepository:
             return AdmissionResult(execution, created=False)
 
     async def get(self, execution_id: str) -> ExecutionRecord:
-        async with await self._connect() as connection:
+        async with self._connection() as connection:
             row = await self._fetch(connection, execution_id)
         return self._record(row)
 
     async def request_cancel(self, execution_id: str) -> ExecutionRecord:
-        async with await self._connect() as connection:
+        async with self._connection() as connection:
             row = await self._fetch(connection, execution_id, for_update=True)
             execution = self._record(row)
             if execution.status in {
@@ -256,7 +189,7 @@ class PostgresExecutionRepository:
         owner: str,
         lease_duration: timedelta,
     ) -> WorkClaim | None:
-        async with await self._connect() as connection:
+        async with self._connection() as connection:
             now = await self._database_now(connection)
             await self._expire_deadlines(connection, now)
             await self._recover_expired_leases(connection, now)
@@ -331,7 +264,7 @@ class PostgresExecutionRepository:
         fencing_token: str,
         lease_duration: timedelta,
     ) -> RenewDirective:
-        async with await self._connect() as connection:
+        async with self._connection() as connection:
             row = await self._fetch(connection, execution_id, for_update=True)
             execution = self._record(row)
             now = await self._database_now(connection)
@@ -365,7 +298,7 @@ class PostgresExecutionRepository:
         settlement: Settlement,
     ) -> ExecutionRecord:
         deadline_exceeded = False
-        async with await self._connect() as connection:
+        async with self._connection() as connection:
             row = await self._fetch(connection, execution_id, for_update=True)
             execution = self._record(row)
             if execution.fencing_token != fencing_token:
@@ -501,39 +434,32 @@ class PostgresExecutionRepository:
         connection: AsyncConnection[DictRow],
         now: datetime,
     ) -> None:
-        await connection.execute(
+        cursor = await connection.execute(
             sql.SQL(
                 """
-                UPDATE {} SET
-                    status = 'failed', work_kind = NULL,
-                    next_attempt_at = NULL, lease_owner = NULL,
-                    fencing_token = NULL, lease_expires_at = NULL,
-                    error_code = 'execution_deadline_exceeded',
-                    error_message = 'execution deadline was exceeded',
-                    updated_at = %s
-                WHERE status NOT IN ('succeeded', 'failed', 'cancelled')
-                  AND deadline_at <= %s
-                """
-            ).format(self._table),
-            (now, now),
-        )
-        await connection.execute(
-            sql.SQL(
-                """
-                UPDATE {} SET
-                    work_kind = NULL, next_attempt_at = NULL,
-                    lease_owner = NULL, fencing_token = NULL,
-                    lease_expires_at = NULL, updated_at = %s
-                WHERE status IN ('failed', 'cancelled')
-                  AND work_kind IN (
-                      'provider_failure_report',
-                      'provider_cancellation_report'
+                SELECT * FROM {}
+                WHERE deadline_at <= %s
+                  AND (
+                    status NOT IN ('succeeded', 'failed', 'cancelled')
+                    OR (
+                      status IN ('failed', 'cancelled')
+                      AND work_kind IN (
+                        'provider_failure_report',
+                        'provider_cancellation_report'
+                      )
+                    )
                   )
-                  AND deadline_at <= %s
+                FOR UPDATE SKIP LOCKED
                 """
             ).format(self._table),
-            (now, now),
+            (now,),
         )
+        for row in await cursor.fetchall():
+            execution = self._record(row)
+            await self._persist_state(
+                connection,
+                self._transitions.deadline(execution, now),
+            )
 
     async def _persist_state(
         self,
@@ -600,8 +526,18 @@ class PostgresExecutionRepository:
         assert row is not None
         return cast("datetime", row["now"])
 
-    async def _connect(self) -> AsyncConnection[DictRow]:
-        return await AsyncConnection.connect(self._dsn, row_factory=dict_row)
+    @asynccontextmanager
+    async def _connection(self) -> AsyncIterator[AsyncConnection[DictRow]]:
+        try:
+            async with await AsyncConnection.connect(
+                self._dsn,
+                row_factory=dict_row,
+            ) as connection:
+                yield connection
+        except PsycopgError as error:
+            raise ExecutionRepositoryUnavailableError(
+                "execution repository is unavailable"
+            ) from error
 
     def _record(self, row: DictRow) -> ExecutionRecord:
         error = None

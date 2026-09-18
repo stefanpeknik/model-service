@@ -9,10 +9,12 @@ RUN uv pip install --system --no-cache \
     "fastapi>=0.115.0" \
     "httpx>=0.27.0" \
     "psycopg[binary]>=3.2.0" \
+    "pyyaml>=6.0.2" \
     "uvicorn>=0.30.0"
 
 WORKDIR /app
 COPY execution_scheduler execution_scheduler
+COPY integrations integrations
 COPY workflow_execution workflow_execution
 COPY workflow-definitions workflow-definitions
 

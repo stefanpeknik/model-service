@@ -31,6 +31,7 @@ from workflow_execution.contracts import (
     WorkflowInvocation,
     WorkflowResult,
 )
+from workflow_execution.http import WorkflowErrorResponse
 
 
 if TYPE_CHECKING:
@@ -58,27 +59,15 @@ class ScheduleBody:
 
 
 @dataclass(frozen=True, slots=True)
-class ErrorDetail:
+class SchedulerErrorDetail:
     code: ApiErrorCode
     message: str
     retryable: bool
 
 
 @dataclass(frozen=True, slots=True)
-class ErrorResponse:
-    detail: ErrorDetail
-
-
-@dataclass(frozen=True, slots=True)
-class WorkflowErrorDetail:
-    code: str
-    message: str
-    retryable: bool
-
-
-@dataclass(frozen=True, slots=True)
-class WorkflowErrorResponse:
-    detail: WorkflowErrorDetail
+class SchedulerErrorResponse:
+    detail: SchedulerErrorDetail
 
 
 class ExecutionSchedulerInterface(Protocol):
@@ -139,9 +128,9 @@ def create_execution_app(
         "/v1/workflows/{workflow_id}/run",
         response_model=WorkflowResult,
         responses={
-            404: {"model": ErrorResponse},
+            404: {"model": SchedulerErrorResponse},
             422: {"model": WorkflowErrorResponse},
-            429: {"model": ErrorResponse},
+            429: {"model": SchedulerErrorResponse},
             503: {"model": WorkflowErrorResponse},
         },
     )
@@ -206,10 +195,10 @@ def create_execution_app(
         status_code=status.HTTP_202_ACCEPTED,
         responses={
             200: {"model": ScheduleResult},
-            404: {"model": ErrorResponse},
-            409: {"model": ErrorResponse},
-            422: {"model": ErrorResponse},
-            503: {"model": ErrorResponse},
+            404: {"model": SchedulerErrorResponse},
+            409: {"model": SchedulerErrorResponse},
+            422: {"model": SchedulerErrorResponse},
+            503: {"model": SchedulerErrorResponse},
         },
     )
     async def schedule(
@@ -258,7 +247,7 @@ def create_execution_app(
     @app.get(
         "/v1/executions/{execution_id}",
         response_model=ExecutionView,
-        responses={404: {"model": ErrorResponse}},
+        responses={404: {"model": SchedulerErrorResponse}},
     )
     async def get_execution(execution_id: str) -> ExecutionView:
         try:
@@ -273,7 +262,7 @@ def create_execution_app(
     @app.post(
         "/v1/executions/{execution_id}/cancel",
         response_model=ExecutionView,
-        responses={404: {"model": ErrorResponse}},
+        responses={404: {"model": SchedulerErrorResponse}},
     )
     async def cancel_execution(execution_id: str) -> ExecutionView:
         try:

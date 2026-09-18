@@ -25,14 +25,16 @@ from workflow_execution.contracts import (
     WorkflowFailure,
     WorkflowInvocation,
     WorkflowResult,
-    invocation_from_dict,
-    invocation_to_dict,
-    result_from_dict,
-    result_to_dict,
 )
 from workflow_execution.prostate_heatmap import (
     HeatmapBuildRequest,
     ProstateHeatmapWorkflow,
+)
+from workflow_execution.serialization import (
+    invocation_from_dict,
+    invocation_to_dict,
+    result_from_dict,
+    result_to_dict,
 )
 
 
@@ -104,6 +106,36 @@ class FixedPathAccessAdapter:
 
     def create(self, _invocation: WorkflowInvocation) -> FixedPathAccess:
         return FixedPathAccess(self._root)
+
+
+class FailingAccessAdapter:
+    def create(self, _invocation: WorkflowInvocation) -> FixedPathAccess:
+        raise OSError("provider credential is secret")
+
+
+class TimingOutAccessAdapter:
+    def create(self, _invocation: WorkflowInvocation) -> FixedPathAccess:
+        raise TimeoutError("provider request timed out")
+
+
+class FailingCloseAccess(FixedPathAccess):
+    async def aclose(self) -> None:
+        raise OSError("provider credential is secret")
+
+
+class FailingCloseAccessAdapter(FixedPathAccessAdapter):
+    def create(self, _invocation: WorkflowInvocation) -> FailingCloseAccess:
+        return FailingCloseAccess(self._root)
+
+
+class TimingOutCloseAccess(FixedPathAccess):
+    async def aclose(self) -> None:
+        raise TimeoutError("provider cleanup timed out")
+
+
+class TimingOutCloseAccessAdapter(FixedPathAccessAdapter):
+    def create(self, _invocation: WorkflowInvocation) -> TimingOutCloseAccess:
+        return TimingOutCloseAccess(self._root)
 
 
 class WorkflowApplicationTests(unittest.IsolatedAsyncioTestCase):
@@ -314,6 +346,122 @@ class WorkflowApplicationTests(unittest.IsolatedAsyncioTestCase):
             "workflow failed unexpectedly",
         )
         self.assertNotIn("secret", str(raised.exception))
+
+    async def test_input_access_failures_use_the_safe_workflow_classification(
+        self,
+    ) -> None:
+        definition = WorkflowDefinition(identifier="failure", inputs={}, outputs={})
+
+        async def run(_context: WorkflowContext) -> WorkflowResult:
+            return WorkflowResult(outputs={})
+
+        invocation = self._empty_invocation()
+        invocation = WorkflowInvocation(
+            inputs={},
+            resolved_configuration={},
+            input_access=InputAccessContext(kind="failing", state={}),
+            deadline_at=invocation.deadline_at,
+        )
+        application = WorkflowApplication(
+            definition,
+            FunctionWorkflow(run),
+            access_adapters={"failing": FailingAccessAdapter()},
+        )
+
+        with self.assertRaises(WorkflowFailure) as raised:
+            await application.run(invocation)
+
+        self.assertEqual(raised.exception.code, "workflow_internal_error")
+        self.assertNotIn("secret", str(raised.exception))
+
+    async def test_input_access_timeout_is_not_a_workflow_deadline(self) -> None:
+        definition = WorkflowDefinition(identifier="failure", inputs={}, outputs={})
+
+        async def run(_context: WorkflowContext) -> WorkflowResult:
+            return WorkflowResult(outputs={})
+
+        invocation = self._empty_invocation()
+        invocation = WorkflowInvocation(
+            inputs={},
+            resolved_configuration={},
+            input_access=InputAccessContext(kind="timing_out", state={}),
+            deadline_at=invocation.deadline_at,
+        )
+        application = WorkflowApplication(
+            definition,
+            FunctionWorkflow(run),
+            access_adapters={"timing_out": TimingOutAccessAdapter()},
+        )
+
+        with self.assertRaises(WorkflowFailure) as raised:
+            await application.run(invocation)
+
+        self.assertEqual(raised.exception.code, "workflow_internal_error")
+        self.assertTrue(raised.exception.retryable)
+
+    async def test_input_access_cleanup_failures_are_classified(self) -> None:
+        with TemporaryDirectory() as directory:
+            definition = WorkflowDefinition(
+                identifier="failure",
+                inputs={},
+                outputs={},
+            )
+
+            async def run(_context: WorkflowContext) -> WorkflowResult:
+                return WorkflowResult(outputs={})
+
+            invocation = self._empty_invocation()
+            invocation = WorkflowInvocation(
+                inputs={},
+                resolved_configuration={},
+                input_access=InputAccessContext(kind="failing", state={}),
+                deadline_at=invocation.deadline_at,
+            )
+            application = WorkflowApplication(
+                definition,
+                FunctionWorkflow(run),
+                access_adapters={"failing": FailingCloseAccessAdapter(Path(directory))},
+            )
+
+            with self.assertRaises(WorkflowFailure) as raised:
+                await application.run(invocation)
+
+            self.assertEqual(raised.exception.code, "workflow_internal_error")
+            self.assertNotIn("secret", str(raised.exception))
+
+    async def test_input_access_cleanup_timeout_is_not_a_workflow_deadline(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as directory:
+            definition = WorkflowDefinition(
+                identifier="failure",
+                inputs={},
+                outputs={},
+            )
+
+            async def run(_context: WorkflowContext) -> WorkflowResult:
+                return WorkflowResult(outputs={})
+
+            invocation = self._empty_invocation()
+            invocation = WorkflowInvocation(
+                inputs={},
+                resolved_configuration={},
+                input_access=InputAccessContext(kind="timing_out", state={}),
+                deadline_at=invocation.deadline_at,
+            )
+            application = WorkflowApplication(
+                definition,
+                FunctionWorkflow(run),
+                access_adapters={
+                    "timing_out": TimingOutCloseAccessAdapter(Path(directory))
+                },
+            )
+
+            with self.assertRaises(WorkflowFailure) as raised:
+                await application.run(invocation)
+
+            self.assertEqual(raised.exception.code, "workflow_internal_error")
+            self.assertTrue(raised.exception.retryable)
 
     async def test_absolute_deadline_cancels_workflow(self) -> None:
         definition = WorkflowDefinition(identifier="slow", inputs={}, outputs={})

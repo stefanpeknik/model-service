@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
 
-    from execution_scheduler.empaia import EmpaiaGateway, EmpaiaGatewayFactory
+    from integrations.empaia.gateway import EmpaiaGateway, EmpaiaGatewayFactory
     from workflow_execution.contracts import JsonValue, WorkflowInvocation
 
 

@@ -3,7 +3,11 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from execution_scheduler.contracts import ExecutionError, ExecutionStatus
+from execution_scheduler.contracts import (
+    ExecutionError,
+    ExecutionErrorCode,
+    ExecutionStatus,
+)
 from execution_scheduler.domain import (
     ProcessingFailed,
     ProcessingRejected,
@@ -130,7 +134,7 @@ class ExecutionTransitions:
             return self._terminal_failure(
                 execution,
                 ExecutionError(
-                    code="processing_attempts_exhausted",
+                    code=ExecutionErrorCode.PROCESSING_ATTEMPTS_EXHAUSTED,
                     message=(
                         "workflow processing did not complete within its retry policy"
                     ),
@@ -143,7 +147,7 @@ class ExecutionTransitions:
                 return self._terminal_failure(
                     execution,
                     ExecutionError(
-                        code="provider_finish_attempts_exhausted",
+                        code=ExecutionErrorCode.PROVIDER_FINISH_ATTEMPTS_EXHAUSTED,
                         message=(
                             "provider finish did not complete within its retry policy"
                         ),
@@ -178,7 +182,7 @@ class ExecutionTransitions:
         return self._terminal_failure(
             execution,
             ExecutionError(
-                code="execution_deadline_exceeded",
+                code=ExecutionErrorCode.DEADLINE_EXCEEDED,
                 message="execution deadline was exceeded",
             ),
             now,
