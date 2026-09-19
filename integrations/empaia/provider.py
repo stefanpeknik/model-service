@@ -23,6 +23,7 @@ from execution_scheduler.providers import (
     ProviderFinishOutcome,
     ProviderSuccess,
 )
+from integrations.empaia.configuration import EmpaiaConfigurationRegistry
 from integrations.empaia.gateway import (
     EmpaiaGateway,
     EmpaiaGatewayError,
@@ -35,7 +36,6 @@ from workflow_execution.contracts import (
     ProviderInput,
     WorkflowInvocation,
 )
-from workflow_execution.prostate_heatmap import ProstateConfiguration
 from workflow_execution.serialization import is_json_value
 
 
@@ -52,16 +52,6 @@ class EmpaiaErrorCode(StrEnum):
 
 logger = logging.getLogger(__name__)
 
-_CONFIGURATION_DEFAULTS: dict[str, ProstateConfiguration] = {
-    "prostate-heatmap": ProstateConfiguration(
-        output_path="heatmap.tiff",
-        stride_fraction=0.5,
-        output_tile_height=256,
-        output_tile_width=256,
-    )
-}
-
-
 class EmpaiaProviderAdapter:
     name = "empaia"
 
@@ -69,9 +59,13 @@ class EmpaiaProviderAdapter:
         self,
         catalog: WorkflowCatalog,
         gateway_factory: EmpaiaGatewayFactory,
+        configuration_registry: EmpaiaConfigurationRegistry | None = None,
     ) -> None:
         self._catalog = catalog
         self._gateway_factory = gateway_factory
+        self._configuration_registry = (
+            configuration_registry or EmpaiaConfigurationRegistry.default()
+        )
 
     def identify(self, request: ScheduleRequest) -> SubmissionIdentity:
         installation_id = _required_string(request.body, "installation_id")
@@ -114,7 +108,7 @@ class EmpaiaProviderAdapter:
                 raise InvalidScheduleRequestError(
                     "EMPAIA configuration must contain only JSON-compatible values"
                 )
-            configuration = _resolve_configuration(
+            configuration = self._configuration_registry.resolve(
                 request.workflow_id,
                 configuration,
             )
@@ -270,15 +264,6 @@ def _job_context(values: dict[str, JsonValue]) -> EmpaiaJobContext:
         job_id=_required_string(values, "job_id"),
         credential=_required_string(values, "credential"),
     )
-
-
-def _resolve_configuration(
-    workflow_id: str,
-    configuration: dict[str, JsonValue],
-) -> dict[str, JsonValue]:
-    defaults = _CONFIGURATION_DEFAULTS.get(workflow_id)
-    resolved = defaults.as_values() if defaults is not None else {}
-    return resolved | deepcopy(configuration)
 
 
 def _credential_expiry(credential: str) -> datetime:

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import TYPE_CHECKING, Protocol
 
 import httpx
+from fastapi import APIRouter, HTTPException, Request, Response
 
 
 if TYPE_CHECKING:
@@ -33,6 +35,10 @@ class InferenceResponse:
 
 class InferenceProxyUnavailableError(RuntimeError):
     pass
+
+
+class InferenceErrorCode(StrEnum):
+    MODEL_INFERENCE_UNAVAILABLE = "model_inference_unavailable"
 
 
 class InferenceProxy(Protocol):
@@ -67,9 +73,50 @@ class HttpInferenceProxy:
         )
 
 
+def create_inference_router(proxy: InferenceProxy | None) -> APIRouter:
+    router = APIRouter()
+
+    @router.post("/{model_path:path}", include_in_schema=False)
+    async def forward_model_inference(
+        request: Request,
+        model_path: str,
+    ) -> Response:
+        if proxy is None:
+            raise _unavailable("model inference is unavailable")
+        try:
+            forwarded = await proxy.forward(
+                InferenceRequest(
+                    path=model_path,
+                    query=request.url.query,
+                    body=await request.body(),
+                    headers=inference_headers(request.headers),
+                )
+            )
+        except InferenceProxyUnavailableError as error:
+            raise _unavailable(str(error)) from error
+        return Response(
+            status_code=forwarded.status_code,
+            content=forwarded.content,
+            headers=forwarded.headers,
+        )
+
+    return router
+
+
 def inference_headers(headers: Mapping[str, str]) -> dict[str, str]:
     return {
         name: value
         for name, value in headers.items()
         if name.lower() in _REQUEST_HEADERS
     }
+
+
+def _unavailable(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail={
+            "code": InferenceErrorCode.MODEL_INFERENCE_UNAVAILABLE,
+            "message": message,
+            "retryable": True,
+        },
+    )

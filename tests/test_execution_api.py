@@ -303,6 +303,16 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
             "application/octet-stream",
         )
 
+        unavailable = await self.client.post(
+            "/prostate-classifier-1",
+            content=b"compressed-image",
+        )
+        self.assertEqual(unavailable.status_code, 503)
+        self.assertEqual(
+            unavailable.json()["detail"]["code"],
+            "model_inference_unavailable",
+        )
+
     async def test_synchronous_workflow_validates_before_dispatch(self) -> None:
         async def reject_dispatch(_invocation: object) -> WorkflowResult:
             raise AssertionError("invalid invocation was dispatched")

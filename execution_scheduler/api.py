@@ -25,11 +25,7 @@ from execution_scheduler.dispatch import (
     RemoteWorkflowFailureError,
     UnknownDispatchOutcomeError,
 )
-from execution_scheduler.inference import (
-    InferenceProxyUnavailableError,
-    InferenceRequest,
-    inference_headers,
-)
+from execution_scheduler.inference import create_inference_router
 from workflow_execution.contracts import (
     InvalidWorkflowInvocation,
     JsonValue,
@@ -351,39 +347,7 @@ def create_execution_app(
             )
         return {"status": "ok"}
 
-    @app.post("/{model_path:path}", include_in_schema=False)
-    async def forward_model_inference(
-        request: Request,
-        model_path: str,
-    ) -> Response:
-        if inference_proxy is None:
-            raise _http_error(
-                503,
-                ApiErrorCode.WORKFLOW_DISPATCH_UNAVAILABLE,
-                "model inference is unavailable",
-                retryable=True,
-            )
-        try:
-            forwarded = await inference_proxy.forward(
-                InferenceRequest(
-                    path=model_path,
-                    query=request.url.query,
-                    body=await request.body(),
-                    headers=inference_headers(request.headers),
-                )
-            )
-        except InferenceProxyUnavailableError as error:
-            raise _http_error(
-                503,
-                ApiErrorCode.WORKFLOW_DISPATCH_UNAVAILABLE,
-                str(error),
-                retryable=True,
-            ) from error
-        return Response(
-            status_code=forwarded.status_code,
-            content=forwarded.content,
-            headers=forwarded.headers,
-        )
+    app.include_router(create_inference_router(inference_proxy))
 
     return app
 
