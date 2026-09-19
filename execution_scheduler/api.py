@@ -59,6 +59,15 @@ class ScheduleBody:
 
 
 @dataclass(frozen=True, slots=True)
+class EmpaiaScheduleBody:
+    installation_id: str
+    api_url: str
+    job_id: str
+    credential: str
+    requested_timeout_seconds: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class SchedulerErrorDetail:
     code: ApiErrorCode
     message: str
@@ -98,6 +107,40 @@ def create_execution_app(
     deployment_health: DeploymentHealth | None = None,
 ) -> FastAPI:
     app = FastAPI(title="model-service execution scheduler", lifespan=lifespan)
+
+    async def submit(
+        request: ScheduleRequest,
+        response: Response,
+    ) -> ScheduleResult:
+        try:
+            result = await scheduler.schedule(request)
+        except UnknownWorkflowError as error:
+            raise _http_error(
+                404,
+                ApiErrorCode.UNKNOWN_WORKFLOW,
+                "workflow is not declared",
+            ) from error
+        except ScheduleConflictError as error:
+            raise _http_error(
+                409,
+                ApiErrorCode.SCHEDULE_CONFLICT,
+                str(error),
+            ) from error
+        except InvalidScheduleRequestError as error:
+            raise _http_error(
+                422,
+                ApiErrorCode.INVALID_SCHEDULE_REQUEST,
+                str(error),
+            ) from error
+        except SchedulingUnavailableError as error:
+            raise _http_error(
+                503,
+                ApiErrorCode.SCHEDULING_UNAVAILABLE,
+                str(error),
+                retryable=True,
+            ) from error
+        response.status_code = 202 if result.created else 200
+        return result
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(
@@ -206,43 +249,48 @@ def create_execution_app(
         body: ScheduleBody,
         response: Response,
     ) -> ScheduleResult:
-        try:
-            result = await scheduler.schedule(
-                ScheduleRequest(
-                    workflow_id=workflow_id,
-                    provider=body.provider,
-                    body=body.body,
-                    requested_timeout_seconds=body.requested_timeout_seconds,
-                    idempotency_key=body.idempotency_key,
-                )
-            )
-        except UnknownWorkflowError as error:
-            raise _http_error(
-                404,
-                ApiErrorCode.UNKNOWN_WORKFLOW,
-                "workflow is not declared",
-            ) from error
-        except ScheduleConflictError as error:
-            raise _http_error(
-                409,
-                ApiErrorCode.SCHEDULE_CONFLICT,
-                str(error),
-            ) from error
-        except InvalidScheduleRequestError as error:
-            raise _http_error(
-                422,
-                ApiErrorCode.INVALID_SCHEDULE_REQUEST,
-                str(error),
-            ) from error
-        except SchedulingUnavailableError as error:
-            raise _http_error(
-                503,
-                ApiErrorCode.SCHEDULING_UNAVAILABLE,
-                str(error),
-                retryable=True,
-            ) from error
-        response.status_code = 202 if result.created else 200
-        return result
+        return await submit(
+            ScheduleRequest(
+                workflow_id=workflow_id,
+                provider=body.provider,
+                body=body.body,
+                requested_timeout_seconds=body.requested_timeout_seconds,
+                idempotency_key=body.idempotency_key,
+            ),
+            response,
+        )
+
+    @app.post(
+        "/v1/providers/empaia/workflows/{workflow_id}/schedule",
+        response_model=ScheduleResult,
+        status_code=status.HTTP_202_ACCEPTED,
+        responses={
+            200: {"model": ScheduleResult},
+            404: {"model": SchedulerErrorResponse},
+            409: {"model": SchedulerErrorResponse},
+            422: {"model": SchedulerErrorResponse},
+            503: {"model": SchedulerErrorResponse},
+        },
+    )
+    async def schedule_empaia(
+        workflow_id: str,
+        body: EmpaiaScheduleBody,
+        response: Response,
+    ) -> ScheduleResult:
+        return await submit(
+            ScheduleRequest(
+                workflow_id=workflow_id,
+                provider="empaia",
+                body={
+                    "installation_id": body.installation_id,
+                    "api_url": body.api_url,
+                    "job_id": body.job_id,
+                    "credential": body.credential,
+                },
+                requested_timeout_seconds=body.requested_timeout_seconds,
+            ),
+            response,
+        )
 
     @app.get(
         "/v1/executions/{execution_id}",

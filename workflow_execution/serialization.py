@@ -135,14 +135,5 @@ def _json_mapping(value: object, name: str) -> dict[str, JsonValue]:
 
 
 def _ensure_json(value: object, name: str) -> None:
-    if value is None or isinstance(value, bool | int | float | str):
-        return
-    if isinstance(value, list):
-        for item in value:
-            _ensure_json(item, name)
-        return
-    if isinstance(value, dict) and all(isinstance(key, str) for key in value):
-        for item in value.values():
-            _ensure_json(item, name)
-        return
-    raise ValueError(f"{name} must contain only JSON-compatible values")
+    if not is_json_value(value):
+        raise ValueError(f"{name} must contain only JSON-compatible values")

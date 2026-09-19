@@ -36,6 +36,14 @@
       }
     }
   },
+  "configuration_defaults": {
+    "empaia": {
+      "output_path": "heatmap.tiff",
+      "stride_fraction": 0.5,
+      "output_tile_height": 256,
+      "output_tile_width": 256
+    }
+  },
   "empaia": {
     "name": "Prostate Classifier",
     "name_short": "ProstCls",

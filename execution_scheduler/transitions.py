@@ -9,6 +9,8 @@ from execution_scheduler.contracts import (
     ExecutionStatus,
 )
 from execution_scheduler.domain import (
+    Admission,
+    ExecutionRecord,
     ProcessingFailed,
     ProcessingRejected,
     ProcessingSucceeded,
@@ -22,7 +24,7 @@ from execution_scheduler.domain import (
 if TYPE_CHECKING:
     from datetime import datetime, timedelta
 
-    from execution_scheduler.domain import ExecutionRecord, RetryPolicy, Settlement
+    from execution_scheduler.domain import RetryPolicy, Settlement
 
 
 class ExecutionTransitions:
@@ -33,6 +35,100 @@ class ExecutionTransitions:
     ) -> None:
         self._processing_policy = processing_policy
         self._finish_policy = finish_policy
+
+    @staticmethod
+    def admit(
+        admission: Admission,
+        execution_id: str,
+        now: datetime,
+    ) -> ExecutionRecord:
+        return ExecutionRecord(
+            id=execution_id,
+            identity=admission.identity,
+            workflow_id=admission.workflow_id,
+            status=ExecutionStatus.QUEUED,
+            invocation=admission.invocation,
+            protected_context=admission.protected_context,
+            deadline_at=admission.deadline_at,
+            terminal_report_deadline_at=admission.terminal_report_deadline_at,
+            work_kind=WorkKind.PROCESSING,
+            next_attempt_at=now,
+            processing_attempts=0,
+            processing_rejections=0,
+            finish_attempts=0,
+            lease_owner=None,
+            fencing_token=None,
+            lease_expires_at=None,
+            result=None,
+            error=None,
+            created_at=now,
+            updated_at=now,
+        )
+
+    @staticmethod
+    def cancel(execution: ExecutionRecord, now: datetime) -> ExecutionRecord:
+        if execution.status in {
+            ExecutionStatus.SUCCEEDED,
+            ExecutionStatus.FAILED,
+            ExecutionStatus.CANCELLED,
+        }:
+            return execution
+        return replace(
+            execution,
+            status=ExecutionStatus.CANCELLED,
+            work_kind=WorkKind.PROVIDER_CANCELLATION_REPORT,
+            next_attempt_at=now,
+            lease_owner=None,
+            fencing_token=None,
+            lease_expires_at=None,
+            updated_at=now,
+        )
+
+    @staticmethod
+    def claim(
+        execution: ExecutionRecord,
+        *,
+        owner: str,
+        fencing_token: str,
+        lease_duration: timedelta,
+        now: datetime,
+    ) -> ExecutionRecord:
+        if execution.work_kind is None:
+            raise StaleWorkClaimError("execution has no due work")
+        processing_attempts = execution.processing_attempts
+        finish_attempts = execution.finish_attempts
+        if execution.work_kind is WorkKind.PROCESSING:
+            processing_attempts += 1
+        else:
+            finish_attempts += 1
+        return replace(
+            execution,
+            status=(
+                ExecutionStatus.RUNNING
+                if execution.work_kind
+                in {WorkKind.PROCESSING, WorkKind.PROVIDER_FINISH}
+                else execution.status
+            ),
+            processing_attempts=processing_attempts,
+            finish_attempts=finish_attempts,
+            lease_owner=owner,
+            fencing_token=fencing_token,
+            lease_expires_at=now + lease_duration,
+            updated_at=now,
+        )
+
+    @staticmethod
+    def renew(
+        execution: ExecutionRecord,
+        *,
+        lease_duration: timedelta,
+        now: datetime,
+    ) -> ExecutionRecord:
+        return replace(
+            execution,
+            lease_expires_at=now + lease_duration,
+            updated_at=now,
+        )
 
     def settle(
         self,
@@ -178,6 +274,11 @@ class ExecutionTransitions:
 
     def deadline(self, execution: ExecutionRecord, now: datetime) -> ExecutionRecord:
         if execution.status in {ExecutionStatus.FAILED, ExecutionStatus.CANCELLED}:
+            if (
+                execution.terminal_report_deadline_at is not None
+                and execution.terminal_report_deadline_at > now
+            ):
+                return execution
             return self._clear_work(execution, now)
         return self._terminal_failure(
             execution,
@@ -186,7 +287,24 @@ class ExecutionTransitions:
                 message="execution deadline was exceeded",
             ),
             now,
+            report=(
+                execution.terminal_report_deadline_at is not None
+                and execution.terminal_report_deadline_at > now
+            ),
         )
+
+    @staticmethod
+    def work_deadline_at(execution: ExecutionRecord) -> datetime:
+        if (
+            execution.work_kind
+            in {
+                WorkKind.PROVIDER_FAILURE_REPORT,
+                WorkKind.PROVIDER_CANCELLATION_REPORT,
+            }
+            and execution.terminal_report_deadline_at is not None
+        ):
+            return execution.terminal_report_deadline_at
+        return execution.deadline_at
 
     @staticmethod
     def _require_kind(execution: ExecutionRecord, expected: WorkKind) -> None:
@@ -202,8 +320,8 @@ class ExecutionTransitions:
         }:
             raise StaleWorkClaimError("claim is not provider work")
 
-    @staticmethod
     def _retry(
+        self,
         execution: ExecutionRecord,
         now: datetime,
         backoff: timedelta,
@@ -213,7 +331,7 @@ class ExecutionTransitions:
         return replace(
             execution,
             status=status,
-            next_attempt_at=min(now + backoff, execution.deadline_at),
+            next_attempt_at=min(now + backoff, self.work_deadline_at(execution)),
             lease_owner=None,
             fencing_token=None,
             lease_expires_at=None,

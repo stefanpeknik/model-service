@@ -10,6 +10,7 @@ from starlette.types import Message, Scope
 
 from execution_scheduler.api import create_execution_app
 from execution_scheduler.contracts import (
+    ExecutionStatus,
     ExecutionView,
     ScheduleRequest,
     ScheduleResult,
@@ -30,6 +31,28 @@ from workflow_execution.contracts import (
     SharedArtifact,
     WorkflowResult,
 )
+
+
+class RecordingScheduler:
+    def __init__(self) -> None:
+        self.requests: list[ScheduleRequest] = []
+
+    async def schedule(self, request: ScheduleRequest) -> ScheduleResult:
+        self.requests.append(request)
+        return ScheduleResult(
+            execution=ExecutionView(
+                id="execution-1",
+                workflow_id=request.workflow_id,
+                status=ExecutionStatus.QUEUED,
+            ),
+            created=True,
+        )
+
+    async def get(self, execution_id: str) -> ExecutionView:
+        raise AssertionError(execution_id)
+
+    async def cancel(self, execution_id: str) -> ExecutionView:
+        raise AssertionError(execution_id)
 
 
 class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
@@ -93,6 +116,49 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(polled.status_code, 200)
         self.assertEqual(cancelled.json()["status"], "cancelled")
         self.assertEqual(repeated.json(), cancelled.json())
+
+    async def test_empaia_ingress_owns_a_typed_request_shape(self) -> None:
+        scheduler = RecordingScheduler()
+        async with AsyncClient(
+            transport=ASGITransport(app=create_execution_app(scheduler)),
+            base_url="http://model-service",
+        ) as client:
+            response = await client.post(
+                "/v1/providers/empaia/workflows/prostate-heatmap/schedule",
+                json={
+                    "installation_id": "installation-1",
+                    "api_url": "https://empaia.example",
+                    "job_id": "job-1",
+                    "credential": "secret",
+                    "requested_timeout_seconds": 600,
+                },
+            )
+            malformed = await client.post(
+                "/v1/providers/empaia/workflows/prostate-heatmap/schedule",
+                json={
+                    "installation_id": "installation-1",
+                    "api_url": "https://empaia.example",
+                    "job_id": "job-1",
+                },
+            )
+
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(malformed.status_code, 422)
+        self.assertEqual(len(scheduler.requests), 1)
+        request = scheduler.requests[0]
+        self.assertEqual(request.provider, "empaia")
+        self.assertEqual(request.workflow_id, "prostate-heatmap")
+        self.assertEqual(request.requested_timeout_seconds, 600)
+        self.assertIsNone(request.idempotency_key)
+        self.assertEqual(
+            request.body,
+            {
+                "installation_id": "installation-1",
+                "api_url": "https://empaia.example",
+                "job_id": "job-1",
+                "credential": "secret",
+            },
+        )
 
     async def test_scheduled_workflow_completes_through_public_api(self) -> None:
         now = datetime(2026, 9, 17, 8, tzinfo=UTC)

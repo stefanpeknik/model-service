@@ -20,8 +20,9 @@ workflow processing and provider finish.
 - `contracts.py` contains caller-visible request, result, and status types.
 - `domain.py` contains internal records, claims, retry policies, and settlement
   values.
-- `transitions.py` is the only module that decides how a settlement, expired
-  lease, or deadline changes an execution record.
+- `transitions.py` is the only module that creates or changes execution state,
+  including admission, claims, cancellation, settlement, lease recovery, and
+  deadlines.
 - `repository.py` defines the seven persistence operations and provides the
   in-memory test adapter.
 - `postgres.py` implements those operations with PostgreSQL.
@@ -35,6 +36,10 @@ workflow processing and provider finish.
 - `standalone.py` prepares shared-storage schedule requests.
 - `../integrations/empaia/provider.py` prepares and finishes EMPAIA-backed
   executions.
+- `../integrations/empaia/http_gateway.py` implements the AppService HTTP and
+  direct-access boundary.
+- `../integrations/empaia/image_io.py` materializes rectangle masks and
+  publishes TIFF artifacts as EMPAIA pixelmaps.
 - `health.py` checks declared workflow applications against Ray Serve routes.
 - `synchronous.py` runs the same workflow contract without creating a durable
   execution.

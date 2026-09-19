@@ -21,9 +21,12 @@ from execution_scheduler.dispatch import (
     UnknownDispatchOutcomeError,
 )
 from execution_scheduler.domain import (
+    Admission,
     PreparedWorkflow,
+    ProviderFinishSucceeded,
     RetryPolicy,
     SubmissionIdentity,
+    WorkKind,
 )
 from execution_scheduler.providers import (
     ProviderCancellation,
@@ -143,6 +146,49 @@ class UnavailableExecutionRepository(InMemoryExecutionRepository):
 
 
 class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_deadline_failure_is_reported_until_provider_deadline(self) -> None:
+        clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
+        repository = InMemoryExecutionRepository(clock=clock)
+        execution_deadline = clock() + timedelta(minutes=5)
+        report_deadline = clock() + timedelta(hours=1)
+        admission = Admission(
+            identity=SubmissionIdentity("empaia", "job-1", "fingerprint"),
+            workflow_id="prostate-heatmap",
+            invocation=WorkflowInvocation(
+                inputs={},
+                resolved_configuration={},
+                input_access=InputAccessContext(kind="empaia", state={}),
+                deadline_at=execution_deadline,
+            ),
+            protected_context={"credential": "secret"},
+            deadline_at=execution_deadline,
+            terminal_report_deadline_at=report_deadline,
+        )
+        await repository.admit(admission)
+        processing = await repository.claim_due("worker-1", timedelta(hours=1))
+        assert processing is not None
+        clock.advance(timedelta(minutes=6))
+
+        directive = await repository.renew(
+            processing.execution_id,
+            processing.fencing_token,
+            timedelta(minutes=1),
+        )
+        report = await repository.claim_due("worker-2", timedelta(minutes=1))
+
+        self.assertEqual(directive, "deadline_exceeded")
+        assert report is not None
+        self.assertEqual(report.kind, WorkKind.PROVIDER_FAILURE_REPORT)
+        assert report.error is not None
+        self.assertEqual(report.error.code, "execution_deadline_exceeded")
+        failed = await repository.settle(
+            report.execution_id,
+            report.fencing_token,
+            ProviderFinishSucceeded(),
+        )
+        self.assertEqual(failed.status, "failed")
+        self.assertIsNone(failed.work_kind)
+
     async def test_repository_failure_is_translated_by_the_scheduler(self) -> None:
         provider = StandaloneProvider()
         scheduler = ExecutionScheduler(

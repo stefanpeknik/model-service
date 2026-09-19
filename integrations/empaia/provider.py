@@ -3,10 +3,12 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
+from contextlib import asynccontextmanager
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Never
 
 from execution_scheduler.contracts import (
     InvalidScheduleRequestError,
@@ -21,7 +23,11 @@ from execution_scheduler.providers import (
     ProviderFinishOutcome,
     ProviderSuccess,
 )
-from integrations.empaia.gateway import EmpaiaGatewayError, EmpaiaGatewayFactory
+from integrations.empaia.gateway import (
+    EmpaiaGateway,
+    EmpaiaGatewayError,
+    EmpaiaGatewayFactory,
+)
 from workflow_execution.application import validate_workflow_invocation
 from workflow_execution.contracts import (
     InputAccessContext,
@@ -32,12 +38,17 @@ from workflow_execution.serialization import is_json_value
 
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
     from workflow_execution.catalog import WorkflowCatalog
     from workflow_execution.contracts import JsonValue
 
 
 class EmpaiaErrorCode(StrEnum):
     FINISH_FAILED = "empaia_finish_failed"
+
+
+logger = logging.getLogger(__name__)
 
 
 class EmpaiaProviderAdapter:
@@ -81,8 +92,12 @@ class EmpaiaProviderAdapter:
         job_id = _required_string(request.body, "job_id")
         credential = _required_string(request.body, "credential")
         credential_expires_at = _credential_expiry(credential)
-        gateway = self._gateway_factory(api_url, job_id, credential)
-        try:
+        async with _preparation_gateway(
+            self._gateway_factory,
+            api_url,
+            job_id,
+            credential,
+        ) as gateway:
             try:
                 configuration = await gateway.get_configuration()
             except EmpaiaGatewayError as error:
@@ -93,6 +108,11 @@ class EmpaiaProviderAdapter:
                 raise InvalidScheduleRequestError(
                     "EMPAIA configuration must contain only JSON-compatible values"
                 )
+            configuration = self._catalog.resolve_configuration(
+                request.workflow_id,
+                self.name,
+                configuration,
+            )
             try:
                 self._catalog.validate_configuration(
                     request.workflow_id,
@@ -100,8 +120,6 @@ class EmpaiaProviderAdapter:
                 )
             except (TypeError, ValueError) as error:
                 raise InvalidScheduleRequestError(str(error)) from error
-        finally:
-            await gateway.close()
         effective_deadline = min(deadline_at, credential_expires_at)
         definition = self._catalog.get(request.workflow_id)
         invocation = WorkflowInvocation(
@@ -129,6 +147,7 @@ class EmpaiaProviderAdapter:
                 "credential": credential,
             },
             deadline_cap=credential_expires_at,
+            terminal_report_deadline_at=credential_expires_at,
         )
 
     async def finish(
@@ -139,27 +158,110 @@ class EmpaiaProviderAdapter:
         api_url = _required_string(protected_context, "api_url")
         job_id = _required_string(protected_context, "job_id")
         credential = _required_string(protected_context, "credential")
-        gateway = self._gateway_factory(api_url, job_id, credential)
-        mutation_completed = False
-        try:
-            if isinstance(outcome, ProviderSuccess):
-                for name, output in outcome.result.outputs.items():
-                    await gateway.publish_output(name, output)
-                    mutation_completed = True
-                await gateway.finalize()
-            elif isinstance(outcome, ProviderFailure):
-                await gateway.report_failure(outcome.error.message)
-            elif isinstance(outcome, ProviderCancellation):
-                await gateway.report_failure("workflow execution was cancelled")
-        except EmpaiaGatewayError as error:
-            raise ProviderFinishFailureError(
-                code=EmpaiaErrorCode.FINISH_FAILED,
-                safe_message=error.safe_message,
-                retryable=error.retryable,
-                outcome_unknown=error.outcome_unknown or mutation_completed,
-            ) from error
-        finally:
-            await gateway.close()
+        async with _finish_gateway(
+            self._gateway_factory,
+            api_url,
+            job_id,
+            credential,
+        ) as gateway:
+            mutation_completed = False
+            try:
+                if isinstance(outcome, ProviderSuccess):
+                    for name, output in outcome.result.outputs.items():
+                        await gateway.publish_output(name, output)
+                        mutation_completed = True
+                    await gateway.finalize()
+                elif isinstance(outcome, ProviderFailure):
+                    await gateway.report_failure(outcome.error.message)
+                elif isinstance(outcome, ProviderCancellation):
+                    await gateway.report_failure("workflow execution was cancelled")
+            except EmpaiaGatewayError as error:
+                raise ProviderFinishFailureError(
+                    code=EmpaiaErrorCode.FINISH_FAILED,
+                    safe_message=error.safe_message,
+                    retryable=error.retryable,
+                    outcome_unknown=error.outcome_unknown or mutation_completed,
+                ) from error
+
+
+@asynccontextmanager
+async def _preparation_gateway(
+    factory: EmpaiaGatewayFactory,
+    api_url: str,
+    job_id: str,
+    credential: str,
+) -> AsyncIterator[EmpaiaGateway]:
+    try:
+        gateway = factory(api_url, job_id, credential)
+    except EmpaiaGatewayError as error:
+        _raise_preparation_error(error)
+    except Exception as error:
+        raise SchedulingUnavailableError(
+            "EMPAIA integration is temporarily unavailable"
+        ) from error
+    try:
+        yield gateway
+    except BaseException:
+        await _close_preserving_outcome(gateway)
+        raise
+    try:
+        await gateway.close()
+    except EmpaiaGatewayError as error:
+        _raise_preparation_error(error)
+    except Exception as error:
+        raise SchedulingUnavailableError(
+            "EMPAIA integration is temporarily unavailable"
+        ) from error
+
+
+@asynccontextmanager
+async def _finish_gateway(
+    factory: EmpaiaGatewayFactory,
+    api_url: str,
+    job_id: str,
+    credential: str,
+) -> AsyncIterator[EmpaiaGateway]:
+    try:
+        gateway = factory(api_url, job_id, credential)
+    except EmpaiaGatewayError as error:
+        raise _finish_failure(error) from error
+    except Exception as error:
+        raise ProviderFinishFailureError(
+            code=EmpaiaErrorCode.FINISH_FAILED,
+            safe_message="EMPAIA integration is temporarily unavailable",
+            retryable=True,
+        ) from error
+    try:
+        yield gateway
+    except BaseException:
+        await _close_preserving_outcome(gateway)
+        raise
+    try:
+        await gateway.close()
+    except Exception as error:
+        logger.warning("EMPAIA gateway cleanup failed: %s", type(error).__name__)
+
+
+async def _close_preserving_outcome(gateway: EmpaiaGateway) -> None:
+    try:
+        await gateway.close()
+    except Exception as error:
+        logger.warning("EMPAIA gateway cleanup failed: %s", type(error).__name__)
+
+
+def _raise_preparation_error(error: EmpaiaGatewayError) -> Never:
+    if error.retryable:
+        raise SchedulingUnavailableError(error.safe_message) from error
+    raise InvalidScheduleRequestError(error.safe_message) from error
+
+
+def _finish_failure(error: EmpaiaGatewayError) -> ProviderFinishFailureError:
+    return ProviderFinishFailureError(
+        code=EmpaiaErrorCode.FINISH_FAILED,
+        safe_message=error.safe_message,
+        retryable=error.retryable,
+        outcome_unknown=error.outcome_unknown,
+    )
 
 
 def _required_string(values: dict[str, JsonValue], name: str) -> str:

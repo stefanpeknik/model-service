@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Protocol
 from uuid import uuid4
@@ -123,26 +122,10 @@ class InMemoryExecutionRepository:
                 self._check_fingerprint(existing, admission.identity)
                 return AdmissionResult(existing, created=False)
             now = self._clock()
-            execution = ExecutionRecord(
-                id=str(uuid4()),
-                identity=admission.identity,
-                workflow_id=admission.workflow_id,
-                status=ExecutionStatus.QUEUED,
-                invocation=admission.invocation,
-                protected_context=admission.protected_context,
-                deadline_at=admission.deadline_at,
-                work_kind=WorkKind.PROCESSING,
-                next_attempt_at=now,
-                processing_attempts=0,
-                processing_rejections=0,
-                finish_attempts=0,
-                lease_owner=None,
-                fencing_token=None,
-                lease_expires_at=None,
-                result=None,
-                error=None,
-                created_at=now,
-                updated_at=now,
+            execution = self._transitions.admit(
+                admission,
+                str(uuid4()),
+                now,
             )
             self._executions[execution.id] = execution
             self._submissions[key] = execution.id
@@ -155,22 +138,7 @@ class InMemoryExecutionRepository:
     async def request_cancel(self, execution_id: str) -> ExecutionRecord:
         async with self._lock:
             execution = self._get(execution_id)
-            if execution.status in {
-                ExecutionStatus.SUCCEEDED,
-                ExecutionStatus.FAILED,
-                ExecutionStatus.CANCELLED,
-            }:
-                return execution
-            cancelled = replace(
-                execution,
-                status=ExecutionStatus.CANCELLED,
-                work_kind=WorkKind.PROVIDER_CANCELLATION_REPORT,
-                next_attempt_at=self._clock(),
-                lease_owner=None,
-                fencing_token=None,
-                lease_expires_at=None,
-                updated_at=self._clock(),
-            )
+            cancelled = self._transitions.cancel(execution, self._clock())
             self._executions[execution_id] = cancelled
             return cancelled
 
@@ -201,32 +169,19 @@ class InMemoryExecutionRepository:
                 ):
                     continue
                 token = str(uuid4())
-                processing_attempts = execution.processing_attempts
-                finish_attempts = execution.finish_attempts
                 if execution.work_kind is WorkKind.PROCESSING:
-                    processing_attempts += 1
                     active_by_workflow[execution.workflow_id] = (
                         active_by_workflow.get(execution.workflow_id, 0) + 1
                     )
-                else:
-                    finish_attempts += 1
-                lease_expires_at = now + lease_duration
-                claimed = replace(
+                claimed = self._transitions.claim(
                     execution,
-                    status=(
-                        ExecutionStatus.RUNNING
-                        if execution.work_kind
-                        in {WorkKind.PROCESSING, WorkKind.PROVIDER_FINISH}
-                        else execution.status
-                    ),
-                    processing_attempts=processing_attempts,
-                    finish_attempts=finish_attempts,
-                    lease_owner=owner,
+                    owner=owner,
                     fencing_token=token,
-                    lease_expires_at=lease_expires_at,
-                    updated_at=now,
+                    lease_duration=lease_duration,
+                    now=now,
                 )
                 self._executions[execution.id] = claimed
+                assert claimed.lease_expires_at is not None
                 return WorkClaim(
                     execution_id=claimed.id,
                     workflow_id=claimed.workflow_id,
@@ -241,7 +196,7 @@ class InMemoryExecutionRepository:
                         else claimed.finish_attempts
                     ),
                     fencing_token=token,
-                    lease_expires_at=lease_expires_at,
+                    lease_expires_at=claimed.lease_expires_at,
                     result=claimed.result,
                     error=claimed.error,
                 )
@@ -264,16 +219,16 @@ class InMemoryExecutionRepository:
                 if execution.status is ExecutionStatus.CANCELLED:
                     return RenewDirective.CANCEL
                 return RenewDirective.LEASE_LOST
-            if execution.deadline_at <= now:
+            if self._transitions.work_deadline_at(execution) <= now:
                 self._executions[execution_id] = self._transitions.deadline(
                     execution,
                     now,
                 )
                 return RenewDirective.DEADLINE_EXCEEDED
-            self._executions[execution_id] = replace(
+            self._executions[execution_id] = self._transitions.renew(
                 execution,
-                lease_expires_at=now + lease_duration,
-                updated_at=now,
+                lease_duration=lease_duration,
+                now=now,
             )
             return RenewDirective.CONTINUE
 
@@ -288,7 +243,7 @@ class InMemoryExecutionRepository:
             if execution.fencing_token != fencing_token:
                 raise StaleWorkClaimError("work claim is no longer current")
             now = self._clock()
-            if execution.deadline_at <= now:
+            if self._transitions.work_deadline_at(execution) <= now:
                 self._executions[execution_id] = self._transitions.deadline(
                     execution,
                     now,
@@ -323,7 +278,8 @@ class InMemoryExecutionRepository:
 
     def _expire_deadlines(self, now: datetime) -> None:
         for execution_id, execution in tuple(self._executions.items()):
-            if execution.deadline_at <= now and (
+            deadline_at = self._transitions.work_deadline_at(execution)
+            if deadline_at <= now and (
                 execution.status
                 not in {
                     ExecutionStatus.SUCCEEDED,

@@ -108,30 +108,48 @@ class PostgresExecutionRepository:
     async def admit(self, admission: Admission) -> AdmissionResult:
         encrypted_context = self._cipher.encrypt(admission.protected_context)
         async with self._connection() as connection:
+            now = await self._database_now(connection)
+            execution = self._transitions.admit(
+                admission,
+                str(uuid4()),
+                now,
+            )
             cursor = await connection.execute(
                 sql.SQL(
                     """
                     INSERT INTO {} (
                         id, provider, submission_key, request_fingerprint,
                         workflow_id, status, invocation, protected_context,
-                        deadline_at, work_kind, next_attempt_at
+                        deadline_at, terminal_report_deadline_at, work_kind,
+                        next_attempt_at, processing_attempts,
+                        processing_rejections, finish_attempts, created_at,
+                        updated_at
                     ) VALUES (
-                        %s, %s, %s, %s, %s, 'queued', %s, %s, %s,
-                        'processing', clock_timestamp()
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s
                     )
                     ON CONFLICT (provider, submission_key) DO NOTHING
                     RETURNING *
                     """
                 ).format(self._table),
                 (
-                    uuid4(),
-                    admission.identity.provider,
-                    admission.identity.key,
-                    admission.identity.fingerprint,
-                    admission.workflow_id,
-                    Jsonb(invocation_to_dict(admission.invocation)),
+                    execution.id,
+                    execution.identity.provider,
+                    execution.identity.key,
+                    execution.identity.fingerprint,
+                    execution.workflow_id,
+                    execution.status,
+                    Jsonb(invocation_to_dict(execution.invocation)),
                     encrypted_context,
-                    admission.deadline_at,
+                    execution.deadline_at,
+                    execution.terminal_report_deadline_at,
+                    execution.work_kind,
+                    execution.next_attempt_at,
+                    execution.processing_attempts,
+                    execution.processing_rejections,
+                    execution.finish_attempts,
+                    execution.created_at,
+                    execution.updated_at,
                 ),
             )
             row = await cursor.fetchone()
@@ -159,30 +177,13 @@ class PostgresExecutionRepository:
         async with self._connection() as connection:
             row = await self._fetch(connection, execution_id, for_update=True)
             execution = self._record(row)
-            if execution.status in {
-                ExecutionStatus.SUCCEEDED,
-                ExecutionStatus.FAILED,
-                ExecutionStatus.CANCELLED,
-            }:
-                return execution
-            cursor = await connection.execute(
-                sql.SQL(
-                    """
-                    UPDATE {} SET
-                        status = 'cancelled',
-                        work_kind = 'provider_cancellation_report',
-                        next_attempt_at = clock_timestamp(), lease_owner = NULL,
-                        fencing_token = NULL, lease_expires_at = NULL,
-                        updated_at = clock_timestamp()
-                    WHERE id = %s
-                    RETURNING *
-                    """
-                ).format(self._table),
-                (execution_id,),
+            cancelled = self._transitions.cancel(
+                execution,
+                await self._database_now(connection),
             )
-            updated = await cursor.fetchone()
-            assert updated is not None
-            return self._record(updated)
+            if cancelled is execution:
+                return execution
+            return await self._persist_state(connection, cancelled)
 
     async def claim_due(
         self,
@@ -200,43 +201,14 @@ class PostgresExecutionRepository:
                 return None
             execution = self._record(row)
             token = str(uuid4())
-            processing_attempts = execution.processing_attempts
-            finish_attempts = execution.finish_attempts
-            if execution.work_kind is WorkKind.PROCESSING:
-                processing_attempts += 1
-            else:
-                finish_attempts += 1
-            cursor = await connection.execute(
-                sql.SQL(
-                    """
-                    UPDATE {} SET
-                        status = %s, processing_attempts = %s,
-                        finish_attempts = %s, lease_owner = %s,
-                        fencing_token = %s, lease_expires_at = %s,
-                        updated_at = %s
-                    WHERE id = %s
-                    RETURNING *
-                    """
-                ).format(self._table),
-                (
-                    (
-                        ExecutionStatus.RUNNING
-                        if execution.work_kind
-                        in {WorkKind.PROCESSING, WorkKind.PROVIDER_FINISH}
-                        else execution.status
-                    ),
-                    processing_attempts,
-                    finish_attempts,
-                    owner,
-                    token,
-                    now + lease_duration,
-                    now,
-                    execution.id,
-                ),
+            claimed = self._transitions.claim(
+                execution,
+                owner=owner,
+                fencing_token=token,
+                lease_duration=lease_duration,
+                now=now,
             )
-            claimed_row = await cursor.fetchone()
-            assert claimed_row is not None
-            claimed = self._record(claimed_row)
+            claimed = await self._persist_state(connection, claimed)
             assert claimed.work_kind is not None
             assert claimed.lease_expires_at is not None
             return WorkClaim(
@@ -276,19 +248,16 @@ class PostgresExecutionRepository:
                 if execution.status is ExecutionStatus.CANCELLED:
                     return RenewDirective.CANCEL
                 return RenewDirective.LEASE_LOST
-            if execution.deadline_at <= now:
+            if self._transitions.work_deadline_at(execution) <= now:
                 failed = self._transitions.deadline(execution, now)
                 await self._persist_state(connection, failed)
                 return RenewDirective.DEADLINE_EXCEEDED
-            await connection.execute(
-                sql.SQL(
-                    """
-                    UPDATE {} SET lease_expires_at = %s, updated_at = %s
-                    WHERE id = %s
-                    """
-                ).format(self._table),
-                (now + lease_duration, now, execution_id),
+            renewed = self._transitions.renew(
+                execution,
+                lease_duration=lease_duration,
+                now=now,
             )
+            await self._persist_state(connection, renewed)
             return RenewDirective.CONTINUE
 
     async def settle(
@@ -304,7 +273,7 @@ class PostgresExecutionRepository:
             if execution.fencing_token != fencing_token:
                 raise StaleWorkClaimError("work claim is no longer current")
             now = await self._database_now(connection)
-            if execution.deadline_at <= now:
+            if self._transitions.work_deadline_at(execution) <= now:
                 await self._persist_state(
                     connection,
                     self._transitions.deadline(execution, now),
@@ -333,13 +302,22 @@ class PostgresExecutionRepository:
                 )
                   AND fencing_token IS NULL
                   AND next_attempt_at <= %s
-                  AND deadline_at > %s
+                  AND (
+                    (work_kind = 'provider_finish' AND deadline_at > %s)
+                    OR (
+                      work_kind IN (
+                        'provider_failure_report',
+                        'provider_cancellation_report'
+                      )
+                      AND COALESCE(terminal_report_deadline_at, deadline_at) > %s
+                    )
+                  )
                 ORDER BY next_attempt_at, created_at
                 FOR UPDATE SKIP LOCKED
                 LIMIT 1
                 """
             ).format(self._table),
-            (now, now),
+            (now, now, now),
         )
         return await cursor.fetchone()
 
@@ -438,21 +416,21 @@ class PostgresExecutionRepository:
             sql.SQL(
                 """
                 SELECT * FROM {}
-                WHERE deadline_at <= %s
-                  AND (
+                WHERE (
                     status NOT IN ('succeeded', 'failed', 'cancelled')
-                    OR (
-                      status IN ('failed', 'cancelled')
-                      AND work_kind IN (
-                        'provider_failure_report',
-                        'provider_cancellation_report'
-                      )
+                    AND deadline_at <= %s
+                  ) OR (
+                    status IN ('failed', 'cancelled')
+                    AND work_kind IN (
+                      'provider_failure_report',
+                      'provider_cancellation_report'
                     )
+                    AND COALESCE(terminal_report_deadline_at, deadline_at) <= %s
                   )
                 FOR UPDATE SKIP LOCKED
                 """
             ).format(self._table),
-            (now,),
+            (now, now),
         )
         for row in await cursor.fetchall():
             execution = self._record(row)
@@ -555,6 +533,7 @@ class PostgresExecutionRepository:
             invocation=invocation_from_dict(row["invocation"]),
             protected_context=self._cipher.decrypt(bytes(row["protected_context"])),
             deadline_at=row["deadline_at"],
+            terminal_report_deadline_at=row["terminal_report_deadline_at"],
             work_kind=WorkKind(row["work_kind"]) if row["work_kind"] else None,
             next_attempt_at=row["next_attempt_at"],
             processing_attempts=row["processing_attempts"],

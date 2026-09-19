@@ -3,14 +3,20 @@ from __future__ import annotations
 import asyncio
 import os
 import unittest
+from base64 import urlsafe_b64encode
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 
 if TYPE_CHECKING:
     from workflow_execution.contracts import WorkflowInvocation
+
+
+# Ray otherwise reproduces the parent `uv run` environment for every local worker.
+os.environ.setdefault("RAY_ENABLE_UV_RUN_RUNTIME_ENV", "0")
 
 
 @unittest.skipUnless(
@@ -18,6 +24,144 @@ if TYPE_CHECKING:
     "set RUN_RAY_SERVE_INTEGRATION=1 to run local Ray Serve validation",
 )
 class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_public_api_postgres_worker_and_ray_serve_are_assembled(
+        self,
+    ) -> None:
+        dsn = os.environ.get("TEST_POSTGRES_DSN")
+        if dsn is None:
+            self.skipTest("TEST_POSTGRES_DSN is not configured")
+
+        import httpx
+        import ray
+        from psycopg import AsyncConnection, sql
+        from ray import serve
+
+        from execution_scheduler.api import create_execution_app
+        from execution_scheduler.dispatch import HTTPWorkflowDispatch
+        from execution_scheduler.domain import RetryPolicy
+        from execution_scheduler.postgres import PostgresExecutionRepository
+        from execution_scheduler.scheduler import ExecutionScheduler
+        from execution_scheduler.security import ProtectedContextCipher
+        from execution_scheduler.standalone import StandaloneProviderAdapter
+        from execution_scheduler.synchronous import SynchronousWorkflowService
+        from execution_scheduler.worker import ExecutionWorker
+        from tests.integration.ray_probe_application import ProbeWorkflow
+        from workflow_execution.catalog import (
+            WorkflowCatalog,
+            WorkflowDefinition,
+            WorkflowValueDefinition,
+        )
+
+        schema = f"test_assembled_{uuid4().hex}"
+        policy = RetryPolicy(3, timedelta(0), timedelta(0))
+        repository = PostgresExecutionRepository(
+            dsn,
+            schema=schema,
+            cipher=ProtectedContextCipher.from_base64(
+                urlsafe_b64encode(bytes(range(32))).decode()
+            ),
+            processing_policy=policy,
+            finish_policy=policy,
+        )
+        definition = WorkflowDefinition(
+            identifier="probe",
+            inputs={},
+            outputs={"value": WorkflowValueDefinition(kind="inline")},
+        )
+        catalog = WorkflowCatalog((definition,))
+        provider = StandaloneProviderAdapter(catalog)
+        ray.init(num_cpus=2, include_dashboard=False)
+        try:
+            with TemporaryDirectory() as directory:
+                await repository.initialize()
+                serve.run(
+                    ProbeWorkflow.bind(directory),  # type: ignore[attr-defined]
+                    name="probe",
+                    route_prefix="/workflows/probe",
+                )
+                async with httpx.AsyncClient() as ray_client:
+                    dispatch = HTTPWorkflowDispatch(
+                        ray_client,
+                        origin="http://127.0.0.1:8000",
+                    )
+                    scheduler = ExecutionScheduler(
+                        repository=repository,
+                        providers={provider.name: provider},
+                        known_workflows=catalog.identifiers,
+                        default_timeout=timedelta(minutes=3),
+                        maximum_timeout=timedelta(minutes=3),
+                    )
+                    worker = ExecutionWorker(
+                        repository=repository,
+                        providers={provider.name: provider},
+                        dispatch=dispatch,
+                        owner="assembled-worker",
+                        lease_duration=timedelta(seconds=30),
+                    )
+                    app = create_execution_app(
+                        scheduler,
+                        workflow_runner=SynchronousWorkflowService(
+                            catalog,
+                            dispatch,
+                        ),
+                    )
+                    async with httpx.AsyncClient(
+                        transport=httpx.ASGITransport(app=app),
+                        base_url="http://model-service",
+                    ) as api_client:
+                        invocation = self._standalone_invocation(directory)
+                        scheduled = await api_client.post(
+                            "/v1/workflows/probe/schedule",
+                            json={
+                                "provider": "standalone",
+                                "body": invocation,
+                                "idempotency_key": "assembled-probe",
+                            },
+                        )
+                        replay = await api_client.post(
+                            "/v1/workflows/probe/schedule",
+                            json={
+                                "provider": "standalone",
+                                "body": invocation,
+                                "idempotency_key": "assembled-probe",
+                            },
+                        )
+                        execution_id = scheduled.json()["execution"]["id"]
+
+                        self.assertTrue(await worker.run_once())
+                        self.assertTrue(await worker.run_once())
+                        completed = await api_client.get(
+                            f"/v1/executions/{execution_id}"
+                        )
+                        synchronous = await api_client.post(
+                            "/v1/workflows/probe/run",
+                            json={
+                                **invocation,
+                                "deadline_at": (
+                                    datetime.now(UTC) + timedelta(minutes=3)
+                                ).isoformat(),
+                            },
+                        )
+
+                self.assertEqual(scheduled.status_code, 202)
+                self.assertEqual(replay.status_code, 200)
+                self.assertEqual(completed.json()["status"], "succeeded")
+                self.assertEqual(
+                    completed.json()["result"],
+                    {"outputs": {"value": {"kind": "inline", "value": 1}}},
+                )
+                self.assertEqual(synchronous.status_code, 200)
+                self.assertEqual(synchronous.json(), completed.json()["result"])
+        finally:
+            serve.shutdown()
+            ray.shutdown()
+            async with await AsyncConnection.connect(dsn) as connection:
+                await connection.execute(
+                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
+                        sql.Identifier(schema)
+                    )
+                )
+
     async def test_scale_from_zero_backpressure_and_client_cancellation(self) -> None:
         import httpx
         import ray
@@ -36,7 +180,7 @@ class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
         try:
             with TemporaryDirectory() as directory:
                 serve.run(
-                    ProbeWorkflow.bind(directory),
+                    ProbeWorkflow.bind(directory),  # type: ignore[attr-defined]
                     name="probe",
                     route_prefix="/workflows/probe",
                 )
@@ -85,6 +229,17 @@ class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
             input_access=InputAccessContext(kind="integration", state={}),
             deadline_at=datetime.now(UTC) + timedelta(minutes=3),
         )
+
+    @staticmethod
+    def _standalone_invocation(directory: str) -> dict[str, object]:
+        return {
+            "inputs": {},
+            "resolved_configuration": {"delay_seconds": 0},
+            "input_access": {
+                "kind": "shared_storage",
+                "state": {"root": directory},
+            },
+        }
 
     @staticmethod
     async def _wait_for(path: Path) -> None:

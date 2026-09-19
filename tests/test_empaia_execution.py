@@ -8,9 +8,14 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
-from execution_scheduler.contracts import InvalidScheduleRequestError, ScheduleRequest
+from execution_scheduler.contracts import (
+    InvalidScheduleRequestError,
+    ScheduleRequest,
+    SchedulingUnavailableError,
+)
 from execution_scheduler.dispatch import InMemoryWorkflowDispatch
 from execution_scheduler.domain import RetryPolicy
+from execution_scheduler.providers import ProviderFinishFailureError, ProviderSuccess
 from execution_scheduler.repository import InMemoryExecutionRepository
 from execution_scheduler.scheduler import ExecutionScheduler
 from execution_scheduler.worker import ExecutionWorker
@@ -45,6 +50,7 @@ class ControlledEmpaiaService:
         self.published: list[tuple[str, WorkflowOutput]] = []
         self.publish_failures: list[EmpaiaGatewayError] = []
         self.finalize_failures: list[EmpaiaGatewayError] = []
+        self.close_failures: list[EmpaiaGatewayError] = []
         self.finalized = False
         self.failures: list[str] = []
 
@@ -88,7 +94,8 @@ class FakeGateway:
         self._service.failures.append(message)
 
     async def close(self) -> None:
-        return None
+        if self._service.close_failures:
+            raise self._service.close_failures.pop(0)
 
 
 class CopyInputsWorkflow:
@@ -109,6 +116,110 @@ class CopyInputsWorkflow:
 
 
 class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_workflow_defaults_fill_missing_empaia_configuration(self) -> None:
+        now = datetime.now(UTC)
+        service = ControlledEmpaiaService()
+        service.configuration = {}
+        catalog = WorkflowCatalog.default()
+        repository = InMemoryExecutionRepository(clock=lambda: now)
+        provider = EmpaiaProviderAdapter(catalog, service.gateway)
+        scheduler = ExecutionScheduler(
+            repository=repository,
+            providers={provider.name: provider},
+            known_workflows=catalog.identifiers,
+            default_timeout=timedelta(hours=1),
+            maximum_timeout=timedelta(hours=6),
+            clock=lambda: now,
+        )
+
+        scheduled = await scheduler.schedule(self._request(now, "credential"))
+        execution = await repository.get(scheduled.execution.id)
+
+        self.assertEqual(
+            execution.invocation.resolved_configuration,
+            {
+                "output_path": "heatmap.tiff",
+                "stride_fraction": 0.5,
+                "output_tile_height": 256,
+                "output_tile_width": 256,
+            },
+        )
+
+    async def test_gateway_factory_failure_is_classified_during_prepare(self) -> None:
+        def unavailable_gateway(
+            api_url: str,
+            job_id: str,
+            credential: str,
+        ) -> FakeGateway:
+            del api_url, job_id, credential
+            raise EmpaiaGatewayError(
+                "EMPAIA is temporarily unavailable",
+                retryable=True,
+            )
+
+        now = datetime.now(UTC)
+        catalog = WorkflowCatalog.default()
+        provider = EmpaiaProviderAdapter(catalog, unavailable_gateway)
+        scheduler = ExecutionScheduler(
+            repository=InMemoryExecutionRepository(clock=lambda: now),
+            providers={provider.name: provider},
+            known_workflows=catalog.identifiers,
+            default_timeout=timedelta(hours=1),
+            maximum_timeout=timedelta(hours=6),
+            clock=lambda: now,
+        )
+
+        with self.assertRaises(SchedulingUnavailableError):
+            await scheduler.schedule(self._request(now, "credential"))
+
+    async def test_gateway_factory_failure_is_classified_during_finish(self) -> None:
+        def unavailable_gateway(
+            api_url: str,
+            job_id: str,
+            credential: str,
+        ) -> FakeGateway:
+            del api_url, job_id, credential
+            raise EmpaiaGatewayError(
+                "EMPAIA is temporarily unavailable",
+                retryable=True,
+            )
+
+        provider = EmpaiaProviderAdapter(WorkflowCatalog.default(), unavailable_gateway)
+
+        with self.assertRaises(ProviderFinishFailureError) as raised:
+            await provider.finish(
+                {
+                    "api_url": "https://empaia.invalid",
+                    "job_id": "job-1",
+                    "credential": "credential",
+                },
+                ProviderSuccess(WorkflowResult(outputs={})),
+            )
+
+        self.assertTrue(raised.exception.retryable)
+        self.assertFalse(raised.exception.outcome_unknown)
+
+    async def test_gateway_cleanup_does_not_replace_successful_finish(self) -> None:
+        service = ControlledEmpaiaService()
+        service.close_failures.append(
+            EmpaiaGatewayError(
+                "EMPAIA cleanup failed",
+                retryable=True,
+            )
+        )
+        provider = EmpaiaProviderAdapter(WorkflowCatalog.default(), service.gateway)
+
+        await provider.finish(
+            {
+                "api_url": "https://empaia.invalid",
+                "job_id": "job-1",
+                "credential": "credential",
+            },
+            ProviderSuccess(WorkflowResult(outputs={})),
+        )
+
+        self.assertTrue(service.finalized)
+
     async def test_controlled_empaia_lifecycle_and_admitted_replay(self) -> None:
         now = datetime.now(UTC)
         service = ControlledEmpaiaService()

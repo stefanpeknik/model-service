@@ -35,7 +35,7 @@ executionScheduler:
   perWorkflowLimit: 1
   empaia:
     enabled: false
-    gatewayFactory: ""
+    gatewayFactory: integrations.empaia.http_gateway:create_http_gateway
     workspaceRoot: /mnt/model-service-executions
     workspaceClaim: ""
   resources:

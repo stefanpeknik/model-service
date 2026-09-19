@@ -246,6 +246,45 @@ class PostgresExecutionRepositoryTests(unittest.IsolatedAsyncioTestCase):
         assert failed.error is not None
         self.assertEqual(failed.error.code, "execution_deadline_exceeded")
 
+    async def test_deadline_failure_remains_reportable_until_provider_deadline(
+        self,
+    ) -> None:
+        admission = self._admission("submission-report-deadline")
+        execution_deadline = datetime.now(UTC) + timedelta(milliseconds=50)
+        expiring = Admission(
+            identity=admission.identity,
+            workflow_id=admission.workflow_id,
+            invocation=admission.invocation,
+            protected_context=admission.protected_context,
+            deadline_at=execution_deadline,
+            terminal_report_deadline_at=datetime.now(UTC) + timedelta(minutes=5),
+        )
+        await self.repository.admit(expiring)
+        processing = await self.repository.claim_due(
+            "worker-1",
+            timedelta(seconds=1),
+        )
+        assert processing is not None
+        await asyncio.sleep(0.08)
+
+        self.assertEqual(
+            await self.repository.renew(
+                processing.execution_id,
+                processing.fencing_token,
+                timedelta(seconds=1),
+            ),
+            RenewDirective.DEADLINE_EXCEEDED,
+        )
+        report = await self.repository.claim_due(
+            "worker-2",
+            timedelta(seconds=1),
+        )
+
+        assert report is not None
+        self.assertEqual(report.kind, WorkKind.PROVIDER_FAILURE_REPORT)
+        assert report.error is not None
+        self.assertEqual(report.error.code, "execution_deadline_exceeded")
+
     async def test_stale_renewal_cannot_apply_deadline_transition(self) -> None:
         admission = self._admission("submission-1")
         expiring = Admission(

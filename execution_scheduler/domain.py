@@ -66,6 +66,7 @@ class PreparedWorkflow:
     invocation: WorkflowInvocation
     protected_context: dict[str, JsonValue]
     deadline_cap: datetime | None = None
+    terminal_report_deadline_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +76,7 @@ class Admission:
     invocation: WorkflowInvocation
     protected_context: dict[str, JsonValue]
     deadline_at: datetime
+    terminal_report_deadline_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +88,7 @@ class ExecutionRecord:
     invocation: WorkflowInvocation
     protected_context: dict[str, JsonValue]
     deadline_at: datetime
+    terminal_report_deadline_at: datetime | None
     work_kind: WorkKind | None
     next_attempt_at: datetime | None
     processing_attempts: int

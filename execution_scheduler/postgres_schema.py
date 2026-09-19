@@ -38,6 +38,7 @@ async def initialize_execution_schema(
                 invocation JSONB NOT NULL,
                 protected_context BYTEA NOT NULL,
                 deadline_at TIMESTAMPTZ NOT NULL,
+                terminal_report_deadline_at TIMESTAMPTZ,
                 work_kind TEXT CHECK (
                     work_kind IS NULL OR work_kind IN (
                         'processing', 'provider_finish',
@@ -71,6 +72,12 @@ async def initialize_execution_schema(
                 )
             )
             """
+        ).format(table)
+    )
+    await connection.execute(
+        sql.SQL(
+            "ALTER TABLE {} ADD COLUMN IF NOT EXISTS "
+            "terminal_report_deadline_at TIMESTAMPTZ"
         ).format(table)
     )
     await connection.execute(
