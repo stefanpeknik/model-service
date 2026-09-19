@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 
@@ -22,6 +23,20 @@ class EmpaiaGatewayError(RuntimeError):
         self.outcome_unknown = outcome_unknown
 
 
+@dataclass(frozen=True, slots=True)
+class EmpaiaJobContext:
+    api_url: str
+    job_id: str
+    credential: str
+
+    def protected_values(self) -> dict[str, JsonValue]:
+        return {
+            "api_url": self.api_url,
+            "job_id": self.job_id,
+            "credential": self.credential,
+        }
+
+
 class EmpaiaGateway(Protocol):
     async def get_configuration(self) -> dict[str, JsonValue]: ...
 
@@ -37,12 +52,7 @@ class EmpaiaGateway(Protocol):
 
 
 class EmpaiaGatewayFactory(Protocol):
-    def __call__(
-        self,
-        api_url: str,
-        job_id: str,
-        credential: str,
-    ) -> EmpaiaGateway: ...
+    def __call__(self, context: EmpaiaJobContext) -> EmpaiaGateway: ...
 
 
 def load_gateway_factory(import_path: str) -> EmpaiaGatewayFactory:

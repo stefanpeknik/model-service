@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
@@ -9,6 +10,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import httpx
@@ -16,8 +18,9 @@ from fastapi import FastAPI
 from psycopg import AsyncConnection, sql
 
 from execution_scheduler.api import create_execution_app
+from execution_scheduler.contracts import ScheduleRequest
 from execution_scheduler.dispatch import HTTPWorkflowDispatch
-from execution_scheduler.domain import RetryPolicy
+from execution_scheduler.domain import RetryPolicy, WorkKind
 from execution_scheduler.postgres import PostgresExecutionRepository
 from execution_scheduler.scheduler import ExecutionScheduler
 from execution_scheduler.security import ProtectedContextCipher
@@ -40,19 +43,18 @@ from workflow_execution.contracts import (
 )
 
 
+if TYPE_CHECKING:
+    from integrations.empaia.gateway import EmpaiaJobContext
+
+
 @dataclass(slots=True)
 class ControlledEmpaiaService:
     source: Path
     published: dict[str, WorkflowOutput] = field(default_factory=dict)
     finalized: bool = False
 
-    def gateway(
-        self,
-        api_url: str,
-        job_id: str,
-        credential: str,
-    ) -> ControlledEmpaiaGateway:
-        del api_url, job_id, credential
+    def gateway(self, context: EmpaiaJobContext) -> ControlledEmpaiaGateway:
+        del context
         return ControlledEmpaiaGateway(self)
 
 
@@ -207,6 +209,135 @@ class DurableEmpaiaExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsInstance(artifact, SharedArtifact)
             assert isinstance(artifact, SharedArtifact)
             self.assertEqual(Path(artifact.path).read_bytes(), source.read_bytes())
+
+        async with await AsyncConnection.connect(dsn) as connection:
+            await connection.execute(
+                sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
+                    sql.Identifier(schema)
+                )
+            )
+
+    async def test_replacement_scheduler_finishes_stored_result_without_redispatch(
+        self,
+    ) -> None:
+        dsn = os.environ["TEST_POSTGRES_DSN"]
+        schema = f"test_empaia_finish_restart_{uuid4().hex}"
+        policy = RetryPolicy(3, timedelta(0), timedelta(0))
+        repository = PostgresExecutionRepository(
+            dsn,
+            schema=schema,
+            cipher=ProtectedContextCipher(bytes(range(32))),
+            processing_policy=policy,
+            finish_policy=policy,
+        )
+        definition = WorkflowDefinition(
+            identifier="empaia-probe",
+            inputs={
+                "source": WorkflowInputDefinition(
+                    kinds=("provider",),
+                    media_type="application/octet-stream",
+                )
+            },
+            outputs={
+                "result": WorkflowValueDefinition(
+                    kind="shared_artifact",
+                    media_type="application/octet-stream",
+                )
+            },
+        )
+        catalog = WorkflowCatalog((definition,))
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.bin"
+            source.write_bytes(b"finish recovery")
+            service = ControlledEmpaiaService(source)
+            provider = EmpaiaProviderAdapter(catalog, service.gateway)
+            workflow_runs = 0
+            workflow = WorkflowApplication(
+                definition,
+                CopyWorkflow(),
+                access_adapters={
+                    "empaia": EmpaiaInputAccessAdapter(
+                        service.gateway,
+                        root / "workspace",
+                    )
+                },
+            )
+            workflow_app = FastAPI()
+
+            @workflow_app.post("/workflows/empaia-probe/")
+            async def run_workflow(invocation: WorkflowInvocation) -> WorkflowResult:
+                nonlocal workflow_runs
+                workflow_runs += 1
+                return await workflow.run(invocation)
+
+            await repository.initialize()
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=workflow_app),
+                base_url="http://ray-serve",
+            ) as workflow_client:
+                dispatch = HTTPWorkflowDispatch(
+                    workflow_client,
+                    origin="http://ray-serve",
+                )
+                scheduler = ExecutionScheduler(
+                    repository=repository,
+                    providers={provider.name: provider},
+                    known_workflows=catalog.identifiers,
+                    default_timeout=timedelta(minutes=5),
+                    maximum_timeout=timedelta(minutes=5),
+                )
+                first_worker = ExecutionWorker(
+                    repository=repository,
+                    providers={provider.name: provider},
+                    dispatch=dispatch,
+                    owner="scheduler-before-restart",
+                    lease_duration=timedelta(milliseconds=30),
+                )
+                admitted = await scheduler.schedule(
+                    ScheduleRequest(
+                        workflow_id="empaia-probe",
+                        provider="empaia",
+                        body={
+                            "installation_id": "installation-1",
+                            "api_url": "https://empaia.invalid",
+                            "job_id": "job-1",
+                            "credential": self._credential(),
+                        },
+                    )
+                )
+
+                self.assertTrue(await first_worker.run_once())
+                abandoned = await repository.claim_due(
+                    "scheduler-before-restart",
+                    timedelta(milliseconds=30),
+                )
+                assert abandoned is not None
+                self.assertEqual(abandoned.kind, WorkKind.PROVIDER_FINISH)
+                await asyncio.sleep(0.08)
+
+                replacement_repository = PostgresExecutionRepository(
+                    dsn,
+                    schema=schema,
+                    cipher=ProtectedContextCipher(bytes(range(32))),
+                    processing_policy=policy,
+                    finish_policy=policy,
+                )
+                replacement_worker = ExecutionWorker(
+                    repository=replacement_repository,
+                    providers={provider.name: provider},
+                    dispatch=dispatch,
+                    owner="scheduler-after-restart",
+                    lease_duration=timedelta(seconds=30),
+                )
+                self.assertTrue(await replacement_worker.run_once())
+                completed = await scheduler.get(admitted.execution.id)
+
+            self.assertEqual(completed.status, "succeeded")
+            self.assertEqual(workflow_runs, 1)
+            self.assertTrue(service.finalized)
+            self.assertEqual(set(service.published), {"result"})
 
         async with await AsyncConnection.connect(dsn) as connection:
             await connection.execute(

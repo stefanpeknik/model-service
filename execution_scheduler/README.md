@@ -32,6 +32,8 @@ workflow processing and provider finish.
 ## External adapters
 
 - `dispatch.py` invokes workflow applications through Ray Serve HTTP.
+- `inference.py` forwards legacy model and slide requests from the public
+  model-service origin to Ray Serve.
 - `providers.py` defines the provider-adapter interface and finish outcomes.
 - `standalone.py` prepares shared-storage schedule requests.
 - `../integrations/empaia/provider.py` prepares and finishes EMPAIA-backed

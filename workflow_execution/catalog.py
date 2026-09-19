@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 import yaml  # type: ignore[import-untyped]
-
-from workflow_execution.serialization import is_json_value
 
 
 if TYPE_CHECKING:
@@ -40,9 +37,6 @@ class WorkflowDefinition:
     inputs: dict[str, WorkflowInputDefinition]
     outputs: dict[str, WorkflowValueDefinition]
     metadata: dict[str, object] = field(default_factory=dict)
-    configuration_defaults: dict[str, dict[str, JsonValue]] = field(
-        default_factory=dict
-    )
 
 
 class UnknownWorkflow(KeyError):  # noqa: N818 - Contract name from the design.
@@ -126,15 +120,6 @@ class WorkflowCatalog:
         if validator is not None:
             validator(configuration)
 
-    def resolve_configuration(
-        self,
-        workflow_id: str,
-        provider: str,
-        configuration: Mapping[str, JsonValue],
-    ) -> dict[str, JsonValue]:
-        defaults = self.get(workflow_id).configuration_defaults.get(provider, {})
-        return deepcopy(defaults) | deepcopy(dict(configuration))
-
     def validate_deployed(self, deployed_workflow_ids: set[str]) -> None:
         missing = tuple(sorted(self._definitions.keys() - deployed_workflow_ids))
         if missing:
@@ -170,42 +155,19 @@ def _load_definition(path: Path) -> WorkflowDefinition:
         raise ValueError(f"{path} needs a non-empty identifier")
     inputs = _load_inputs(value.get("inputs"), path)
     outputs = _load_outputs(value.get("outputs"), path)
-    configuration_defaults = _load_configuration_defaults(
-        value.get("configuration_defaults", {}),
-        path,
-    )
     if set(inputs) & set(outputs):
         raise ValueError(f"{path} input and output names must not overlap")
     metadata = {
         key: item
         for key, item in value.items()
-        if key not in {"identifier", "inputs", "outputs", "configuration_defaults"}
+        if key not in {"identifier", "inputs", "outputs"}
     }
     return WorkflowDefinition(
         identifier,
         inputs,
         outputs,
         metadata,
-        configuration_defaults,
     )
-
-
-def _load_configuration_defaults(
-    value: object,
-    path: Path,
-) -> dict[str, dict[str, JsonValue]]:
-    if not isinstance(value, dict):
-        raise TypeError(f"{path} configuration_defaults must be an object")
-    defaults: dict[str, dict[str, JsonValue]] = {}
-    for provider, configuration in value.items():
-        if not isinstance(provider, str) or not provider:
-            raise ValueError(f"{path} has an invalid configuration defaults provider")
-        if not isinstance(configuration, dict) or not is_json_value(configuration):
-            raise ValueError(
-                f"{path} configuration_defaults.{provider} must be a JSON object"
-            )
-        defaults[provider] = deepcopy(configuration)
-    return defaults
 
 
 def _load_enabled_application_ids(path: Path) -> set[str]:

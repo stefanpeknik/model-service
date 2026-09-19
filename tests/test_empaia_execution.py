@@ -19,7 +19,7 @@ from execution_scheduler.providers import ProviderFinishFailureError, ProviderSu
 from execution_scheduler.repository import InMemoryExecutionRepository
 from execution_scheduler.scheduler import ExecutionScheduler
 from execution_scheduler.worker import ExecutionWorker
-from integrations.empaia.gateway import EmpaiaGatewayError
+from integrations.empaia.gateway import EmpaiaGatewayError, EmpaiaJobContext
 from integrations.empaia.input_access import EmpaiaInputAccessAdapter
 from integrations.empaia.provider import EmpaiaProviderAdapter
 from workflow_execution.application import WorkflowApplication
@@ -54,9 +54,9 @@ class ControlledEmpaiaService:
         self.finalized = False
         self.failures: list[str] = []
 
-    def gateway(self, api_url: str, job_id: str, credential: str) -> FakeGateway:
-        self.credentials.append(credential)
-        return FakeGateway(self, api_url, job_id)
+    def gateway(self, context: EmpaiaJobContext) -> FakeGateway:
+        self.credentials.append(context.credential)
+        return FakeGateway(self, context.api_url, context.job_id)
 
 
 class FakeGateway:
@@ -146,12 +146,8 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_gateway_factory_failure_is_classified_during_prepare(self) -> None:
-        def unavailable_gateway(
-            api_url: str,
-            job_id: str,
-            credential: str,
-        ) -> FakeGateway:
-            del api_url, job_id, credential
+        def unavailable_gateway(context: EmpaiaJobContext) -> FakeGateway:
+            del context
             raise EmpaiaGatewayError(
                 "EMPAIA is temporarily unavailable",
                 retryable=True,
@@ -173,12 +169,8 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
             await scheduler.schedule(self._request(now, "credential"))
 
     async def test_gateway_factory_failure_is_classified_during_finish(self) -> None:
-        def unavailable_gateway(
-            api_url: str,
-            job_id: str,
-            credential: str,
-        ) -> FakeGateway:
-            del api_url, job_id, credential
+        def unavailable_gateway(context: EmpaiaJobContext) -> FakeGateway:
+            del context
             raise EmpaiaGatewayError(
                 "EMPAIA is temporarily unavailable",
                 retryable=True,

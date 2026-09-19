@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from workflow_execution.application import WorkflowContext
+    from workflow_execution.contracts import JsonValue
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +81,14 @@ class ProstateConfiguration:
     stride_fraction: float
     output_tile_height: int
     output_tile_width: int
+
+    def as_values(self) -> dict[str, JsonValue]:
+        return {
+            "output_path": self.output_path,
+            "stride_fraction": self.stride_fraction,
+            "output_tile_height": self.output_tile_height,
+            "output_tile_width": self.output_tile_width,
+        }
 
 
 def validate_configuration(value: Mapping[str, object]) -> ProstateConfiguration:

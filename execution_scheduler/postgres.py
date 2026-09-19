@@ -23,7 +23,6 @@ from execution_scheduler.domain import (
     RenewDirective,
     RetryPolicy,
     Settlement,
-    StaleWorkClaimError,
     SubmissionIdentity,
     WorkClaim,
     WorkKind,
@@ -208,27 +207,8 @@ class PostgresExecutionRepository:
                 lease_duration=lease_duration,
                 now=now,
             )
-            claimed = await self._persist_state(connection, claimed)
-            assert claimed.work_kind is not None
-            assert claimed.lease_expires_at is not None
-            return WorkClaim(
-                execution_id=claimed.id,
-                workflow_id=claimed.workflow_id,
-                provider=claimed.identity.provider,
-                kind=claimed.work_kind,
-                invocation=claimed.invocation,
-                protected_context=claimed.protected_context,
-                deadline_at=claimed.deadline_at,
-                attempt=(
-                    claimed.processing_attempts
-                    if claimed.work_kind is WorkKind.PROCESSING
-                    else claimed.finish_attempts
-                ),
-                fencing_token=token,
-                lease_expires_at=claimed.lease_expires_at,
-                result=claimed.result,
-                error=claimed.error,
-            )
+            await self._persist_state(connection, claimed.execution)
+            return claimed.claim
 
     async def renew(
         self,
@@ -240,25 +220,15 @@ class PostgresExecutionRepository:
             row = await self._fetch(connection, execution_id, for_update=True)
             execution = self._record(row)
             now = await self._database_now(connection)
-            if (
-                execution.fencing_token != fencing_token
-                or execution.lease_expires_at is None
-                or execution.lease_expires_at <= now
-            ):
-                if execution.status is ExecutionStatus.CANCELLED:
-                    return RenewDirective.CANCEL
-                return RenewDirective.LEASE_LOST
-            if self._transitions.work_deadline_at(execution) <= now:
-                failed = self._transitions.deadline(execution, now)
-                await self._persist_state(connection, failed)
-                return RenewDirective.DEADLINE_EXCEEDED
-            renewed = self._transitions.renew(
+            decision = self._transitions.decide_renewal(
                 execution,
+                fencing_token=fencing_token,
                 lease_duration=lease_duration,
                 now=now,
             )
-            await self._persist_state(connection, renewed)
-            return RenewDirective.CONTINUE
+            if decision.execution is not None:
+                await self._persist_state(connection, decision.execution)
+            return decision.directive
 
     async def settle(
         self,
@@ -266,25 +236,19 @@ class PostgresExecutionRepository:
         fencing_token: str,
         settlement: Settlement,
     ) -> ExecutionRecord:
-        deadline_exceeded = False
         async with self._connection() as connection:
             row = await self._fetch(connection, execution_id, for_update=True)
             execution = self._record(row)
-            if execution.fencing_token != fencing_token:
-                raise StaleWorkClaimError("work claim is no longer current")
             now = await self._database_now(connection)
-            if self._transitions.work_deadline_at(execution) <= now:
-                await self._persist_state(
-                    connection,
-                    self._transitions.deadline(execution, now),
-                )
-                deadline_exceeded = True
-            else:
-                updated = self._transitions.settle(execution, settlement, now)
-                return await self._persist_state(connection, updated)
-        if deadline_exceeded:
-            raise StaleWorkClaimError("execution deadline was exceeded")
-        raise AssertionError("settlement transaction had no outcome")
+            decision = self._transitions.decide_settlement(
+                execution,
+                fencing_token,
+                settlement,
+                now,
+            )
+            if decision.execution is not None:
+                await self._persist_state(connection, decision.execution)
+        return decision.accepted_execution()
 
     async def _select_finish(
         self,

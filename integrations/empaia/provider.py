@@ -27,6 +27,7 @@ from integrations.empaia.gateway import (
     EmpaiaGateway,
     EmpaiaGatewayError,
     EmpaiaGatewayFactory,
+    EmpaiaJobContext,
 )
 from workflow_execution.application import validate_workflow_invocation
 from workflow_execution.contracts import (
@@ -34,6 +35,7 @@ from workflow_execution.contracts import (
     ProviderInput,
     WorkflowInvocation,
 )
+from workflow_execution.prostate_heatmap import ProstateConfiguration
 from workflow_execution.serialization import is_json_value
 
 
@@ -50,6 +52,15 @@ class EmpaiaErrorCode(StrEnum):
 
 logger = logging.getLogger(__name__)
 
+_CONFIGURATION_DEFAULTS: dict[str, ProstateConfiguration] = {
+    "prostate-heatmap": ProstateConfiguration(
+        output_path="heatmap.tiff",
+        stride_fraction=0.5,
+        output_tile_height=256,
+        output_tile_width=256,
+    )
+}
+
 
 class EmpaiaProviderAdapter:
     name = "empaia"
@@ -64,14 +75,13 @@ class EmpaiaProviderAdapter:
 
     def identify(self, request: ScheduleRequest) -> SubmissionIdentity:
         installation_id = _required_string(request.body, "installation_id")
-        job_id = _required_string(request.body, "job_id")
-        api_url = _required_string(request.body, "api_url")
+        context = _job_context(request.body)
         canonical = json.dumps(
             {
                 "workflow_id": request.workflow_id,
                 "installation_id": installation_id,
-                "job_id": job_id,
-                "api_url": api_url,
+                "job_id": context.job_id,
+                "api_url": context.api_url,
                 "requested_timeout_seconds": request.requested_timeout_seconds,
             },
             sort_keys=True,
@@ -79,7 +89,7 @@ class EmpaiaProviderAdapter:
         ).encode()
         return SubmissionIdentity(
             provider=self.name,
-            key=f"{installation_id}:{job_id}",
+            key=f"{installation_id}:{context.job_id}",
             fingerprint=hashlib.sha256(canonical).hexdigest(),
         )
 
@@ -88,15 +98,11 @@ class EmpaiaProviderAdapter:
         request: ScheduleRequest,
         deadline_at: datetime,
     ) -> PreparedWorkflow:
-        api_url = _required_string(request.body, "api_url")
-        job_id = _required_string(request.body, "job_id")
-        credential = _required_string(request.body, "credential")
-        credential_expires_at = _credential_expiry(credential)
+        context = _job_context(request.body)
+        credential_expires_at = _credential_expiry(context.credential)
         async with _preparation_gateway(
             self._gateway_factory,
-            api_url,
-            job_id,
-            credential,
+            context,
         ) as gateway:
             try:
                 configuration = await gateway.get_configuration()
@@ -108,9 +114,8 @@ class EmpaiaProviderAdapter:
                 raise InvalidScheduleRequestError(
                     "EMPAIA configuration must contain only JSON-compatible values"
                 )
-            configuration = self._catalog.resolve_configuration(
+            configuration = _resolve_configuration(
                 request.workflow_id,
-                self.name,
                 configuration,
             )
             try:
@@ -127,7 +132,7 @@ class EmpaiaProviderAdapter:
             resolved_configuration=deepcopy(configuration),
             input_access=InputAccessContext(
                 kind="empaia",
-                state={"api_url": api_url, "job_id": job_id},
+                state={"api_url": context.api_url, "job_id": context.job_id},
             ),
             deadline_at=effective_deadline,
         )
@@ -141,11 +146,7 @@ class EmpaiaProviderAdapter:
             raise InvalidScheduleRequestError(str(error)) from error
         return PreparedWorkflow(
             invocation=invocation,
-            protected_context={
-                "api_url": api_url,
-                "job_id": job_id,
-                "credential": credential,
-            },
+            protected_context=context.protected_values(),
             deadline_cap=credential_expires_at,
             terminal_report_deadline_at=credential_expires_at,
         )
@@ -155,14 +156,10 @@ class EmpaiaProviderAdapter:
         protected_context: dict[str, JsonValue],
         outcome: ProviderFinishOutcome,
     ) -> None:
-        api_url = _required_string(protected_context, "api_url")
-        job_id = _required_string(protected_context, "job_id")
-        credential = _required_string(protected_context, "credential")
+        context = _job_context(protected_context)
         async with _finish_gateway(
             self._gateway_factory,
-            api_url,
-            job_id,
-            credential,
+            context,
         ) as gateway:
             mutation_completed = False
             try:
@@ -187,12 +184,10 @@ class EmpaiaProviderAdapter:
 @asynccontextmanager
 async def _preparation_gateway(
     factory: EmpaiaGatewayFactory,
-    api_url: str,
-    job_id: str,
-    credential: str,
+    context: EmpaiaJobContext,
 ) -> AsyncIterator[EmpaiaGateway]:
     try:
-        gateway = factory(api_url, job_id, credential)
+        gateway = factory(context)
     except EmpaiaGatewayError as error:
         _raise_preparation_error(error)
     except Exception as error:
@@ -217,12 +212,10 @@ async def _preparation_gateway(
 @asynccontextmanager
 async def _finish_gateway(
     factory: EmpaiaGatewayFactory,
-    api_url: str,
-    job_id: str,
-    credential: str,
+    context: EmpaiaJobContext,
 ) -> AsyncIterator[EmpaiaGateway]:
     try:
-        gateway = factory(api_url, job_id, credential)
+        gateway = factory(context)
     except EmpaiaGatewayError as error:
         raise _finish_failure(error) from error
     except Exception as error:
@@ -269,6 +262,23 @@ def _required_string(values: dict[str, JsonValue], name: str) -> str:
     if not isinstance(value, str) or not value:
         raise InvalidScheduleRequestError(f"{name} must be a non-empty string")
     return value
+
+
+def _job_context(values: dict[str, JsonValue]) -> EmpaiaJobContext:
+    return EmpaiaJobContext(
+        api_url=_required_string(values, "api_url"),
+        job_id=_required_string(values, "job_id"),
+        credential=_required_string(values, "credential"),
+    )
+
+
+def _resolve_configuration(
+    workflow_id: str,
+    configuration: dict[str, JsonValue],
+) -> dict[str, JsonValue]:
+    defaults = _CONFIGURATION_DEFAULTS.get(workflow_id)
+    resolved = defaults.as_values() if defaults is not None else {}
+    return resolved | deepcopy(configuration)
 
 
 def _credential_expiry(credential: str) -> datetime:

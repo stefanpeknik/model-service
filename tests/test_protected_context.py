@@ -3,9 +3,7 @@ from __future__ import annotations
 import base64
 import unittest
 
-from cryptography.exceptions import InvalidTag
-
-from execution_scheduler.security import ProtectedContextCipher
+from execution_scheduler.security import ProtectedContextCipher, ProtectedContextError
 
 
 class ProtectedContextCipherTests(unittest.TestCase):
@@ -24,7 +22,10 @@ class ProtectedContextCipherTests(unittest.TestCase):
         self.assertNotIn(b"secret-job-token", encrypted)
         self.assertEqual(cipher.decrypt(encrypted), context)
         tampered = encrypted[:-1] + bytes([encrypted[-1] ^ 1])
-        with self.assertRaises(InvalidTag):
+        with self.assertRaisesRegex(
+            ProtectedContextError,
+            "protected provider context failed authentication",
+        ):
             cipher.decrypt(tampered)
 
 

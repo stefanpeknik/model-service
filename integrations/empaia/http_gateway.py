@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 import httpx
 
-from integrations.empaia.gateway import EmpaiaGatewayError
+from integrations.empaia.gateway import EmpaiaGatewayError, EmpaiaJobContext
 from workflow_execution.contracts import InlineOutput, SharedArtifact
 from workflow_execution.serialization import is_json_value
 
@@ -298,12 +298,12 @@ class HttpEmpaiaGateway:
         return quote(self._job_id, safe="")
 
 
-def create_http_gateway(
-    api_url: str,
-    job_id: str,
-    credential: str,
-) -> HttpEmpaiaGateway:
-    return HttpEmpaiaGateway(api_url, job_id, credential)
+def create_http_gateway(context: EmpaiaJobContext) -> HttpEmpaiaGateway:
+    return HttpEmpaiaGateway(
+        context.api_url,
+        context.job_id,
+        context.credential,
+    )
 
 
 def _primitive_output(name: str, job_id: str, value: JsonValue) -> dict[str, object]:

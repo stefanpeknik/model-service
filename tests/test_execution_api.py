@@ -20,6 +20,7 @@ from execution_scheduler.dispatch import (
     ConfirmedDispatchRejectionError,
     InMemoryWorkflowDispatch,
 )
+from execution_scheduler.inference import InferenceRequest, InferenceResponse
 from execution_scheduler.repository import InMemoryExecutionRepository
 from execution_scheduler.scheduler import ExecutionScheduler
 from execution_scheduler.synchronous import SynchronousWorkflowService
@@ -53,6 +54,22 @@ class RecordingScheduler:
 
     async def cancel(self, execution_id: str) -> ExecutionView:
         raise AssertionError(execution_id)
+
+
+class RecordingInferenceProxy:
+    def __init__(self) -> None:
+        self.requests: list[InferenceRequest] = []
+
+    async def forward(self, request: InferenceRequest) -> InferenceResponse:
+        self.requests.append(request)
+        return InferenceResponse(
+            status_code=200,
+            content=b"compressed-result",
+            headers={
+                "content-type": "application/octet-stream",
+                "x-output-shape": "(1, 2, 2)",
+            },
+        )
 
 
 class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
@@ -253,6 +270,38 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(unknown.status_code, 404)
         self.assertEqual(unknown.json()["detail"]["code"], "unknown_workflow")
+
+    async def test_legacy_model_inference_is_forwarded_through_public_origin(
+        self,
+    ) -> None:
+        proxy = RecordingInferenceProxy()
+        async with AsyncClient(
+            transport=ASGITransport(
+                app=create_execution_app(
+                    self.scheduler,
+                    inference_proxy=proxy,
+                )
+            ),
+            base_url="http://model-service",
+        ) as client:
+            response = await client.post(
+                "/prostate-classifier-1?variant=probe",
+                content=b"compressed-image",
+                headers={"content-type": "application/octet-stream"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"compressed-result")
+        self.assertEqual(response.headers["x-output-shape"], "(1, 2, 2)")
+        self.assertEqual(len(proxy.requests), 1)
+        forwarded = proxy.requests[0]
+        self.assertEqual(forwarded.path, "prostate-classifier-1")
+        self.assertEqual(forwarded.query, "variant=probe")
+        self.assertEqual(forwarded.body, b"compressed-image")
+        self.assertEqual(
+            forwarded.headers["content-type"],
+            "application/octet-stream",
+        )
 
     async def test_synchronous_workflow_validates_before_dispatch(self) -> None:
         async def reject_dispatch(_invocation: object) -> WorkflowResult:

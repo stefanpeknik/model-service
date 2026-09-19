@@ -17,7 +17,6 @@ from execution_scheduler.domain import (
     RenewDirective,
     RetryPolicy,
     Settlement,
-    StaleWorkClaimError,
     SubmissionIdentity,
     WorkClaim,
     WorkKind,
@@ -180,26 +179,8 @@ class InMemoryExecutionRepository:
                     lease_duration=lease_duration,
                     now=now,
                 )
-                self._executions[execution.id] = claimed
-                assert claimed.lease_expires_at is not None
-                return WorkClaim(
-                    execution_id=claimed.id,
-                    workflow_id=claimed.workflow_id,
-                    provider=claimed.identity.provider,
-                    kind=execution.work_kind,
-                    invocation=claimed.invocation,
-                    protected_context=claimed.protected_context,
-                    deadline_at=claimed.deadline_at,
-                    attempt=(
-                        claimed.processing_attempts
-                        if execution.work_kind is WorkKind.PROCESSING
-                        else claimed.finish_attempts
-                    ),
-                    fencing_token=token,
-                    lease_expires_at=claimed.lease_expires_at,
-                    result=claimed.result,
-                    error=claimed.error,
-                )
+                self._executions[execution.id] = claimed.execution
+                return claimed.claim
             return None
 
     async def renew(
@@ -211,26 +192,15 @@ class InMemoryExecutionRepository:
         async with self._lock:
             execution = self._get(execution_id)
             now = self._clock()
-            if (
-                execution.fencing_token != fencing_token
-                or execution.lease_expires_at is None
-                or execution.lease_expires_at <= now
-            ):
-                if execution.status is ExecutionStatus.CANCELLED:
-                    return RenewDirective.CANCEL
-                return RenewDirective.LEASE_LOST
-            if self._transitions.work_deadline_at(execution) <= now:
-                self._executions[execution_id] = self._transitions.deadline(
-                    execution,
-                    now,
-                )
-                return RenewDirective.DEADLINE_EXCEEDED
-            self._executions[execution_id] = self._transitions.renew(
+            decision = self._transitions.decide_renewal(
                 execution,
+                fencing_token=fencing_token,
                 lease_duration=lease_duration,
                 now=now,
             )
-            return RenewDirective.CONTINUE
+            if decision.execution is not None:
+                self._executions[execution_id] = decision.execution
+            return decision.directive
 
     async def settle(
         self,
@@ -240,18 +210,16 @@ class InMemoryExecutionRepository:
     ) -> ExecutionRecord:
         async with self._lock:
             execution = self._get(execution_id)
-            if execution.fencing_token != fencing_token:
-                raise StaleWorkClaimError("work claim is no longer current")
             now = self._clock()
-            if self._transitions.work_deadline_at(execution) <= now:
-                self._executions[execution_id] = self._transitions.deadline(
-                    execution,
-                    now,
-                )
-                raise StaleWorkClaimError("execution deadline was exceeded")
-            updated = self._transitions.settle(execution, settlement, now)
-            self._executions[execution_id] = updated
-            return updated
+            decision = self._transitions.decide_settlement(
+                execution,
+                fencing_token,
+                settlement,
+                now,
+            )
+            if decision.execution is not None:
+                self._executions[execution_id] = decision.execution
+            return decision.accepted_execution()
 
     def _recover_expired_leases(self, now: datetime) -> None:
         for execution_id, execution in tuple(self._executions.items()):

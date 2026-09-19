@@ -13,6 +13,7 @@ from execution_scheduler.api import create_execution_app
 from execution_scheduler.dispatch import HTTPWorkflowDispatch
 from execution_scheduler.domain import RetryPolicy
 from execution_scheduler.health import WorkflowDeploymentHealth
+from execution_scheduler.inference import HttpInferenceProxy
 from execution_scheduler.postgres import PostgresExecutionRepository
 from execution_scheduler.scheduler import ExecutionScheduler
 from execution_scheduler.security import ProtectedContextCipher
@@ -98,6 +99,7 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
     return create_execution_app(
         scheduler,
         workflow_runner=SynchronousWorkflowService(catalog, dispatch),
+        inference_proxy=HttpInferenceProxy(client, origin=config.ray_serve_origin),
         lifespan=lifespan,
         deployment_health=WorkflowDeploymentHealth(
             client,

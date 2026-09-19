@@ -12,6 +12,10 @@ one model-service origin and synchronous processing cannot drift from scheduled
 processing. A synchronous request is never converted into a durable execution;
 cancelling the caller's request cancels its in-flight HTTP dispatch.
 
+Legacy model-inference and slide operations also use this public origin. The
+execution-scheduler ingress forwards their existing POST paths and binary
+payloads to Ray Serve, so clients do not need an internal Ray Serve address.
+
 ## Initial operating values
 
 | Setting | Default | Purpose |
@@ -72,10 +76,10 @@ queueing cases.
 
 Set `executionScheduler.empaia.enabled`, provide a shared workspace claim,
 and configure `executionScheduler.empaia.gatewayFactory` as a
-`module:attribute` callable. The callable receives the EMPAIA API URL, job ID,
-and original job credential and returns the gateway used by preparation,
-workflow input access, and provider finish. The gateway module must be present
-in both the scheduler and Ray worker images.
+`module:attribute` callable. The callable receives an `EmpaiaJobContext` with
+the EMPAIA API URL, job ID, and original job credential. It returns the gateway
+used by preparation, workflow input access, and provider finish. The gateway
+module must be present in both the scheduler and Ray worker images.
 
 The original credential is never refreshed. Its real expiry caps the complete
 execution deadline. Workflow results remain durable while required output

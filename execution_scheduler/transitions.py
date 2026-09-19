@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from execution_scheduler.contracts import (
@@ -16,7 +17,9 @@ from execution_scheduler.domain import (
     ProcessingSucceeded,
     ProviderFinishFailed,
     ProviderFinishSucceeded,
+    RenewDirective,
     StaleWorkClaimError,
+    WorkClaim,
     WorkKind,
 )
 
@@ -25,6 +28,35 @@ if TYPE_CHECKING:
     from datetime import datetime, timedelta
 
     from execution_scheduler.domain import RetryPolicy, Settlement
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimDecision:
+    execution: ExecutionRecord
+    claim: WorkClaim
+
+
+@dataclass(frozen=True, slots=True)
+class RenewalDecision:
+    execution: ExecutionRecord | None
+    directive: RenewDirective
+
+
+class SettlementRejection(StrEnum):
+    STALE_CLAIM = "work claim is no longer current"
+    DEADLINE_EXCEEDED = "execution deadline was exceeded"
+
+
+@dataclass(frozen=True, slots=True)
+class SettlementDecision:
+    execution: ExecutionRecord | None
+    rejection: SettlementRejection | None = None
+
+    def accepted_execution(self) -> ExecutionRecord:
+        if self.rejection is not None:
+            raise StaleWorkClaimError(self.rejection.value)
+        assert self.execution is not None
+        return self.execution
 
 
 class ExecutionTransitions:
@@ -92,7 +124,7 @@ class ExecutionTransitions:
         fencing_token: str,
         lease_duration: timedelta,
         now: datetime,
-    ) -> ExecutionRecord:
+    ) -> ClaimDecision:
         if execution.work_kind is None:
             raise StaleWorkClaimError("execution has no due work")
         processing_attempts = execution.processing_attempts
@@ -101,7 +133,7 @@ class ExecutionTransitions:
             processing_attempts += 1
         else:
             finish_attempts += 1
-        return replace(
+        claimed = replace(
             execution,
             status=(
                 ExecutionStatus.RUNNING
@@ -116,19 +148,85 @@ class ExecutionTransitions:
             lease_expires_at=now + lease_duration,
             updated_at=now,
         )
+        assert claimed.work_kind is not None
+        assert claimed.fencing_token is not None
+        assert claimed.lease_expires_at is not None
+        attempt = (
+            claimed.processing_attempts
+            if claimed.work_kind is WorkKind.PROCESSING
+            else claimed.finish_attempts
+        )
+        return ClaimDecision(
+            execution=claimed,
+            claim=WorkClaim(
+                execution_id=claimed.id,
+                workflow_id=claimed.workflow_id,
+                provider=claimed.identity.provider,
+                kind=claimed.work_kind,
+                invocation=claimed.invocation,
+                protected_context=claimed.protected_context,
+                deadline_at=claimed.deadline_at,
+                attempt=attempt,
+                fencing_token=claimed.fencing_token,
+                lease_expires_at=claimed.lease_expires_at,
+                result=claimed.result,
+                error=claimed.error,
+            ),
+        )
 
-    @staticmethod
-    def renew(
+    def decide_renewal(
+        self,
         execution: ExecutionRecord,
         *,
+        fencing_token: str,
         lease_duration: timedelta,
         now: datetime,
-    ) -> ExecutionRecord:
-        return replace(
-            execution,
-            lease_expires_at=now + lease_duration,
-            updated_at=now,
+    ) -> RenewalDecision:
+        if (
+            execution.fencing_token != fencing_token
+            or execution.lease_expires_at is None
+            or execution.lease_expires_at <= now
+        ):
+            return RenewalDecision(
+                execution=None,
+                directive=(
+                    RenewDirective.CANCEL
+                    if execution.status is ExecutionStatus.CANCELLED
+                    else RenewDirective.LEASE_LOST
+                ),
+            )
+        if self.work_deadline_at(execution) <= now:
+            return RenewalDecision(
+                execution=self.deadline(execution, now),
+                directive=RenewDirective.DEADLINE_EXCEEDED,
+            )
+        return RenewalDecision(
+            execution=replace(
+                execution,
+                lease_expires_at=now + lease_duration,
+                updated_at=now,
+            ),
+            directive=RenewDirective.CONTINUE,
         )
+
+    def decide_settlement(
+        self,
+        execution: ExecutionRecord,
+        fencing_token: str,
+        settlement: Settlement,
+        now: datetime,
+    ) -> SettlementDecision:
+        if execution.fencing_token != fencing_token:
+            return SettlementDecision(
+                execution=None,
+                rejection=SettlementRejection.STALE_CLAIM,
+            )
+        if self.work_deadline_at(execution) <= now:
+            return SettlementDecision(
+                execution=self.deadline(execution, now),
+                rejection=SettlementRejection.DEADLINE_EXCEEDED,
+            )
+        return SettlementDecision(self.settle(execution, settlement, now))
 
     def settle(
         self,

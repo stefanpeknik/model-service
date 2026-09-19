@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from typing import TYPE_CHECKING
 
+from integrations.empaia.gateway import EmpaiaJobContext
 from workflow_execution.contracts import (
     InvalidWorkflowInvocation,
     ProviderInput,
@@ -69,13 +70,15 @@ class EmpaiaInputAccessAdapter:
 
     async def create(self, invocation: WorkflowInvocation) -> EmpaiaInputAccess:
         state = invocation.input_access.state
-        api_url = _state_string(state, "api_url")
-        job_id = _state_string(state, "job_id")
-        credential = _state_string(state, "credential")
+        context = EmpaiaJobContext(
+            api_url=_state_string(state, "api_url"),
+            job_id=_state_string(state, "job_id"),
+            credential=_state_string(state, "credential"),
+        )
         processing_attempt_id = _state_string(state, "processing_attempt_id")
-        gateway = self._gateway_factory(api_url, job_id, credential)
+        gateway = self._gateway_factory(context)
         execution_key = hashlib.sha256(
-            f"{api_url}\0{job_id}\0{processing_attempt_id}".encode()
+            f"{context.api_url}\0{context.job_id}\0{processing_attempt_id}".encode()
         ).hexdigest()
         root = self._workspace_root / execution_key
         root.mkdir(parents=True, exist_ok=True)

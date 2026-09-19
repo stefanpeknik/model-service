@@ -25,6 +25,11 @@ from execution_scheduler.dispatch import (
     RemoteWorkflowFailureError,
     UnknownDispatchOutcomeError,
 )
+from execution_scheduler.inference import (
+    InferenceProxyUnavailableError,
+    InferenceRequest,
+    inference_headers,
+)
 from workflow_execution.contracts import (
     InvalidWorkflowInvocation,
     JsonValue,
@@ -36,6 +41,8 @@ from workflow_execution.http import WorkflowErrorResponse
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
+
+    from execution_scheduler.inference import InferenceProxy
 
 
 class ApiErrorCode(StrEnum):
@@ -103,6 +110,7 @@ def create_execution_app(
     scheduler: ExecutionSchedulerInterface,
     *,
     workflow_runner: SynchronousWorkflowInterface | None = None,
+    inference_proxy: InferenceProxy | None = None,
     lifespan: Lifespan[FastAPI] | None = None,
     deployment_health: DeploymentHealth | None = None,
 ) -> FastAPI:
@@ -342,6 +350,40 @@ def create_execution_app(
                 },
             )
         return {"status": "ok"}
+
+    @app.post("/{model_path:path}", include_in_schema=False)
+    async def forward_model_inference(
+        request: Request,
+        model_path: str,
+    ) -> Response:
+        if inference_proxy is None:
+            raise _http_error(
+                503,
+                ApiErrorCode.WORKFLOW_DISPATCH_UNAVAILABLE,
+                "model inference is unavailable",
+                retryable=True,
+            )
+        try:
+            forwarded = await inference_proxy.forward(
+                InferenceRequest(
+                    path=model_path,
+                    query=request.url.query,
+                    body=await request.body(),
+                    headers=inference_headers(request.headers),
+                )
+            )
+        except InferenceProxyUnavailableError as error:
+            raise _http_error(
+                503,
+                ApiErrorCode.WORKFLOW_DISPATCH_UNAVAILABLE,
+                str(error),
+                retryable=True,
+            ) from error
+        return Response(
+            status_code=forwarded.status_code,
+            content=forwarded.content,
+            headers=forwarded.headers,
+        )
 
     return app
 

@@ -6,6 +6,7 @@ import json
 import os
 from typing import TYPE_CHECKING, cast
 
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
@@ -18,6 +19,10 @@ if TYPE_CHECKING:
 _VERSION = b"\x01"
 _ASSOCIATED_DATA = b"model-service/provider-context/v1"
 _NONCE_BYTES = 12
+
+
+class ProtectedContextError(ValueError):
+    pass
 
 
 class ProtectedContextCipher:
@@ -52,11 +57,16 @@ class ProtectedContextCipher:
             raise ValueError("protected provider context has an unsupported envelope")
         nonce_start = len(_VERSION)
         ciphertext_start = nonce_start + _NONCE_BYTES
-        plaintext = self._cipher.decrypt(
-            value[nonce_start:ciphertext_start],
-            value[ciphertext_start:],
-            _ASSOCIATED_DATA,
-        )
+        try:
+            plaintext = self._cipher.decrypt(
+                value[nonce_start:ciphertext_start],
+                value[ciphertext_start:],
+                _ASSOCIATED_DATA,
+            )
+        except InvalidTag as error:
+            raise ProtectedContextError(
+                "protected provider context failed authentication"
+            ) from error
         decoded = json.loads(
             plaintext,
             parse_constant=lambda value: _reject_constant(value),
