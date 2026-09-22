@@ -27,8 +27,8 @@ spec:
               type: RuntimeDefault
           containers:
             - name: ray-head
-              image: rayproject/ray:2.58.0-py312
-              imagePullPolicy: Always
+              image: "{{ .Values.rayImage.repository }}:{{ .Values.rayImage.tag }}"
+              imagePullPolicy: {{ .Values.rayImage.pullPolicy }}
               resources:
                 limits:
                   cpu: 0

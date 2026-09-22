@@ -1,0 +1,36 @@
+workers:
+  - validation-cpu-workers
+
+applications:
+  - validation-prostate-heatmap
+
+validation:
+  maxWorkerReplicas: 1
+
+rayImage:
+  repository: cerit.io/stefanpeknik/model-service-ray-validation
+  tag: validation-20260922-1
+  pullPolicy: Always
+
+executionScheduler:
+  enabled: true
+  replicas: 1
+  image:
+    repository: cerit.io/stefanpeknik/model-service-scheduler
+    tag: 0fd9a57
+    pullPolicy: Always
+  database:
+    existingSecret: model-service-validation-db
+    urlKey: database-url
+  encryption:
+    existingSecret: model-service-validation-db
+    keyKey: provider-context-key
+  sharedStorage:
+    existingClaim: model-service-validation-shared
+    mountPath: /mnt/validation
+  leaseSeconds: 30
+  workerPollSeconds: 0.5
+  initialBackoffSeconds: 2
+  maximumBackoffSeconds: 30
+  defaultDeadlineSeconds: 600
+  maximumDeadlineSeconds: 600

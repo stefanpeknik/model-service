@@ -99,6 +99,10 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            {{- if .Values.executionScheduler.sharedStorage.existingClaim }}
+            - name: shared-storage
+              mountPath: {{ .Values.executionScheduler.sharedStorage.mountPath | quote }}
+            {{- end }}
             {{- if .Values.executionScheduler.empaia.enabled }}
             - name: empaia-workspace
               mountPath: {{ .Values.executionScheduler.empaia.workspaceRoot | quote }}
@@ -106,6 +110,11 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+        {{- if .Values.executionScheduler.sharedStorage.existingClaim }}
+        - name: shared-storage
+          persistentVolumeClaim:
+            claimName: {{ .Values.executionScheduler.sharedStorage.existingClaim | quote }}
+        {{- end }}
         {{- if .Values.executionScheduler.empaia.enabled }}
         - name: empaia-workspace
           persistentVolumeClaim:

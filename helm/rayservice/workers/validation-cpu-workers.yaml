@@ -1,0 +1,36 @@
+groupName: validation-cpu-workers
+replicas: 0
+minReplicas: 0
+maxReplicas: {{ .Values.validation.maxWorkerReplicas }}
+rayStartParams:
+  num-cpus: "1"
+template:
+  spec:
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: ray-worker
+        image: "{{ .Values.rayImage.repository }}:{{ .Values.rayImage.tag }}"
+        imagePullPolicy: {{ .Values.rayImage.pullPolicy }}
+        resources:
+          requests:
+            cpu: 1
+            memory: 2Gi
+          limits:
+            cpu: 1
+            memory: 2Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsUser: 1000
+        volumeMounts:
+          - name: shared
+            mountPath: /mnt/validation
+    volumes:
+      - name: shared
+        persistentVolumeClaim:
+          claimName: model-service-validation-shared

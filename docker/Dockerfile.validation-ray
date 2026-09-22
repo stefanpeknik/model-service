@@ -1,0 +1,15 @@
+FROM ghcr.io/astral-sh/uv:0.8.15 AS uv
+
+FROM docker.io/rayproject/ray:2.58.0-py312
+
+COPY --from=uv /uv /usr/local/bin/uv
+
+RUN uv pip install --python /home/ray/anaconda3/bin/python --no-cache \
+    "fastapi>=0.115.0" \
+    "pillow>=11.3.0" \
+    "pyyaml>=6.0.2"
+
+WORKDIR /app
+COPY validation validation
+COPY workflow_execution workflow_execution
+COPY workflow-definitions workflow-definitions

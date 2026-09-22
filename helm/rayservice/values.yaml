@@ -10,6 +10,11 @@ applications:
   - prov-gigapath
   - virchow2
 
+rayImage:
+  repository: rayproject/ray
+  tag: 2.58.0-py312
+  pullPolicy: Always
+
 executionScheduler:
   enabled: false
   replicas: 2
@@ -23,6 +28,9 @@ executionScheduler:
   encryption:
     existingSecret: ""
     keyKey: provider-context-key
+  sharedStorage:
+    existingClaim: ""
+    mountPath: /mnt/data
   rayServeOrigin: ""
   leaseSeconds: 60
   workerPollSeconds: 0.5
