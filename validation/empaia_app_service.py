@@ -15,6 +15,7 @@ class ValidationScenario(StrEnum):
     CANCELLATION = "cancellation"
     DIRECT_ACCESS = "direct-access"
     FINALIZATION_FAILURE = "finalization-failure"
+    FINISH_RESTART = "finish-restart"
     INVALID_CONFIGURATION = "invalid-configuration"
     NATIVE_PROCESSOR = "native-processor"
     NATIVE_RECTANGLE = "native-rectangle"
@@ -38,6 +39,7 @@ class JobView(BaseModel):
     configuration_reads: int = 0
     direct_access_reads: int = 0
     rectangle_reads: int = 0
+    slide_metadata_reads: int = 0
     tile_attempts: int = 0
     tile_count: int = 0
     tile_sample: float | None = None
@@ -53,12 +55,14 @@ class JobRecord:
     configuration_reads: int = 0
     direct_access_reads: int = 0
     rectangle_reads: int = 0
+    slide_metadata_reads: int = 0
     tile_attempts: int = 0
     tile_count: int = 0
     tile_sample: float | None = None
     tile_background_sample: float | None = None
     finalize_attempts: int = 0
     output_created: bool = False
+    metadata_released: bool = False
     finalized: bool = False
     failure: str | None = None
     failure_reports: int = 0
@@ -151,10 +155,19 @@ async def direct_access(
 
 
 @app.get("/v3/{job_id}/inputs/slide")
-def slide(
+async def slide(
     job_id: str, authorization: str | None = Header(default=None)
 ) -> dict[str, object]:
     _authorize(authorization)
+    with _lock:
+        record = _job(job_id)
+        record.slide_metadata_reads += 1
+    if _is_scenario(job_id, ValidationScenario.FINISH_RESTART):
+        while True:
+            with _lock:
+                if _job(job_id).metadata_released:
+                    break
+            await asyncio.sleep(0.1)
     native = _is_native(job_id)
     extent = 256 if native else 8
     pixel_size_nm = 500 if native else 250
@@ -278,6 +291,7 @@ def inspect_job(job_id: str) -> JobView:
             configuration_reads=record.configuration_reads,
             direct_access_reads=record.direct_access_reads,
             rectangle_reads=record.rectangle_reads,
+            slide_metadata_reads=record.slide_metadata_reads,
             tile_attempts=record.tile_attempts,
             tile_count=record.tile_count,
             tile_sample=record.tile_sample,
@@ -287,3 +301,11 @@ def inspect_job(job_id: str) -> JobView:
             failure=record.failure,
             failure_reports=record.failure_reports,
         )
+
+
+@app.post("/validation/jobs/{job_id}/release-metadata", status_code=204)
+def release_metadata(job_id: str) -> None:
+    if not _is_scenario(job_id, ValidationScenario.FINISH_RESTART):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    with _lock:
+        _job(job_id).metadata_released = True

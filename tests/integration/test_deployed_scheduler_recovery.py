@@ -85,6 +85,68 @@ class DeployedSchedulerRecoveryTests(unittest.TestCase):
         os.environ.get("VALIDATION_KUBERNETES_FAULTS") == "1",
         "VALIDATION_KUBERNETES_FAULTS=1 is required",
     )
+    def test_replacement_scheduler_resumes_provider_finish_without_reprocessing(
+        self,
+    ) -> None:
+        job_id = f"{ValidationScenario.FINISH_RESTART}-{uuid4().hex}"
+        with (
+            PortForward("service/model-service-validation-appservice", 18084, 8000),
+            httpx.Client(base_url="http://127.0.0.1:18084", timeout=30) as appservice,
+        ):
+            with (
+                PortForward(
+                    "service/model-service-validation-execution-scheduler", 18083, 8080
+                ),
+                httpx.Client(
+                    base_url="http://127.0.0.1:18083", timeout=30
+                ) as scheduler,
+            ):
+                execution_id = _schedule(scheduler, job_id)
+                before = _wait_for_job_field(appservice, job_id, "slide_metadata_reads")
+                self.assertEqual(before["tile_attempts"], 0)
+                self.assertEqual(before["finalize_attempts"], 0)
+
+            _delete_validation_scheduler_pod()
+            subprocess.run(
+                [
+                    "oc",
+                    "-n",
+                    NAMESPACE,
+                    "rollout",
+                    "status",
+                    f"deployment/{SCHEDULER_DEPLOYMENT}",
+                    "--timeout=180s",
+                ],
+                check=True,
+            )
+            released = appservice.post(f"/validation/jobs/{job_id}/release-metadata")
+            self.assertEqual(released.status_code, 204, released.text)
+
+            with (
+                PortForward(
+                    "service/model-service-validation-execution-scheduler", 18083, 8080
+                ),
+                httpx.Client(
+                    base_url="http://127.0.0.1:18083", timeout=30
+                ) as scheduler,
+            ):
+                execution = _wait_for_terminal(scheduler, execution_id)
+
+            self.assertEqual(execution["status"], "succeeded", execution)
+            recorded = _wait_for_job_field(appservice, job_id, "finalized")
+            self.assertEqual(recorded["configuration_reads"], 1)
+            self.assertEqual(recorded["direct_access_reads"], 2)
+            metadata_reads = recorded["slide_metadata_reads"]
+            self.assertIsInstance(metadata_reads, int)
+            assert isinstance(metadata_reads, int)
+            self.assertGreaterEqual(metadata_reads, 2)
+            self.assertEqual(recorded["tile_count"], 1)
+            self.assertEqual(recorded["finalize_attempts"], 1)
+
+    @unittest.skipUnless(
+        os.environ.get("VALIDATION_KUBERNETES_FAULTS") == "1",
+        "VALIDATION_KUBERNETES_FAULTS=1 is required",
+    )
     def test_replacement_scheduler_recovers_an_inflight_execution(self) -> None:
         job_id = f"{ValidationScenario.SCHEDULER_RESTART}-{uuid4().hex}"
         with (
@@ -102,22 +164,7 @@ class DeployedSchedulerRecoveryTests(unittest.TestCase):
                 execution_id = _schedule(scheduler, job_id)
                 _wait_for_job_field(appservice, job_id, "direct_access_reads")
 
-            subprocess.run(
-                [
-                    "oc",
-                    "-n",
-                    NAMESPACE,
-                    "delete",
-                    "pod",
-                    "-l",
-                    (
-                        "app.kubernetes.io/name=model-service-execution-scheduler,"
-                        "app.kubernetes.io/instance=model-service-validation"
-                    ),
-                    "--wait=true",
-                ],
-                check=True,
-            )
+            _delete_validation_scheduler_pod()
             subprocess.run(
                 [
                     "oc",
@@ -249,6 +296,26 @@ def _wait_for_job_field(
             raise AssertionError(response.text)
         time.sleep(0.5)
     raise AssertionError(f"AppService did not record {field}")
+
+
+def _delete_validation_scheduler_pod() -> None:
+    selector = (
+        "app.kubernetes.io/name=model-service-execution-scheduler,"
+        "app.kubernetes.io/instance=model-service-validation"
+    )
+    pods = subprocess.check_output(
+        ["oc", "-n", NAMESPACE, "get", "pods", "-l", selector, "-o", "name"],
+        text=True,
+    ).splitlines()
+    if len(pods) != 1 or not pods[0].startswith(
+        "pod/model-service-validation-execution-scheduler-"
+    ):
+        raise AssertionError(
+            f"expected exactly one validation scheduler pod, got {pods}"
+        )
+    subprocess.run(
+        ["oc", "-n", NAMESPACE, "delete", pods[0], "--wait=true"], check=True
+    )
 
 
 def _wait_for_terminal(client: httpx.Client, execution_id: str) -> dict[str, object]:
