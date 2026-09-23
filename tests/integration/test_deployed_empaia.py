@@ -175,6 +175,22 @@ class DeployedEmpaiaTests(unittest.TestCase):
             self.assertEqual(recorded["failure"], "workflow execution was cancelled")
             self.assertFalse(recorded["finalized"])
 
+    def test_credential_expiry_caps_a_blocked_execution(self) -> None:
+        with self._clients() as (scheduler, appservice):
+            job_id, request = self._request(ValidationScenario.CANCELLATION)
+            request["credential"] = self._credential(valid_seconds=20)
+            execution_id = self._schedule(scheduler, request)
+            execution = self._wait_terminal(scheduler, execution_id)
+            self.assertEqual(execution["status"], "failed", execution)
+            error = execution["error"]
+            self.assertIsInstance(error, dict)
+            assert isinstance(error, dict)
+            self.assertEqual(error["code"], "execution_deadline_exceeded")
+
+            recorded = self._wait_job(appservice, job_id, "configuration_reads")
+            self.assertFalse(recorded["finalized"])
+            self.assertEqual(recorded["tile_count"], 0)
+
     def _clients(self) -> _ClientPair:
         origin = os.environ.get("VALIDATION_ORIGIN")
         appservice_origin = os.environ.get("VALIDATION_APPSERVICE_ORIGIN")
@@ -252,7 +268,7 @@ class DeployedEmpaiaTests(unittest.TestCase):
         self.fail(f"AppService did not record {field}")
 
     @staticmethod
-    def _credential() -> str:
+    def _credential(valid_seconds: int = 600) -> str:
         def encode(value: dict[str, object]) -> str:
             return (
                 base64.urlsafe_b64encode(json.dumps(value).encode())
@@ -260,7 +276,7 @@ class DeployedEmpaiaTests(unittest.TestCase):
                 .decode()
             )
 
-        expiry = int((datetime.now(UTC) + timedelta(minutes=10)).timestamp())
+        expiry = int((datetime.now(UTC) + timedelta(seconds=valid_seconds)).timestamp())
         return f"{encode({})}.{encode({'exp': expiry})}.synthetic-signature"
 
 
