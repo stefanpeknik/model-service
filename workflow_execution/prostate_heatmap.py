@@ -154,7 +154,7 @@ class RayProstateHeatmapProcessor:
         output_tile_size = int(model_config["output_tile_size"])
         n_channels = int(model_config["n_channels"])
         target_mpp = float(model_config["mpp"])
-        stride = round(request.stride_fraction * tile_size)
+        stride = max(1, round(request.stride_fraction * tile_size))
         loop = asyncio.get_running_loop()
         tasks: set[asyncio.Task[None]] = set()
         with (
