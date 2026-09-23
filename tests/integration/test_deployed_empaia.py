@@ -62,6 +62,26 @@ class DeployedEmpaiaTests(unittest.TestCase):
             self.assertEqual(recorded["configuration_reads"], 1)
             self.assertEqual(recorded["direct_access_reads"], 0)
 
+    def test_per_workflow_limit_queues_then_releases_capacity(self) -> None:
+        with self._clients() as (scheduler, appservice):
+            first_job_id, first_request = self._request(ValidationScenario.CANCELLATION)
+            first_id = self._schedule(scheduler, first_request)
+            self._wait_status(scheduler, first_id, "running")
+
+            _, second_request = self._request(ValidationScenario.DIRECT_ACCESS)
+            second_id = self._schedule(scheduler, second_request)
+            queued = scheduler.get(f"/v1/executions/{second_id}")
+            self.assertEqual(queued.status_code, 200, queued.text)
+            self.assertEqual(queued.json()["status"], "queued")
+
+            cancelled = scheduler.post(f"/v1/executions/{first_id}/cancel")
+            self.assertEqual(cancelled.status_code, 200, cancelled.text)
+            self.assertEqual(cancelled.json()["status"], "cancelled")
+            self._wait_job(appservice, first_job_id, "failure_reports")
+
+            second = self._wait_terminal(scheduler, second_id)
+            self.assertEqual(second["status"], "succeeded", second)
+
     def test_temporary_appservice_failure_rejects_admission_as_retryable(self) -> None:
         with self._clients() as (scheduler, appservice):
             job_id, request = self._request(ValidationScenario.SERVICE_UNAVAILABLE)
