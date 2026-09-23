@@ -4,12 +4,48 @@ import unittest
 
 from fastapi.testclient import TestClient
 
-from validation.empaia_app_service import app
+from validation.empaia_app_service import ValidationScenario, app
 
 
 class ValidationAppServiceTests(unittest.TestCase):
+    def test_configuration_scenarios_are_explicit(self) -> None:
+        headers = {"Authorization": "Bearer synthetic-token"}
+        with TestClient(app) as client:
+            invalid = client.get(
+                f"/v3/{ValidationScenario.INVALID_CONFIGURATION}-contract/configuration",
+                headers=headers,
+            )
+            self.assertEqual(invalid.status_code, 200)
+            self.assertEqual(invalid.json()["customer"], {"unexpected": True})
+
+            unavailable = client.get(
+                f"/v3/{ValidationScenario.SERVICE_UNAVAILABLE}-contract/configuration",
+                headers=headers,
+            )
+            self.assertEqual(unavailable.status_code, 503)
+
+    def test_workflow_failure_points_at_an_unavailable_slide(self) -> None:
+        job_id = f"{ValidationScenario.WORKFLOW_FAILURE}-contract"
+        headers = {"Authorization": "Bearer synthetic-token"}
+        with TestClient(app) as client:
+            direct = client.get(
+                f"/v3/rationai/{job_id}/inputs/slide/direct-access", headers=headers
+            )
+            self.assertEqual(direct.status_code, 200)
+            self.assertTrue(direct.json()["storage_path"].endswith("missing-slide.dat"))
+            failed = client.put(
+                f"/v3/{job_id}/failure",
+                headers=headers,
+                json={"user_message": "safe failure"},
+            )
+            self.assertEqual(failed.status_code, 204)
+            recorded = client.get(f"/validation/jobs/{job_id}")
+            self.assertEqual(recorded.json()["direct_access_reads"], 1)
+            self.assertEqual(recorded.json()["failure_reports"], 1)
+            self.assertEqual(recorded.json()["failure"], "safe failure")
+
     def test_rectangle_input_has_no_direct_access(self) -> None:
-        job_id = "rectangle-contract"
+        job_id = f"{ValidationScenario.RECTANGLE}-contract"
         headers = {"Authorization": "Bearer synthetic-token"}
         with TestClient(app) as client:
             direct = client.get(

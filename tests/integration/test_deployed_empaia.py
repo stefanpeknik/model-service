@@ -6,72 +6,125 @@ import os
 import time
 import unittest
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from uuid import uuid4
 
 import httpx
 
 
+class ValidationScenario(StrEnum):
+    CANCELLATION = "cancellation"
+    DIRECT_ACCESS = "direct-access"
+    INVALID_CONFIGURATION = "invalid-configuration"
+    RECTANGLE = "rectangle"
+    SERVICE_UNAVAILABLE = "service-unavailable"
+    WORKFLOW_FAILURE = "workflow-failure"
+
+
 class DeployedEmpaiaTests(unittest.TestCase):
     def test_public_empaia_schedule_publishes_and_finalizes(self) -> None:
-        origin = os.environ.get("VALIDATION_ORIGIN")
-        appservice_origin = os.environ.get("VALIDATION_APPSERVICE_ORIGIN")
-        if origin is None or appservice_origin is None:
-            self.skipTest("validation scheduler and AppService origins are required")
+        with self._clients() as (scheduler, appservice):
+            job_id, request = self._request(ValidationScenario.DIRECT_ACCESS)
+            execution_id = self._schedule(scheduler, request, replay=True)
+            execution = self._wait_terminal(scheduler, execution_id)
+            self.assertEqual(execution["status"], "succeeded", execution)
 
-        job_id = uuid4().hex
-        credential = self._credential()
-        request = {
-            "installation_id": "validation",
-            "api_url": os.environ.get(
-                "VALIDATION_APPSERVICE_CLUSTER_URL",
-                "http://model-service-validation-appservice.peknik-ns.svc.cluster.local:8000",
-            ),
-            "job_id": job_id,
-            "credential": credential,
-        }
-        with (
-            httpx.Client(base_url=origin, timeout=30) as scheduler,
-            httpx.Client(base_url=appservice_origin, timeout=30) as appservice,
-        ):
-            admitted = scheduler.post(
-                "/v1/providers/empaia/workflows/prostate-heatmap/schedule",
-                json=request,
-            )
-            self.assertEqual(admitted.status_code, 202, admitted.text)
-            execution_id = admitted.json()["execution"]["id"]
-            replay = scheduler.post(
-                "/v1/providers/empaia/workflows/prostate-heatmap/schedule",
-                json=request,
-            )
-            self.assertEqual(replay.status_code, 200, replay.text)
-            self.assertEqual(replay.json()["execution"]["id"], execution_id)
-
-            deadline = time.monotonic() + 180
-            while time.monotonic() < deadline:
-                response = scheduler.get(f"/v1/executions/{execution_id}")
-                self.assertEqual(response.status_code, 200, response.text)
-                if response.json()["status"] in {"succeeded", "failed", "cancelled"}:
-                    break
-                time.sleep(1)
-            else:
-                self.fail("EMPAIA execution did not reach a terminal status")
-
-            self.assertEqual(response.json()["status"], "succeeded", response.text)
-            recorded = appservice.get(f"/validation/jobs/{job_id}")
-            self.assertEqual(recorded.status_code, 200, recorded.text)
-            self.assertEqual(recorded.json()["configuration_reads"], 1)
-            self.assertEqual(recorded.json()["tile_count"], 1)
-            self.assertTrue(recorded.json()["finalized"])
-            self.assertIsNone(recorded.json()["failure"])
+            recorded = self._wait_job(appservice, job_id, "finalized")
+            self.assertEqual(recorded["configuration_reads"], 1)
+            self.assertEqual(recorded["tile_count"], 1)
+            self.assertTrue(recorded["finalized"])
+            self.assertIsNone(recorded["failure"])
 
     def test_rectangle_input_is_materialized_before_publication(self) -> None:
+        with self._clients() as (scheduler, appservice):
+            job_id, request = self._request(ValidationScenario.RECTANGLE)
+            execution_id = self._schedule(scheduler, request)
+            execution = self._wait_terminal(scheduler, execution_id)
+            self.assertEqual(execution["status"], "succeeded", execution)
+
+            recorded = self._wait_job(appservice, job_id, "finalized")
+            self.assertEqual(recorded["configuration_reads"], 1)
+            self.assertEqual(recorded["rectangle_reads"], 1)
+            self.assertEqual(recorded["tile_count"], 1)
+
+    def test_invalid_configuration_is_rejected_before_admission(self) -> None:
+        with self._clients() as (scheduler, appservice):
+            job_id, request = self._request(ValidationScenario.INVALID_CONFIGURATION)
+            response = scheduler.post(
+                "/v1/providers/empaia/workflows/prostate-heatmap/schedule",
+                json=request,
+            )
+            self.assertEqual(response.status_code, 422, response.text)
+            self.assertEqual(
+                response.json()["detail"]["code"], "invalid_schedule_request"
+            )
+            recorded = self._wait_job(appservice, job_id, "configuration_reads")
+            self.assertEqual(recorded["configuration_reads"], 1)
+            self.assertEqual(recorded["direct_access_reads"], 0)
+
+    def test_temporary_appservice_failure_rejects_admission_as_retryable(self) -> None:
+        with self._clients() as (scheduler, appservice):
+            job_id, request = self._request(ValidationScenario.SERVICE_UNAVAILABLE)
+            response = scheduler.post(
+                "/v1/providers/empaia/workflows/prostate-heatmap/schedule",
+                json=request,
+            )
+            self.assertEqual(response.status_code, 503, response.text)
+            self.assertEqual(
+                response.json()["detail"]["code"], "scheduling_unavailable"
+            )
+            recorded = self._wait_job(appservice, job_id, "configuration_reads")
+            self.assertEqual(recorded["configuration_reads"], 1)
+
+    def test_workflow_failure_is_reported_to_appservice(self) -> None:
+        with self._clients() as (scheduler, appservice):
+            job_id, request = self._request(ValidationScenario.WORKFLOW_FAILURE)
+            execution_id = self._schedule(scheduler, request)
+            execution = self._wait_terminal(scheduler, execution_id)
+            self.assertEqual(execution["status"], "failed", execution)
+            error = execution["error"]
+            self.assertIsInstance(error, dict)
+            assert isinstance(error, dict)
+            self.assertEqual(error["code"], "workflow_internal_error")
+
+            recorded = self._wait_job(appservice, job_id, "failure_reports")
+            self.assertEqual(recorded["failure_reports"], 1)
+            direct_access_reads = recorded["direct_access_reads"]
+            self.assertIsInstance(direct_access_reads, int)
+            assert isinstance(direct_access_reads, int)
+            self.assertGreaterEqual(direct_access_reads, 3)
+            self.assertEqual(recorded["failure"], "workflow failed unexpectedly")
+            self.assertFalse(recorded["finalized"])
+
+    def test_cancellation_is_reported_to_appservice(self) -> None:
+        with self._clients() as (scheduler, appservice):
+            job_id, request = self._request(ValidationScenario.CANCELLATION)
+            execution_id = self._schedule(scheduler, request)
+            running = self._wait_status(scheduler, execution_id, "running")
+            self.assertEqual(running["status"], "running")
+
+            cancelled = scheduler.post(f"/v1/executions/{execution_id}/cancel")
+            self.assertEqual(cancelled.status_code, 200, cancelled.text)
+            self.assertEqual(cancelled.json()["status"], "cancelled")
+            repeated = scheduler.post(f"/v1/executions/{execution_id}/cancel")
+            self.assertEqual(repeated.status_code, 200, repeated.text)
+            self.assertEqual(repeated.json()["status"], "cancelled")
+
+            recorded = self._wait_job(appservice, job_id, "failure_reports")
+            self.assertEqual(recorded["failure_reports"], 1)
+            self.assertEqual(recorded["failure"], "workflow execution was cancelled")
+            self.assertFalse(recorded["finalized"])
+
+    def _clients(self) -> _ClientPair:
         origin = os.environ.get("VALIDATION_ORIGIN")
         appservice_origin = os.environ.get("VALIDATION_APPSERVICE_ORIGIN")
         if origin is None or appservice_origin is None:
             self.skipTest("validation scheduler and AppService origins are required")
+        return _ClientPair(origin, appservice_origin)
 
-        job_id = f"rectangle-{uuid4().hex}"
-        request = {
+    def _request(self, scenario: ValidationScenario) -> tuple[str, dict[str, object]]:
+        job_id = f"{scenario.value}-{uuid4().hex}"
+        return job_id, {
             "installation_id": "validation",
             "api_url": os.environ.get(
                 "VALIDATION_APPSERVICE_CLUSTER_URL",
@@ -80,33 +133,63 @@ class DeployedEmpaiaTests(unittest.TestCase):
             "job_id": job_id,
             "credential": self._credential(),
         }
-        with (
-            httpx.Client(base_url=origin, timeout=30) as scheduler,
-            httpx.Client(base_url=appservice_origin, timeout=30) as appservice,
-        ):
-            admitted = scheduler.post(
-                "/v1/providers/empaia/workflows/prostate-heatmap/schedule",
-                json=request,
-            )
-            self.assertEqual(admitted.status_code, 202, admitted.text)
-            execution_id = admitted.json()["execution"]["id"]
-            deadline = time.monotonic() + 180
-            while time.monotonic() < deadline:
-                response = scheduler.get(f"/v1/executions/{execution_id}")
-                self.assertEqual(response.status_code, 200, response.text)
-                if response.json()["status"] in {"succeeded", "failed", "cancelled"}:
-                    break
-                time.sleep(1)
-            else:
-                self.fail("rectangle execution did not reach a terminal status")
 
-            self.assertEqual(response.json()["status"], "succeeded", response.text)
-            recorded = appservice.get(f"/validation/jobs/{job_id}")
-            self.assertEqual(recorded.status_code, 200, recorded.text)
-            self.assertEqual(recorded.json()["configuration_reads"], 1)
-            self.assertEqual(recorded.json()["rectangle_reads"], 1)
-            self.assertEqual(recorded.json()["tile_count"], 1)
-            self.assertTrue(recorded.json()["finalized"])
+    def _schedule(
+        self,
+        scheduler: httpx.Client,
+        request: dict[str, object],
+        *,
+        replay: bool = False,
+    ) -> str:
+        path = "/v1/providers/empaia/workflows/prostate-heatmap/schedule"
+        admitted = scheduler.post(path, json=request)
+        self.assertEqual(admitted.status_code, 202, admitted.text)
+        execution_id = admitted.json()["execution"]["id"]
+        if replay:
+            repeated = scheduler.post(path, json=request)
+            self.assertEqual(repeated.status_code, 200, repeated.text)
+            self.assertEqual(repeated.json()["execution"]["id"], execution_id)
+        return execution_id
+
+    def _wait_terminal(
+        self, scheduler: httpx.Client, execution_id: str
+    ) -> dict[str, object]:
+        deadline = time.monotonic() + 180
+        while time.monotonic() < deadline:
+            response = scheduler.get(f"/v1/executions/{execution_id}")
+            self.assertEqual(response.status_code, 200, response.text)
+            execution = response.json()
+            if execution["status"] in {"succeeded", "failed", "cancelled"}:
+                return execution
+            time.sleep(1)
+        self.fail("EMPAIA execution did not reach a terminal status")
+
+    def _wait_status(
+        self, scheduler: httpx.Client, execution_id: str, expected: str
+    ) -> dict[str, object]:
+        deadline = time.monotonic() + 180
+        while time.monotonic() < deadline:
+            response = scheduler.get(f"/v1/executions/{execution_id}")
+            self.assertEqual(response.status_code, 200, response.text)
+            execution = response.json()
+            if execution["status"] == expected:
+                return execution
+            if execution["status"] in {"succeeded", "failed", "cancelled"}:
+                self.fail(f"execution reached {execution['status']} before {expected}")
+            time.sleep(1)
+        self.fail(f"EMPAIA execution did not reach {expected}")
+
+    def _wait_job(
+        self, appservice: httpx.Client, job_id: str, field: str
+    ) -> dict[str, object]:
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            response = appservice.get(f"/validation/jobs/{job_id}")
+            if response.status_code == 200 and response.json().get(field):
+                return response.json()
+            self.assertIn(response.status_code, {200, 404}, response.text)
+            time.sleep(0.5)
+        self.fail(f"AppService did not record {field}")
 
     @staticmethod
     def _credential() -> str:
@@ -119,6 +202,19 @@ class DeployedEmpaiaTests(unittest.TestCase):
 
         expiry = int((datetime.now(UTC) + timedelta(minutes=10)).timestamp())
         return f"{encode({})}.{encode({'exp': expiry})}.synthetic-signature"
+
+
+class _ClientPair:
+    def __init__(self, scheduler_origin: str, appservice_origin: str) -> None:
+        self._scheduler = httpx.Client(base_url=scheduler_origin, timeout=30)
+        self._appservice = httpx.Client(base_url=appservice_origin, timeout=30)
+
+    def __enter__(self) -> tuple[httpx.Client, httpx.Client]:
+        return self._scheduler, self._appservice
+
+    def __exit__(self, *_args: object) -> None:
+        self._scheduler.close()
+        self._appservice.close()
 
 
 if __name__ == "__main__":

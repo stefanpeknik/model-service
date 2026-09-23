@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from ray import serve
 from workflow_execution.application import WorkflowApplication
 from workflow_execution.catalog import WorkflowCatalog
 from workflow_execution.contracts import WorkflowInvocation, WorkflowResult
+from workflow_execution.http import WorkflowErrorResponse, run_workflow_http
 from workflow_execution.prostate_heatmap import (
     HeatmapBuildRequest,
     ProstateHeatmapWorkflow,
@@ -20,6 +22,8 @@ class ValidationHeatmapProcessor:
     async def build(self, request: HeatmapBuildRequest) -> None:
         request.slide_path.read_bytes()
         request.tissue_mask_path.read_bytes()
+        if "cancellation" in request.output_path.parts:
+            await asyncio.sleep(300)
         Image.new("L", (8, 8), color=128).save(request.output_path, format="TIFF")
 
 
@@ -49,9 +53,17 @@ class ValidationProstateHeatmapApplication:
             access_adapters=access_adapters,
         )
 
-    @fastapi.post("/", response_model=WorkflowResult)
+    @fastapi.post(
+        "/",
+        response_model=WorkflowResult,
+        responses={
+            422: {"model": WorkflowErrorResponse},
+            500: {"model": WorkflowErrorResponse},
+            503: {"model": WorkflowErrorResponse},
+        },
+    )
     async def run(self, body: WorkflowInvocation) -> WorkflowResult:
-        return await self._application.run(body)
+        return await run_workflow_http(self._application, body)
 
 
 app = ValidationProstateHeatmapApplication.bind()  # type: ignore[attr-defined]
