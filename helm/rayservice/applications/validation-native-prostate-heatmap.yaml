@@ -1,0 +1,14 @@
+- name: prostate-heatmap
+  import_path: workflow_execution.prostate_heatmap_serve:app
+  route_prefix: /workflows/prostate-heatmap
+  deployments:
+    - name: ProstateHeatmapApplication
+      autoscaling_config:
+        min_replicas: 0
+        max_replicas: 1
+        target_ongoing_requests: 1
+      ray_actor_options:
+        num_cpus: 0.5
+      user_config:
+        num_threads: 1
+        max_concurrent_tasks: 2

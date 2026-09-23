@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import struct
 from dataclasses import dataclass
 from enum import StrEnum
 from threading import Lock
@@ -15,6 +16,7 @@ class ValidationScenario(StrEnum):
     DIRECT_ACCESS = "direct-access"
     FINALIZATION_FAILURE = "finalization-failure"
     INVALID_CONFIGURATION = "invalid-configuration"
+    NATIVE_PROCESSOR = "native-processor"
     PUBLICATION_FAILURE = "publication-failure"
     RAY_RESTART = "ray-restart"
     RECTANGLE = "rectangle"
@@ -37,6 +39,7 @@ class JobView(BaseModel):
     rectangle_reads: int = 0
     tile_attempts: int = 0
     tile_count: int = 0
+    tile_sample: float | None = None
     finalize_attempts: int = 0
     finalized: bool = False
     failure: str | None = None
@@ -50,6 +53,7 @@ class JobRecord:
     rectangle_reads: int = 0
     tile_attempts: int = 0
     tile_count: int = 0
+    tile_sample: float | None = None
     finalize_attempts: int = 0
     output_created: bool = False
     finalized: bool = False
@@ -125,6 +129,8 @@ async def direct_access(
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     filename = "slide.dat" if name == "slide" else "roi.dat"
+    if _is_scenario(job_id, ValidationScenario.NATIVE_PROCESSOR):
+        filename = "slide.tiff" if name == "slide" else "roi.tiff"
     if name == "slide" and _is_scenario(job_id, ValidationScenario.WORKFLOW_FAILURE):
         filename = "missing-slide.dat"
     return {
@@ -139,11 +145,14 @@ def slide(
     job_id: str, authorization: str | None = Header(default=None)
 ) -> dict[str, object]:
     _authorize(authorization)
+    native = _is_scenario(job_id, ValidationScenario.NATIVE_PROCESSOR)
+    extent = 256 if native else 8
+    pixel_size_nm = 500 if native else 250
     return {
         "id": f"{job_id}-slide",
-        "extent": {"x": 8, "y": 8},
-        "pixel_size_nm": {"x": 250, "y": 250},
-        "levels": [{"extent": {"x": 8, "y": 8}}],
+        "extent": {"x": extent, "y": extent},
+        "pixel_size_nm": {"x": pixel_size_nm, "y": pixel_size_nm},
+        "levels": [{"extent": {"x": extent, "y": extent}}],
     }
 
 
@@ -187,14 +196,20 @@ async def put_tile(
     authorization: str | None = Header(default=None),
 ) -> None:
     _authorize(authorization)
+    data = await request.body()
     if (
         pixelmap_id != f"{job_id}-heatmap"
         or level != 0
         or tile_x != 0
         or tile_y != 0
-        or not await request.body()
+        or not data
     ):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT)
+    tile_sample = None
+    if _is_scenario(job_id, ValidationScenario.NATIVE_PROCESSOR):
+        if len(data) != 512 * 512 * 4:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT)
+        tile_sample = struct.unpack_from("=f", data, 4 * (128 * 512 + 128))[0]
     with _lock:
         record = _job(job_id)
         record.tile_attempts += 1
@@ -203,6 +218,7 @@ async def put_tile(
         if _is_scenario(job_id, ValidationScenario.PUBLICATION_FAILURE):
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
         record.tile_count += 1
+        record.tile_sample = tile_sample
 
 
 @app.put("/v3/{job_id}/finalize", status_code=status.HTTP_204_NO_CONTENT)
@@ -243,6 +259,7 @@ def inspect_job(job_id: str) -> JobView:
             rectangle_reads=record.rectangle_reads,
             tile_attempts=record.tile_attempts,
             tile_count=record.tile_count,
+            tile_sample=record.tile_sample,
             finalize_attempts=record.finalize_attempts,
             finalized=record.finalized,
             failure=record.failure,
