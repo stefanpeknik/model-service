@@ -27,6 +27,35 @@ class DeployedEmpaiaTests(unittest.TestCase):
             self.assertTrue(recorded["finalized"])
             self.assertIsNone(recorded["failure"])
 
+    def test_job_replay_accepts_new_credential_but_rejects_changed_origin(self) -> None:
+        with self._clients() as (scheduler, appservice):
+            job_id, request = self._request(ValidationScenario.DIRECT_ACCESS)
+            execution_id = self._schedule(scheduler, request)
+            path = "/v1/providers/empaia/workflows/prostate-heatmap/schedule"
+
+            replacement = scheduler.post(
+                path,
+                json={**request, "credential": self._credential(valid_seconds=700)},
+            )
+            self.assertEqual(replacement.status_code, 200, replacement.text)
+            self.assertEqual(replacement.json()["execution"]["id"], execution_id)
+
+            changed_origin = scheduler.post(
+                path,
+                json={**request, "api_url": f"{request['api_url']}/alternate"},
+            )
+            self.assertEqual(changed_origin.status_code, 409, changed_origin.text)
+            self.assertEqual(
+                changed_origin.json()["detail"]["code"], "schedule_conflict"
+            )
+
+            execution = self._wait_terminal(scheduler, execution_id)
+            self.assertEqual(execution["status"], "succeeded", execution)
+            recorded = self._wait_job(appservice, job_id, "finalized")
+            self.assertEqual(recorded["configuration_reads"], 1)
+            self.assertEqual(recorded["tile_count"], 1)
+            self.assertEqual(recorded["finalize_attempts"], 1)
+
     def test_rectangle_input_is_materialized_before_publication(self) -> None:
         with self._clients() as (scheduler, appservice):
             job_id, request = self._request(ValidationScenario.RECTANGLE)
