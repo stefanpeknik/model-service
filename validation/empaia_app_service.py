@@ -10,9 +10,12 @@ from pydantic import BaseModel
 
 
 class ValidationScenario(StrEnum):
+    AUTH_REJECTED = "auth-rejected"
     CANCELLATION = "cancellation"
     DIRECT_ACCESS = "direct-access"
+    FINALIZATION_FAILURE = "finalization-failure"
     INVALID_CONFIGURATION = "invalid-configuration"
+    PUBLICATION_FAILURE = "publication-failure"
     RAY_RESTART = "ray-restart"
     RECTANGLE = "rectangle"
     SCHEDULER_RESTART = "scheduler-restart"
@@ -32,7 +35,9 @@ class JobView(BaseModel):
     configuration_reads: int = 0
     direct_access_reads: int = 0
     rectangle_reads: int = 0
+    tile_attempts: int = 0
     tile_count: int = 0
+    finalize_attempts: int = 0
     finalized: bool = False
     failure: str | None = None
     failure_reports: int = 0
@@ -43,7 +48,9 @@ class JobRecord:
     configuration_reads: int = 0
     direct_access_reads: int = 0
     rectangle_reads: int = 0
+    tile_attempts: int = 0
     tile_count: int = 0
+    finalize_attempts: int = 0
     output_created: bool = False
     finalized: bool = False
     failure: str | None = None
@@ -77,6 +84,8 @@ def configuration(
     _authorize(authorization)
     with _lock:
         _job(job_id).configuration_reads += 1
+    if _is_scenario(job_id, ValidationScenario.AUTH_REJECTED):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
     if _is_scenario(job_id, ValidationScenario.SERVICE_UNAVAILABLE):
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
     customer: dict[str, object] = {}
@@ -187,9 +196,13 @@ async def put_tile(
     ):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT)
     with _lock:
-        if not _job(job_id).output_created:
+        record = _job(job_id)
+        record.tile_attempts += 1
+        if not record.output_created:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT)
-        _job(job_id).tile_count += 1
+        if _is_scenario(job_id, ValidationScenario.PUBLICATION_FAILURE):
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
+        record.tile_count += 1
 
 
 @app.put("/v3/{job_id}/finalize", status_code=status.HTTP_204_NO_CONTENT)
@@ -197,6 +210,9 @@ def finalize(job_id: str, authorization: str | None = Header(default=None)) -> N
     _authorize(authorization)
     with _lock:
         record = _job(job_id)
+        record.finalize_attempts += 1
+        if _is_scenario(job_id, ValidationScenario.FINALIZATION_FAILURE):
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
         if not record.output_created or record.tile_count == 0:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT)
         record.finalized = True
@@ -225,7 +241,9 @@ def inspect_job(job_id: str) -> JobView:
             configuration_reads=record.configuration_reads,
             direct_access_reads=record.direct_access_reads,
             rectangle_reads=record.rectangle_reads,
+            tile_attempts=record.tile_attempts,
             tile_count=record.tile_count,
+            finalize_attempts=record.finalize_attempts,
             finalized=record.finalized,
             failure=record.failure,
             failure_reports=record.failure_reports,

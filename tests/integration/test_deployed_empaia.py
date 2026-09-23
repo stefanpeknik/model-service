@@ -54,6 +54,20 @@ class DeployedEmpaiaTests(unittest.TestCase):
             self.assertEqual(recorded["configuration_reads"], 1)
             self.assertEqual(recorded["direct_access_reads"], 0)
 
+    def test_rejected_credential_is_a_permanent_admission_error(self) -> None:
+        with self._clients() as (scheduler, appservice):
+            job_id, request = self._request(ValidationScenario.AUTH_REJECTED)
+            response = scheduler.post(
+                "/v1/providers/empaia/workflows/prostate-heatmap/schedule",
+                json=request,
+            )
+            self.assertEqual(response.status_code, 422, response.text)
+            self.assertEqual(
+                response.json()["detail"]["code"], "invalid_schedule_request"
+            )
+            recorded = self._wait_job(appservice, job_id, "configuration_reads")
+            self.assertEqual(recorded["configuration_reads"], 1)
+
     def test_per_workflow_limit_queues_then_releases_capacity(self) -> None:
         with self._clients() as (scheduler, appservice):
             first_job_id, first_request = self._request(ValidationScenario.CANCELLATION)
@@ -87,6 +101,40 @@ class DeployedEmpaiaTests(unittest.TestCase):
             )
             recorded = self._wait_job(appservice, job_id, "configuration_reads")
             self.assertEqual(recorded["configuration_reads"], 1)
+
+    def test_unknown_tile_upload_outcome_is_not_replayed(self) -> None:
+        with self._clients() as (scheduler, appservice):
+            job_id, request = self._request(ValidationScenario.PUBLICATION_FAILURE)
+            execution_id = self._schedule(scheduler, request)
+            execution = self._wait_terminal(scheduler, execution_id)
+            self.assertEqual(execution["status"], "failed", execution)
+            error = execution["error"]
+            self.assertIsInstance(error, dict)
+            assert isinstance(error, dict)
+            self.assertEqual(error["code"], "empaia_finish_failed")
+
+            recorded = self._wait_job(appservice, job_id, "tile_attempts")
+            self.assertEqual(recorded["tile_attempts"], 1)
+            self.assertEqual(recorded["tile_count"], 0)
+            self.assertEqual(recorded["finalize_attempts"], 0)
+            self.assertFalse(recorded["finalized"])
+
+    def test_unknown_finalization_outcome_is_not_replayed(self) -> None:
+        with self._clients() as (scheduler, appservice):
+            job_id, request = self._request(ValidationScenario.FINALIZATION_FAILURE)
+            execution_id = self._schedule(scheduler, request)
+            execution = self._wait_terminal(scheduler, execution_id)
+            self.assertEqual(execution["status"], "failed", execution)
+            error = execution["error"]
+            self.assertIsInstance(error, dict)
+            assert isinstance(error, dict)
+            self.assertEqual(error["code"], "empaia_finish_failed")
+
+            recorded = self._wait_job(appservice, job_id, "finalize_attempts")
+            self.assertEqual(recorded["tile_attempts"], 1)
+            self.assertEqual(recorded["tile_count"], 1)
+            self.assertEqual(recorded["finalize_attempts"], 1)
+            self.assertFalse(recorded["finalized"])
 
     def test_workflow_failure_is_reported_to_appservice(self) -> None:
         with self._clients() as (scheduler, appservice):

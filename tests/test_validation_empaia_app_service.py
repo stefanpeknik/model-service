@@ -45,6 +45,45 @@ class ValidationAppServiceTests(unittest.TestCase):
             self.assertEqual(recorded.json()["failure_reports"], 1)
             self.assertEqual(recorded.json()["failure"], "safe failure")
 
+    def test_publication_and_finalization_failures_are_counted(self) -> None:
+        headers = {"Authorization": "Bearer synthetic-token"}
+        with TestClient(app) as client:
+            publication_job = f"{ValidationScenario.PUBLICATION_FAILURE}-contract"
+            created = client.post(
+                f"/v3/{publication_job}/outputs/heatmap",
+                headers=headers,
+                json={"type": "continuous_pixelmap"},
+            )
+            tile = client.put(
+                f"/v3/{publication_job}/pixelmaps/{created.json()['id']}"
+                "/level/0/position/0/0/data",
+                headers=headers,
+                content=b"tile",
+            )
+            self.assertEqual(tile.status_code, 503)
+            publication = client.get(f"/validation/jobs/{publication_job}").json()
+            self.assertEqual(publication["tile_attempts"], 1)
+            self.assertEqual(publication["tile_count"], 0)
+
+            finalization_job = f"{ValidationScenario.FINALIZATION_FAILURE}-contract"
+            created = client.post(
+                f"/v3/{finalization_job}/outputs/heatmap",
+                headers=headers,
+                json={"type": "continuous_pixelmap"},
+            )
+            tile = client.put(
+                f"/v3/{finalization_job}/pixelmaps/{created.json()['id']}"
+                "/level/0/position/0/0/data",
+                headers=headers,
+                content=b"tile",
+            )
+            self.assertEqual(tile.status_code, 204)
+            finalized = client.put(f"/v3/{finalization_job}/finalize", headers=headers)
+            self.assertEqual(finalized.status_code, 503)
+            finalization = client.get(f"/validation/jobs/{finalization_job}").json()
+            self.assertEqual(finalization["tile_count"], 1)
+            self.assertEqual(finalization["finalize_attempts"], 1)
+
     def test_scheduler_restart_delays_only_the_first_slide_access(self) -> None:
         job_id = f"{ValidationScenario.SCHEDULER_RESTART}-contract"
         headers = {"Authorization": "Bearer synthetic-token"}
