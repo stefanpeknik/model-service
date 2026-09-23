@@ -11,5 +11,5 @@ validation:
   appService:
     image:
       repository: cerit.io/stefanpeknik/model-service-appservice-validation
-      tag: validation-native-20260923-2
+      tag: validation-native-20260923-3
       pullPolicy: Always

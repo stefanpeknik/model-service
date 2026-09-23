@@ -17,6 +17,7 @@ class ValidationScenario(StrEnum):
     FINALIZATION_FAILURE = "finalization-failure"
     INVALID_CONFIGURATION = "invalid-configuration"
     NATIVE_PROCESSOR = "native-processor"
+    NATIVE_RECTANGLE = "native-rectangle"
     PUBLICATION_FAILURE = "publication-failure"
     RAY_RESTART = "ray-restart"
     RECTANGLE = "rectangle"
@@ -40,6 +41,7 @@ class JobView(BaseModel):
     tile_attempts: int = 0
     tile_count: int = 0
     tile_sample: float | None = None
+    tile_background_sample: float | None = None
     finalize_attempts: int = 0
     finalized: bool = False
     failure: str | None = None
@@ -54,6 +56,7 @@ class JobRecord:
     tile_attempts: int = 0
     tile_count: int = 0
     tile_sample: float | None = None
+    tile_background_sample: float | None = None
     finalize_attempts: int = 0
     output_created: bool = False
     finalized: bool = False
@@ -79,6 +82,12 @@ def _job(job_id: str) -> JobRecord:
 
 def _is_scenario(job_id: str, scenario: ValidationScenario) -> bool:
     return job_id.startswith(f"{scenario.value}-")
+
+
+def _is_native(job_id: str) -> bool:
+    return _is_scenario(job_id, ValidationScenario.NATIVE_PROCESSOR) or _is_scenario(
+        job_id, ValidationScenario.NATIVE_RECTANGLE
+    )
 
 
 @app.get("/v3/{job_id}/configuration")
@@ -124,12 +133,13 @@ async def direct_access(
         )
     ):
         await asyncio.sleep(45)
-    if name == "region_of_interest" and _is_scenario(
-        job_id, ValidationScenario.RECTANGLE
+    if name == "region_of_interest" and (
+        _is_scenario(job_id, ValidationScenario.RECTANGLE)
+        or _is_scenario(job_id, ValidationScenario.NATIVE_RECTANGLE)
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     filename = "slide.dat" if name == "slide" else "roi.dat"
-    if _is_scenario(job_id, ValidationScenario.NATIVE_PROCESSOR):
+    if _is_native(job_id):
         filename = "slide.tiff" if name == "slide" else "roi.tiff"
     if name == "slide" and _is_scenario(job_id, ValidationScenario.WORKFLOW_FAILURE):
         filename = "missing-slide.dat"
@@ -145,7 +155,7 @@ def slide(
     job_id: str, authorization: str | None = Header(default=None)
 ) -> dict[str, object]:
     _authorize(authorization)
-    native = _is_scenario(job_id, ValidationScenario.NATIVE_PROCESSOR)
+    native = _is_native(job_id)
     extent = 256 if native else 8
     pixel_size_nm = 500 if native else 250
     return {
@@ -206,10 +216,20 @@ async def put_tile(
     ):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT)
     tile_sample = None
-    if _is_scenario(job_id, ValidationScenario.NATIVE_PROCESSOR):
+    tile_background_sample = None
+    if _is_native(job_id):
         if len(data) != 512 * 512 * 4:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT)
-        tile_sample = struct.unpack_from("=f", data, 4 * (128 * 512 + 128))[0]
+        sample_at = (
+            4 if _is_scenario(job_id, ValidationScenario.NATIVE_RECTANGLE) else 128
+        )
+        tile_sample = struct.unpack_from("=f", data, 4 * (sample_at * 512 + sample_at))[
+            0
+        ]
+        if _is_scenario(job_id, ValidationScenario.NATIVE_RECTANGLE):
+            tile_background_sample = struct.unpack_from(
+                "=f", data, 4 * (200 * 512 + 200)
+            )[0]
     with _lock:
         record = _job(job_id)
         record.tile_attempts += 1
@@ -219,6 +239,7 @@ async def put_tile(
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
         record.tile_count += 1
         record.tile_sample = tile_sample
+        record.tile_background_sample = tile_background_sample
 
 
 @app.put("/v3/{job_id}/finalize", status_code=status.HTTP_204_NO_CONTENT)
@@ -260,6 +281,7 @@ def inspect_job(job_id: str) -> JobView:
             tile_attempts=record.tile_attempts,
             tile_count=record.tile_count,
             tile_sample=record.tile_sample,
+            tile_background_sample=record.tile_background_sample,
             finalize_attempts=record.finalize_attempts,
             finalized=record.finalized,
             failure=record.failure,

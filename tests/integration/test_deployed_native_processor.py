@@ -10,16 +10,36 @@ from uuid import uuid4
 
 import httpx
 
-from validation.empaia_app_service import ValidationScenario
+from validation.empaia_app_service import JobView, ValidationScenario
 
 
 class DeployedNativeProcessorTests(unittest.TestCase):
     def test_native_heatmap_is_published_through_empaia(self) -> None:
+        job = self._published_job(ValidationScenario.NATIVE_PROCESSOR)
+        sample = job.tile_sample
+        self.assertIsNotNone(sample)
+        assert sample is not None
+        self.assertGreater(sample, 0.6)
+        self.assertLess(sample, 0.9)
+
+    def test_native_rectangle_mask_limits_the_published_heatmap(self) -> None:
+        job = self._published_job(ValidationScenario.NATIVE_RECTANGLE)
+        self.assertEqual(job.rectangle_reads, 1)
+        sample = job.tile_sample
+        background = job.tile_background_sample
+        self.assertIsNotNone(sample)
+        self.assertIsNotNone(background)
+        assert sample is not None and background is not None
+        self.assertGreater(sample, 0.6)
+        self.assertLess(sample, 0.9)
+        self.assertLess(background, 0.1)
+
+    def _published_job(self, scenario: ValidationScenario) -> JobView:
         if os.environ.get("VALIDATION_NATIVE_PROCESSOR") != "1":
             self.skipTest("native processor validation profile is not active")
         scheduler_origin = os.environ["VALIDATION_ORIGIN"]
         appservice_origin = os.environ["VALIDATION_APPSERVICE_ORIGIN"]
-        job_id = f"{ValidationScenario.NATIVE_PROCESSOR.value}-{uuid4().hex}"
+        job_id = f"{scenario.value}-{uuid4().hex}"
 
         def encode(value: dict[str, object]) -> str:
             return (
@@ -63,8 +83,7 @@ class DeployedNativeProcessorTests(unittest.TestCase):
 
             recorded = appservice.get(f"/validation/jobs/{job_id}")
             self.assertEqual(recorded.status_code, 200, recorded.text)
-            job = recorded.json()
-            self.assertTrue(job["finalized"])
-            self.assertEqual(job["tile_count"], 1)
-            self.assertGreater(job["tile_sample"], 0.6)
-            self.assertLess(job["tile_sample"], 0.9)
+            job = JobView.model_validate(recorded.json())
+            self.assertTrue(job.finalized)
+            self.assertEqual(job.tile_count, 1)
+            return job
