@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 
 NAMESPACE = "peknik-ns"
+RAYSERVICE = "model-service-validation"
 SCHEDULER_DEPLOYMENT = "model-service-validation-execution-scheduler"
 
 
@@ -98,20 +99,7 @@ class DeployedSchedulerRecoveryTests(unittest.TestCase):
                     base_url="http://127.0.0.1:18083", timeout=30
                 ) as scheduler,
             ):
-                admitted = scheduler.post(
-                    "/v1/providers/empaia/workflows/prostate-heatmap/schedule",
-                    json={
-                        "installation_id": "validation",
-                        "api_url": (
-                            "http://model-service-validation-appservice."
-                            "peknik-ns.svc.cluster.local:8000"
-                        ),
-                        "job_id": job_id,
-                        "credential": _credential(),
-                    },
-                )
-                self.assertEqual(admitted.status_code, 202, admitted.text)
-                execution_id = admitted.json()["execution"]["id"]
+                execution_id = _schedule(scheduler, job_id)
                 _wait_for_job_field(appservice, job_id, "direct_access_reads")
 
             subprocess.run(
@@ -161,6 +149,92 @@ class DeployedSchedulerRecoveryTests(unittest.TestCase):
             assert isinstance(direct_access_reads, int)
             self.assertGreaterEqual(direct_access_reads, 2)
             self.assertEqual(recorded["tile_count"], 1)
+
+    @unittest.skipUnless(
+        os.environ.get("VALIDATION_KUBERNETES_FAULTS") == "1",
+        "VALIDATION_KUBERNETES_FAULTS=1 is required",
+    )
+    def test_processing_recovers_after_ray_head_loss(self) -> None:
+        job_id = f"{ValidationScenario.RAY_RESTART}-{uuid4().hex}"
+        with (
+            PortForward("service/model-service-validation-appservice", 18084, 8000),
+            httpx.Client(base_url="http://127.0.0.1:18084", timeout=30) as appservice,
+            PortForward(
+                "service/model-service-validation-execution-scheduler", 18083, 8080
+            ),
+            httpx.Client(base_url="http://127.0.0.1:18083", timeout=30) as scheduler,
+        ):
+            execution_id = _schedule(scheduler, job_id)
+            _wait_for_job_field(appservice, job_id, "direct_access_reads")
+            cluster = subprocess.check_output(
+                [
+                    "oc",
+                    "-n",
+                    NAMESPACE,
+                    "get",
+                    "rayservice",
+                    RAYSERVICE,
+                    "-o",
+                    "jsonpath={.status.activeServiceStatus.rayClusterName}",
+                ],
+                text=True,
+            ).strip()
+            self.assertTrue(cluster.startswith(f"{RAYSERVICE}-"), cluster)
+            selector = f"ray.io/cluster={cluster},ray.io/node-type=head"
+            subprocess.run(
+                [
+                    "oc",
+                    "-n",
+                    NAMESPACE,
+                    "delete",
+                    "pod",
+                    "-l",
+                    selector,
+                    "--wait=true",
+                ],
+                check=True,
+            )
+            subprocess.run(
+                [
+                    "oc",
+                    "-n",
+                    NAMESPACE,
+                    "wait",
+                    "pod",
+                    "-l",
+                    selector,
+                    "--for=condition=Ready",
+                    "--timeout=240s",
+                ],
+                check=True,
+            )
+
+            execution = _wait_for_terminal(scheduler, execution_id)
+            self.assertEqual(execution["status"], "succeeded", execution)
+            recorded = _wait_for_job_field(appservice, job_id, "finalized")
+            direct_access_reads = recorded["direct_access_reads"]
+            self.assertIsInstance(direct_access_reads, int)
+            assert isinstance(direct_access_reads, int)
+            self.assertGreaterEqual(direct_access_reads, 2)
+            self.assertEqual(recorded["tile_count"], 1)
+
+
+def _schedule(client: httpx.Client, job_id: str) -> str:
+    admitted = client.post(
+        "/v1/providers/empaia/workflows/prostate-heatmap/schedule",
+        json={
+            "installation_id": "validation",
+            "api_url": (
+                "http://model-service-validation-appservice."
+                "peknik-ns.svc.cluster.local:8000"
+            ),
+            "job_id": job_id,
+            "credential": _credential(),
+        },
+    )
+    if admitted.status_code != 202:
+        raise AssertionError(admitted.text)
+    return admitted.json()["execution"]["id"]
 
 
 def _wait_for_job_field(

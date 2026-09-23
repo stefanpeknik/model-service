@@ -10,7 +10,7 @@ validation:
     enabled: true
     image:
       repository: cerit.io/stefanpeknik/model-service-appservice-validation
-      tag: validation-20260923-3
+      tag: validation-20260923-4
       pullPolicy: Always
 
 rayImage:
@@ -41,6 +41,7 @@ executionScheduler:
     workspaceClaim: model-service-validation-shared
   leaseSeconds: 30
   workerPollSeconds: 0.5
+  processingAttempts: 6
   initialBackoffSeconds: 2
   maximumBackoffSeconds: 30
   defaultDeadlineSeconds: 600

@@ -13,6 +13,7 @@ class ValidationScenario(StrEnum):
     CANCELLATION = "cancellation"
     DIRECT_ACCESS = "direct-access"
     INVALID_CONFIGURATION = "invalid-configuration"
+    RAY_RESTART = "ray-restart"
     RECTANGLE = "rectangle"
     SCHEDULER_RESTART = "scheduler-restart"
     SERVICE_UNAVAILABLE = "service-unavailable"
@@ -104,7 +105,10 @@ async def direct_access(
     if (
         name == "slide"
         and direct_access_reads == 1
-        and _is_scenario(job_id, ValidationScenario.SCHEDULER_RESTART)
+        and (
+            _is_scenario(job_id, ValidationScenario.RAY_RESTART)
+            or _is_scenario(job_id, ValidationScenario.SCHEDULER_RESTART)
+        )
     ):
         await asyncio.sleep(45)
     if name == "region_of_interest" and _is_scenario(

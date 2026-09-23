@@ -63,6 +63,24 @@ class ValidationAppServiceTests(unittest.TestCase):
         self.assertEqual(second.status_code, 200)
         sleep.assert_awaited_once_with(45)
 
+    def test_ray_restart_delays_only_the_first_slide_access(self) -> None:
+        job_id = f"{ValidationScenario.RAY_RESTART}-contract"
+        headers = {"Authorization": "Bearer synthetic-token"}
+        path = f"/v3/rationai/{job_id}/inputs/slide/direct-access"
+        with (
+            patch(
+                "validation.empaia_app_service.asyncio.sleep",
+                new_callable=AsyncMock,
+            ) as sleep,
+            TestClient(app) as client,
+        ):
+            first = client.get(path, headers=headers)
+            second = client.get(path, headers=headers)
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        sleep.assert_awaited_once_with(45)
+
     def test_rectangle_input_has_no_direct_access(self) -> None:
         job_id = f"{ValidationScenario.RECTANGLE}-contract"
         headers = {"Authorization": "Bearer synthetic-token"}
