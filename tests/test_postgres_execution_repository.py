@@ -30,6 +30,10 @@ from workflow_execution.contracts import (
 )
 
 
+DATABASE_DEADLINE_WINDOW = timedelta(milliseconds=500)
+DATABASE_DEADLINE_WAIT_SECONDS = 0.7
+
+
 class PostgresExecutionRepositoryTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         dsn = os.environ.get("TEST_POSTGRES_DSN")
@@ -228,13 +232,13 @@ class PostgresExecutionRepositoryTests(unittest.IsolatedAsyncioTestCase):
             workflow_id=admission.workflow_id,
             invocation=admission.invocation,
             protected_context=admission.protected_context,
-            deadline_at=datetime.now(UTC) + timedelta(milliseconds=50),
+            deadline_at=datetime.now(UTC) + DATABASE_DEADLINE_WINDOW,
         )
         admitted = await self.repository.admit(expiring)
         claim = await self.repository.claim_due("worker-1", timedelta(seconds=1))
         assert claim is not None
 
-        await asyncio.sleep(0.08)
+        await asyncio.sleep(DATABASE_DEADLINE_WAIT_SECONDS)
         with self.assertRaises(StaleWorkClaimError):
             await self.repository.settle(
                 claim.execution_id,
@@ -250,7 +254,7 @@ class PostgresExecutionRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         admission = self._admission("submission-report-deadline")
-        execution_deadline = datetime.now(UTC) + timedelta(milliseconds=50)
+        execution_deadline = datetime.now(UTC) + DATABASE_DEADLINE_WINDOW
         expiring = Admission(
             identity=admission.identity,
             workflow_id=admission.workflow_id,
@@ -265,7 +269,7 @@ class PostgresExecutionRepositoryTests(unittest.IsolatedAsyncioTestCase):
             timedelta(seconds=1),
         )
         assert processing is not None
-        await asyncio.sleep(0.08)
+        await asyncio.sleep(DATABASE_DEADLINE_WAIT_SECONDS)
 
         self.assertEqual(
             await self.repository.renew(
@@ -292,12 +296,12 @@ class PostgresExecutionRepositoryTests(unittest.IsolatedAsyncioTestCase):
             workflow_id=admission.workflow_id,
             invocation=admission.invocation,
             protected_context=admission.protected_context,
-            deadline_at=datetime.now(UTC) + timedelta(milliseconds=50),
+            deadline_at=datetime.now(UTC) + DATABASE_DEADLINE_WINDOW,
         )
         admitted = await self.repository.admit(expiring)
-        claim = await self.repository.claim_due("worker-1", timedelta(seconds=1))
+        claim = await self.repository.claim_due("worker-1", timedelta(seconds=5))
         assert claim is not None
-        await asyncio.sleep(0.08)
+        await asyncio.sleep(DATABASE_DEADLINE_WAIT_SECONDS)
 
         stale = await self._repository().renew(
             claim.execution_id,
