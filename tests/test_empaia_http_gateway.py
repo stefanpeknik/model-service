@@ -75,8 +75,8 @@ class FakeVipsImage:
         assert value == 255.0
         return self
 
-    def write_to_memory(self) -> bytes:
-        return b"float32 tile"
+    def write_to_memory(self) -> memoryview:
+        return memoryview(b"float32 tile")
 
 
 class FakeVipsImageType:

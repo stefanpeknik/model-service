@@ -6,10 +6,16 @@ applications:
 
 validation:
   maxWorkerReplicas: 1
+  appService:
+    enabled: true
+    image:
+      repository: cerit.io/stefanpeknik/model-service-appservice-validation
+      tag: validation-20260922-2
+      pullPolicy: Always
 
 rayImage:
   repository: cerit.io/stefanpeknik/model-service-ray-validation
-  tag: validation-20260922-1
+  tag: validation-20260922-2
   pullPolicy: Always
 
 executionScheduler:
@@ -17,7 +23,7 @@ executionScheduler:
   replicas: 1
   image:
     repository: cerit.io/stefanpeknik/model-service-scheduler
-    tag: 0fd9a57
+    tag: empaia-tile-20260922-1
     pullPolicy: Always
   database:
     existingSecret: model-service-validation-db
@@ -28,6 +34,11 @@ executionScheduler:
   sharedStorage:
     existingClaim: model-service-validation-shared
     mountPath: /mnt/validation
+  empaia:
+    enabled: true
+    gatewayFactory: integrations.empaia.http_gateway:create_http_gateway
+    workspaceRoot: /mnt/model-service-executions
+    workspaceClaim: model-service-validation-shared
   leaseSeconds: 30
   workerPollSeconds: 0.5
   initialBackoffSeconds: 2

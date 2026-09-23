@@ -92,7 +92,7 @@ class TiffPixelmapPublisher:
                     level.index,
                     tile_x,
                     tile_y,
-                    tile.write_to_memory(),
+                    bytes(tile.write_to_memory()),
                 )
 
 

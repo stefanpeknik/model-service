@@ -27,10 +27,26 @@ template:
           capabilities:
             drop: ["ALL"]
           runAsUser: 1000
+        {{- if .Values.executionScheduler.empaia.enabled }}
+        env:
+          - name: EMPAIA_GATEWAY_FACTORY
+            value: {{ .Values.executionScheduler.empaia.gatewayFactory | quote }}
+          - name: EMPAIA_WORKSPACE_ROOT
+            value: {{ .Values.executionScheduler.empaia.workspaceRoot | quote }}
+        {{- end }}
         volumeMounts:
           - name: shared
             mountPath: /mnt/validation
+          {{- if .Values.executionScheduler.empaia.enabled }}
+          - name: empaia-workspace
+            mountPath: {{ .Values.executionScheduler.empaia.workspaceRoot | quote }}
+          {{- end }}
     volumes:
       - name: shared
         persistentVolumeClaim:
           claimName: model-service-validation-shared
+      {{- if .Values.executionScheduler.empaia.enabled }}
+      - name: empaia-workspace
+        persistentVolumeClaim:
+          claimName: {{ .Values.executionScheduler.empaia.workspaceClaim | quote }}
+      {{- end }}

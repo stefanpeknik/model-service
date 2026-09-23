@@ -6,10 +6,13 @@ COPY --from=uv /uv /usr/local/bin/uv
 
 RUN uv pip install --python /home/ray/anaconda3/bin/python --no-cache \
     "fastapi>=0.115.0" \
+    "httpx>=0.28.0" \
     "pillow>=11.3.0" \
+    "pyvips[binary]>=3.0.0" \
     "pyyaml>=6.0.2"
 
 WORKDIR /app
 COPY validation validation
+COPY integrations integrations
 COPY workflow_execution workflow_execution
 COPY workflow-definitions workflow-definitions

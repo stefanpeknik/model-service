@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 from fastapi import FastAPI
 from PIL import Image
 from ray import serve
@@ -28,9 +31,22 @@ fastapi = FastAPI()
 class ValidationProstateHeatmapApplication:
     def __init__(self) -> None:
         definition = WorkflowCatalog.default().get("prostate-heatmap")
+        access_adapters = None
+        gateway_factory_path = os.environ.get("EMPAIA_GATEWAY_FACTORY")
+        if gateway_factory_path:
+            from integrations.empaia.gateway import load_gateway_factory
+            from integrations.empaia.input_access import EmpaiaInputAccessAdapter
+
+            access_adapters = {
+                "empaia": EmpaiaInputAccessAdapter(
+                    load_gateway_factory(gateway_factory_path),
+                    Path(os.environ["EMPAIA_WORKSPACE_ROOT"]),
+                )
+            }
         self._application = WorkflowApplication(
             definition,
             ProstateHeatmapWorkflow(ValidationHeatmapProcessor()),
+            access_adapters=access_adapters,
         )
 
     @fastapi.post("/", response_model=WorkflowResult)
