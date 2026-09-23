@@ -11,8 +11,10 @@ from pydantic import BaseModel
 
 class ValidationScenario(StrEnum):
     CANCELLATION = "cancellation"
+    DIRECT_ACCESS = "direct-access"
     INVALID_CONFIGURATION = "invalid-configuration"
     RECTANGLE = "rectangle"
+    SCHEDULER_RESTART = "scheduler-restart"
     SERVICE_UNAVAILABLE = "service-unavailable"
     WORKFLOW_FAILURE = "workflow-failure"
 
@@ -94,9 +96,17 @@ async def direct_access(
     if name not in {"slide", "region_of_interest"}:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     with _lock:
-        _job(job_id).direct_access_reads += 1
+        record = _job(job_id)
+        record.direct_access_reads += 1
+        direct_access_reads = record.direct_access_reads
     if name == "slide" and _is_scenario(job_id, ValidationScenario.CANCELLATION):
         await asyncio.sleep(300)
+    if (
+        name == "slide"
+        and direct_access_reads == 1
+        and _is_scenario(job_id, ValidationScenario.SCHEDULER_RESTART)
+    ):
+        await asyncio.sleep(45)
     if name == "region_of_interest" and _is_scenario(
         job_id, ValidationScenario.RECTANGLE
     ):

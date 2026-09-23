@@ -10,7 +10,7 @@ validation:
     enabled: true
     image:
       repository: cerit.io/stefanpeknik/model-service-appservice-validation
-      tag: validation-20260923-2
+      tag: validation-20260923-3
       pullPolicy: Always
 
 rayImage:

@@ -6,19 +6,11 @@ import os
 import time
 import unittest
 from datetime import UTC, datetime, timedelta
-from enum import StrEnum
 from uuid import uuid4
 
 import httpx
 
-
-class ValidationScenario(StrEnum):
-    CANCELLATION = "cancellation"
-    DIRECT_ACCESS = "direct-access"
-    INVALID_CONFIGURATION = "invalid-configuration"
-    RECTANGLE = "rectangle"
-    SERVICE_UNAVAILABLE = "service-unavailable"
-    WORKFLOW_FAILURE = "workflow-failure"
+from validation.empaia_app_service import ValidationScenario
 
 
 class DeployedEmpaiaTests(unittest.TestCase):
