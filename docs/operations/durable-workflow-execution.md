@@ -135,7 +135,22 @@ The real PostgreSQL suite also exercised competing admissions and claims,
 database-clock deadlines, lease replacement, stale fencing tokens, provider
 finish recovery, per-workflow limits, and encrypted provider context.
 
-The target-cluster controller-loss, cluster-loss, and GPU-starvation scenarios
-remain release validation steps. They cannot validate this local-only change
-set until its images and manifests are available to that cluster; do not treat
-the local Ray result as evidence for those Kubernetes failure modes.
+On 2026-09-24, the `model-service-validation` release in `peknik-ns` passed
+public HTTP checks for a deadline expiring without Ray worker capacity and for
+cancellation remaining terminal without capacity. The active RayCluster had
+`replicas: 0`, `minReplicas: 0`, and `maxReplicas: 0` during those tests. The
+release was then restored with `maxReplicas: 1`, and scheduled and synchronous
+invocations produced the same result.
+
+Changing only `validation.maxWorkerReplicas` through `helm upgrade` changed
+the RayService spec but did not change its active RayCluster. For this
+validation run, the release was uninstalled and reinstalled with the
+zero-worker value after confirming there were no active executions. The
+PostgreSQL deployment and shared PVC were outside the release and remained
+in place. Do not use the value-only upgrade as evidence of zero worker
+capacity; inspect the active RayCluster spec before running these tests.
+
+Target-cluster GPU starvation and recovery, Ray cluster loss, Serve-controller
+loss, and scheduler death during in-flight cluster dispatch remain release
+validation steps. The local Ray result and the zero-worker tests do not prove
+those failure modes.
