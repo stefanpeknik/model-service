@@ -156,7 +156,10 @@ read. KubeRay activated a replacement cluster, and the durable execution
 retried, succeeded, and finalized the EMPAIA job. The active RayService was
 `Running` after both runs.
 
-Target-cluster GPU starvation and recovery, Serve-controller loss independent
-of cluster loss, and scheduler death during in-flight cluster dispatch remain
-release validation steps. The completed tests do not prove those separate
-failure modes.
+The guarded scheduler-replacement test also passed against this release. It
+deleted the scheduler pod during an in-flight EMPAIA direct-access read; the
+replacement scheduler recovered the durable execution and finalized the job.
+
+The remaining target-cluster release checks are GPU starvation followed by
+recovery and Serve-controller loss independent of cluster loss. The completed
+tests do not prove either case.
