@@ -337,6 +337,93 @@ class DeployedSchedulerRecoveryTests(unittest.TestCase):
             self.assertGreaterEqual(direct_access_reads, 2)
             self.assertEqual(recorded["tile_count"], 1)
 
+    @unittest.skipUnless(
+        os.environ.get("VALIDATION_KUBERNETES_FAULTS") == "1",
+        "VALIDATION_KUBERNETES_FAULTS=1 is required",
+    )
+    def test_processing_recovers_after_ray_cluster_loss(self) -> None:
+        job_id = f"{ValidationScenario.RAY_RESTART}-{uuid4().hex}"
+        with (
+            PortForward("service/model-service-validation-appservice", 18084, 8000),
+            httpx.Client(base_url="http://127.0.0.1:18084", timeout=30) as appservice,
+            PortForward(
+                "service/model-service-validation-execution-scheduler", 18083, 8080
+            ),
+            httpx.Client(base_url="http://127.0.0.1:18083", timeout=30) as scheduler,
+        ):
+            execution_id = _schedule(scheduler, job_id)
+            _wait_for_job_field(appservice, job_id, "direct_access_reads")
+            service = json.loads(
+                subprocess.check_output(
+                    [
+                        "oc",
+                        "-n",
+                        NAMESPACE,
+                        "get",
+                        "rayservice",
+                        RAYSERVICE,
+                        "-o",
+                        "json",
+                    ],
+                    text=True,
+                )
+            )
+            cluster = service["status"]["activeServiceStatus"]["rayClusterName"]
+            self.assertTrue(cluster.startswith(f"{RAYSERVICE}-"), cluster)
+            cluster_resource = json.loads(
+                subprocess.check_output(
+                    ["oc", "-n", NAMESPACE, "get", "raycluster", cluster, "-o", "json"],
+                    text=True,
+                )
+            )
+            self.assertTrue(
+                any(
+                    owner["kind"] == "RayService"
+                    and owner["name"] == RAYSERVICE
+                    and owner["uid"] == service["metadata"]["uid"]
+                    for owner in cluster_resource["metadata"].get("ownerReferences", [])
+                )
+            )
+            subprocess.run(
+                ["oc", "-n", NAMESPACE, "delete", "raycluster", cluster, "--wait=true"],
+                check=True,
+            )
+
+            deadline = time.monotonic() + 240
+            while time.monotonic() < deadline:
+                replacement = json.loads(
+                    subprocess.check_output(
+                        [
+                            "oc",
+                            "-n",
+                            NAMESPACE,
+                            "get",
+                            "rayservice",
+                            RAYSERVICE,
+                            "-o",
+                            "json",
+                        ],
+                        text=True,
+                    )
+                )
+                active = replacement.get("status", {}).get("activeServiceStatus", {})
+                if replacement.get("status", {}).get(
+                    "serviceStatus"
+                ) == "Running" and active.get("rayClusterName") not in {None, cluster}:
+                    break
+                time.sleep(1)
+            else:
+                self.fail("RayService did not activate a replacement RayCluster")
+
+            execution = _wait_for_terminal(scheduler, execution_id)
+            self.assertEqual(execution["status"], "succeeded", execution)
+            recorded = _wait_for_job_field(appservice, job_id, "finalized")
+            direct_access_reads = recorded["direct_access_reads"]
+            self.assertIsInstance(direct_access_reads, int)
+            assert isinstance(direct_access_reads, int)
+            self.assertGreaterEqual(direct_access_reads, 2)
+            self.assertEqual(recorded["tile_count"], 1)
+
 
 def _schedule(client: httpx.Client, job_id: str) -> str:
     admitted = client.post(

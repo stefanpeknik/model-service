@@ -150,7 +150,13 @@ PostgreSQL deployment and shared PVC were outside the release and remained
 in place. Do not use the value-only upgrade as evidence of zero worker
 capacity; inspect the active RayCluster spec before running these tests.
 
-Target-cluster GPU starvation and recovery, Ray cluster loss, Serve-controller
-loss, and scheduler death during in-flight cluster dispatch remain release
-validation steps. The local Ray result and the zero-worker tests do not prove
-those failure modes.
+The same release passed the guarded RayCluster-loss test twice. Each run
+deleted the validation RayCluster during an in-flight EMPAIA direct-access
+read. KubeRay activated a replacement cluster, and the durable execution
+retried, succeeded, and finalized the EMPAIA job. The active RayService was
+`Running` after both runs.
+
+Target-cluster GPU starvation and recovery, Serve-controller loss independent
+of cluster loss, and scheduler death during in-flight cluster dispatch remain
+release validation steps. The completed tests do not prove those separate
+failure modes.
