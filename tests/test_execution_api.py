@@ -5,7 +5,7 @@ import json
 import unittest
 from datetime import UTC, datetime, timedelta
 
-from httpx import ASGITransport, AsyncClient
+from httpx import ASGITransport, AsyncClient, MockTransport, Request, Response
 from starlette.types import Message, Scope
 
 from execution_scheduler.api import create_execution_app
@@ -20,7 +20,7 @@ from execution_scheduler.dispatch import (
     ConfirmedDispatchRejectionError,
     InMemoryWorkflowDispatch,
 )
-from execution_scheduler.inference import InferenceRequest, InferenceResponse
+from execution_scheduler.inference import HttpInferenceProxy
 from execution_scheduler.repository import InMemoryExecutionRepository
 from execution_scheduler.scheduler import ExecutionScheduler
 from execution_scheduler.synchronous import SynchronousWorkflowService
@@ -54,22 +54,6 @@ class RecordingScheduler:
 
     async def cancel(self, execution_id: str) -> ExecutionView:
         raise AssertionError(execution_id)
-
-
-class RecordingInferenceProxy:
-    def __init__(self) -> None:
-        self.requests: list[InferenceRequest] = []
-
-    async def forward(self, request: InferenceRequest) -> InferenceResponse:
-        self.requests.append(request)
-        return InferenceResponse(
-            status_code=200,
-            content=b"compressed-result",
-            headers={
-                "content-type": "application/octet-stream",
-                "x-output-shape": "(1, 2, 2)",
-            },
-        )
 
 
 class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
@@ -271,36 +255,75 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(unknown.status_code, 404)
         self.assertEqual(unknown.json()["detail"]["code"], "unknown_workflow")
 
-    async def test_legacy_model_inference_is_forwarded_through_public_origin(
+    async def test_legacy_model_and_slide_calls_use_public_origin(
         self,
     ) -> None:
-        proxy = RecordingInferenceProxy()
-        async with AsyncClient(
-            transport=ASGITransport(
-                app=create_execution_app(
-                    self.scheduler,
-                    inference_proxy=proxy,
-                )
-            ),
-            base_url="http://model-service",
-        ) as client:
+        forwarded: list[Request] = []
+
+        def ray_handler(request: Request) -> Response:
+            forwarded.append(request)
+            if request.url.path == "/heatmap-builder":
+                return Response(200, text="/mnt/output/heatmap.tiff")
+            return Response(
+                200,
+                content=b"compressed-result",
+                headers={
+                    "content-type": "application/octet-stream",
+                    "x-output-shape": "(1, 2, 2)",
+                },
+            )
+
+        async with (
+            AsyncClient(transport=MockTransport(ray_handler)) as ray_client,
+            AsyncClient(
+                transport=ASGITransport(
+                    app=create_execution_app(
+                        self.scheduler,
+                        inference_proxy=HttpInferenceProxy(
+                            ray_client, origin="http://ray-serve"
+                        ),
+                    )
+                ),
+                base_url="http://model-service",
+            ) as client,
+        ):
             response = await client.post(
                 "/prostate-classifier-1?variant=probe",
                 content=b"compressed-image",
-                headers={"content-type": "application/octet-stream"},
+                headers={
+                    "content-type": "application/octet-stream",
+                    "x-output-dtype": "float32",
+                },
+            )
+            heatmap = await client.post(
+                "/heatmap-builder",
+                params={
+                    "model_id": "prostate-classifier-1",
+                    "slide_path": "/mnt/input/slide.svs",
+                    "output_path": "/mnt/output/heatmap.tiff",
+                },
             )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"compressed-result")
         self.assertEqual(response.headers["x-output-shape"], "(1, 2, 2)")
-        self.assertEqual(len(proxy.requests), 1)
-        forwarded = proxy.requests[0]
-        self.assertEqual(forwarded.path, "prostate-classifier-1")
-        self.assertEqual(forwarded.query, "variant=probe")
-        self.assertEqual(forwarded.body, b"compressed-image")
+        self.assertEqual(len(forwarded), 2)
         self.assertEqual(
-            forwarded.headers["content-type"],
+            forwarded[0].url, "http://ray-serve/prostate-classifier-1?variant=probe"
+        )
+        self.assertEqual(forwarded[0].content, b"compressed-image")
+        self.assertEqual(
+            forwarded[0].headers["content-type"],
             "application/octet-stream",
+        )
+        self.assertEqual(forwarded[0].headers["x-output-dtype"], "float32")
+        self.assertEqual(heatmap.status_code, 200)
+        self.assertEqual(heatmap.text, "/mnt/output/heatmap.tiff")
+        self.assertEqual(forwarded[1].url.path, "/heatmap-builder")
+        self.assertEqual(forwarded[1].url.params["model_id"], "prostate-classifier-1")
+        self.assertEqual(forwarded[1].url.params["slide_path"], "/mnt/input/slide.svs")
+        self.assertEqual(
+            forwarded[1].url.params["output_path"], "/mnt/output/heatmap.tiff"
         )
 
         unavailable = await self.client.post(

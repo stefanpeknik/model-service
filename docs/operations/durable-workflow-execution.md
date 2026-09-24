@@ -167,5 +167,12 @@ the RayCluster or head pod, and the execution succeeded and finalized the job.
 The test uses the in-pod interpreter because a local Ray Client launched under
 `uv run` automatically uploads its working directory as a runtime environment.
 
-GPU starvation followed by recovery remains a target-cluster release check.
-These CPU validation tests do not prove the behavior of a real GPU workflow.
+The local public-API compatibility test sends legacy model and heatmap-builder
+POST requests through the real scheduler ingress and HTTP proxy, with only Ray
+Serve mocked. It checks the binary body and response headers as well as the
+heatmap-builder query and text response. The RationAI SDK's existing model
+test checks that its compressed image request uses the same public origin.
+
+GPU starvation followed by recovery and real legacy model inference remain
+target-cluster release checks. The CPU validation RayService does not deploy
+the GPU model applications, so these tests cannot prove those paths.
