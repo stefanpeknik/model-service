@@ -424,6 +424,68 @@ class DeployedSchedulerRecoveryTests(unittest.TestCase):
             self.assertGreaterEqual(direct_access_reads, 2)
             self.assertEqual(recorded["tile_count"], 1)
 
+    @unittest.skipUnless(
+        os.environ.get("VALIDATION_KUBERNETES_FAULTS") == "1",
+        "VALIDATION_KUBERNETES_FAULTS=1 is required",
+    )
+    def test_processing_survives_serve_controller_loss(self) -> None:
+        job_id = f"{ValidationScenario.RAY_RESTART}-{uuid4().hex}"
+        with (
+            PortForward("service/model-service-validation-appservice", 18084, 8000),
+            httpx.Client(base_url="http://127.0.0.1:18084", timeout=30) as appservice,
+            PortForward(
+                "service/model-service-validation-execution-scheduler", 18083, 8080
+            ),
+            httpx.Client(base_url="http://127.0.0.1:18083", timeout=30) as scheduler,
+        ):
+            execution_id = _schedule(scheduler, job_id)
+            _wait_for_job_field(appservice, job_id, "direct_access_reads")
+            cluster, head_pod = _validation_ray_head()
+            original_controller = _alive_serve_controller_id(head_pod)
+            self.assertIsNotNone(original_controller)
+
+            subprocess.run(
+                [
+                    "oc",
+                    "-n",
+                    NAMESPACE,
+                    "exec",
+                    f"pod/{head_pod}",
+                    "-c",
+                    "ray-head",
+                    "--",
+                    "python",
+                    "-c",
+                    (
+                        "import ray; "
+                        "ray.init(address='auto', namespace='serve'); "
+                        "controller = ray.get_actor('SERVE_CONTROLLER_ACTOR', "
+                        "namespace='serve'); "
+                        "ray.kill(controller, no_restart=True); "
+                        "ray.shutdown()"
+                    ),
+                ],
+                check=True,
+                timeout=60,
+            )
+
+            deadline = time.monotonic() + 120
+            while time.monotonic() < deadline:
+                restarted_controller = _alive_serve_controller_id(head_pod)
+                if restarted_controller not in {None, original_controller}:
+                    break
+                time.sleep(1)
+            else:
+                self.fail("Serve controller did not restart")
+
+            current_cluster, current_head_pod = _validation_ray_head()
+            self.assertEqual(current_cluster, cluster)
+            self.assertEqual(current_head_pod, head_pod)
+            execution = _wait_for_terminal(scheduler, execution_id)
+            self.assertEqual(execution["status"], "succeeded", execution)
+            recorded = _wait_for_job_field(appservice, job_id, "finalized")
+            self.assertEqual(recorded["tile_count"], 1)
+
 
 def _schedule(client: httpx.Client, job_id: str) -> str:
     admitted = client.post(
@@ -455,6 +517,95 @@ def _wait_for_job_field(
             raise AssertionError(response.text)
         time.sleep(0.5)
     raise AssertionError(f"AppService did not record {field}")
+
+
+def _validation_ray_head() -> tuple[str, str]:
+    service = json.loads(
+        subprocess.check_output(
+            ["oc", "-n", NAMESPACE, "get", "rayservice", RAYSERVICE, "-o", "json"],
+            text=True,
+        )
+    )
+    cluster = service["status"]["activeServiceStatus"]["rayClusterName"]
+    if not cluster.startswith(f"{RAYSERVICE}-"):
+        raise AssertionError(f"unexpected validation RayCluster: {cluster}")
+    cluster_resource = json.loads(
+        subprocess.check_output(
+            ["oc", "-n", NAMESPACE, "get", "raycluster", cluster, "-o", "json"],
+            text=True,
+        )
+    )
+    if not any(
+        owner["kind"] == "RayService"
+        and owner["name"] == RAYSERVICE
+        and owner["uid"] == service["metadata"]["uid"]
+        for owner in cluster_resource["metadata"].get("ownerReferences", [])
+    ):
+        raise AssertionError("validation RayCluster is not owned by its RayService")
+    pods = json.loads(
+        subprocess.check_output(
+            [
+                "oc",
+                "-n",
+                NAMESPACE,
+                "get",
+                "pods",
+                "-l",
+                f"ray.io/cluster={cluster},ray.io/node-type=head",
+                "-o",
+                "json",
+            ],
+            text=True,
+        )
+    )["items"]
+    if len(pods) != 1:
+        raise AssertionError(f"expected one validation Ray head pod, got {len(pods)}")
+    pod = pods[0]
+    if not any(
+        owner["kind"] == "RayCluster"
+        and owner["name"] == cluster
+        and owner["uid"] == cluster_resource["metadata"]["uid"]
+        for owner in pod["metadata"].get("ownerReferences", [])
+    ):
+        raise AssertionError("validation Ray head pod is not owned by its RayCluster")
+    return cluster, pod["metadata"]["name"]
+
+
+def _alive_serve_controller_id(head_pod: str) -> str | None:
+    output = subprocess.check_output(
+        [
+            "oc",
+            "-n",
+            NAMESPACE,
+            "exec",
+            f"pod/{head_pod}",
+            "-c",
+            "ray-head",
+            "--",
+            "ray",
+            "list",
+            "actors",
+            "--filter",
+            "class_name=ServeController",
+            "--filter",
+            "state=ALIVE",
+            "--format",
+            "json",
+        ],
+        text=True,
+    )
+    if output.strip() == "No resource in the cluster":
+        return None
+    actors = json.loads(output)
+    controllers = [
+        actor
+        for actor in actors
+        if actor["name"] == "SERVE_CONTROLLER_ACTOR"
+        and actor["ray_namespace"] == "serve"
+    ]
+    if len(controllers) > 1:
+        raise AssertionError("more than one live Serve controller actor")
+    return controllers[0]["actor_id"] if controllers else None
 
 
 def _delete_validation_scheduler_pod() -> None:

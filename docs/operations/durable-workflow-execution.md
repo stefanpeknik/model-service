@@ -160,6 +160,12 @@ The guarded scheduler-replacement test also passed against this release. It
 deleted the scheduler pod during an in-flight EMPAIA direct-access read; the
 replacement scheduler recovered the durable execution and finalized the job.
 
-The remaining target-cluster release checks are GPU starvation followed by
-recovery and Serve-controller loss independent of cluster loss. The completed
-tests do not prove either case.
+The guarded Serve-controller-loss test passed twice. It killed the named
+controller actor from inside the validation Ray head pod while an EMPAIA
+execution was in flight. Ray started a new controller actor without replacing
+the RayCluster or head pod, and the execution succeeded and finalized the job.
+The test uses the in-pod interpreter because a local Ray Client launched under
+`uv run` automatically uploads its working directory as a runtime environment.
+
+GPU starvation followed by recovery remains a target-cluster release check.
+These CPU validation tests do not prove the behavior of a real GPU workflow.
