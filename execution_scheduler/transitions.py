@@ -88,6 +88,7 @@ class ExecutionTransitions:
             processing_attempts=0,
             processing_rejections=0,
             finish_attempts=0,
+            finish_mutation_started=False,
             lease_owner=None,
             fencing_token=None,
             lease_expires_at=None,
@@ -228,6 +229,22 @@ class ExecutionTransitions:
             )
         return SettlementDecision(self.settle(execution, settlement, now))
 
+    def mark_finish_mutation_started(
+        self,
+        execution: ExecutionRecord,
+        fencing_token: str,
+        now: datetime,
+    ) -> ExecutionRecord:
+        self._require_provider_kind(execution)
+        if (
+            execution.fencing_token != fencing_token
+            or execution.lease_expires_at is None
+            or execution.lease_expires_at <= now
+            or self.work_deadline_at(execution) <= now
+        ):
+            raise StaleWorkClaimError("provider finish claim is no longer current")
+        return replace(execution, finish_mutation_started=True, updated_at=now)
+
     def settle(
         self,
         execution: ExecutionRecord,
@@ -305,11 +322,14 @@ class ExecutionTransitions:
                 and not settlement.outcome_unknown
                 and execution.finish_attempts < self._finish_policy.max_attempts
             ):
-                return self._retry(
-                    execution,
-                    now,
-                    self._finish_policy.backoff(execution.finish_attempts),
-                    status=execution.status,
+                return replace(
+                    self._retry(
+                        execution,
+                        now,
+                        self._finish_policy.backoff(execution.finish_attempts),
+                        status=execution.status,
+                    ),
+                    finish_mutation_started=False,
                 )
             if execution.work_kind is WorkKind.PROVIDER_FINISH:
                 return self._terminal_failure(execution, settlement.error, now)
@@ -321,6 +341,20 @@ class ExecutionTransitions:
         execution: ExecutionRecord,
         now: datetime,
     ) -> ExecutionRecord:
+        if (
+            execution.work_kind is WorkKind.PROVIDER_FINISH
+            and execution.finish_mutation_started
+        ):
+            return self._finish_outcome_unknown(execution, now)
+        if (
+            execution.work_kind
+            in {
+                WorkKind.PROVIDER_FAILURE_REPORT,
+                WorkKind.PROVIDER_CANCELLATION_REPORT,
+            }
+            and execution.finish_mutation_started
+        ):
+            return self._clear_work(execution, now)
         if (
             execution.work_kind is WorkKind.PROCESSING
             and execution.processing_attempts >= self._processing_policy.max_attempts
@@ -371,6 +405,11 @@ class ExecutionTransitions:
         )
 
     def deadline(self, execution: ExecutionRecord, now: datetime) -> ExecutionRecord:
+        if (
+            execution.work_kind is WorkKind.PROVIDER_FINISH
+            and execution.finish_mutation_started
+        ):
+            return self._finish_outcome_unknown(execution, now)
         if execution.status in {ExecutionStatus.FAILED, ExecutionStatus.CANCELLED}:
             if (
                 execution.terminal_report_deadline_at is not None
@@ -389,6 +428,20 @@ class ExecutionTransitions:
                 execution.terminal_report_deadline_at is not None
                 and execution.terminal_report_deadline_at > now
             ),
+        )
+
+    @staticmethod
+    def _finish_outcome_unknown(
+        execution: ExecutionRecord,
+        now: datetime,
+    ) -> ExecutionRecord:
+        return ExecutionTransitions._terminal_failure(
+            execution,
+            ExecutionError(
+                code=ExecutionErrorCode.PROVIDER_FINISH_OUTCOME_UNKNOWN,
+                message="provider finish outcome is unknown after work was interrupted",
+            ),
+            now,
         )
 
     @staticmethod

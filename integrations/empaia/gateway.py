@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import importlib
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 
 if TYPE_CHECKING:
     from workflow_execution.contracts import JsonValue, WorkflowOutput
+
+
+type MutationGuard = Callable[[], Awaitable[None]]
 
 
 class EmpaiaGatewayError(RuntimeError):
@@ -38,6 +42,8 @@ class EmpaiaJobContext:
 
 
 class EmpaiaGateway(Protocol):
+    def set_before_mutation(self, callback: MutationGuard) -> None: ...
+
     async def get_configuration(self) -> dict[str, JsonValue]: ...
 
     async def materialize_input(self, name: str, destination: str) -> None: ...

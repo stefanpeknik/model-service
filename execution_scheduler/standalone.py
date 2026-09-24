@@ -17,7 +17,7 @@ from workflow_execution.shared_storage import SharedStorageAccessAdapter
 
 
 if TYPE_CHECKING:
-    from execution_scheduler.providers import ProviderFinishOutcome
+    from execution_scheduler.providers import BeforeMutation, ProviderFinishOutcome
     from workflow_execution.catalog import WorkflowCatalog
     from workflow_execution.contracts import JsonValue
 
@@ -89,5 +89,8 @@ class StandaloneProviderAdapter:
         self,
         _protected_context: dict[str, JsonValue],
         _outcome: ProviderFinishOutcome,
+        *,
+        before_mutation: BeforeMutation,
     ) -> None:
+        del before_mutation
         return None

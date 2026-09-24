@@ -64,6 +64,12 @@ class ExecutionRepository(Protocol):
         settlement: Settlement,
     ) -> ExecutionRecord: ...
 
+    async def mark_finish_mutation_started(
+        self,
+        execution_id: str,
+        fencing_token: str,
+    ) -> None: ...
+
 
 class ExecutionRepositoryUnavailableError(RuntimeError):
     pass
@@ -220,6 +226,21 @@ class InMemoryExecutionRepository:
             if decision.execution is not None:
                 self._executions[execution_id] = decision.execution
             return decision.accepted_execution()
+
+    async def mark_finish_mutation_started(
+        self,
+        execution_id: str,
+        fencing_token: str,
+    ) -> None:
+        async with self._lock:
+            execution = self._get(execution_id)
+            self._executions[execution_id] = (
+                self._transitions.mark_finish_mutation_started(
+                    execution,
+                    fencing_token,
+                    self._clock(),
+                )
+            )
 
     def _recover_expired_leases(self, now: datetime) -> None:
         for execution_id, execution in tuple(self._executions.items()):

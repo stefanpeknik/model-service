@@ -94,6 +94,7 @@ class ExecutionRecord:
     processing_attempts: int
     processing_rejections: int
     finish_attempts: int
+    finish_mutation_started: bool
     lease_owner: str | None
     fencing_token: str | None
     lease_expires_at: datetime | None

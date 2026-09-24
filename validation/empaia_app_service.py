@@ -15,6 +15,7 @@ class ValidationScenario(StrEnum):
     CANCELLATION = "cancellation"
     DIRECT_ACCESS = "direct-access"
     FINALIZATION_FAILURE = "finalization-failure"
+    FINALIZATION_ACK_LOST = "finalization-ack-lost"
     FINISH_RESTART = "finish-restart"
     INVALID_CONFIGURATION = "invalid-configuration"
     NATIVE_PROCESSOR = "native-processor"
@@ -40,11 +41,13 @@ class JobView(BaseModel):
     direct_access_reads: int = 0
     rectangle_reads: int = 0
     slide_metadata_reads: int = 0
+    output_create_attempts: int = 0
     tile_attempts: int = 0
     tile_count: int = 0
     tile_sample: float | None = None
     tile_background_sample: float | None = None
     finalize_attempts: int = 0
+    finalize_ack_blocked: bool = False
     finalized: bool = False
     failure: str | None = None
     failure_reports: int = 0
@@ -56,6 +59,7 @@ class JobRecord:
     direct_access_reads: int = 0
     rectangle_reads: int = 0
     slide_metadata_reads: int = 0
+    output_create_attempts: int = 0
     tile_attempts: int = 0
     tile_count: int = 0
     tile_sample: float | None = None
@@ -63,6 +67,8 @@ class JobRecord:
     finalize_attempts: int = 0
     output_created: bool = False
     metadata_released: bool = False
+    finalize_ack_blocked: bool = False
+    finalize_ack_released: bool = False
     finalized: bool = False
     failure: str | None = None
     failure_reports: int = 0
@@ -201,7 +207,9 @@ def create_output(
     if name != "heatmap" or body.type != "continuous_pixelmap":
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT)
     with _lock:
-        _job(job_id).output_created = True
+        record = _job(job_id)
+        record.output_create_attempts += 1
+        record.output_created = True
     return {"id": f"{job_id}-heatmap"}
 
 
@@ -256,7 +264,9 @@ async def put_tile(
 
 
 @app.put("/v3/{job_id}/finalize", status_code=status.HTTP_204_NO_CONTENT)
-def finalize(job_id: str, authorization: str | None = Header(default=None)) -> None:
+async def finalize(
+    job_id: str, authorization: str | None = Header(default=None)
+) -> None:
     _authorize(authorization)
     with _lock:
         record = _job(job_id)
@@ -266,6 +276,18 @@ def finalize(job_id: str, authorization: str | None = Header(default=None)) -> N
         if not record.output_created or record.tile_count == 0:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT)
         record.finalized = True
+        blocked = (
+            _is_scenario(job_id, ValidationScenario.FINALIZATION_ACK_LOST)
+            and record.finalize_attempts == 1
+        )
+        if blocked:
+            record.finalize_ack_blocked = True
+    if blocked:
+        while True:
+            with _lock:
+                if _job(job_id).finalize_ack_released:
+                    break
+            await asyncio.sleep(0.1)
 
 
 @app.put("/v3/{job_id}/failure", status_code=status.HTTP_204_NO_CONTENT)
@@ -292,11 +314,13 @@ def inspect_job(job_id: str) -> JobView:
             direct_access_reads=record.direct_access_reads,
             rectangle_reads=record.rectangle_reads,
             slide_metadata_reads=record.slide_metadata_reads,
+            output_create_attempts=record.output_create_attempts,
             tile_attempts=record.tile_attempts,
             tile_count=record.tile_count,
             tile_sample=record.tile_sample,
             tile_background_sample=record.tile_background_sample,
             finalize_attempts=record.finalize_attempts,
+            finalize_ack_blocked=record.finalize_ack_blocked,
             finalized=record.finalized,
             failure=record.failure,
             failure_reports=record.failure_reports,
@@ -309,3 +333,13 @@ def release_metadata(job_id: str) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     with _lock:
         _job(job_id).metadata_released = True
+
+
+@app.post("/validation/jobs/{job_id}/release-finalize", status_code=204)
+def release_finalize(job_id: str) -> None:
+    if not _is_scenario(job_id, ValidationScenario.FINALIZATION_ACK_LOST):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    with _lock:
+        record = _job(job_id)
+        record.finalize_ack_released = True
+        record.finalize_ack_blocked = False

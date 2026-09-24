@@ -40,6 +40,14 @@ HTTP response or expired processing lease consumes an attempt and can repeat
 GPU work. PostgreSQL fencing prevents an older attempt from changing durable
 state after replacement, cancellation, or deadline expiry.
 
+Provider finish uses a different recovery rule. The scheduler durably marks
+the first outbound provider mutation before sending it. A lost lease before
+that mark can retry from the stored workflow result; a lost lease after the
+mark ends with `provider_finish_outcome_unknown` and must be reconciled with
+the provider. It cannot safely replay publication without a verified
+idempotency guarantee. A failed local execution may therefore correspond to
+an EMPAIA job that was already finalized.
+
 ## PostgreSQL and protected provider context
 
 `DATABASE_URL` points at PostgreSQL. Each scheduler replica uses the same

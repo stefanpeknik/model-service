@@ -168,9 +168,22 @@ class ExecutionWorker:
                     retryable=error.retryable,
                 )
         try:
+            mutation_started = False
+
+            async def before_mutation() -> None:
+                nonlocal mutation_started
+                if mutation_started:
+                    return
+                await self._repository.mark_finish_mutation_started(
+                    claim.execution_id,
+                    claim.fencing_token,
+                )
+                mutation_started = True
+
             await self._providers[claim.provider].finish(
                 claim.protected_context,
                 _finish_outcome(claim),
+                before_mutation=before_mutation,
             )
             return ProviderFinishSucceeded()
         except ProviderFinishFailureError as error:

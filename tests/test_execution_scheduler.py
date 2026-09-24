@@ -53,7 +53,7 @@ from workflow_execution.contracts import (
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from execution_scheduler.providers import ProviderFinishOutcome
+    from execution_scheduler.providers import BeforeMutation, ProviderFinishOutcome
     from workflow_execution.contracts import JsonValue
 
 
@@ -90,7 +90,10 @@ class StandaloneProvider:
         self,
         _protected_context: dict[str, JsonValue],
         _outcome: ProviderFinishOutcome,
+        *,
+        before_mutation: BeforeMutation,
     ) -> None:
+        del before_mutation
         return None
 
 
@@ -120,7 +123,10 @@ class RecordingProvider(StandaloneProvider):
         self,
         _protected_context: dict[str, JsonValue],
         outcome: ProviderFinishOutcome,
+        *,
+        before_mutation: BeforeMutation,
     ) -> None:
+        del before_mutation
         self.outcomes.append(outcome)
         if self.finish_failures:
             raise self.finish_failures.pop(0)

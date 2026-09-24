@@ -50,6 +50,7 @@ async def initialize_execution_schema(
                 processing_attempts INTEGER NOT NULL DEFAULT 0 CHECK (processing_attempts >= 0),
                 processing_rejections INTEGER NOT NULL DEFAULT 0 CHECK (processing_rejections >= 0),
                 finish_attempts INTEGER NOT NULL DEFAULT 0 CHECK (finish_attempts >= 0),
+                finish_mutation_started BOOLEAN NOT NULL DEFAULT FALSE,
                 lease_owner TEXT,
                 fencing_token UUID,
                 lease_expires_at TIMESTAMPTZ,
@@ -78,6 +79,12 @@ async def initialize_execution_schema(
         sql.SQL(
             "ALTER TABLE {} ADD COLUMN IF NOT EXISTS "
             "terminal_report_deadline_at TIMESTAMPTZ"
+        ).format(table)
+    )
+    await connection.execute(
+        sql.SQL(
+            "ALTER TABLE {} ADD COLUMN IF NOT EXISTS "
+            "finish_mutation_started BOOLEAN NOT NULL DEFAULT FALSE"
         ).format(table)
     )
     await connection.execute(

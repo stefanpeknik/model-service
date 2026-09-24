@@ -23,7 +23,7 @@ executionScheduler:
   replicas: 1
   image:
     repository: cerit.io/stefanpeknik/model-service-scheduler
-    tag: empaia-tile-20260922-1
+    tag: publication-guard-20260924-1
     pullPolicy: Always
   database:
     existingSecret: model-service-validation-db

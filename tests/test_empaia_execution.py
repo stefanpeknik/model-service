@@ -32,6 +32,7 @@ from workflow_execution.contracts import (
 
 
 if TYPE_CHECKING:
+    from integrations.empaia.gateway import MutationGuard
     from workflow_execution.application import WorkflowContext
     from workflow_execution.contracts import JsonValue, WorkflowOutput
 
@@ -69,6 +70,10 @@ class FakeGateway:
         self._service = service
         self._api_url = api_url
         self._job_id = job_id
+        self._before_mutation: MutationGuard | None = None
+
+    def set_before_mutation(self, callback: MutationGuard) -> None:
+        self._before_mutation = callback
 
     async def get_configuration(self) -> dict[str, JsonValue]:
         self._service.configuration_reads += 1
@@ -79,6 +84,8 @@ class FakeGateway:
         Path(destination).write_bytes(f"{name}-from-empaia".encode())
 
     async def publish_output(self, name: str, output: WorkflowOutput) -> None:
+        if self._before_mutation is not None:
+            await self._before_mutation()
         if self._service.publish_failures:
             raise self._service.publish_failures.pop(0)
         if isinstance(output, SharedArtifact) and not Path(output.path).is_file():
@@ -86,11 +93,15 @@ class FakeGateway:
         self._service.published.append((name, output))
 
     async def finalize(self) -> None:
+        if self._before_mutation is not None:
+            await self._before_mutation()
         if self._service.finalize_failures:
             raise self._service.finalize_failures.pop(0)
         self._service.finalized = True
 
     async def report_failure(self, message: str) -> None:
+        if self._before_mutation is not None:
+            await self._before_mutation()
         self._service.failures.append(message)
 
     async def close(self) -> None:

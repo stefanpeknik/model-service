@@ -42,6 +42,7 @@ from workflow_execution.serialization import is_json_value
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+    from execution_scheduler.providers import BeforeMutation
     from workflow_execution.catalog import WorkflowCatalog
     from workflow_execution.contracts import JsonValue
 
@@ -51,6 +52,7 @@ class EmpaiaErrorCode(StrEnum):
 
 
 logger = logging.getLogger(__name__)
+
 
 class EmpaiaProviderAdapter:
     name = "empaia"
@@ -149,12 +151,16 @@ class EmpaiaProviderAdapter:
         self,
         protected_context: dict[str, JsonValue],
         outcome: ProviderFinishOutcome,
+        *,
+        before_mutation: BeforeMutation | None = None,
     ) -> None:
         context = _job_context(protected_context)
         async with _finish_gateway(
             self._gateway_factory,
             context,
         ) as gateway:
+            if before_mutation is not None:
+                gateway.set_before_mutation(before_mutation)
             mutation_completed = False
             try:
                 if isinstance(outcome, ProviderSuccess):

@@ -14,6 +14,7 @@ from workflow_execution.serialization import is_json_value
 
 
 if TYPE_CHECKING:
+    from integrations.empaia.gateway import MutationGuard
     from workflow_execution.contracts import JsonValue, WorkflowOutput
 
 
@@ -84,6 +85,7 @@ class HttpEmpaiaGateway:
                 retryable=False,
             )
         self._job_id = job_id
+        self._before_mutation: MutationGuard | None = None
         self._headers = {"Authorization": f"Bearer {credential}"}
         self._client = client or httpx.AsyncClient(base_url=api_url.rstrip("/"))
         if artifact_publisher is None or rectangle_writer is None:
@@ -94,6 +96,9 @@ class HttpEmpaiaGateway:
 
         self._artifact_publisher = artifact_publisher or TiffPixelmapPublisher()
         self._rectangle_writer = rectangle_writer or VipsRectangleMaskWriter()
+
+    def set_before_mutation(self, callback: MutationGuard) -> None:
+        self._before_mutation = callback
 
     async def get_configuration(self) -> dict[str, JsonValue]:
         value = await self._request_json(
@@ -266,6 +271,8 @@ class HttpEmpaiaGateway:
         mutation: bool = False,
         allow_not_found: bool = False,
     ) -> httpx.Response:
+        if mutation and self._before_mutation is not None:
+            await self._before_mutation()
         try:
             response = await self._client.request(
                 method,

@@ -121,11 +121,12 @@ class PostgresExecutionRepository:
                         workflow_id, status, invocation, protected_context,
                         deadline_at, terminal_report_deadline_at, work_kind,
                         next_attempt_at, processing_attempts,
-                        processing_rejections, finish_attempts, created_at,
+                        processing_rejections, finish_attempts,
+                        finish_mutation_started, created_at,
                         updated_at
                     ) VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s, %s
                     )
                     ON CONFLICT (provider, submission_key) DO NOTHING
                     RETURNING *
@@ -147,6 +148,7 @@ class PostgresExecutionRepository:
                     execution.processing_attempts,
                     execution.processing_rejections,
                     execution.finish_attempts,
+                    execution.finish_mutation_started,
                     execution.created_at,
                     execution.updated_at,
                 ),
@@ -249,6 +251,21 @@ class PostgresExecutionRepository:
             if decision.execution is not None:
                 await self._persist_state(connection, decision.execution)
         return decision.accepted_execution()
+
+    async def mark_finish_mutation_started(
+        self,
+        execution_id: str,
+        fencing_token: str,
+    ) -> None:
+        async with self._connection() as connection:
+            row = await self._fetch(connection, execution_id, for_update=True)
+            execution = self._record(row)
+            marked = self._transitions.mark_finish_mutation_started(
+                execution,
+                fencing_token,
+                await self._database_now(connection),
+            )
+            await self._persist_state(connection, marked)
 
     async def _select_finish(
         self,
@@ -414,7 +431,8 @@ class PostgresExecutionRepository:
                 UPDATE {} SET
                     status = %s, work_kind = %s, next_attempt_at = %s,
                     processing_attempts = %s, processing_rejections = %s,
-                    finish_attempts = %s, lease_owner = %s,
+                    finish_attempts = %s, finish_mutation_started = %s,
+                    lease_owner = %s,
                     fencing_token = %s, lease_expires_at = %s,
                     result = %s, error_code = %s, error_message = %s,
                     updated_at = %s
@@ -429,6 +447,7 @@ class PostgresExecutionRepository:
                 execution.processing_attempts,
                 execution.processing_rejections,
                 execution.finish_attempts,
+                execution.finish_mutation_started,
                 execution.lease_owner,
                 execution.fencing_token,
                 execution.lease_expires_at,
@@ -503,6 +522,7 @@ class PostgresExecutionRepository:
             processing_attempts=row["processing_attempts"],
             processing_rejections=row["processing_rejections"],
             finish_attempts=row["finish_attempts"],
+            finish_mutation_started=row["finish_mutation_started"],
             lease_owner=row["lease_owner"],
             fencing_token=(
                 str(row["fencing_token"]) if row["fencing_token"] is not None else None

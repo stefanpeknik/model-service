@@ -85,6 +85,78 @@ class DeployedSchedulerRecoveryTests(unittest.TestCase):
         os.environ.get("VALIDATION_KUBERNETES_FAULTS") == "1",
         "VALIDATION_KUBERNETES_FAULTS=1 is required",
     )
+    def test_finalization_ack_loss_does_not_replay_publication(self) -> None:
+        job_id = f"{ValidationScenario.FINALIZATION_ACK_LOST}-{uuid4().hex}"
+        with (
+            PortForward("service/model-service-validation-appservice", 18084, 8000),
+            httpx.Client(base_url="http://127.0.0.1:18084", timeout=30) as appservice,
+        ):
+            with (
+                PortForward(
+                    "service/model-service-validation-execution-scheduler", 18083, 8080
+                ),
+                httpx.Client(
+                    base_url="http://127.0.0.1:18083", timeout=30
+                ) as scheduler,
+            ):
+                execution_id = _schedule(scheduler, job_id)
+                before = _wait_for_job_field(appservice, job_id, "finalized")
+                self.assertTrue(before.get("finalize_ack_blocked"), before)
+                self.assertEqual(before["output_create_attempts"], 1)
+                self.assertEqual(before["tile_attempts"], 1)
+                self.assertEqual(before["finalize_attempts"], 1)
+                current = scheduler.get(f"/v1/executions/{execution_id}")
+                self.assertEqual(current.status_code, 200, current.text)
+                self.assertEqual(current.json()["status"], "running")
+
+            try:
+                _delete_validation_scheduler_pod()
+                subprocess.run(
+                    [
+                        "oc",
+                        "-n",
+                        NAMESPACE,
+                        "rollout",
+                        "status",
+                        f"deployment/{SCHEDULER_DEPLOYMENT}",
+                        "--timeout=180s",
+                    ],
+                    check=True,
+                )
+            finally:
+                released = appservice.post(
+                    f"/validation/jobs/{job_id}/release-finalize"
+                )
+                self.assertEqual(released.status_code, 204, released.text)
+
+            with (
+                PortForward(
+                    "service/model-service-validation-execution-scheduler", 18083, 8080
+                ),
+                httpx.Client(
+                    base_url="http://127.0.0.1:18083", timeout=30
+                ) as scheduler,
+            ):
+                execution = _wait_for_terminal(scheduler, execution_id)
+
+            self.assertEqual(execution["status"], "failed", execution)
+            error = execution["error"]
+            self.assertIsInstance(error, dict)
+            assert isinstance(error, dict)
+            self.assertEqual(
+                error["code"],
+                "provider_finish_outcome_unknown",
+            )
+
+            recorded = _wait_for_job_field(appservice, job_id, "finalized")
+            self.assertEqual(recorded["output_create_attempts"], 1)
+            self.assertEqual(recorded["tile_attempts"], 1)
+            self.assertEqual(recorded["finalize_attempts"], 1)
+
+    @unittest.skipUnless(
+        os.environ.get("VALIDATION_KUBERNETES_FAULTS") == "1",
+        "VALIDATION_KUBERNETES_FAULTS=1 is required",
+    )
     def test_replacement_scheduler_resumes_provider_finish_without_reprocessing(
         self,
     ) -> None:

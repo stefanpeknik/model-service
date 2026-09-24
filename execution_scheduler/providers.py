@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
@@ -28,6 +29,7 @@ class ProviderCancellation:
 
 
 type ProviderFinishOutcome = ProviderSuccess | ProviderFailure | ProviderCancellation
+type BeforeMutation = Callable[[], Awaitable[None]]
 
 
 class ProviderFinishFailureError(RuntimeError):
@@ -61,4 +63,6 @@ class ProviderAdapter(Protocol):
         self,
         protected_context: dict[str, JsonValue],
         outcome: ProviderFinishOutcome,
+        *,
+        before_mutation: BeforeMutation,
     ) -> None: ...
