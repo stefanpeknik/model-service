@@ -3,6 +3,7 @@ workers:
 
 applications:
   - validation-prostate-heatmap
+  - validation-raw-classifier
 
 validation:
   maxWorkerReplicas: 1

@@ -193,6 +193,14 @@ Serve mocked. It checks the binary body and response headers as well as the
 heatmap-builder query and text response. The RationAI SDK's existing model
 test checks that its compressed image request uses the same public origin.
 
+The local `test_validation_raw_inference` integration test also passes through
+the RationAI SDK, scheduler ingress, and a real Ray Serve validation classifier.
+It checks a compressed image request and the classifier's JSON prediction.
+The validation Helm profile now declares that classifier at
+`/prostate-classifier-1`, but the running release does not include it until a
+new validation image is built and deployed. This tests the raw inference call
+path, not production model accuracy.
+
 GPU starvation followed by recovery and real legacy model inference remain
 target-cluster release checks. The CPU validation RayService does not deploy
 the GPU model applications, so these tests cannot prove those paths.
