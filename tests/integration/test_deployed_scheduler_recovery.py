@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import httpx
+import yaml  # type: ignore[import-untyped]
 
 from validation.empaia_app_service import ValidationScenario
 
@@ -24,6 +25,12 @@ if TYPE_CHECKING:
 NAMESPACE = "peknik-ns"
 RAYSERVICE = "model-service-validation"
 SCHEDULER_DEPLOYMENT = "model-service-validation-execution-scheduler"
+
+
+@dataclass(frozen=True, slots=True)
+class ServeControllerProcess:
+    actor_id: str
+    pid: int
 
 
 @dataclass(slots=True)
@@ -441,42 +448,7 @@ class DeployedSchedulerRecoveryTests(unittest.TestCase):
             execution_id = _schedule(scheduler, job_id)
             _wait_for_job_field(appservice, job_id, "direct_access_reads")
             cluster, head_pod = _validation_ray_head()
-            original_controller = _alive_serve_controller_id(head_pod)
-            self.assertIsNotNone(original_controller)
-
-            subprocess.run(
-                [
-                    "oc",
-                    "-n",
-                    NAMESPACE,
-                    "exec",
-                    f"pod/{head_pod}",
-                    "-c",
-                    "ray-head",
-                    "--",
-                    "python",
-                    "-c",
-                    (
-                        "import ray; "
-                        "ray.init(address='auto', namespace='serve'); "
-                        "controller = ray.get_actor('SERVE_CONTROLLER_ACTOR', "
-                        "namespace='serve'); "
-                        "ray.kill(controller, no_restart=True); "
-                        "ray.shutdown()"
-                    ),
-                ],
-                check=True,
-                timeout=60,
-            )
-
-            deadline = time.monotonic() + 120
-            while time.monotonic() < deadline:
-                restarted_controller = _alive_serve_controller_id(head_pod)
-                if restarted_controller not in {None, original_controller}:
-                    break
-                time.sleep(1)
-            else:
-                self.fail("Serve controller did not restart")
+            _restart_serve_controller(head_pod)
 
             current_cluster, current_head_pod = _validation_ray_head()
             self.assertEqual(current_cluster, cluster)
@@ -486,19 +458,52 @@ class DeployedSchedulerRecoveryTests(unittest.TestCase):
             recorded = _wait_for_job_field(appservice, job_id, "finalized")
             self.assertEqual(recorded["tile_count"], 1)
 
+    @unittest.skipUnless(
+        os.environ.get("VALIDATION_KUBERNETES_FAULTS") == "1",
+        "VALIDATION_KUBERNETES_FAULTS=1 is required",
+    )
+    def test_scaled_zero_accepts_work_after_serve_controller_restart(self) -> None:
+        with (
+            PortForward("service/model-service-validation-appservice", 18084, 8000),
+            httpx.Client(base_url="http://127.0.0.1:18084", timeout=30) as appservice,
+            PortForward(
+                "service/model-service-validation-execution-scheduler", 18083, 8080
+            ),
+            httpx.Client(base_url="http://127.0.0.1:18083", timeout=30) as scheduler,
+        ):
+            cluster, head_pod = _validation_ray_head()
+            self.assertEqual(_serve_replica_states(head_pod), {})
+            _restart_serve_controller(head_pod)
+            job_id = f"{ValidationScenario.DIRECT_ACCESS}-{uuid4().hex}"
+            execution_id = _schedule(scheduler, job_id, requested_timeout_seconds=600)
+            execution = _wait_for_terminal(scheduler, execution_id, timeout_seconds=630)
+            self.assertEqual(execution["status"], "succeeded", execution)
+            recorded = _wait_for_job_field(appservice, job_id, "finalized")
+            self.assertEqual(recorded["tile_count"], 1)
+            current_cluster, current_head_pod = _validation_ray_head()
+            self.assertEqual(current_cluster, cluster)
+            self.assertEqual(current_head_pod, head_pod)
 
-def _schedule(client: httpx.Client, job_id: str) -> str:
+
+def _schedule(
+    client: httpx.Client,
+    job_id: str,
+    requested_timeout_seconds: int | None = None,
+) -> str:
+    payload: dict[str, object] = {
+        "installation_id": "validation",
+        "api_url": (
+            "http://model-service-validation-appservice."
+            "peknik-ns.svc.cluster.local:8000"
+        ),
+        "job_id": job_id,
+        "credential": _credential(),
+    }
+    if requested_timeout_seconds is not None:
+        payload["requested_timeout_seconds"] = requested_timeout_seconds
     admitted = client.post(
         "/v1/providers/empaia/workflows/prostate-heatmap/schedule",
-        json={
-            "installation_id": "validation",
-            "api_url": (
-                "http://model-service-validation-appservice."
-                "peknik-ns.svc.cluster.local:8000"
-            ),
-            "job_id": job_id,
-            "credential": _credential(),
-        },
+        json=payload,
     )
     if admitted.status_code != 202:
         raise AssertionError(admitted.text)
@@ -571,7 +576,7 @@ def _validation_ray_head() -> tuple[str, str]:
     return cluster, pod["metadata"]["name"]
 
 
-def _alive_serve_controller_id(head_pod: str) -> str | None:
+def _alive_serve_controller(head_pod: str) -> ServeControllerProcess | None:
     output = subprocess.check_output(
         [
             "oc",
@@ -605,7 +610,74 @@ def _alive_serve_controller_id(head_pod: str) -> str | None:
     ]
     if len(controllers) > 1:
         raise AssertionError("more than one live Serve controller actor")
-    return controllers[0]["actor_id"] if controllers else None
+    if not controllers:
+        return None
+    return ServeControllerProcess(
+        actor_id=controllers[0]["actor_id"], pid=controllers[0]["pid"]
+    )
+
+
+def _restart_serve_controller(head_pod: str) -> None:
+    original = _alive_serve_controller(head_pod)
+    if original is None:
+        raise AssertionError("Serve controller is not alive")
+    subprocess.run(
+        [
+            "oc",
+            "-n",
+            NAMESPACE,
+            "exec",
+            f"pod/{head_pod}",
+            "-c",
+            "ray-head",
+            "--",
+            "python",
+            "-c",
+            (
+                "import ray; "
+                "ray.init(address='auto', namespace='serve'); "
+                "controller = ray.get_actor('SERVE_CONTROLLER_ACTOR', "
+                "namespace='serve'); "
+                "ray.kill(controller, no_restart=False); "
+                "ray.shutdown()"
+            ),
+        ],
+        check=True,
+        timeout=60,
+    )
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        restarted = _alive_serve_controller(head_pod)
+        if restarted is not None and restarted.pid != original.pid:
+            if restarted.actor_id != original.actor_id:
+                raise AssertionError("Serve controller actor was replaced")
+            return
+        time.sleep(1)
+    raise AssertionError("Serve controller did not restart")
+
+
+def _serve_replica_states(head_pod: str) -> dict[str, object]:
+    output = subprocess.check_output(
+        [
+            "oc",
+            "-n",
+            NAMESPACE,
+            "exec",
+            f"pod/{head_pod}",
+            "-c",
+            "ray-head",
+            "--",
+            "serve",
+            "status",
+            "--address",
+            "http://127.0.0.1:8265",
+        ],
+        text=True,
+    )
+    status = yaml.safe_load(output)
+    return status["applications"]["prostate-heatmap"]["deployments"][
+        "ValidationProstateHeatmapApplication"
+    ]["replica_states"]
 
 
 def _delete_validation_scheduler_pod() -> None:
@@ -628,8 +700,12 @@ def _delete_validation_scheduler_pod() -> None:
     )
 
 
-def _wait_for_terminal(client: httpx.Client, execution_id: str) -> dict[str, object]:
-    deadline = time.monotonic() + 180
+def _wait_for_terminal(
+    client: httpx.Client,
+    execution_id: str,
+    timeout_seconds: int = 180,
+) -> dict[str, object]:
+    deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         response = client.get(f"/v1/executions/{execution_id}")
         if response.status_code != 200:

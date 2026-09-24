@@ -79,9 +79,10 @@ class DeployedSchedulerTests(unittest.TestCase):
         if origin is None:
             self.skipTest("VALIDATION_ORIGIN is not configured")
 
+        invocation = self._invocation(f"output/{uuid4().hex}.tiff")
         request = {
             "provider": "standalone",
-            "body": self._invocation(f"output/{uuid4().hex}.tiff"),
+            "body": invocation,
             "idempotency_key": uuid4().hex,
         }
         with httpx.Client(base_url=origin, timeout=30) as client:
@@ -98,7 +99,7 @@ class DeployedSchedulerTests(unittest.TestCase):
                 json={
                     **request,
                     "body": {
-                        **request["body"],
+                        **invocation,
                         "input_access": {
                             "kind": "shared_storage",
                             "state": {"root": "/missing"},
@@ -171,7 +172,7 @@ class DeployedSchedulerTests(unittest.TestCase):
             self.assertEqual(admitted.status_code, 202, admitted.text)
             execution_id = admitted.json()["execution"]["id"]
 
-            deadline = time.monotonic() + 180
+            deadline = time.monotonic() + 630
             while time.monotonic() < deadline:
                 status = client.get(f"/v1/executions/{execution_id}")
                 self.assertEqual(status.status_code, 200, status.text)

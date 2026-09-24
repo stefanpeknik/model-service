@@ -160,12 +160,32 @@ The guarded scheduler-replacement test also passed against this release. It
 deleted the scheduler pod during an in-flight EMPAIA direct-access read; the
 replacement scheduler recovered the durable execution and finalized the job.
 
-The guarded Serve-controller-loss test passed twice. It killed the named
-controller actor from inside the validation Ray head pod while an EMPAIA
-execution was in flight. Ray started a new controller actor without replacing
-the RayCluster or head pod, and the execution succeeded and finalized the job.
-The test uses the in-pod interpreter because a local Ray Client launched under
-`uv run` automatically uploads its working directory as a runtime environment.
+The first guarded Serve-controller-loss test passed twice for the in-flight
+EMPAIA execution, but its fault injection used `ray.kill(...,
+no_restart=True)`. That overrides Serve's configured `max_restarts=-1`: a new
+controller actor appeared, while the existing proxy retained a handle to the
+dead actor. Ray 2.58 also defaults `ray.kill` to `no_restart=True`, so an
+omitted argument has the same effect. After the deployment scaled to zero, a
+later SDK execution queued at the proxy for about 599 seconds and failed at
+its deadline. A bounded 90-second reproduction showed
+`ray_serve_deployment_queued_queries=1` at the
+proxy while `ray_serve_autoscaling_total_requests=0` at the controller; no
+worker demand appeared. These runs prove deadline behavior, not recovery from
+that forced permanent actor death. The guarded test now explicitly sets
+`no_restart=False` and checks for a new process under the same actor ID; a
+separate scaled-to-zero test is added but has not yet passed against the
+cluster. The fault injection uses the in-pod interpreter because local Ray
+Client under `uv run` automatically uploaded its working directory as a
+runtime environment.
+
+After restoring the validation RayCluster, a standalone execution scheduled
+through public HTTP succeeded once the CPU worker image was pulled. The worker
+pull took over four minutes, exceeding the previous 180-second test polling
+limit but not the execution's 600-second deadline. With the worker ready, the
+public HTTP scheduled/immediate result-comparison test and the RationAI SDK
+scheduled/immediate test both passed. The deployed test polling limit is now
+630 seconds so it observes the execution's actual terminal outcome on a cold
+node.
 
 The local public-API compatibility test sends legacy model and heatmap-builder
 POST requests through the real scheduler ingress and HTTP proxy, with only Ray

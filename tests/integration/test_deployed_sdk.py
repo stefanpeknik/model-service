@@ -49,7 +49,7 @@ class DeployedSDKTests(unittest.TestCase):
             self.assertFalse(replay.created)
             self.assertEqual(replay.execution.id, scheduled.execution.id)
 
-            deadline = time.monotonic() + 180
+            deadline = time.monotonic() + 630
             while time.monotonic() < deadline:
                 execution = client.executions.get(scheduled.execution.id)
                 if execution.status in {
