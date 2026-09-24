@@ -187,6 +187,11 @@ scheduled/immediate test both passed. The deployed test polling limit is now
 630 seconds so it observes the execution's actual terminal outcome on a cold
 node.
 
+The full deployed scheduler smoke suite then passed its three normal-capacity
+tests; two deliberate zero-worker tests were skipped because worker capacity
+was enabled. Both deployed RationAI SDK smoke tests passed. A database check
+after the suites found no queued or running validation executions.
+
 The local public-API compatibility test sends legacy model and heatmap-builder
 POST requests through the real scheduler ingress and HTTP proxy, with only Ray
 Serve mocked. It checks the binary body and response headers as well as the
