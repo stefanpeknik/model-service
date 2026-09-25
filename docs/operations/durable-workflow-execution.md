@@ -201,11 +201,46 @@ test checks that its compressed image request uses the same public origin.
 The local `test_validation_raw_inference` integration test also passes through
 the RationAI SDK, scheduler ingress, and a real Ray Serve validation classifier.
 It checks a compressed image request and the classifier's JSON prediction.
-The validation Helm profile now declares that classifier at
-`/prostate-classifier-1`, but the running release does not include it until a
-new validation image is built and deployed. This tests the raw inference call
-path, not production model accuracy.
+The validation Helm profile declares that classifier at
+`/prostate-classifier-1`, but the running CPU RayService does not include it.
+The deployed scheduler instead routes inference to the existing production
+RayService while keeping workflow dispatch on the validation RayService.
 
-GPU starvation followed by recovery and real legacy model inference remain
-target-cluster release checks. The CPU validation RayService does not deploy
-the GPU model applications, so these tests cannot prove those paths.
+On 2026-09-25, one RationAI SDK `classify_image` request to the existing
+production Ray Serve service in `peknik-ns` started its zero-replica GPU
+classifier and returned `0.256591796875` for a zero-filled 512 by 512 RGB
+tile. The worker was healthy afterward. This proves the original direct Serve
+route with the MLflow-backed model, but not the deployed execution scheduler's
+forwarding path: the validation scheduler points to a separate CPU RayService.
+
+The deployed EMPAIA contract suite passed all 12 tests against the validation
+scheduler and in-namespace mock AppService. It covered admission, replay,
+publication, cancellation, failure reporting, and uncertain provider outcomes.
+The first test's 180-second observation window expired during a cold worker
+image pull; the execution later succeeded and the AppService recorded one tile
+upload and one finalization. EMPAIA terminal and status polling now use the
+same 630-second window as the deployed workflow tests.
+
+The guarded in-flight Serve-controller restart test passed with
+`no_restart=False`. The guarded finalization-ack loss test also passed using
+its dedicated mock AppService image: after scheduler replacement, it reported
+an unknown provider-finish outcome without repeating output creation, tile
+upload, or finalization. The mock AppService deployment was restored to its
+original image afterward.
+
+The first deployed SDK inference call through the scheduler failed while the
+production GPU classifier scaled from zero: the proxy used HTTPX's default
+five-second read timeout. A later call reached Ray Serve but leaked its 307
+trailing-slash redirect to the SDK, which could not resolve the internal
+service hostname. Public-HTTP regression tests cover both cases. The scheduler
+now allows a separate inference origin, uses a configurable 900-second
+inference timeout, and follows the internal redirect before responding.
+With those changes deployed, one SDK `classify_image` request through the
+public scheduler URL returned `0.256591796875` for the same test tile. Both
+deployed SDK workflow tests passed again through that URL, covering scheduled
+and synchronous invocation plus cancellation. The validation release uses
+`model-service-scheduler:split-inference-redirect-20260925-1`.
+
+GPU starvation followed by recovery remains a target-cluster release check.
+The CPU validation RayService does not deploy the GPU model applications, so
+its own inference tests cannot prove that path.

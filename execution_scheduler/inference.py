@@ -46,9 +46,16 @@ class InferenceProxy(Protocol):
 
 
 class HttpInferenceProxy:
-    def __init__(self, client: httpx.AsyncClient, *, origin: str) -> None:
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        *,
+        origin: str,
+        timeout: float = 900,
+    ) -> None:
         self._client = client
         self._origin = origin.rstrip("/")
+        self._timeout = timeout
 
     async def forward(self, request: InferenceRequest) -> InferenceResponse:
         try:
@@ -57,6 +64,8 @@ class HttpInferenceProxy:
                 params=request.query,
                 content=request.body,
                 headers=request.headers,
+                timeout=self._timeout,
+                follow_redirects=True,
             )
         except httpx.RequestError as error:
             raise InferenceProxyUnavailableError(

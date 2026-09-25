@@ -259,7 +259,7 @@ class DeployedEmpaiaTests(unittest.TestCase):
     def _wait_terminal(
         self, scheduler: httpx.Client, execution_id: str
     ) -> dict[str, object]:
-        deadline = time.monotonic() + 180
+        deadline = time.monotonic() + 630
         while time.monotonic() < deadline:
             response = scheduler.get(f"/v1/executions/{execution_id}")
             self.assertEqual(response.status_code, 200, response.text)
@@ -272,7 +272,7 @@ class DeployedEmpaiaTests(unittest.TestCase):
     def _wait_status(
         self, scheduler: httpx.Client, execution_id: str, expected: str
     ) -> dict[str, object]:
-        deadline = time.monotonic() + 180
+        deadline = time.monotonic() + 630
         while time.monotonic() < deadline:
             response = scheduler.get(f"/v1/executions/{execution_id}")
             self.assertEqual(response.status_code, 200, response.text)

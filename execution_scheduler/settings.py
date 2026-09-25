@@ -15,6 +15,8 @@ class SchedulerSettings:
     database_url: str
     provider_context_key: str
     ray_serve_origin: str
+    inference_serve_origin: str | None = None
+    inference_timeout: timedelta = timedelta(minutes=15)
     lease_duration: timedelta = timedelta(seconds=60)
     poll_interval: float = 0.5
     processing_attempts: int = 3
@@ -36,6 +38,11 @@ class SchedulerSettings:
             database_url=_required(values, "DATABASE_URL"),
             provider_context_key=_required(values, "PROVIDER_CONTEXT_KEY"),
             ray_serve_origin=_required(values, "RAY_SERVE_ORIGIN"),
+            inference_serve_origin=values.get("INFERENCE_SERVE_ORIGIN", "").strip()
+            or None,
+            inference_timeout=timedelta(
+                seconds=_positive_float(values, "INFERENCE_TIMEOUT_SECONDS", 900)
+            ),
             lease_duration=timedelta(
                 seconds=_positive_float(values, "LEASE_SECONDS", 60)
             ),

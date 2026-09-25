@@ -336,6 +336,42 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
             "model_inference_unavailable",
         )
 
+    async def test_model_inference_resolves_upstream_route_redirect(self) -> None:
+        forwarded: list[Request] = []
+
+        def ray_handler(request: Request) -> Response:
+            forwarded.append(request)
+            if request.url.path == "/prostate-classifier-1":
+                return Response(
+                    307,
+                    headers={"location": "http://ray-serve/prostate-classifier-1/"},
+                )
+            return Response(200, json=0.25)
+
+        async with (
+            AsyncClient(transport=MockTransport(ray_handler)) as ray_client,
+            AsyncClient(
+                transport=ASGITransport(
+                    app=create_execution_app(
+                        self.scheduler,
+                        inference_proxy=HttpInferenceProxy(
+                            ray_client, origin="http://ray-serve"
+                        ),
+                    )
+                ),
+                base_url="http://model-service",
+            ) as client,
+        ):
+            response = await client.post(
+                "/prostate-classifier-1", content=b"compressed-image"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), 0.25)
+        self.assertEqual(len(forwarded), 2)
+        self.assertEqual(forwarded[1].url, "http://ray-serve/prostate-classifier-1/")
+        self.assertEqual(forwarded[1].content, b"compressed-image")
+
     async def test_synchronous_workflow_validates_before_dispatch(self) -> None:
         async def reject_dispatch(_invocation: object) -> WorkflowResult:
             raise AssertionError("invalid invocation was dispatched")

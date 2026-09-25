@@ -51,6 +51,12 @@ spec:
                   key: {{ .Values.executionScheduler.encryption.keyKey }}
             - name: RAY_SERVE_ORIGIN
               value: {{ default (printf "http://%s-serve-svc.%s.svc.cluster.local:8000" .Release.Name (.Release.Namespace | default "rationai-jobs-ns")) .Values.executionScheduler.rayServeOrigin | quote }}
+            {{- if .Values.executionScheduler.inferenceServeOrigin }}
+            - name: INFERENCE_SERVE_ORIGIN
+              value: {{ .Values.executionScheduler.inferenceServeOrigin | quote }}
+            {{- end }}
+            - name: INFERENCE_TIMEOUT_SECONDS
+              value: {{ default 900 .Values.executionScheduler.inferenceTimeoutSeconds | quote }}
             - name: LEASE_SECONDS
               value: {{ .Values.executionScheduler.leaseSeconds | quote }}
             - name: WORKER_POLL_SECONDS

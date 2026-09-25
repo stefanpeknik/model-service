@@ -99,7 +99,11 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
     return create_execution_app(
         scheduler,
         workflow_runner=SynchronousWorkflowService(catalog, dispatch),
-        inference_proxy=HttpInferenceProxy(client, origin=config.ray_serve_origin),
+        inference_proxy=HttpInferenceProxy(
+            client,
+            origin=config.inference_serve_origin or config.ray_serve_origin,
+            timeout=config.inference_timeout.total_seconds(),
+        ),
         lifespan=lifespan,
         deployment_health=WorkflowDeploymentHealth(
             client,
