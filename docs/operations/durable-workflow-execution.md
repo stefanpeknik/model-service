@@ -244,3 +244,34 @@ and synchronous invocation plus cancellation. The validation release uses
 GPU starvation followed by recovery remains a target-cluster release check.
 The CPU validation RayService does not deploy the GPU model applications, so
 its own inference tests cannot prove that path.
+
+## First-phase checkpoint entry points
+
+The public caller origin for this validation release is the execution scheduler
+service at `model-service-validation-execution-scheduler.peknik-ns.svc.cluster.local:8080`.
+The RationAI SDK must receive that URL as `base_url`; its default points to a
+different namespace. The scheduler sends workflow calls to the validation Ray
+Serve service and model inference to the production Ray Serve service in
+`peknik-ns`.
+
+| Caller | Public HTTP path | Result |
+| --- | --- | --- |
+| RationAI SDK `workflows.run` | `POST /v1/workflows/prostate-heatmap/run` | Synchronous workflow result |
+| RationAI SDK `workflows.schedule`, then `executions.get` or `executions.cancel` | `POST /v1/workflows/prostate-heatmap/schedule`, then `GET /v1/executions/{id}` or `POST /v1/executions/{id}/cancel` | Durable execution status |
+| RationAI SDK `models.classify_image` | `POST /prostate-classifier-1` | Production classifier prediction |
+| EMPAIA backend through the validation mock AppService | `POST /v1/providers/empaia/workflows/prostate-heatmap/schedule` | Durable execution and mock publication |
+
+To repeat the SDK workflow checks from this repository, open a local port
+forward and run the public-interface test suite in another terminal:
+
+```sh
+oc -n peknik-ns port-forward svc/model-service-validation-execution-scheduler 18080:8080
+VALIDATION_ORIGIN=http://127.0.0.1:18080 UV_CACHE_DIR=.cache/uv uv run --no-sync python -m unittest tests.integration.test_deployed_sdk -v
+```
+
+The raw classifier call uses a 512 by 512 RGB `uint8` tile and a 900-second
+client timeout to allow a cold GPU worker to start. Starting that worker may
+read its GitHub runtime archive and the MLflow artifact. Send one request, then
+inspect the result and worker state before sending another. The deployed
+EMPAIA suite uses only the in-namespace mock AppService; it does not validate
+a real EMPAIA installation.
