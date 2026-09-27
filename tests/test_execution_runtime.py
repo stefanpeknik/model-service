@@ -11,7 +11,7 @@ from execution_scheduler.settings import SchedulerSettings
 
 
 class ExecutionRuntimeTests(unittest.IsolatedAsyncioTestCase):
-    async def test_public_inference_uses_separate_origin_without_changing_workflow_readiness(
+    async def test_public_inference_uses_separate_origin_without_changing_workflow_health(
         self,
     ) -> None:
         forwarded: list[Request] = []
@@ -44,12 +44,12 @@ class ExecutionRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 transport=ASGITransport(app=app),
                 base_url="http://model-service",
             ) as client:
-                ready = await client.get("/readyz")
+                workflows = await client.get("/healthz/workflows")
                 prediction = await client.post(
                     "/prostate-classifier-1", content=b"compressed-image"
                 )
 
-        self.assertEqual(ready.status_code, 200)
+        self.assertEqual(workflows.status_code, 200)
         self.assertEqual(prediction.status_code, 200)
         self.assertEqual(prediction.json(), 0.25)
         self.assertEqual(forwarded[0].url, "http://workflow-serve/-/routes")

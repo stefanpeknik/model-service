@@ -86,6 +86,18 @@ class PostgresExecutionRepository:
                 schema=self._schema,
             )
 
+    async def check_ready(self) -> None:
+        async with self._connection() as connection:
+            await connection.execute(
+                sql.SQL("SELECT id FROM {} LIMIT 1").format(self._table)
+            )
+
+    async def maintain(self) -> None:
+        async with self._connection() as connection:
+            now = await self._database_now(connection)
+            await self._expire_deadlines(connection, now)
+            await self._recover_expired_leases(connection, now)
+
     async def find_submission(
         self,
         identity: SubmissionIdentity,

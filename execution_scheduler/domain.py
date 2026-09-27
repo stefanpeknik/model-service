@@ -50,8 +50,16 @@ class RetryPolicy:
             raise ValueError("maximum_backoff cannot be shorter than initial_backoff")
 
     def backoff(self, attempt: int) -> timedelta:
-        multiplier = 2 ** max(0, attempt - 1)
-        return min(self.initial_backoff * multiplier, self.maximum_backoff)
+        delay = self.initial_backoff
+        if delay == timedelta(0):
+            return delay
+        remaining = max(0, attempt - 1)
+        while remaining and delay < self.maximum_backoff:
+            if delay >= self.maximum_backoff - delay:
+                return self.maximum_backoff
+            delay *= 2
+            remaining -= 1
+        return delay
 
 
 @dataclass(frozen=True, slots=True)

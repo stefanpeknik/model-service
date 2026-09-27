@@ -12,6 +12,8 @@ workflow processing and provider finish.
 - `scheduler.py` implements admission, status reads, cancellation, and public
   execution views.
 - `worker.py` owns lease renewal, dispatch, settlement, and local cancellation.
+  Maintenance runs independently of its single active claim, so queued
+  deadlines and abandoned leases advance while processing is blocked.
 - `active_work.py` tracks locally running attempts so cancellation can stop
   their tasks without making in-memory state authoritative.
 
@@ -23,7 +25,7 @@ workflow processing and provider finish.
 - `transitions.py` is the only module that creates or changes execution state,
   including admission, claims, cancellation, settlement, lease recovery, and
   deadlines.
-- `repository.py` defines the seven persistence operations and provides the
+- `repository.py` defines persistence and maintenance operations and provides the
   in-memory test adapter.
 - `postgres.py` implements those operations with PostgreSQL.
 - `postgres_schema.py` owns PostgreSQL schema creation.
@@ -42,7 +44,9 @@ workflow processing and provider finish.
   direct-access boundary.
 - `../integrations/empaia/image_io.py` materializes rectangle masks and
   publishes TIFF artifacts as EMPAIA pixelmaps.
-- `health.py` checks declared workflow applications against Ray Serve routes.
+- `health.py` reports Ray availability and missing workflow routes through
+  `/healthz/workflows`. Durable API readiness at `/readyz` checks repository
+  access without requiring Ray.
 - `synchronous.py` runs the same workflow contract without creating a durable
   execution.
 

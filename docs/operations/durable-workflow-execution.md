@@ -73,12 +73,16 @@ signal as confirmed pre-acceptance backpressure. A generic 503, connection
 loss, or malformed response has an unknown acceptance outcome and consumes a
 processing attempt.
 
-`/readyz` reads Ray Serve's route table. A declared workflow whose route is
-missing makes readiness return 503 with
-`workflow_application_unavailable`. Scheduling an undeclared identifier is a
-separate 404 `unknown_workflow` response. Admission does not require a live
-replica, so scale-from-zero and temporary capacity shortages remain durable
-queueing cases.
+`/readyz` checks access to the durable execution repository. Ray downtime does
+not remove scheduler pods from Service routing, so admission, polling, and
+cancellation remain available while the database works. `/healthz/workflows`
+reads Ray Serve's route table separately. It returns 503 with status
+`unreachable` for transport failures or invalid route responses, and
+`missing_applications` with `missing_workflows` for absent declared routes.
+Healthy routes return 200 with status `ready`. Scheduling an undeclared
+identifier remains a separate 404 `unknown_workflow` response. Admission does
+not require a live replica, so scale-from-zero and temporary capacity shortages
+remain durable queueing cases.
 
 ## EMPAIA adapter
 
@@ -275,3 +279,36 @@ read its GitHub runtime archive and the MLflow artifact. Send one request, then
 inspect the result and worker state before sending another. The deployed
 EMPAIA suite uses only the in-namespace mock AppService; it does not validate
 a real EMPAIA installation.
+
+## Checkpoint review fixes, 2026-09-27
+
+The local source now keeps the worker loop alive after an individual claim
+loses its lease. Renewal exceptions or a stalled renewal stop local processing
+and provider finish, and their late results are not settled. Settlement also
+rejects an expired lease even before another worker recovers it. Worker shutdown
+still propagates cancellation and stops active local work.
+
+Deadline expiry and abandoned-lease recovery run independently of the worker's
+single active claim. This does not increase dispatch concurrency. Backoff
+saturates before duration multiplication can overflow. Durable API readiness
+now checks the database, while `/healthz/workflows` reports Ray degradation
+separately.
+
+The tracked local unit suite plus new retry-policy tests ran 112 tests against
+a disposable localhost PostgreSQL 16 container. All passed except one skipped
+TIFF-publication test because libvips was unavailable. The suite includes
+production PostgreSQL transactions, worker-loop regressions, public HTTP
+admission, polling, and cancellation during a mocked Ray outage, and existing
+raw-inference and synchronous-workflow compatibility checks. Changed Python
+files passed Ruff. This is not evidence of live Kubernetes Service behavior.
+
+These fixes have not been deployed. The validation image recorded above still
+uses the earlier readiness and worker behavior. No cluster resources or other
+repositories were modified for this follow-up.
+
+EMPAIA service authentication on both admission paths, known publication-failure
+reporting, and negative-origin rectangle clipping remain deferred. Maintenance
+now advances queued deadlines while work is blocked, but concurrent delivery of
+EMPAIA terminal reports while the local worker is occupied remains a provider
+follow-up. Do not treat the EMPAIA admission paths as production-ready before
+the separate service-authentication finding is resolved.

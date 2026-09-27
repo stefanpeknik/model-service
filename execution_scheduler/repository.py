@@ -33,6 +33,10 @@ def utc_now() -> datetime:
 
 
 class ExecutionRepository(Protocol):
+    async def check_ready(self) -> None: ...
+
+    async def maintain(self) -> None: ...
+
     async def find_submission(
         self,
         identity: SubmissionIdentity,
@@ -105,6 +109,16 @@ class InMemoryExecutionRepository:
         self._executions: dict[str, ExecutionRecord] = {}
         self._submissions: dict[tuple[str, str], str] = {}
         self._lock = asyncio.Lock()
+
+    async def check_ready(self) -> None:
+        async with self._lock:
+            return
+
+    async def maintain(self) -> None:
+        async with self._lock:
+            now = self._clock()
+            self._expire_deadlines(now)
+            self._recover_expired_leases(now)
 
     async def find_submission(
         self,

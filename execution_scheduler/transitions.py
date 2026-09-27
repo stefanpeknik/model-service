@@ -227,6 +227,11 @@ class ExecutionTransitions:
                 execution=self.deadline(execution, now),
                 rejection=SettlementRejection.DEADLINE_EXCEEDED,
             )
+        if execution.lease_expires_at is None or execution.lease_expires_at <= now:
+            return SettlementDecision(
+                execution=None,
+                rejection=SettlementRejection.STALE_CLAIM,
+            )
         return SettlementDecision(self.settle(execution, settlement, now))
 
     def mark_finish_mutation_started(

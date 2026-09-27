@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from execution_scheduler.active_work import ActiveWorkRegistry
 from execution_scheduler.contracts import (
+    ExecutionStatus,
     InvalidScheduleRequestError,
     ScheduleConflictError,
     ScheduleRequest,
@@ -23,8 +24,11 @@ from execution_scheduler.dispatch import (
 from execution_scheduler.domain import (
     Admission,
     PreparedWorkflow,
+    ProcessingSucceeded,
     ProviderFinishSucceeded,
+    RenewDirective,
     RetryPolicy,
+    StaleWorkClaimError,
     SubmissionIdentity,
     WorkKind,
 )
@@ -94,7 +98,6 @@ class StandaloneProvider:
         before_mutation: BeforeMutation,
     ) -> None:
         del before_mutation
-        return None
 
 
 class RecordingProvider(StandaloneProvider):
@@ -152,6 +155,319 @@ class UnavailableExecutionRepository(InMemoryExecutionRepository):
 
 
 class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_claim_lease_loss_returns_before_another_worker_recovers_it(
+        self,
+    ) -> None:
+        clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
+
+        async def dispatch(_invocation: WorkflowInvocation) -> WorkflowResult:
+            clock.advance(timedelta(seconds=2))
+            await asyncio.Event().wait()
+            raise AssertionError("unreachable")
+
+        repository = InMemoryExecutionRepository(clock=clock)
+        scheduler, worker = self._scheduler_and_worker(
+            repository,
+            StandaloneProvider(),
+            InMemoryWorkflowDispatch({"prostate-heatmap": dispatch}),
+            clock=clock,
+            lease_duration=timedelta(milliseconds=30),
+        )
+        admitted = await scheduler.schedule(self._request())
+
+        self.assertTrue(await asyncio.wait_for(worker.run_once(), timeout=1))
+        durable = await repository.get(admitted.execution.id)
+        self.assertEqual(durable.status, "running")
+        self.assertIsNotNone(durable.fencing_token)
+        self.assertIsNone(durable.result)
+
+    async def test_worker_shutdown_cancels_active_dispatch_and_propagates(self) -> None:
+        started = asyncio.Event()
+        stopped = asyncio.Event()
+
+        async def dispatch(_invocation: WorkflowInvocation) -> WorkflowResult:
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                stopped.set()
+            raise AssertionError("unreachable")
+
+        scheduler, worker = self._scheduler_and_worker(
+            InMemoryExecutionRepository(),
+            StandaloneProvider(),
+            InMemoryWorkflowDispatch({"prostate-heatmap": dispatch}),
+        )
+        await scheduler.schedule(self._request())
+        worker_task = self._start_worker(worker)
+        await asyncio.wait_for(started.wait(), timeout=1)
+
+        worker_task.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await asyncio.wait_for(worker_task, timeout=1)
+        self.assertTrue(stopped.is_set())
+
+    async def test_renewal_error_stops_provider_finish(self) -> None:
+        stopped = asyncio.Event()
+
+        class FailingRenewalRepository(InMemoryExecutionRepository):
+            async def renew(
+                self,
+                execution_id: str,
+                fencing_token: str,
+                lease_duration: timedelta,
+            ) -> RenewDirective:
+                raise ExecutionRepositoryUnavailableError("renewal unavailable")
+
+        class BlockingProvider(StandaloneProvider):
+            async def finish(
+                self,
+                _protected_context: dict[str, JsonValue],
+                _outcome: ProviderFinishOutcome,
+                *,
+                before_mutation: BeforeMutation,
+            ) -> None:
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    stopped.set()
+
+        repository = FailingRenewalRepository()
+        scheduler, worker = self._scheduler_and_worker(
+            repository,
+            BlockingProvider(),
+            InMemoryWorkflowDispatch(
+                {"prostate-heatmap": lambda _invocation: WorkflowResult(outputs={})}
+            ),
+            lease_duration=timedelta(milliseconds=30),
+        )
+        admitted = await scheduler.schedule(self._request())
+        self.assertTrue(await worker.run_once())
+
+        with self.assertRaises(ExecutionRepositoryUnavailableError):
+            await asyncio.wait_for(worker.run_once(), timeout=1)
+        self.assertTrue(stopped.is_set())
+        durable = await repository.get(admitted.execution.id)
+        self.assertEqual(durable.status, "running")
+        self.assertEqual(durable.work_kind, WorkKind.PROVIDER_FINISH)
+        self.assertFalse(durable.finish_mutation_started)
+
+    async def test_stalled_renewal_stops_dispatch_before_abandoning_heartbeats(
+        self,
+    ) -> None:
+        stopped = asyncio.Event()
+
+        class StalledRenewalRepository(InMemoryExecutionRepository):
+            async def renew(
+                self,
+                execution_id: str,
+                fencing_token: str,
+                lease_duration: timedelta,
+            ) -> RenewDirective:
+                await asyncio.Event().wait()
+                raise AssertionError("unreachable")
+
+        async def dispatch(_invocation: WorkflowInvocation) -> WorkflowResult:
+            try:
+                await asyncio.Event().wait()
+            finally:
+                stopped.set()
+            raise AssertionError("unreachable")
+
+        scheduler, worker = self._scheduler_and_worker(
+            StalledRenewalRepository(),
+            StandaloneProvider(),
+            InMemoryWorkflowDispatch({"prostate-heatmap": dispatch}),
+            lease_duration=timedelta(milliseconds=30),
+        )
+        await scheduler.schedule(self._request())
+        task = asyncio.create_task(worker.run_once())
+
+        async def cleanup() -> None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+        self.addAsyncCleanup(cleanup)
+        await asyncio.wait_for(stopped.wait(), timeout=0.5)
+        with self.assertRaises(TimeoutError):
+            await task
+
+    async def test_worker_loop_survives_claim_lease_loss(self) -> None:
+        clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
+        stopped = asyncio.Event()
+        calls = 0
+
+        async def dispatch(_invocation: WorkflowInvocation) -> WorkflowResult:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                clock.advance(timedelta(seconds=2))
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    stopped.set()
+            return WorkflowResult(outputs={})
+
+        repository = InMemoryExecutionRepository(
+            clock=clock,
+            processing_policy=RetryPolicy(3, timedelta(0), timedelta(0)),
+        )
+        scheduler, worker = self._scheduler_and_worker(
+            repository,
+            StandaloneProvider(),
+            InMemoryWorkflowDispatch({"prostate-heatmap": dispatch}),
+            clock=clock,
+            lease_duration=timedelta(milliseconds=30),
+        )
+        admitted = await scheduler.schedule(self._request())
+        worker_task = self._start_worker(worker)
+
+        await asyncio.wait_for(stopped.wait(), timeout=1)
+        await self._wait_for_status(
+            scheduler, admitted.execution.id, ExecutionStatus.SUCCEEDED
+        )
+        self.assertFalse(worker_task.done())
+        self.assertEqual(calls, 2)
+
+    async def test_renewal_error_stops_dispatch_and_discards_late_result(self) -> None:
+        clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
+        stopped = asyncio.Event()
+        calls = 0
+
+        class FailingRenewalRepository(InMemoryExecutionRepository):
+            failed = False
+
+            async def renew(
+                self,
+                execution_id: str,
+                fencing_token: str,
+                lease_duration: timedelta,
+            ) -> RenewDirective:
+                if not self.failed:
+                    self.failed = True
+                    clock.advance(timedelta(seconds=2))
+                    raise ExecutionRepositoryUnavailableError("renewal unavailable")
+                return await super().renew(execution_id, fencing_token, lease_duration)
+
+        async def dispatch(_invocation: WorkflowInvocation) -> WorkflowResult:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    stopped.set()
+                    return WorkflowResult(outputs={"stale": SharedArtifact("/stale")})
+            return WorkflowResult(outputs={})
+
+        repository = FailingRenewalRepository(
+            clock=clock,
+            processing_policy=RetryPolicy(3, timedelta(0), timedelta(0)),
+        )
+        scheduler, worker = self._scheduler_and_worker(
+            repository,
+            StandaloneProvider(),
+            InMemoryWorkflowDispatch({"prostate-heatmap": dispatch}),
+            clock=clock,
+            lease_duration=timedelta(milliseconds=30),
+        )
+        admitted = await scheduler.schedule(self._request())
+        worker_task = self._start_worker(worker)
+
+        await asyncio.wait_for(stopped.wait(), timeout=1)
+        await self._wait_for_status(
+            scheduler, admitted.execution.id, ExecutionStatus.SUCCEEDED
+        )
+        self.assertFalse(worker_task.done())
+        self.assertEqual(calls, 2)
+        self.assertEqual(
+            (await scheduler.get(admitted.execution.id)).result,
+            WorkflowResult(outputs={}),
+        )
+
+    async def test_busy_worker_expires_queued_deadlines_without_dispatching_more(
+        self,
+    ) -> None:
+        clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
+        started = asyncio.Event()
+        calls = 0
+
+        async def dispatch(_invocation: WorkflowInvocation) -> WorkflowResult:
+            nonlocal calls
+            calls += 1
+            started.set()
+            await asyncio.Event().wait()
+            raise AssertionError("unreachable")
+
+        repository = InMemoryExecutionRepository(clock=clock)
+        scheduler, worker = self._scheduler_and_worker(
+            repository,
+            StandaloneProvider(),
+            InMemoryWorkflowDispatch({"prostate-heatmap": dispatch}),
+            clock=clock,
+        )
+        running = await scheduler.schedule(self._request("running"))
+        queued = await scheduler.schedule(
+            ScheduleRequest(
+                workflow_id="prostate-heatmap",
+                provider="standalone",
+                body={},
+                idempotency_key="queued",
+                requested_timeout_seconds=1,
+            )
+        )
+        worker_task = self._start_worker(worker)
+        await asyncio.wait_for(started.wait(), timeout=1)
+        clock.advance(timedelta(seconds=2))
+
+        await self._wait_for_status(
+            scheduler, queued.execution.id, ExecutionStatus.FAILED
+        )
+        self.assertEqual((await scheduler.get(running.execution.id)).status, "running")
+        self.assertEqual(calls, 1)
+        self.assertFalse(worker_task.done())
+
+    async def test_expired_lease_rejects_settlement_before_recovery(self) -> None:
+        clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
+        repository = InMemoryExecutionRepository(clock=clock)
+        scheduler, _worker = self._scheduler_and_worker(
+            repository,
+            StandaloneProvider(),
+            InMemoryWorkflowDispatch({}),
+            clock=clock,
+        )
+        admitted = await scheduler.schedule(self._request())
+        claim = await repository.claim_due("worker-1", timedelta(seconds=1))
+        assert claim is not None
+        clock.advance(timedelta(seconds=2))
+
+        with self.assertRaises(StaleWorkClaimError):
+            await repository.settle(
+                claim.execution_id,
+                claim.fencing_token,
+                ProcessingSucceeded(WorkflowResult(outputs={})),
+            )
+        self.assertIsNone((await repository.get(admitted.execution.id)).result)
+
+    def _start_worker(self, worker: ExecutionWorker) -> asyncio.Task[None]:
+        stop = asyncio.Event()
+        task = asyncio.create_task(worker.run(stop, poll_interval=0.005))
+
+        async def cleanup() -> None:
+            stop.set()
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+        self.addAsyncCleanup(cleanup)
+        return task
+
+    async def _wait_for_status(
+        self, scheduler: ExecutionScheduler, execution_id: str, status: ExecutionStatus
+    ) -> None:
+        async with asyncio.timeout(1):
+            while (await scheduler.get(execution_id)).status != status:
+                await asyncio.sleep(0.005)
+
     async def test_deadline_failure_is_reported_until_provider_deadline(self) -> None:
         clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
         repository = InMemoryExecutionRepository(clock=clock)
@@ -842,6 +1158,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         dispatch: InMemoryWorkflowDispatch,
         *,
         clock: Callable[[], datetime] | None = None,
+        lease_duration: timedelta = timedelta(minutes=1),
     ) -> tuple[ExecutionScheduler, ExecutionWorker]:
         scheduler = ExecutionScheduler(
             repository=repository,
@@ -856,7 +1173,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             providers={provider.name: provider},
             dispatch=dispatch,
             owner="worker-1",
-            lease_duration=timedelta(minutes=1),
+            lease_duration=lease_duration,
         )
         return scheduler, worker
 

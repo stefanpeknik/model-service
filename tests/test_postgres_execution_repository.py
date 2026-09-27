@@ -70,6 +70,60 @@ class PostgresExecutionRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual({first.created, second.created}, {False, True})
         self.assertEqual(first.execution.id, second.execution.id)
 
+    async def test_readiness_checks_initialized_execution_storage(self) -> None:
+        await self.repository.check_ready()
+
+    async def test_maintenance_expires_queued_work_without_claiming(self) -> None:
+        admission = self._admission("queued-expiry")
+        admitted = await self.repository.admit(
+            Admission(
+                identity=admission.identity,
+                workflow_id=admission.workflow_id,
+                invocation=admission.invocation,
+                protected_context=admission.protected_context,
+                deadline_at=datetime.now(UTC) + DATABASE_DEADLINE_WINDOW,
+            )
+        )
+        await asyncio.sleep(DATABASE_DEADLINE_WAIT_SECONDS)
+
+        await self._repository().maintain()
+
+        failed = await self.repository.get(admitted.execution.id)
+        self.assertEqual(failed.status, "failed")
+        self.assertIsNone(failed.fencing_token)
+        self.assertEqual(failed.processing_attempts, 0)
+        assert failed.error is not None
+        self.assertEqual(failed.error.code, "execution_deadline_exceeded")
+
+    async def test_maintenance_recovers_expired_lease_without_claiming(self) -> None:
+        admitted = await self.repository.admit(self._admission("lease-recovery"))
+        claim = await self.repository.claim_due("worker-1", timedelta(milliseconds=30))
+        assert claim is not None
+        await asyncio.sleep(0.08)
+
+        await self._repository().maintain()
+
+        recovered = await self.repository.get(admitted.execution.id)
+        self.assertEqual(recovered.status, "queued")
+        self.assertIsNone(recovered.fencing_token)
+        self.assertEqual(recovered.processing_attempts, 1)
+
+    async def test_expired_lease_rejects_settlement_before_recovery(self) -> None:
+        admitted = await self.repository.admit(self._admission("late-result"))
+        claim = await self.repository.claim_due("worker-1", timedelta(milliseconds=30))
+        assert claim is not None
+        await asyncio.sleep(0.08)
+
+        with self.assertRaises(StaleWorkClaimError):
+            await self.repository.settle(
+                claim.execution_id,
+                claim.fencing_token,
+                ProcessingSucceeded(WorkflowResult(outputs={})),
+            )
+        durable = await self.repository.get(admitted.execution.id)
+        self.assertIsNone(durable.result)
+        self.assertEqual(durable.fencing_token, claim.fencing_token)
+
     async def test_conflicting_admission_is_rejected(self) -> None:
         first = self._admission("submission-1")
         conflicting = Admission(

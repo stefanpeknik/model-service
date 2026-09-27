@@ -10,7 +10,6 @@ from execution_scheduler.active_work import ActiveWorkRegistry
 from execution_scheduler.contracts import (
     ExecutionError,
     ExecutionErrorCode,
-    ExecutionStatus,
 )
 from execution_scheduler.dispatch import (
     ConfirmedDispatchRejectionError,
@@ -72,10 +71,29 @@ class ExecutionWorker:
     async def run(self, stop: asyncio.Event, *, poll_interval: float) -> None:
         if poll_interval <= 0:
             raise ValueError("poll_interval must be positive")
+        maintenance_task = asyncio.create_task(
+            self._maintain(stop, poll_interval=poll_interval)
+        )
+        try:
+            await self._run_claims(stop, poll_interval=poll_interval)
+        finally:
+            maintenance_task.cancel()
+            await asyncio.gather(maintenance_task, return_exceptions=True)
+
+    async def _maintain(self, stop: asyncio.Event, *, poll_interval: float) -> None:
+        while not stop.is_set():
+            try:
+                await self._repository.maintain()
+            except Exception as error:  # noqa: BLE001 - Keep maintenance alive after adapter failures.
+                logger.error("execution maintenance failed: %s", type(error).__name__)
+            with suppress(TimeoutError):
+                await asyncio.wait_for(stop.wait(), timeout=poll_interval)
+
+    async def _run_claims(self, stop: asyncio.Event, *, poll_interval: float) -> None:
         while not stop.is_set():
             try:
                 worked = await self.run_once()
-            except Exception as error:
+            except Exception as error:  # noqa: BLE001 - One failed claim must not stop the worker.
                 logger.error(
                     "execution worker pass failed: %s",
                     type(error).__name__,
@@ -101,18 +119,34 @@ class ExecutionWorker:
         )
         renewal_task = asyncio.create_task(self._renew_while_running(claim, task))
         try:
+            done, _pending = await asyncio.wait(
+                {task, renewal_task}, return_when=asyncio.FIRST_COMPLETED
+            )
+            if renewal_task in done:
+                directive = await renewal_task
+                if directive is not RenewDirective.CONTINUE:
+                    return True
             settlement = await task
         except asyncio.CancelledError:
-            execution = await self._repository.get(claim.execution_id)
-            if (
-                execution.status in {ExecutionStatus.CANCELLED, ExecutionStatus.FAILED}
-                or execution.fencing_token != claim.fencing_token
-            ):
-                return True
+            current = asyncio.current_task()
+            if current is not None and current.cancelling():
+                raise
+            return True
+        except Exception as error:
+            logger.error(
+                "execution claim failed: id=%s kind=%s attempt=%s token=%s error=%s",
+                claim.execution_id,
+                claim.kind,
+                claim.attempt,
+                claim.fencing_token,
+                type(error).__name__,
+            )
             raise
         finally:
-            renewal_task.cancel()
-            await asyncio.gather(renewal_task, return_exceptions=True)
+            for pending_task in (task, renewal_task):
+                if not pending_task.done():
+                    pending_task.cancel()
+            await asyncio.gather(task, renewal_task, return_exceptions=True)
             self._active_work.unregister(claim.execution_id, claim.fencing_token)
         try:
             await self._repository.settle(
@@ -128,20 +162,21 @@ class ExecutionWorker:
         self,
         claim: WorkClaim,
         task: asyncio.Task[Settlement],
-    ) -> None:
+    ) -> RenewDirective:
         interval = max(self._lease_duration.total_seconds() / 3, 0.001)
         while not task.done():
             await asyncio.sleep(interval)
             if task.done():
-                return
-            directive = await self._repository.renew(
-                claim.execution_id,
-                claim.fencing_token,
-                self._lease_duration,
-            )
+                return RenewDirective.CONTINUE
+            async with asyncio.timeout(interval):
+                directive = await self._repository.renew(
+                    claim.execution_id,
+                    claim.fencing_token,
+                    self._lease_duration,
+                )
             if directive is not RenewDirective.CONTINUE:
-                task.cancel()
-                return
+                return directive
+        return RenewDirective.CONTINUE
 
     async def _execute(self, claim: WorkClaim) -> Settlement:
         if claim.kind is WorkKind.PROCESSING:

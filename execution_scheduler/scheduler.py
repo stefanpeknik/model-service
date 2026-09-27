@@ -48,6 +48,14 @@ class ExecutionScheduler:
         self._clock = clock or (lambda: datetime.now(UTC))
         self._active_work = active_work or ActiveWorkRegistry()
 
+    async def check_ready(self) -> None:
+        try:
+            await self._repository.check_ready()
+        except ExecutionRepositoryUnavailableError as error:
+            raise SchedulingUnavailableError(
+                "execution repository is temporarily unavailable"
+            ) from error
+
     async def schedule(self, request: ScheduleRequest) -> ScheduleResult:
         if request.workflow_id not in self._known_workflows:
             raise UnknownWorkflowError(request.workflow_id)

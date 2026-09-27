@@ -5,7 +5,14 @@ import json
 import unittest
 from datetime import UTC, datetime, timedelta
 
-from httpx import ASGITransport, AsyncClient, MockTransport, Request, Response
+from httpx import (
+    ASGITransport,
+    AsyncClient,
+    ConnectError,
+    MockTransport,
+    Request,
+    Response,
+)
 from starlette.types import Message, Scope
 
 from execution_scheduler.api import create_execution_app
@@ -20,8 +27,12 @@ from execution_scheduler.dispatch import (
     ConfirmedDispatchRejectionError,
     InMemoryWorkflowDispatch,
 )
+from execution_scheduler.health import WorkflowDeploymentHealth
 from execution_scheduler.inference import HttpInferenceProxy
-from execution_scheduler.repository import InMemoryExecutionRepository
+from execution_scheduler.repository import (
+    ExecutionRepositoryUnavailableError,
+    InMemoryExecutionRepository,
+)
 from execution_scheduler.scheduler import ExecutionScheduler
 from execution_scheduler.synchronous import SynchronousWorkflowService
 from execution_scheduler.worker import ExecutionWorker
@@ -542,44 +553,101 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
             unknown_execution.json()["detail"]["code"], "unknown_execution"
         )
 
-    async def test_readiness_reports_declared_but_missing_application(self) -> None:
-        class MissingDeployment:
-            async def missing_workflows(self) -> tuple[str, ...]:
-                return ("prostate-heatmap",)
+    async def test_missing_application_is_reported_separately_from_readiness(
+        self,
+    ) -> None:
+        async with (
+            AsyncClient(
+                transport=MockTransport(lambda _request: Response(200, json={}))
+            ) as ray_client,
+            AsyncClient(
+                transport=ASGITransport(
+                    app=create_execution_app(
+                        self.scheduler,
+                        deployment_health=WorkflowDeploymentHealth(
+                            ray_client,
+                            origin="http://ray",
+                            workflow_ids={"prostate-heatmap"},
+                        ),
+                    )
+                ),
+                base_url="http://model-service",
+            ) as client,
+        ):
+            live = await client.get("/healthz")
+            ready = await client.get("/readyz")
+            workflows = await client.get("/healthz/workflows")
 
-        now = datetime(2026, 9, 17, 8, tzinfo=UTC)
+        self.assertEqual(live.status_code, 200)
+        self.assertEqual(ready.status_code, 200)
+        self.assertEqual(workflows.status_code, 503)
+        self.assertEqual(workflows.json()["status"], "missing_applications")
+        self.assertEqual(
+            workflows.json()["missing_workflows"],
+            ["prostate-heatmap"],
+        )
+
+    async def test_ray_outage_keeps_durable_api_ready_and_usable(self) -> None:
+        def unavailable(request: Request) -> Response:
+            raise ConnectError("Ray is unavailable", request=request)
+
+        async with AsyncClient(transport=MockTransport(unavailable)) as ray_client:
+            app = create_execution_app(
+                self.scheduler,
+                deployment_health=WorkflowDeploymentHealth(
+                    ray_client,
+                    origin="http://ray",
+                    workflow_ids={"prostate-heatmap"},
+                ),
+            )
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://model-service"
+            ) as client:
+                ready = await client.get("/readyz")
+                workflows = await client.get("/healthz/workflows")
+                admitted = await client.post(
+                    "/v1/workflows/prostate-heatmap/schedule",
+                    json={
+                        "provider": "standalone",
+                        "body": {},
+                        "idempotency_key": "ray-outage",
+                    },
+                )
+                execution_id = admitted.json()["execution"]["id"]
+                polled = await client.get(f"/v1/executions/{execution_id}")
+                cancelled = await client.post(f"/v1/executions/{execution_id}/cancel")
+
+        self.assertEqual(ready.status_code, 200)
+        self.assertEqual(workflows.status_code, 503)
+        self.assertEqual(workflows.json()["status"], "unreachable")
+        self.assertEqual(workflows.json()["missing_workflows"], [])
+        self.assertEqual(admitted.status_code, 202)
+        self.assertEqual(polled.json()["status"], "queued")
+        self.assertEqual(cancelled.json()["status"], "cancelled")
+
+    async def test_database_outage_fails_durable_readiness(self) -> None:
+        class UnavailableRepository(InMemoryExecutionRepository):
+            async def check_ready(self) -> None:
+                raise ExecutionRepositoryUnavailableError("database unavailable")
+
         provider = StandaloneProvider()
         scheduler = ExecutionScheduler(
-            repository=InMemoryExecutionRepository(clock=lambda: now),
+            repository=UnavailableRepository(),
             providers={provider.name: provider},
             known_workflows={"prostate-heatmap"},
             default_timeout=timedelta(hours=1),
             maximum_timeout=timedelta(hours=6),
-            clock=lambda: now,
         )
-        client = AsyncClient(
-            transport=ASGITransport(
-                app=create_execution_app(
-                    scheduler,
-                    deployment_health=MissingDeployment(),
-                )
-            ),
+        async with AsyncClient(
+            transport=ASGITransport(app=create_execution_app(scheduler)),
             base_url="http://model-service",
-        )
-        async with client:
-            live = await client.get("/healthz")
+        ) as client:
             ready = await client.get("/readyz")
+            live = await client.get("/healthz")
 
-        self.assertEqual(live.status_code, 200)
         self.assertEqual(ready.status_code, 503)
-        self.assertEqual(
-            ready.json()["detail"]["code"],
-            "workflow_application_unavailable",
-        )
-        self.assertEqual(
-            ready.json()["detail"]["workflows"],
-            ["prostate-heatmap"],
-        )
+        self.assertEqual(ready.json()["detail"]["code"], "scheduling_unavailable")
+        self.assertEqual(live.status_code, 200)
 
     async def test_temporary_scheduling_unavailability_is_retryable(self) -> None:
         class UnavailableScheduler:

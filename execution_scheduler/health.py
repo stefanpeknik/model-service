@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from enum import StrEnum
 from typing import TYPE_CHECKING, Protocol
+
+from httpx import HTTPError
 
 
 if TYPE_CHECKING:
@@ -17,6 +21,19 @@ class RouteClient(Protocol):
     async def get(self, url: str, *, timeout: float) -> RouteResponse: ...
 
 
+class WorkflowDeploymentState(StrEnum):
+    READY = "ready"
+    UNREACHABLE = "unreachable"
+    MISSING_APPLICATIONS = "missing_applications"
+    NOT_CONFIGURED = "not_configured"
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowDeploymentStatus:
+    status: WorkflowDeploymentState
+    missing_workflows: tuple[str, ...] = ()
+
+
 class WorkflowDeploymentHealth:
     def __init__(
         self,
@@ -29,24 +46,30 @@ class WorkflowDeploymentHealth:
         self._origin = origin.rstrip("/")
         self._workflow_ids = frozenset(workflow_ids)
 
-    async def missing_workflows(self) -> tuple[str, ...]:
+    async def check(self) -> WorkflowDeploymentStatus:
         try:
             response = await self._client.get(
                 f"{self._origin}/-/routes",
                 timeout=5,
             )
             if response.status_code != 200:
-                return tuple(sorted(self._workflow_ids))
+                return WorkflowDeploymentStatus(WorkflowDeploymentState.UNREACHABLE)
             routes = response.json()
-        except Exception:
-            return tuple(sorted(self._workflow_ids))
+        except (HTTPError, TypeError, ValueError):
+            return WorkflowDeploymentStatus(WorkflowDeploymentState.UNREACHABLE)
         if not isinstance(routes, dict):
-            return tuple(sorted(self._workflow_ids))
+            return WorkflowDeploymentStatus(WorkflowDeploymentState.UNREACHABLE)
         route_names = _route_names(routes)
-        return tuple(
+        missing = tuple(
             workflow_id
             for workflow_id in sorted(self._workflow_ids)
             if f"/workflows/{workflow_id}" not in route_names
+        )
+        return WorkflowDeploymentStatus(
+            WorkflowDeploymentState.MISSING_APPLICATIONS
+            if missing
+            else WorkflowDeploymentState.READY,
+            missing,
         )
 
 

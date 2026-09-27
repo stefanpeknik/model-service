@@ -25,6 +25,7 @@ from execution_scheduler.dispatch import (
     RemoteWorkflowFailureError,
     UnknownDispatchOutcomeError,
 )
+from execution_scheduler.health import WorkflowDeploymentState, WorkflowDeploymentStatus
 from execution_scheduler.inference import create_inference_router
 from workflow_execution.contracts import (
     InvalidWorkflowInvocation,
@@ -83,6 +84,8 @@ class SchedulerErrorResponse:
 
 
 class ExecutionSchedulerInterface(Protocol):
+    async def check_ready(self) -> None: ...
+
     async def schedule(self, request: ScheduleRequest) -> ScheduleResult: ...
 
     async def get(self, execution_id: str) -> ExecutionView: ...
@@ -99,7 +102,7 @@ class SynchronousWorkflowInterface(Protocol):
 
 
 class DeploymentHealth(Protocol):
-    async def missing_workflows(self) -> tuple[str, ...]: ...
+    async def check(self) -> WorkflowDeploymentStatus: ...
 
 
 def create_execution_app(
@@ -332,20 +335,25 @@ def create_execution_app(
 
     @app.get("/readyz")
     async def readiness() -> dict[str, object]:
-        if deployment_health is None:
-            return {"status": "ok"}
-        missing = await deployment_health.missing_workflows()
-        if missing:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail={
-                    "code": ApiErrorCode.WORKFLOW_APPLICATION_UNAVAILABLE,
-                    "message": "declared workflow applications are not deployed",
-                    "retryable": True,
-                    "workflows": list(missing),
-                },
-            )
+        try:
+            await scheduler.check_ready()
+        except SchedulingUnavailableError as error:
+            raise _http_error(
+                503,
+                ApiErrorCode.SCHEDULING_UNAVAILABLE,
+                "execution repository is temporarily unavailable",
+                retryable=True,
+            ) from error
         return {"status": "ok"}
+
+    @app.get("/healthz/workflows")
+    async def workflow_health(response: Response) -> WorkflowDeploymentStatus:
+        if deployment_health is None:
+            return WorkflowDeploymentStatus(WorkflowDeploymentState.NOT_CONFIGURED)
+        health = await deployment_health.check()
+        if health.status is not WorkflowDeploymentState.READY:
+            response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return health
 
     app.include_router(create_inference_router(inference_proxy))
 
