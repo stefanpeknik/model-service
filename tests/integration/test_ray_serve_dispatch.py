@@ -48,6 +48,7 @@ class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
         from tests.integration.ray_probe_application import ProbeWorkflow
         from workflow_execution.catalog import (
             WorkflowCatalog,
+            WorkflowConfiguration,
             WorkflowDefinition,
             WorkflowValueDefinition,
             validate_empty_configuration,
@@ -71,8 +72,10 @@ class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
         )
         catalog = WorkflowCatalog(
             (definition,),
-            configuration_validators={
-                definition.identifier: validate_empty_configuration
+            configurations={
+                definition.identifier: WorkflowConfiguration(
+                    validator=validate_empty_configuration
+                )
             },
         )
         provider = StandaloneProviderAdapter(catalog)

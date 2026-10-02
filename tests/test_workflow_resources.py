@@ -19,8 +19,10 @@ from integrations.empaia.input_access import EmpaiaInputAccessAdapter
 from workflow_execution.application import WorkflowApplication
 from workflow_execution.catalog import (
     WorkflowCatalog,
+    WorkflowConfiguration,
     WorkflowDefinition,
     WorkflowValueDefinition,
+    validate_empty_configuration,
 )
 from workflow_execution.contracts import (
     InputAccessContext,
@@ -316,7 +318,11 @@ class WorkflowResourceTests(unittest.IsolatedAsyncioTestCase):
             )
             catalog = WorkflowCatalog(
                 (definition,),
-                configuration_validators={"artifact": lambda _values: None},
+                configurations={
+                    "artifact": WorkflowConfiguration(
+                        validator=validate_empty_configuration
+                    )
+                },
             )
             application = WorkflowApplication(definition, Workflow())
 

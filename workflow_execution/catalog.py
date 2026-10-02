@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import field
-from pathlib import Path
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated
 
 import yaml
 from pydantic import ConfigDict, Field, TypeAdapter, model_validator
-from pydantic.dataclasses import dataclass
+from pydantic.dataclasses import dataclass as validated_dataclass
 
 from workflow_execution.contracts import (  # noqa: TC001 - Pydantic resolves enum fields at runtime.
     WorkflowInputKind,
@@ -17,18 +16,18 @@ from workflow_execution.contracts import (  # noqa: TC001 - Pydantic resolves en
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
+    from pathlib import Path
     from typing import Self
 
     from workflow_execution.contracts import JsonValue
 
 
-ROOT = Path(__file__).resolve().parents[1]
 type Identifier = Annotated[str, Field(strict=True, min_length=1)]
 type ConfigurationValidator = Callable[[Mapping[str, JsonValue]], object]
 type MediaType = Annotated[str, Field(strict=True)] | None
 
 
-@dataclass(frozen=True, slots=True, config=ConfigDict(extra="ignore"))
+@validated_dataclass(frozen=True, slots=True, config=ConfigDict(extra="ignore"))
 class WorkflowInputDefinition:
     kinds: Annotated[tuple[WorkflowInputKind, ...], Field(min_length=1)]
     media_type: MediaType = None
@@ -40,13 +39,13 @@ class WorkflowInputDefinition:
         return self
 
 
-@dataclass(frozen=True, slots=True, config=ConfigDict(extra="ignore"))
+@validated_dataclass(frozen=True, slots=True, config=ConfigDict(extra="ignore"))
 class WorkflowValueDefinition:
     kind: WorkflowOutputKind
     media_type: MediaType = None
 
 
-@dataclass(frozen=True, slots=True)
+@validated_dataclass(frozen=True, slots=True)
 class WorkflowDefinition:
     identifier: Identifier
     inputs: dict[Identifier, WorkflowInputDefinition]
@@ -58,6 +57,12 @@ class WorkflowDefinition:
         if self.inputs.keys() & self.outputs.keys():
             raise ValueError("input and output names must not overlap")
         return self
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowConfiguration:
+    validator: ConfigurationValidator
+    defaults: Mapping[str, JsonValue] | None = None
 
 
 class UnknownWorkflow(KeyError):  # noqa: N818 - Contract name from the design.
@@ -78,23 +83,30 @@ class WorkflowCatalog:
         self,
         definitions: tuple[WorkflowDefinition, ...],
         *,
-        configuration_validators: Mapping[str, ConfigurationValidator] | None = None,
-        configuration_defaults: Mapping[str, Mapping[str, JsonValue]] | None = None,
+        configurations: Mapping[str, WorkflowConfiguration],
     ) -> None:
         by_id = {definition.identifier: definition for definition in definitions}
         if len(by_id) != len(definitions):
             raise ValueError("workflow identifiers must be unique")
         self._definitions = by_id
-        self._configuration_validators = dict(configuration_validators or {})
-        self._configuration_defaults = deepcopy(dict(configuration_defaults or {}))
-        if self._configuration_validators.keys() != by_id.keys():
+        if configurations.keys() != by_id.keys():
             raise ValueError(
-                "every declared workflow must have a configuration validator"
+                "every declared workflow must have one configuration registration"
             )
-        if self._configuration_defaults.keys() - by_id.keys():
-            raise ValueError("configuration defaults must reference declared workflows")
-        for workflow_id, defaults in self._configuration_defaults.items():
-            self.validate_configuration(workflow_id, defaults)
+        self._configurations = {
+            workflow_id: WorkflowConfiguration(
+                validator=configuration.validator,
+                defaults=(
+                    deepcopy(dict(configuration.defaults))
+                    if configuration.defaults is not None
+                    else None
+                ),
+            )
+            for workflow_id, configuration in configurations.items()
+        }
+        for workflow_id, configuration in self._configurations.items():
+            if configuration.defaults is not None:
+                self.validate_configuration(workflow_id, configuration.defaults)
 
     @classmethod
     def default(cls) -> WorkflowCatalog:
@@ -107,8 +119,7 @@ class WorkflowCatalog:
         cls,
         directory: Path,
         *,
-        configuration_validators: Mapping[str, ConfigurationValidator] | None = None,
-        configuration_defaults: Mapping[str, Mapping[str, JsonValue]] | None = None,
+        configurations: Mapping[str, WorkflowConfiguration],
     ) -> WorkflowCatalog:
         definitions = tuple(
             _load_definition(path) for path in sorted(directory.glob("*.yaml"))
@@ -117,8 +128,7 @@ class WorkflowCatalog:
             raise ValueError(f"no workflow definitions found in {directory}")
         return cls(
             definitions,
-            configuration_validators=configuration_validators,
-            configuration_defaults=configuration_defaults,
+            configurations=configurations,
         )
 
     def get(self, workflow_id: str) -> WorkflowDefinition:
@@ -135,7 +145,7 @@ class WorkflowCatalog:
         self, workflow_id: str, configuration: Mapping[str, JsonValue]
     ) -> None:
         self.get(workflow_id)
-        self._configuration_validators[workflow_id](configuration)
+        self._configurations[workflow_id].validator(configuration)
 
     def resolve_configuration(
         self,
@@ -144,7 +154,8 @@ class WorkflowCatalog:
         *,
         overrides: Mapping[str, JsonValue] | None = None,
     ) -> dict[str, JsonValue]:
-        resolved = deepcopy(dict(self._configuration_defaults.get(workflow_id, {})))
+        self.get(workflow_id)
+        resolved = deepcopy(dict(self._configurations[workflow_id].defaults or {}))
         resolved.update(deepcopy(dict(overrides or {})))
         resolved.update(deepcopy(dict(configuration)))
         self.validate_configuration(workflow_id, resolved)

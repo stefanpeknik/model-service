@@ -14,8 +14,9 @@ logic.
   validation for every registered workflow.
 - `registry.py` composes the built-in declarations, configuration rules, and
   workflow defaults. Adding YAML without registering its configuration fails
-  at startup. Configuration-free workflows register `validate_empty_configuration`.
-- `deployment_validation.py` checks declarations against Helm applications.
+  at startup. Each workflow ID maps to one `WorkflowConfiguration` containing
+  its validator and optional defaults. Configuration-free workflows register
+  `validate_empty_configuration`.
 - `application.py` validates an invocation, creates input access, enforces its
   deadline, runs the workflow, and validates the result.
 - `shared_storage.py` implements standalone shared-storage input and output
@@ -33,6 +34,10 @@ slide tiling, prediction reconstruction, mask aggregation, and TIFF writing;
 `prostate_heatmap_serve.py` is its Ray Serve and FastAPI adapter. Deployment
 configuration imports `workflow_execution.prostate_heatmap_serve:app`, so that
 module remains a stable entry point.
+
+`tests/test_workflow_deployment.py` checks declarations against the enabled
+Helm applications. Deployment-file inspection is test-only; the runtime uses
+the separate workflow health endpoint to inspect actual Ray routes.
 
 Workflow code receives `WorkflowContext`. It does not inspect provider
 credentials, schedule records, leases, or publication state. New input systems

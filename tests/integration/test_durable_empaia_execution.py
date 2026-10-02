@@ -30,6 +30,7 @@ from integrations.empaia.provider import EmpaiaProviderAdapter
 from workflow_execution.application import WorkflowApplication, WorkflowContext
 from workflow_execution.catalog import (
     WorkflowCatalog,
+    WorkflowConfiguration,
     WorkflowDefinition,
     WorkflowInputDefinition,
     WorkflowValueDefinition,
@@ -132,8 +133,10 @@ class DurableEmpaiaExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
         )
         catalog = WorkflowCatalog(
             (definition,),
-            configuration_validators={
-                definition.identifier: validate_empty_configuration
+            configurations={
+                definition.identifier: WorkflowConfiguration(
+                    validator=validate_empty_configuration
+                )
             },
         )
 
@@ -253,8 +256,10 @@ class DurableEmpaiaExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
         )
         catalog = WorkflowCatalog(
             (definition,),
-            configuration_validators={
-                definition.identifier: validate_empty_configuration
+            configurations={
+                definition.identifier: WorkflowConfiguration(
+                    validator=validate_empty_configuration
+                )
             },
         )
 

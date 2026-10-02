@@ -6,24 +6,31 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from workflow_execution.catalog import (
+    MissingWorkflowApplicationsError,
     WorkflowCatalog,
+    WorkflowConfiguration,
     WorkflowDefinition,
     validate_empty_configuration,
 )
 from workflow_execution.contracts import WorkflowInputKind, WorkflowOutputKind
-from workflow_execution.prostate_heatmap import validate_configuration
+from workflow_execution.prostate_heatmap import (
+    default_configuration,
+    validate_configuration,
+)
 
 
 class WorkflowCatalogTests(unittest.TestCase):
     def test_catalog_fails_closed_when_workflow_validator_is_missing(self) -> None:
         definition = WorkflowDefinition("unregistered", {}, {})
-        with self.assertRaisesRegex(ValueError, "configuration validator"):
-            WorkflowCatalog((definition,))
+        with self.assertRaisesRegex(ValueError, "configuration registration"):
+            WorkflowCatalog((definition,), configurations={})
 
     def test_configuration_free_workflow_explicitly_rejects_parameters(self) -> None:
         catalog = WorkflowCatalog(
             (WorkflowDefinition("empty", {}, {}),),
-            configuration_validators={"empty": validate_empty_configuration},
+            configurations={
+                "empty": WorkflowConfiguration(validator=validate_empty_configuration)
+            },
         )
         self.assertEqual(catalog.resolve_configuration("empty", {}), {})
         with self.assertRaisesRegex(ValueError, "must be empty"):
@@ -43,7 +50,11 @@ class WorkflowCatalogTests(unittest.TestCase):
             path.write_text(json.dumps(definition), encoding="utf-8")
             catalog = WorkflowCatalog.from_directory(
                 Path(directory),
-                configuration_validators={"probe": validate_empty_configuration},
+                configurations={
+                    "probe": WorkflowConfiguration(
+                        validator=validate_empty_configuration
+                    )
+                },
             )
             loaded = catalog.get("probe")
             self.assertEqual(
@@ -58,8 +69,10 @@ class WorkflowCatalogTests(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         WorkflowCatalog.from_directory(
                             Path(directory),
-                            configuration_validators={
-                                "probe": validate_empty_configuration
+                            configurations={
+                                "probe": WorkflowConfiguration(
+                                    validator=validate_empty_configuration
+                                )
                             },
                         )
 
@@ -93,3 +106,69 @@ class WorkflowCatalogTests(unittest.TestCase):
             validate_configuration({**values, "output_tile_height": True})
         with self.assertRaises(ValueError):
             validate_configuration({})
+
+    def test_catalog_reports_declared_workflow_without_application(self) -> None:
+        catalog = WorkflowCatalog.default()
+
+        with self.assertRaises(MissingWorkflowApplicationsError) as raised:
+            catalog.validate_deployed(set())
+
+        self.assertEqual(raised.exception.workflow_ids, ("prostate-heatmap",))
+
+    def test_registration_validates_defaults_at_construction(self) -> None:
+        with self.assertRaisesRegex(ValueError, "must be empty"):
+            WorkflowCatalog(
+                (WorkflowDefinition("empty", {}, {}),),
+                configurations={
+                    "empty": WorkflowConfiguration(
+                        validator=validate_empty_configuration,
+                        defaults={"unexpected": True},
+                    )
+                },
+            )
+
+    def test_registration_rejects_configuration_for_undeclared_workflow(self) -> None:
+        with self.assertRaisesRegex(ValueError, "configuration registration"):
+            WorkflowCatalog(
+                (WorkflowDefinition("empty", {}, {}),),
+                configurations={
+                    workflow_id: WorkflowConfiguration(
+                        validator=validate_empty_configuration
+                    )
+                    for workflow_id in ("empty", "undeclared")
+                },
+            )
+
+    def test_registration_retains_its_own_copy_of_defaults(self) -> None:
+        defaults = default_configuration()
+        catalog = WorkflowCatalog(
+            (WorkflowCatalog.default().get("prostate-heatmap"),),
+            configurations={
+                "prostate-heatmap": WorkflowConfiguration(
+                    validator=validate_configuration, defaults=defaults
+                )
+            },
+        )
+        defaults["output_tile_width"] = 0
+        self.assertEqual(
+            catalog.resolve_configuration("prostate-heatmap", {})["output_tile_width"],
+            256,
+        )
+
+    def test_registration_supports_required_configuration_without_defaults(
+        self,
+    ) -> None:
+        catalog = WorkflowCatalog(
+            (WorkflowCatalog.default().get("prostate-heatmap"),),
+            configurations={
+                "prostate-heatmap": WorkflowConfiguration(
+                    validator=validate_configuration
+                )
+            },
+        )
+        with self.assertRaises(ValueError):
+            catalog.resolve_configuration("prostate-heatmap", {})
+        values = default_configuration()
+        self.assertEqual(
+            catalog.resolve_configuration("prostate-heatmap", values), values
+        )

@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any, cast
 
 from workflow_execution.application import WorkflowApplication, WorkflowContext
 from workflow_execution.catalog import (
-    MissingWorkflowApplicationsError,
     WorkflowCatalog,
     WorkflowDefinition,
     WorkflowValueDefinition,
@@ -486,25 +485,6 @@ class WorkflowApplicationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(raised.exception.code, "workflow_deadline_exceeded")
         self.assertFalse(raised.exception.retryable)
-
-    def test_catalog_reports_declared_workflow_without_application(self) -> None:
-        catalog = WorkflowCatalog.default()
-
-        with self.assertRaises(MissingWorkflowApplicationsError) as raised:
-            catalog.validate_deployed(set())
-
-        self.assertEqual(raised.exception.workflow_ids, ("prostate-heatmap",))
-
-    def test_repo_catalog_matches_enabled_helm_applications(self) -> None:
-        catalog = WorkflowCatalog.default()
-
-        from workflow_execution.deployment_validation import validate_helm_applications
-
-        validate_helm_applications(
-            catalog,
-            Path("helm/rayservice/values.yaml"),
-            Path("helm/rayservice/applications"),
-        )
 
     async def test_shared_artifact_must_be_visible_through_input_access(self) -> None:
         with (
