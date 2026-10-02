@@ -31,7 +31,7 @@ executionScheduler:
   replicas: 1
   image:
     repository: cerit.io/stefanpeknik/model-service-scheduler
-    tag: full-wsi-20261002-1
+    tag: full-wsi-20261002-2
     pullPolicy: IfNotPresent
   database:
     existingSecret: model-service-validation-db
@@ -43,6 +43,8 @@ executionScheduler:
     existingClaim: model-service-validation-shared
     mountPath: /mnt/validation
   inferenceServeOrigin: http://peknik-model-service-model-service-serve-svc.peknik-ns.svc.cluster.local:8000
+  inferenceModelOrigins:
+    prostate-classifier-1: http://model-service-validation-serve-svc.peknik-ns.svc.cluster.local:8000
   inferenceTimeoutSeconds: 900
   defaultDeadlineSeconds: 21600
   maximumDeadlineSeconds: 86400

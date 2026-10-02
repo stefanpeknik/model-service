@@ -85,6 +85,10 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
         inference_proxy=HttpInferenceProxy(
             client,
             origin=config.inference_serve_origin or config.ray_serve_origin,
+            model_origins={
+                model: str(origin)
+                for model, origin in config.inference_model_origins.items()
+            },
             timeout=config.inference_timeout.total_seconds(),
         ),
         lifespan=lifespan,

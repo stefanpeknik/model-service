@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
+
+from pydantic import HttpUrl, StringConstraints, TypeAdapter
 
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+
+
+_ModelPrefix = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9._-]+$")]
+_MODEL_ORIGINS = TypeAdapter(dict[_ModelPrefix, HttpUrl])
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,6 +22,7 @@ class SchedulerSettings:
     provider_context_key: str
     ray_serve_origin: str
     inference_serve_origin: str | None = None
+    inference_model_origins: Mapping[str, HttpUrl] = field(default_factory=dict)
     inference_timeout: timedelta = timedelta(minutes=15)
     lease_duration: timedelta = timedelta(seconds=60)
     poll_interval: float = 0.5
@@ -40,6 +47,9 @@ class SchedulerSettings:
             ray_serve_origin=_required(values, "RAY_SERVE_ORIGIN"),
             inference_serve_origin=values.get("INFERENCE_SERVE_ORIGIN", "").strip()
             or None,
+            inference_model_origins=_MODEL_ORIGINS.validate_json(
+                values.get("INFERENCE_MODEL_ORIGINS", "{}")
+            ),
             inference_timeout=timedelta(
                 seconds=_positive_float(values, "INFERENCE_TIMEOUT_SECONDS", 900)
             ),

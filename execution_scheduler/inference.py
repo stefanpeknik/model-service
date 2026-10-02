@@ -53,16 +53,22 @@ class HttpInferenceProxy:
         client: httpx.AsyncClient,
         *,
         origin: str,
+        model_origins: Mapping[str, str] | None = None,
         timeout: float = 900,
     ) -> None:
         self._client = client
         self._origin = origin.rstrip("/")
+        self._model_origins = {
+            model: url.rstrip("/") for model, url in (model_origins or {}).items()
+        }
         self._timeout = timeout
 
     async def forward(self, request: InferenceRequest) -> InferenceResponse:
+        path = request.path.lstrip("/")
+        origin = self._model_origins.get(path.partition("/")[0], self._origin)
         try:
             response = await self._client.post(
-                f"{self._origin}/{request.path.lstrip('/')}",
+                f"{origin}/{path}",
                 params=request.query,
                 content=request.body,
                 headers=request.headers,

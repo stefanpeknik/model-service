@@ -22,7 +22,7 @@ template:
         resources:
           requests:
             cpu: 8
-            memory: 24Gi
+            memory: 23Gi
             nvidia.com/mig-2g.20gb: 1
           limits:
             cpu: 8

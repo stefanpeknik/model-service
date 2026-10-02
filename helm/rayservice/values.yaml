@@ -32,6 +32,7 @@ executionScheduler:
     existingClaim: ""
     mountPath: /mnt/data
   rayServeOrigin: ""
+  inferenceModelOrigins: {}
   leaseSeconds: 60
   workerPollSeconds: 0.5
   processingAttempts: 3

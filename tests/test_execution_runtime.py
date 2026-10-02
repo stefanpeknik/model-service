@@ -112,6 +112,75 @@ class ExecutionRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(forwarded[1].content, b"compressed-image")
         self.assertEqual(forwarded[1].extensions["timeout"]["read"], 900)
 
+    async def test_named_model_shares_workflow_cluster_without_redirecting_other_models(
+        self,
+    ) -> None:
+        forwarded: list[Request] = []
+
+        def serve_handler(request: Request) -> Response:
+            forwarded.append(request)
+            if request.url.host == "workflow-serve":
+                return Response(200, json=0.25)
+            if request.url.path == "/prostate-classifier-10":
+                return Response(200, json=0.5)
+            return Response(404)
+
+        settings = SchedulerSettings.from_environment(
+            {
+                "DATABASE_URL": "postgresql://unused",
+                "PROVIDER_CONTEXT_KEY": base64.urlsafe_b64encode(b"x" * 32).decode(),
+                "RAY_SERVE_ORIGIN": "http://workflow-serve",
+                "INFERENCE_SERVE_ORIGIN": "http://model-serve",
+                "INFERENCE_MODEL_ORIGINS": '{"prostate-classifier-1":"http://workflow-serve"}',
+            }
+        )
+        async with AsyncClient(transport=MockTransport(serve_handler)) as serve_client:
+            with patch(
+                "execution_scheduler.runtime.httpx.AsyncClient",
+                return_value=serve_client,
+            ):
+                app = create_app(settings)
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://model-service"
+            ) as client:
+                prediction = await client.post(
+                    "/prostate-classifier-1/predict?variant=probe",
+                    content=b"compressed-image",
+                    headers={"x-output-dtype": "float32"},
+                )
+                fallback = await client.post(
+                    "/prostate-classifier-10", content=b"other"
+                )
+
+        self.assertEqual(prediction.status_code, 200)
+        self.assertEqual(prediction.json(), 0.25)
+        self.assertEqual(fallback.status_code, 200)
+        self.assertEqual(fallback.json(), 0.5)
+        self.assertEqual(
+            forwarded[0].url,
+            "http://workflow-serve/prostate-classifier-1/predict?variant=probe",
+        )
+        self.assertEqual(forwarded[0].content, b"compressed-image")
+        self.assertEqual(forwarded[0].headers["x-output-dtype"], "float32")
+        self.assertEqual(forwarded[1].url, "http://model-serve/prostate-classifier-10")
+
+    def test_model_origin_configuration_rejects_invalid_prefixes_and_urls(self) -> None:
+        for origins in (
+            '{"prostate-classifier-1":"file:///tmp/model"}',
+            '{"prostate-classifier-1":12}',
+            '{"prostate-classifier-1/nested":"http://workflow-serve"}',
+            "[]",
+        ):
+            with self.subTest(origins=origins), self.assertRaises(ValueError):
+                SchedulerSettings.from_environment(
+                    {
+                        "DATABASE_URL": "postgresql://unused",
+                        "PROVIDER_CONTEXT_KEY": "unused",
+                        "RAY_SERVE_ORIGIN": "http://workflow-serve",
+                        "INFERENCE_MODEL_ORIGINS": origins,
+                    }
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

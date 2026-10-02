@@ -1,3 +1,4 @@
+import json
 import shutil
 import subprocess
 import unittest
@@ -54,6 +55,9 @@ class WorkflowDeploymentTests(unittest.TestCase):
         worker = ray["spec"]["rayClusterConfig"]["workerGroupSpecs"][0]
         self.assertEqual(worker["minReplicas"], 1)
         self.assertEqual(worker["maxReplicas"], 1)
+        worker_resources = worker["template"]["spec"]["containers"][0]["resources"]
+        self.assertEqual(worker_resources["requests"]["memory"], "23Gi")
+        self.assertEqual(worker_resources["limits"]["memory"], "24Gi")
         self.assertEqual(
             worker["template"]["spec"]["containers"][0]["resources"]["limits"][
                 "nvidia.com/mig-2g.20gb"
@@ -88,6 +92,12 @@ class WorkflowDeploymentTests(unittest.TestCase):
         self.assertEqual(
             environment["INFERENCE_SERVE_ORIGIN"],
             "http://peknik-model-service-model-service-serve-svc.peknik-ns.svc.cluster.local:8000",
+        )
+        self.assertEqual(
+            json.loads(environment["INFERENCE_MODEL_ORIGINS"]),
+            {
+                "prostate-classifier-1": "http://model-service-validation-serve-svc.peknik-ns.svc.cluster.local:8000"
+            },
         )
         worker_outputs = next(
             item
