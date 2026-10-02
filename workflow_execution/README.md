@@ -7,8 +7,9 @@ logic.
 ## Start here
 
 - `contracts.py` contains the typed invocation, input, output, result, and
-  failure values used by every workflow.
-- `serialization.py` is the JSON transport codec for those values.
+  failure values, with their structural validation rules.
+- `serialization.py` converts those values for HTTP transport and JSONB
+  persistence using Pydantic's contract schemas.
 - `catalog.py` loads workflow definitions and validates their configuration.
 - `application.py` validates an invocation, creates input access, enforces its
   deadline, runs the workflow, and validates the result.

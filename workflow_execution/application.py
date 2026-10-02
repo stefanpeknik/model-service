@@ -17,8 +17,8 @@ from workflow_execution.contracts import (
     WorkflowFailureCode,
     WorkflowInvocation,
     WorkflowResult,
+    is_json_value,
 )
-from workflow_execution.serialization import is_json_value
 from workflow_execution.shared_storage import SharedStorageAccessAdapter
 
 

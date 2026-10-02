@@ -35,8 +35,8 @@ from workflow_execution.contracts import (
     InputAccessContext,
     ProviderInput,
     WorkflowInvocation,
+    is_json_value,
 )
-from workflow_execution.serialization import is_json_value
 
 
 if TYPE_CHECKING:

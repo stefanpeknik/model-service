@@ -413,6 +413,33 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
             "invalid_workflow_invocation",
         )
 
+    async def test_synchronous_workflow_requires_explicit_input_kind(self) -> None:
+        runner = SynchronousWorkflowService(
+            WorkflowCatalog.default(),
+            InMemoryWorkflowDispatch(
+                {"prostate-heatmap": lambda _invocation: WorkflowResult(outputs={})}
+            ),
+        )
+        body = self._workflow_invocation()
+        body["inputs"] = {
+            "slide": {"path": "slide.svs"},
+            "region_of_interest": {"kind": "shared_path", "path": "roi.tiff"},
+        }
+        async with AsyncClient(
+            transport=ASGITransport(
+                app=create_execution_app(self.scheduler, workflow_runner=runner)
+            ),
+            base_url="http://model-service",
+        ) as client:
+            response = await client.post(
+                "/v1/workflows/prostate-heatmap/run", json=body
+            )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.json()["detail"]["code"], "invalid_workflow_invocation"
+        )
+
     async def test_synchronous_backpressure_preserves_retry_after(self) -> None:
         async def reject_for_capacity(_invocation: object) -> WorkflowResult:
             raise ConfirmedDispatchRejectionError(timedelta(seconds=7))

@@ -1,14 +1,32 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime  # noqa: TC003 - FastAPI resolves dataclass fields.
+from datetime import datetime
 from enum import StrEnum
-from typing import Literal
+from typing import Annotated, Literal
 
-
-type JsonValue = (
-    bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
+from pydantic import (
+    BeforeValidator,
+    Field,
+    PlainSerializer,
+    TypeAdapter,
+    ValidationError,
 )
+from pydantic import JsonValue as PydanticJsonValue
+
+
+type JsonValue = PydanticJsonValue
+type _NonEmptyString = Annotated[str, Field(strict=True, min_length=1)]
+type _JsonObject = Annotated[dict[str, JsonValue], Field(strict=True)]
+
+
+def _iso_datetime(value: object) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    if not isinstance(value, str):
+        # Pydantic wraps ValueError as validation failure; TypeError escapes it.
+        raise ValueError("deadline_at must be an ISO 8601 string")  # noqa: TRY004
+    return datetime.fromisoformat(value)
 
 
 class WorkflowFailureCode(StrEnum):
@@ -18,58 +36,77 @@ class WorkflowFailureCode(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class InlineInput:
-    value: JsonValue
+    value: JsonValue = None
     kind: Literal["inline"] = "inline"
 
 
 @dataclass(frozen=True, slots=True)
 class SharedPathInput:
-    path: str
+    path: _NonEmptyString
     kind: Literal["shared_path"] = "shared_path"
 
 
 @dataclass(frozen=True, slots=True)
 class ProviderInput:
-    name: str
+    name: _NonEmptyString
     kind: Literal["provider"] = "provider"
 
 
-type WorkflowInput = InlineInput | SharedPathInput | ProviderInput
+type WorkflowInput = Annotated[
+    InlineInput | SharedPathInput | ProviderInput, Field(discriminator="kind")
+]
 
 
 @dataclass(frozen=True, slots=True)
 class InputAccessContext:
-    kind: str
-    state: dict[str, JsonValue]
+    kind: _NonEmptyString
+    state: _JsonObject
 
 
 @dataclass(frozen=True, slots=True)
 class WorkflowInvocation:
-    inputs: dict[str, WorkflowInput]
-    resolved_configuration: dict[str, JsonValue]
+    inputs: Annotated[dict[str, WorkflowInput], Field(strict=True)]
+    resolved_configuration: _JsonObject
     input_access: InputAccessContext
-    deadline_at: datetime
+    deadline_at: Annotated[
+        datetime,
+        BeforeValidator(_iso_datetime),
+        PlainSerializer(datetime.isoformat, return_type=str),
+    ]
 
 
 @dataclass(frozen=True, slots=True)
 class InlineOutput:
-    value: JsonValue
+    value: JsonValue = None
     kind: Literal["inline"] = "inline"
 
 
 @dataclass(frozen=True, slots=True)
 class SharedArtifact:
-    path: str
-    media_type: str | None = None
+    path: _NonEmptyString
+    media_type: Annotated[str, Field(strict=True)] | None = None
     kind: Literal["shared_artifact"] = "shared_artifact"
 
 
-type WorkflowOutput = InlineOutput | SharedArtifact
+type WorkflowOutput = Annotated[
+    InlineOutput | SharedArtifact, Field(discriminator="kind")
+]
 
 
 @dataclass(frozen=True, slots=True)
 class WorkflowResult:
-    outputs: dict[str, WorkflowOutput]
+    outputs: Annotated[dict[str, WorkflowOutput], Field(strict=True)]
+
+
+_JSON_VALUE: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
+
+
+def is_json_value(value: object) -> bool:
+    try:
+        _JSON_VALUE.validate_python(value, strict=True)
+    except ValidationError:
+        return False
+    return True
 
 
 class InvalidWorkflowInvocation(ValueError):  # noqa: N818 - Contract name.

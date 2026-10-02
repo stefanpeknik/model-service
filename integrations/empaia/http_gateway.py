@@ -9,8 +9,7 @@ from urllib.parse import quote
 import httpx
 
 from integrations.empaia.gateway import EmpaiaGatewayError, EmpaiaJobContext
-from workflow_execution.contracts import InlineOutput, SharedArtifact
-from workflow_execution.serialization import is_json_value
+from workflow_execution.contracts import InlineOutput, SharedArtifact, is_json_value
 
 
 if TYPE_CHECKING:
