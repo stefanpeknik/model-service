@@ -151,7 +151,6 @@ class ExecutionTransitions:
         )
         assert claimed.work_kind is not None
         assert claimed.fencing_token is not None
-        assert claimed.lease_expires_at is not None
         attempt = (
             claimed.processing_attempts
             if claimed.work_kind is WorkKind.PROCESSING
@@ -166,10 +165,8 @@ class ExecutionTransitions:
                 kind=claimed.work_kind,
                 invocation=claimed.invocation,
                 protected_context=claimed.protected_context,
-                deadline_at=claimed.deadline_at,
                 attempt=attempt,
                 fencing_token=claimed.fencing_token,
-                lease_expires_at=claimed.lease_expires_at,
                 result=claimed.result,
                 error=claimed.error,
             ),

@@ -27,7 +27,6 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class DirectAccess:
-    slide_id: str
     storage_path: Path
     supported: bool
 
@@ -204,7 +203,6 @@ class HttpEmpaiaGateway:
             return None
         direct = DirectAccessResponse.parse(_response_json(response))
         return DirectAccess(
-            slide_id=direct.slide_id,
             storage_path=Path(direct.storage_path),
             supported=direct.direct_access_supported,
         )

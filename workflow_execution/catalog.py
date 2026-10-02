@@ -69,15 +69,6 @@ class UnknownWorkflow(KeyError):  # noqa: N818 - Contract name from the design.
     pass
 
 
-class MissingWorkflowApplicationsError(RuntimeError):
-    def __init__(self, workflow_ids: tuple[str, ...]) -> None:
-        super().__init__(
-            "declared workflows are missing Ray Serve applications: "
-            + ", ".join(workflow_ids)
-        )
-        self.workflow_ids = workflow_ids
-
-
 class WorkflowCatalog:
     def __init__(
         self,
@@ -151,20 +142,12 @@ class WorkflowCatalog:
         self,
         workflow_id: str,
         configuration: Mapping[str, JsonValue],
-        *,
-        overrides: Mapping[str, JsonValue] | None = None,
     ) -> dict[str, JsonValue]:
         self.get(workflow_id)
         resolved = deepcopy(dict(self._configurations[workflow_id].defaults or {}))
-        resolved.update(deepcopy(dict(overrides or {})))
         resolved.update(deepcopy(dict(configuration)))
         self.validate_configuration(workflow_id, resolved)
         return resolved
-
-    def validate_deployed(self, deployed_workflow_ids: set[str]) -> None:
-        missing = tuple(sorted(self._definitions.keys() - deployed_workflow_ids))
-        if missing:
-            raise MissingWorkflowApplicationsError(missing)
 
 
 def validate_empty_configuration(configuration: Mapping[str, JsonValue]) -> None:

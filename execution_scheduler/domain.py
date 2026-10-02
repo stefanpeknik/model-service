@@ -126,10 +126,8 @@ class WorkClaim:
     kind: WorkKind
     invocation: WorkflowInvocation
     protected_context: dict[str, JsonValue]
-    deadline_at: datetime
     attempt: int
     fencing_token: str
-    lease_expires_at: datetime
     result: WorkflowResult | None
     error: ExecutionError | None
 

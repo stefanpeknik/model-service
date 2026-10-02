@@ -6,7 +6,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from workflow_execution.catalog import (
-    MissingWorkflowApplicationsError,
     WorkflowCatalog,
     WorkflowConfiguration,
     WorkflowDefinition,
@@ -76,16 +75,15 @@ class WorkflowCatalogTests(unittest.TestCase):
                             },
                         )
 
-    def test_defaults_and_provider_overrides_do_not_change_resolved_validation(
+    def test_submitted_configuration_overrides_defaults_without_mutating_them(
         self,
     ) -> None:
         catalog = WorkflowCatalog.default()
         resolved = catalog.resolve_configuration(
             "prostate-heatmap",
-            {"stride_fraction": 0.25},
-            overrides={"output_path": "provider.tiff"},
+            {"stride_fraction": 0.25, "output_path": "requested.tiff"},
         )
-        self.assertEqual(resolved["output_path"], "provider.tiff")
+        self.assertEqual(resolved["output_path"], "requested.tiff")
         self.assertEqual(resolved["stride_fraction"], 0.25)
         resolved["output_tile_width"] = 0
         self.assertEqual(
@@ -106,14 +104,6 @@ class WorkflowCatalogTests(unittest.TestCase):
             validate_configuration({**values, "output_tile_height": True})
         with self.assertRaises(ValueError):
             validate_configuration({})
-
-    def test_catalog_reports_declared_workflow_without_application(self) -> None:
-        catalog = WorkflowCatalog.default()
-
-        with self.assertRaises(MissingWorkflowApplicationsError) as raised:
-            catalog.validate_deployed(set())
-
-        self.assertEqual(raised.exception.workflow_ids, ("prostate-heatmap",))
 
     def test_registration_validates_defaults_at_construction(self) -> None:
         with self.assertRaisesRegex(ValueError, "must be empty"):

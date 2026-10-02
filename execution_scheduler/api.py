@@ -51,7 +51,6 @@ class ApiErrorCode(StrEnum):
     UNKNOWN_EXECUTION = "unknown_execution"
     WORKFLOW_BACKPRESSURE = "workflow_backpressure"
     WORKFLOW_DISPATCH_UNAVAILABLE = "workflow_dispatch_unavailable"
-    WORKFLOW_APPLICATION_UNAVAILABLE = "workflow_application_unavailable"
 
 
 @dataclass(frozen=True, slots=True)

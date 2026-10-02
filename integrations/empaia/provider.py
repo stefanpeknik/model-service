@@ -23,7 +23,6 @@ from execution_scheduler.providers import (
     ProviderFinishOutcome,
     ProviderSuccess,
 )
-from integrations.empaia.configuration import EmpaiaConfigurationRegistry
 from integrations.empaia.gateway import (
     EmpaiaGateway,
     EmpaiaGatewayError,
@@ -61,13 +60,9 @@ class EmpaiaProviderAdapter:
         self,
         catalog: WorkflowCatalog,
         gateway_factory: EmpaiaGatewayFactory,
-        configuration_registry: EmpaiaConfigurationRegistry | None = None,
     ) -> None:
         self._catalog = catalog
         self._gateway_factory = gateway_factory
-        self._configuration_registry = (
-            configuration_registry or EmpaiaConfigurationRegistry.default()
-        )
 
     def identify(self, request: ScheduleRequest) -> SubmissionIdentity:
         installation_id = _required_string(request.body, "installation_id")
@@ -111,8 +106,7 @@ class EmpaiaProviderAdapter:
                     "EMPAIA configuration must contain only JSON-compatible values"
                 )
             try:
-                configuration = self._configuration_registry.resolve(
-                    self._catalog,
+                configuration = self._catalog.resolve_configuration(
                     request.workflow_id,
                     configuration,
                 )
