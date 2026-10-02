@@ -1,0 +1,29 @@
+- name: prostate-classifier-1
+  import_path: models.binary_classifier:app
+  route_prefix: /prostate-classifier-1
+  deployments:
+    - name: BinaryClassifier
+      num_replicas: 1
+      max_ongoing_requests: 128
+      max_queued_requests: 1024
+      ray_actor_options:
+        num_cpus: 4
+        num_gpus: 1
+        memory: 12884901888
+        runtime_env:
+          env_vars:
+            MLFLOW_TRACKING_URI: https://mlflow.rationai.cloud.e-infra.cz
+      user_config:
+        tile_size: 512
+        output_tile_size: 1
+        n_channels: 1
+        mpp: 0.468
+        max_batch_size: 64
+        batch_wait_timeout_s: 0.05
+        intra_op_num_threads: 4
+        trt_max_workspace_size: 8589934592
+        trt_cache_path: /mnt/cache/trt_cache/binary-classifier-1/full-wsi-ray258-b64
+        trt_builder_optimization_level: 3
+        model:
+          _target_: providers.model_provider:mlflow
+          artifact_uri: mlflow-artifacts:/169/17dda4dc3f7449478208e87016ce7d86/artifacts/checkpoints/epoch=0-step=6972/prostate_model_norm.onnx

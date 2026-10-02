@@ -1,0 +1,17 @@
+- name: prostate-heatmap
+  import_path: workflow_execution.prostate_heatmap_serve:app
+  route_prefix: /workflows/prostate-heatmap
+  deployments:
+    - name: ProstateHeatmapApplication
+      num_replicas: 1
+      max_ongoing_requests: 1
+      max_queued_requests: 1
+      backpressure_config:
+        status_code: 429
+        retry_after_s: 5
+      ray_actor_options:
+        num_cpus: 4
+        memory: 8589934592
+      user_config:
+        num_threads: 4
+        max_concurrent_tasks: 32

@@ -29,6 +29,10 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
+        {{- if .Values.fullWsi }}
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        {{- end }}
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -109,6 +113,12 @@ spec:
             - name: shared-storage
               mountPath: {{ .Values.executionScheduler.sharedStorage.mountPath | quote }}
             {{- end }}
+            {{- if .Values.fullWsi }}
+            - name: full-wsi-outputs
+              mountPath: /mnt/validation/outputs
+            - name: full-wsi-outputs
+              mountPath: /mnt/validation/.workflow-attempts
+            {{- end }}
             {{- if .Values.executionScheduler.empaia.enabled }}
             - name: empaia-workspace
               mountPath: {{ .Values.executionScheduler.empaia.workspaceRoot | quote }}
@@ -120,6 +130,11 @@ spec:
         - name: shared-storage
           persistentVolumeClaim:
             claimName: {{ .Values.executionScheduler.sharedStorage.existingClaim | quote }}
+        {{- end }}
+        {{- if .Values.fullWsi }}
+        - name: full-wsi-outputs
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-full-wsi-outputs
         {{- end }}
         {{- if .Values.executionScheduler.empaia.enabled }}
         - name: empaia-workspace

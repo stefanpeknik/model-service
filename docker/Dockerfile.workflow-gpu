@@ -1,0 +1,21 @@
+ARG GPU_BASE_IMAGE=cerit.io/rationai/model-service:2.58.0-gpu
+FROM ghcr.io/astral-sh/uv:0.8.15 AS uv
+
+FROM ${GPU_BASE_IMAGE}
+
+COPY --from=uv /uv /usr/local/bin/uv
+
+RUN uv pip install --python /home/ray/anaconda3/bin/python --no-cache \
+    "httpx>=0.27.0" "pydantic>=2.10.0" "pyyaml>=6.0.2"
+
+ARG SOURCE_REVISION
+LABEL org.opencontainers.image.revision=${SOURCE_REVISION}
+
+WORKDIR /app
+ENV PYTHONPATH=/app
+COPY models models
+COPY providers providers
+COPY misc misc
+COPY integrations integrations
+COPY workflow_execution workflow_execution
+COPY workflow-definitions workflow-definitions

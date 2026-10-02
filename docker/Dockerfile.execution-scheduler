@@ -14,6 +14,8 @@ RUN uv pip install --system --no-cache \
     "uvicorn>=0.30.0"
 
 WORKDIR /app
+ARG SOURCE_REVISION
+LABEL org.opencontainers.image.revision=${SOURCE_REVISION}
 COPY execution_scheduler execution_scheduler
 COPY integrations integrations
 COPY workflow_execution workflow_execution

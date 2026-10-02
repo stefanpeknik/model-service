@@ -1,0 +1,51 @@
+workers:
+  - full-wsi-gpu-workers
+
+applications:
+  - full-wsi-prostate-heatmap
+  - full-wsi-prostate-classifier
+
+rayImage:
+  repository: cerit.io/stefanpeknik/model-service-ray-validation
+  tag: full-wsi-20261002-1
+  pullPolicy: IfNotPresent
+
+fullWsi:
+  gpuImage:
+    repository: cerit.io/stefanpeknik/model-service-workflow-gpu
+    tag: full-wsi-20261002-1
+    pullPolicy: IfNotPresent
+  inputClaim: model-service-validation-shared
+  tensorRtCacheClaim: peknik-persist-model-service-trt-cache
+  storageClassName: nfs-csi
+  outputSize: 32Gi
+  scratchSize: 32Gi
+  mlflowCredentialsSecret: mlflow-public-credentials
+
+validation:
+  appService:
+    enabled: false
+
+executionScheduler:
+  enabled: true
+  replicas: 1
+  image:
+    repository: cerit.io/stefanpeknik/model-service-scheduler
+    tag: full-wsi-20261002-1
+    pullPolicy: IfNotPresent
+  database:
+    existingSecret: model-service-validation-db
+    urlKey: database-url
+  encryption:
+    existingSecret: model-service-validation-db
+    keyKey: provider-context-key
+  sharedStorage:
+    existingClaim: model-service-validation-shared
+    mountPath: /mnt/validation
+  inferenceServeOrigin: http://peknik-model-service-model-service-serve-svc.peknik-ns.svc.cluster.local:8000
+  inferenceTimeoutSeconds: 900
+  defaultDeadlineSeconds: 21600
+  maximumDeadlineSeconds: 86400
+  processingAttempts: 2
+  empaia:
+    enabled: false
