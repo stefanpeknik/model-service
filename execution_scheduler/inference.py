@@ -12,7 +12,9 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 
-_REQUEST_HEADERS = frozenset({"accept", "content-type", "x-output-dtype"})
+_REQUEST_HEADERS = frozenset(
+    {"accept", "content-type", "x-output-dtype", "x-pool-tokens"}
+)
 _RESPONSE_EXCLUDED_HEADERS = frozenset(
     {"connection", "content-length", "keep-alive", "transfer-encoding", "upgrade"}
 )

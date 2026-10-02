@@ -87,6 +87,108 @@ class FakeVipsImageType:
 
 
 class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
+    async def test_invalid_rectangle_geometry_is_a_safe_integration_error(self) -> None:
+        for coordinate in [float("nan"), float("inf"), True, "10"]:
+            with self.subTest(coordinate=coordinate), TemporaryDirectory() as directory:
+                writer = RecordingRectangleWriter()
+
+                def handle(
+                    request: httpx.Request, coordinate=coordinate
+                ) -> httpx.Response:
+                    if request.url.path.endswith("/direct-access"):
+                        return httpx.Response(404)
+                    if request.url.path.endswith("/inputs/slide"):
+                        return httpx.Response(
+                            200,
+                            json={
+                                "id": "slide-1",
+                                "extent": {"x": 1200, "y": 600, "z": 1},
+                                "pixel_size_nm": {"x": 250, "y": 250},
+                                "levels": [{"extent": {"x": 1200, "y": 600}}],
+                            },
+                        )
+                    return httpx.Response(
+                        200,
+                        content=json.dumps(
+                            {
+                                "upper_left": [coordinate, 20],
+                                "width": 100,
+                                "height": 50,
+                            }
+                        ),
+                    )
+
+                gateway = HttpEmpaiaGateway(
+                    "https://empaia.example",
+                    "job-1",
+                    "credential",
+                    client=httpx.AsyncClient(
+                        transport=httpx.MockTransport(handle),
+                        base_url="https://empaia.example",
+                    ),
+                    rectangle_writer=writer,
+                )
+                try:
+                    with self.assertRaises(EmpaiaGatewayError) as raised:
+                        await gateway.materialize_input(
+                            "roi", str(Path(directory) / "roi.tiff")
+                        )
+                    self.assertFalse(raised.exception.retryable)
+                    self.assertEqual(writer.calls, [])
+                finally:
+                    await gateway.close()
+
+    async def test_configuration_rejects_nested_nonfinite_values(self) -> None:
+        gateway = HttpEmpaiaGateway(
+            "https://empaia.example",
+            "job-1",
+            "credential",
+            client=httpx.AsyncClient(
+                transport=httpx.MockTransport(
+                    lambda _request: httpx.Response(
+                        200,
+                        content='{"global": {"nested": [NaN]}, "customer": {}}',
+                    )
+                ),
+                base_url="https://empaia.example",
+            ),
+        )
+        try:
+            with self.assertRaises(EmpaiaGatewayError):
+                await gateway.get_configuration()
+        finally:
+            await gateway.close()
+
+    async def test_mutation_guard_runs_before_authenticated_request(self) -> None:
+        events = []
+
+        async def guard():
+            events.append("guard")
+
+        def handle(request: httpx.Request) -> httpx.Response:
+            self.assertEqual(request.headers["Authorization"], "Bearer credential")
+            events.append("request")
+            return httpx.Response(503)
+
+        gateway = HttpEmpaiaGateway(
+            "https://empaia.example",
+            "job-1",
+            "credential",
+            client=httpx.AsyncClient(
+                transport=httpx.MockTransport(handle),
+                base_url="https://empaia.example",
+            ),
+        )
+        gateway.set_before_mutation(guard)
+        try:
+            with self.assertRaises(EmpaiaGatewayError) as raised:
+                await gateway.finalize()
+            self.assertEqual(events, ["guard", "request"])
+            self.assertTrue(raised.exception.retryable)
+            self.assertTrue(raised.exception.outcome_unknown)
+        finally:
+            await gateway.close()
+
     async def test_configuration_is_flattened_and_direct_input_is_linked(self) -> None:
         with TemporaryDirectory() as directory:
             source = Path(directory) / "slide.tiff"

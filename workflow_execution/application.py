@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import logging
+import math
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,7 +21,11 @@ from workflow_execution.contracts import (
     WorkflowResult,
     is_json_value,
 )
+from workflow_execution.resources import close_resource
 from workflow_execution.shared_storage import SharedStorageAccessAdapter
+
+
+logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
@@ -38,6 +44,8 @@ class WorkflowInputAccess(Protocol):
     def output_path(self, relative_path: str) -> Path: ...
 
     def is_visible_artifact(self, path: Path) -> bool: ...
+
+    async def aclose(self) -> None: ...
 
 
 class WorkflowInputAccessAdapter(Protocol):
@@ -67,8 +75,12 @@ class WorkflowApplication:
         workflow: Workflow,
         *,
         access_adapters: Mapping[str, WorkflowInputAccessAdapter] | None = None,
+        cleanup_timeout_seconds: float = 10,
     ) -> None:
+        if not math.isfinite(cleanup_timeout_seconds) or cleanup_timeout_seconds <= 0:
+            raise ValueError("cleanup timeout must be finite and positive")
         self._definition = definition
+        self._cleanup_timeout_seconds = cleanup_timeout_seconds
         self._workflow = workflow
         self._access_adapters: dict[str, WorkflowInputAccessAdapter] = {
             "shared_storage": SharedStorageAccessAdapter(),
@@ -78,46 +90,67 @@ class WorkflowApplication:
 
     async def run(self, invocation: WorkflowInvocation) -> WorkflowResult:
         validate_workflow_invocation(self._definition, invocation)
+        access: WorkflowInputAccess | None = None
+        primary_failure: BaseException | None = None
         try:
-            access = await self._create_access(invocation)
+            timeout_seconds = (
+                invocation.deadline_at - datetime.now(UTC)
+            ).total_seconds()
+            timeout = asyncio.timeout(max(0, timeout_seconds))
             try:
-                context = WorkflowContext(
-                    inputs=access,
-                    configuration=invocation.resolved_configuration,
-                    deadline_at=invocation.deadline_at,
-                )
-                timeout_seconds = (
-                    invocation.deadline_at - datetime.now(UTC)
-                ).total_seconds()
-                timeout = asyncio.timeout(max(0, timeout_seconds))
-                try:
-                    async with timeout:
-                        result = await self._workflow.run(context)
-                except TimeoutError as error:
-                    if not timeout.expired():
-                        raise
-                    raise WorkflowFailure(
-                        code=WorkflowFailureCode.DEADLINE_EXCEEDED,
-                        safe_message="workflow deadline was exceeded",
-                        retryable=False,
-                    ) from error
-                self._validate_result(result, access)
-            finally:
-                close = getattr(access, "aclose", None)
-                if close is not None:
-                    await close()
+                async with timeout:
+                    access = await self._create_access(invocation)
+                    context = WorkflowContext(
+                        inputs=access,
+                        configuration=invocation.resolved_configuration,
+                        deadline_at=invocation.deadline_at,
+                    )
+                    result = await self._workflow.run(context)
+                    self._validate_result(result, access)
+            except TimeoutError as error:
+                if not timeout.expired():
+                    raise
+                raise WorkflowFailure(
+                    code=WorkflowFailureCode.DEADLINE_EXCEEDED,
+                    safe_message="workflow deadline was exceeded",
+                    retryable=False,
+                ) from error
         except (
             InvalidWorkflowInvocation,
             WorkflowContractViolation,
             WorkflowFailure,
-        ):
+        ) as error:
+            primary_failure = error
             raise
         except Exception as error:
-            raise WorkflowFailure(
+            primary_failure = WorkflowFailure(
                 code=WorkflowFailureCode.INTERNAL_ERROR,
                 safe_message="workflow failed unexpectedly",
                 retryable=True,
-            ) from error
+            )
+            raise primary_failure from error
+        except BaseException as error:
+            primary_failure = error
+            raise
+        finally:
+            if access is not None:
+                try:
+                    await close_resource(
+                        access.aclose,
+                        timeout_seconds=self._cleanup_timeout_seconds,
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except Exception as error:
+                    if primary_failure is None:
+                        raise WorkflowFailure(
+                            code=WorkflowFailureCode.INTERNAL_ERROR,
+                            safe_message="workflow resource cleanup failed",
+                            retryable=True,
+                        ) from error
+                    logger.warning(
+                        "workflow resource cleanup failed: %s", type(error).__name__
+                    )
         return result
 
     async def _create_access(

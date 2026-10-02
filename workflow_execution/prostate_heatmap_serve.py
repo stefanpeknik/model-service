@@ -15,6 +15,7 @@ from workflow_execution.contracts import (
     WorkflowInvocation,
     WorkflowResult,
 )
+from workflow_execution.heatmap import SlideHeatmapProcessor
 from workflow_execution.http import (
     WorkflowErrorResponse,
     WorkflowHTTPErrorCode,
@@ -22,8 +23,8 @@ from workflow_execution.http import (
 )
 from workflow_execution.prostate_heatmap import (
     ProstateHeatmapWorkflow,
-    RayProstateHeatmapProcessor,
 )
+from workflow_execution.ray_heatmap import RayHeatmapPredictor
 
 
 class Config(TypedDict):
@@ -60,7 +61,8 @@ class ProstateHeatmapApplication:
     def reconfigure(self, config: Config) -> None:
         catalog = WorkflowCatalog.default()
         definition = catalog.get("prostate-heatmap")
-        processor = RayProstateHeatmapProcessor(
+        processor = SlideHeatmapProcessor(
+            RayHeatmapPredictor("prostate-classifier-1"),
             num_threads=config["num_threads"],
             max_concurrent_tasks=config["max_concurrent_tasks"],
         )

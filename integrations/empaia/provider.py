@@ -110,12 +110,9 @@ class EmpaiaProviderAdapter:
                 raise InvalidScheduleRequestError(
                     "EMPAIA configuration must contain only JSON-compatible values"
                 )
-            configuration = self._configuration_registry.resolve(
-                request.workflow_id,
-                configuration,
-            )
             try:
-                self._catalog.validate_configuration(
+                configuration = self._configuration_registry.resolve(
+                    self._catalog,
                     request.workflow_id,
                     configuration,
                 )
@@ -231,14 +228,14 @@ async def _finish_gateway(
         raise
     try:
         await gateway.close()
-    except Exception as error:
+    except Exception as error:  # noqa: BLE001 - Cleanup must preserve the committed outcome.
         logger.warning("EMPAIA gateway cleanup failed: %s", type(error).__name__)
 
 
 async def _close_preserving_outcome(gateway: EmpaiaGateway) -> None:
     try:
         await gateway.close()
-    except Exception as error:
+    except Exception as error:  # noqa: BLE001 - Cleanup must preserve the original error.
         logger.warning("EMPAIA gateway cleanup failed: %s", type(error).__name__)
 
 

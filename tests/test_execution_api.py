@@ -4,6 +4,7 @@ import asyncio
 import json
 import unittest
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from httpx import (
     ASGITransport,
@@ -45,9 +46,16 @@ from workflow_execution.contracts import (
 )
 
 
+if TYPE_CHECKING:
+    from execution_scheduler.domain import ExecutionRecord
+
+
 class RecordingScheduler:
     def __init__(self) -> None:
         self.requests: list[ScheduleRequest] = []
+
+    async def check_ready(self) -> None:
+        return None
 
     async def schedule(self, request: ScheduleRequest) -> ScheduleResult:
         self.requests.append(request)
@@ -304,6 +312,8 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
                 headers={
                     "content-type": "application/octet-stream",
                     "x-output-dtype": "float32",
+                    "x-pool-tokens": "false",
+                    "authorization": "Bearer scheduler-only",
                 },
             )
             heatmap = await client.post(
@@ -328,6 +338,8 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
             "application/octet-stream",
         )
         self.assertEqual(forwarded[0].headers["x-output-dtype"], "float32")
+        self.assertEqual(forwarded[0].headers["x-pool-tokens"], "false")
+        self.assertNotIn("authorization", forwarded[0].headers)
         self.assertEqual(heatmap.status_code, 200)
         self.assertEqual(heatmap.text, "/mnt/output/heatmap.tiff")
         self.assertEqual(forwarded[1].url.path, "/heatmap-builder")
@@ -439,6 +451,33 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             response.json()["detail"]["code"], "invalid_workflow_invocation"
         )
+
+    async def test_synchronous_workflow_rejects_nonfinite_context_values(self) -> None:
+        async def reject_dispatch(_invocation: object) -> WorkflowResult:
+            raise AssertionError("invalid invocation was dispatched")
+
+        runner = SynchronousWorkflowService(
+            WorkflowCatalog.default(),
+            InMemoryWorkflowDispatch({"prostate-heatmap": reject_dispatch}),
+        )
+        async with AsyncClient(
+            transport=ASGITransport(
+                app=create_execution_app(self.scheduler, workflow_runner=runner),
+                raise_app_exceptions=False,
+            ),
+            base_url="http://model-service",
+        ) as client:
+            for value in (float("nan"), float("inf"), float("-inf")):
+                with self.subTest(value=value):
+                    body = self._workflow_invocation()
+                    body["input_access"]["state"]["nested"] = [value]
+                    response = await client.post(
+                        "/v1/workflows/prostate-heatmap/run",
+                        content=json.dumps(body),
+                        headers={"content-type": "application/json"},
+                    )
+                    self.assertEqual(response.status_code, 422)
+                    self.assertFalse(response.json()["detail"]["retryable"])
 
     async def test_synchronous_backpressure_preserves_retry_after(self) -> None:
         async def reject_for_capacity(_invocation: object) -> WorkflowResult:
@@ -676,8 +715,47 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ready.json()["detail"]["code"], "scheduling_unavailable")
         self.assertEqual(live.status_code, 200)
 
+    async def test_database_outage_makes_polling_and_cancellation_retryable(
+        self,
+    ) -> None:
+        class UnavailableRepository(InMemoryExecutionRepository):
+            async def get(self, execution_id: str) -> ExecutionRecord:
+                raise ExecutionRepositoryUnavailableError(execution_id)
+
+            async def request_cancel(self, execution_id: str) -> ExecutionRecord:
+                raise ExecutionRepositoryUnavailableError(execution_id)
+
+        provider = StandaloneProvider()
+        scheduler = ExecutionScheduler(
+            repository=UnavailableRepository(),
+            providers={provider.name: provider},
+            known_workflows={"prostate-heatmap"},
+            default_timeout=timedelta(hours=1),
+            maximum_timeout=timedelta(hours=6),
+        )
+        async with AsyncClient(
+            transport=ASGITransport(
+                app=create_execution_app(scheduler), raise_app_exceptions=False
+            ),
+            base_url="http://model-service",
+        ) as client:
+            responses = [
+                await client.get("/v1/executions/execution-1"),
+                await client.post("/v1/executions/execution-1/cancel"),
+            ]
+
+        for response in responses:
+            self.assertEqual(response.status_code, 503)
+            self.assertEqual(
+                response.json()["detail"]["code"], "scheduling_unavailable"
+            )
+            self.assertTrue(response.json()["detail"]["retryable"])
+
     async def test_temporary_scheduling_unavailability_is_retryable(self) -> None:
         class UnavailableScheduler:
+            async def check_ready(self) -> None:
+                raise SchedulingUnavailableError("repository unavailable")
+
             async def schedule(self, _request: ScheduleRequest) -> ScheduleResult:
                 raise SchedulingUnavailableError(
                     "execution scheduling is temporarily unavailable"

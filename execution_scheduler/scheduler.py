@@ -102,10 +102,21 @@ class ExecutionScheduler:
         )
 
     async def get(self, execution_id: str) -> ExecutionView:
-        return self._view(await self._repository.get(execution_id))
+        try:
+            execution = await self._repository.get(execution_id)
+        except ExecutionRepositoryUnavailableError as error:
+            raise SchedulingUnavailableError(
+                "execution repository is temporarily unavailable"
+            ) from error
+        return self._view(execution)
 
     async def cancel(self, execution_id: str) -> ExecutionView:
-        execution = await self._repository.request_cancel(execution_id)
+        try:
+            execution = await self._repository.request_cancel(execution_id)
+        except ExecutionRepositoryUnavailableError as error:
+            raise SchedulingUnavailableError(
+                "execution repository is temporarily unavailable"
+            ) from error
         self._active_work.cancel(execution_id)
         return self._view(execution)
 

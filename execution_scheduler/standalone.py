@@ -93,4 +93,3 @@ class StandaloneProviderAdapter:
         before_mutation: BeforeMutation,
     ) -> None:
         del before_mutation
-        return None

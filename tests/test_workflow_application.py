@@ -26,10 +26,7 @@ from workflow_execution.contracts import (
     WorkflowInvocation,
     WorkflowResult,
 )
-from workflow_execution.prostate_heatmap import (
-    HeatmapBuildRequest,
-    ProstateHeatmapWorkflow,
-)
+from workflow_execution.prostate_heatmap import ProstateHeatmapWorkflow
 from workflow_execution.serialization import (
     invocation_from_dict,
     invocation_to_dict,
@@ -40,6 +37,8 @@ from workflow_execution.serialization import (
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+
+    from workflow_execution.heatmap import HeatmapBuildRequest
 
 
 class FunctionWorkflow:
@@ -98,6 +97,9 @@ class FixedPathAccess:
         except (OSError, ValueError):
             return False
         return path.is_file()
+
+    async def aclose(self) -> None:
+        return None
 
 
 class FixedPathAccessAdapter:
@@ -496,7 +498,10 @@ class WorkflowApplicationTests(unittest.IsolatedAsyncioTestCase):
     def test_repo_catalog_matches_enabled_helm_applications(self) -> None:
         catalog = WorkflowCatalog.default()
 
-        catalog.validate_helm_applications(
+        from workflow_execution.deployment_validation import validate_helm_applications
+
+        validate_helm_applications(
+            catalog,
             Path("helm/rayservice/values.yaml"),
             Path("helm/rayservice/applications"),
         )

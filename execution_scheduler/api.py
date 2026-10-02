@@ -302,11 +302,18 @@ def create_execution_app(
     @app.get(
         "/v1/executions/{execution_id}",
         response_model=ExecutionView,
-        responses={404: {"model": SchedulerErrorResponse}},
+        responses={
+            404: {"model": SchedulerErrorResponse},
+            503: {"model": SchedulerErrorResponse},
+        },
     )
     async def get_execution(execution_id: str) -> ExecutionView:
         try:
             return await scheduler.get(execution_id)
+        except SchedulingUnavailableError as error:
+            raise _http_error(
+                503, ApiErrorCode.SCHEDULING_UNAVAILABLE, str(error), retryable=True
+            ) from error
         except UnknownExecutionError as error:
             raise _http_error(
                 404,
@@ -317,11 +324,18 @@ def create_execution_app(
     @app.post(
         "/v1/executions/{execution_id}/cancel",
         response_model=ExecutionView,
-        responses={404: {"model": SchedulerErrorResponse}},
+        responses={
+            404: {"model": SchedulerErrorResponse},
+            503: {"model": SchedulerErrorResponse},
+        },
     )
     async def cancel_execution(execution_id: str) -> ExecutionView:
         try:
             return await scheduler.cancel(execution_id)
+        except SchedulingUnavailableError as error:
+            raise _http_error(
+                503, ApiErrorCode.SCHEDULING_UNAVAILABLE, str(error), retryable=True
+            ) from error
         except UnknownExecutionError as error:
             raise _http_error(
                 404,

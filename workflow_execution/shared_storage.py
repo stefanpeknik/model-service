@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path, PurePosixPath
 
 from workflow_execution.contracts import (
@@ -11,7 +12,13 @@ from workflow_execution.contracts import (
 
 
 class SharedStorageAccess:
-    def __init__(self, root: Path, inputs: dict[str, WorkflowInput]) -> None:
+    def __init__(
+        self,
+        root: Path,
+        inputs: dict[str, WorkflowInput],
+        *,
+        processing_attempt_id: str | None = None,
+    ) -> None:
         try:
             self._root = root.resolve(strict=True)
         except OSError as error:
@@ -21,6 +28,13 @@ class SharedStorageAccess:
         if not self._root.is_dir():
             raise InvalidWorkflowInvocation("shared storage root must be a directory")
         self._inputs = inputs
+        self._output_prefix = (
+            ".workflow-attempts/"
+            + hashlib.sha256(processing_attempt_id.encode()).hexdigest()
+            + "/"
+            if processing_attempt_id is not None
+            else ""
+        )
 
     def input_path(self, name: str) -> Path:
         value = self._inputs.get(name)
@@ -34,7 +48,12 @@ class SharedStorageAccess:
         return path
 
     def output_path(self, relative_path: str) -> Path:
-        return self._resolve(relative_path, must_exist=False)
+        return self._resolve(
+            relative_path, must_exist=False, prefix=self._output_prefix
+        )
+
+    async def aclose(self) -> None:
+        return None
 
     def is_visible_artifact(self, path: Path) -> bool:
         try:
@@ -44,7 +63,13 @@ class SharedStorageAccess:
             return False
         return resolved.is_file()
 
-    def _resolve(self, relative_path: str, *, must_exist: bool) -> Path:
+    def _resolve(
+        self,
+        relative_path: str,
+        *,
+        must_exist: bool,
+        prefix: str = "",
+    ) -> Path:
         path = PurePosixPath(relative_path)
         if (
             not relative_path
@@ -56,7 +81,7 @@ class SharedStorageAccess:
             raise InvalidWorkflowInvocation(
                 "shared storage paths must be traversal-free relative paths"
             )
-        candidate = self._root.joinpath(*path.parts)
+        candidate = self._root.joinpath(*PurePosixPath(prefix).parts, *path.parts)
         try:
             resolved = candidate.resolve(strict=must_exist)
             resolved.relative_to(self._root)
@@ -74,4 +99,15 @@ class SharedStorageAccessAdapter:
             raise InvalidWorkflowInvocation(
                 "shared storage input access requires a root"
             )
-        return SharedStorageAccess(Path(root), invocation.inputs)
+        processing_attempt_id = invocation.input_access.state.get(
+            "processing_attempt_id"
+        )
+        if processing_attempt_id is not None and (
+            not isinstance(processing_attempt_id, str) or not processing_attempt_id
+        ):
+            raise InvalidWorkflowInvocation("processing_attempt_id must be non-empty")
+        return SharedStorageAccess(
+            Path(root),
+            invocation.inputs,
+            processing_attempt_id=processing_attempt_id,
+        )

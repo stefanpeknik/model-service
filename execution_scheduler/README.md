@@ -42,6 +42,8 @@ workflow processing and provider finish.
   executions.
 - `../integrations/empaia/http_gateway.py` implements the AppService HTTP and
   direct-access boundary.
+- `../integrations/empaia/responses.py` validates consumed AppService response
+  fields; `materialization.py` owns local input linking and writing.
 - `../integrations/empaia/image_io.py` materializes rectangle masks and
   publishes TIFF artifacts as EMPAIA pixelmaps.
 - `health.py` reports Ray availability and missing workflow routes through

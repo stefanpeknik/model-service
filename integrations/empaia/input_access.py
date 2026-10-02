@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from typing import TYPE_CHECKING
 
 from integrations.empaia.gateway import EmpaiaJobContext
@@ -8,6 +9,10 @@ from workflow_execution.contracts import (
     InvalidWorkflowInvocation,
     ProviderInput,
 )
+from workflow_execution.resources import close_resource
+
+
+logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
@@ -81,9 +86,9 @@ class EmpaiaInputAccessAdapter:
             f"{context.api_url}\0{context.job_id}\0{processing_attempt_id}".encode()
         ).hexdigest()
         root = self._workspace_root / execution_key
-        root.mkdir(parents=True, exist_ok=True)
         paths: dict[str, Path] = {}
         try:
+            root.mkdir(parents=True, exist_ok=True)
             for name, value in invocation.inputs.items():
                 if not isinstance(value, ProviderInput):
                     raise InvalidWorkflowInvocation(
@@ -97,8 +102,11 @@ class EmpaiaInputAccessAdapter:
                         f"EMPAIA input {name!r} was not materialized"
                     )
                 paths[name] = path
-        except Exception:
-            await gateway.close()
+        except BaseException:
+            try:
+                await close_resource(gateway.close)
+            except Exception as error:  # noqa: BLE001 - Preserve acquisition failure after cleanup failure.
+                logger.warning("EMPAIA input cleanup failed: %s", type(error).__name__)
             raise
         return EmpaiaInputAccess(root, gateway, paths)
 

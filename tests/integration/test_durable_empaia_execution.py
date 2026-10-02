@@ -33,6 +33,7 @@ from workflow_execution.catalog import (
     WorkflowDefinition,
     WorkflowInputDefinition,
     WorkflowValueDefinition,
+    validate_empty_configuration,
 )
 from workflow_execution.contracts import (
     JsonValue,
@@ -129,7 +130,12 @@ class DurableEmpaiaExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 )
             },
         )
-        catalog = WorkflowCatalog((definition,))
+        catalog = WorkflowCatalog(
+            (definition,),
+            configuration_validators={
+                definition.identifier: validate_empty_configuration
+            },
+        )
 
         with TemporaryDirectory() as directory:
             root = Path(directory)
@@ -245,7 +251,12 @@ class DurableEmpaiaExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 )
             },
         )
-        catalog = WorkflowCatalog((definition,))
+        catalog = WorkflowCatalog(
+            (definition,),
+            configuration_validators={
+                definition.identifier: validate_empty_configuration
+            },
+        )
 
         with TemporaryDirectory() as directory:
             root = Path(directory)

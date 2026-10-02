@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 from PIL import Image
@@ -12,10 +13,11 @@ from workflow_execution.application import WorkflowApplication
 from workflow_execution.catalog import WorkflowCatalog
 from workflow_execution.contracts import WorkflowInvocation, WorkflowResult
 from workflow_execution.http import WorkflowErrorResponse, run_workflow_http
-from workflow_execution.prostate_heatmap import (
-    HeatmapBuildRequest,
-    ProstateHeatmapWorkflow,
-)
+from workflow_execution.prostate_heatmap import ProstateHeatmapWorkflow
+
+
+if TYPE_CHECKING:
+    from workflow_execution.heatmap import HeatmapBuildRequest
 
 
 class ValidationHeatmapProcessor:

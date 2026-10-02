@@ -16,6 +16,15 @@ Legacy model-inference and slide operations also use this public origin. The
 execution-scheduler ingress forwards their existing POST paths and binary
 payloads to Ray Serve, so clients do not need an internal Ray Serve address.
 
+Scheduled shared-storage artifacts are written under
+`.workflow-attempts/<attempt-hash>/` beneath the invocation's storage root.
+Read the artifact path from the completed execution result, rather than
+constructing it from `resolved_configuration.output_path`. Different attempts
+cannot overwrite each other's outputs. Synchronous workflow invocations and
+the legacy slide route keep their existing requested destinations. Artifacts
+are retained after execution; retention and garbage collection need an
+operational policy before sustained use.
+
 ## Initial operating values
 
 | Setting | Default | Purpose |
@@ -92,6 +101,13 @@ and configure `executionScheduler.empaia.gatewayFactory` as a
 the EMPAIA API URL, job ID, and original job credential. It returns the gateway
 used by preparation, workflow input access, and provider finish. The gateway
 module must be present in both the scheduler and Ray worker images.
+
+The current direct-access adapter trusts readable paths supplied by AppService
+and links them into its workspace. It does not enforce a storage-root or WSI
+plugin allow-list. Keep EMPAIA disabled outside the controlled validation
+profile until service authentication and storage trust are resolved. A job
+credential authenticates outbound AppService requests, not the caller of the
+model-service admission endpoint.
 
 The original credential is never refreshed. Its real expiry caps the complete
 execution deadline. Workflow results remain durable while required output

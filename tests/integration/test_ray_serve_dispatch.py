@@ -50,6 +50,7 @@ class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
             WorkflowCatalog,
             WorkflowDefinition,
             WorkflowValueDefinition,
+            validate_empty_configuration,
         )
 
         schema = f"test_assembled_{uuid4().hex}"
@@ -68,7 +69,12 @@ class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
             inputs={},
             outputs={"value": WorkflowValueDefinition(kind="inline")},
         )
-        catalog = WorkflowCatalog((definition,))
+        catalog = WorkflowCatalog(
+            (definition,),
+            configuration_validators={
+                definition.identifier: validate_empty_configuration
+            },
+        )
         provider = StandaloneProviderAdapter(catalog)
         ray.init(num_cpus=2, include_dashboard=False)
         try:
