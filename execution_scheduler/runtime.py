@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import asyncio
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
-from uuid import uuid4
 
 import httpx
 from fastapi import FastAPI
 
-from execution_scheduler.active_work import ActiveWorkRegistry
 from execution_scheduler.api import create_execution_app
 from execution_scheduler.dispatch import HTTPWorkflowDispatch
 from execution_scheduler.domain import RetryPolicy
@@ -20,7 +17,6 @@ from execution_scheduler.security import ProtectedContextCipher
 from execution_scheduler.settings import SchedulerSettings
 from execution_scheduler.standalone import StandaloneProviderAdapter
 from execution_scheduler.synchronous import SynchronousWorkflowService
-from execution_scheduler.worker import ExecutionWorker
 from integrations.empaia.gateway import load_gateway_factory
 from integrations.empaia.provider import EmpaiaProviderAdapter
 from workflow_execution.catalog import WorkflowCatalog
@@ -61,39 +57,26 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
         gateway_factory = load_gateway_factory(config.empaia_gateway_factory)
         empaia_provider = EmpaiaProviderAdapter(catalog, gateway_factory)
         providers[empaia_provider.name] = empaia_provider
-    active_work = ActiveWorkRegistry()
     client = httpx.AsyncClient()
     dispatch = HTTPWorkflowDispatch(client, origin=config.ray_serve_origin)
     scheduler = ExecutionScheduler(
         repository=repository,
+        dispatch=dispatch,
         providers=providers,
         known_workflows=catalog.identifiers,
         default_timeout=config.default_deadline,
         maximum_timeout=config.maximum_deadline,
-        active_work=active_work,
-    )
-    worker = ExecutionWorker(
-        repository=repository,
-        providers=providers,
-        dispatch=dispatch,
-        owner=f"execution-scheduler-{uuid4()}",
         lease_duration=config.lease_duration,
-        active_work=active_work,
+        poll_interval=config.poll_interval,
     )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-        await repository.initialize()
-        stop = asyncio.Event()
-        worker_task = asyncio.create_task(
-            worker.run(stop, poll_interval=config.poll_interval)
-        )
         try:
-            yield
+            await repository.initialize()
+            async with scheduler.running():
+                yield
         finally:
-            stop.set()
-            worker_task.cancel()
-            await asyncio.gather(worker_task, return_exceptions=True)
             await client.aclose()
 
     return create_execution_app(

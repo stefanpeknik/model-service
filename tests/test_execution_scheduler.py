@@ -538,6 +538,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         provider = StandaloneProvider()
         scheduler = ExecutionScheduler(
             repository=UnavailableExecutionRepository(),
+            dispatch=InMemoryWorkflowDispatch({}),
             providers={provider.name: provider},
             known_workflows={"prostate-heatmap"},
             default_timeout=timedelta(hours=1),
@@ -762,6 +763,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         provider = StandaloneProvider()
         scheduler = ExecutionScheduler(
             repository=repository,
+            dispatch=InMemoryWorkflowDispatch({}),
             providers={provider.name: provider},
             known_workflows={"prostate-heatmap"},
             default_timeout=timedelta(hours=1),
@@ -770,6 +772,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         )
         worker = ExecutionWorker(
             repository=repository,
+            active_work=ActiveWorkRegistry(),
             providers={provider.name: provider},
             dispatch=InMemoryWorkflowDispatch(
                 {"prostate-heatmap": lambda _invocation, _execution_context: result}
@@ -810,6 +813,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         )
         scheduler = ExecutionScheduler(
             repository=repository,
+            dispatch=InMemoryWorkflowDispatch({}),
             providers={provider.name: provider},
             known_workflows={"prostate-heatmap"},
             default_timeout=timedelta(hours=1),
@@ -828,6 +832,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
 
         first_worker = ExecutionWorker(
             repository=repository,
+            active_work=ActiveWorkRegistry(),
             providers={provider.name: provider},
             dispatch=InMemoryWorkflowDispatch({"prostate-heatmap": abandoned}),
             owner="scheduler-before-restart",
@@ -835,6 +840,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         )
         replacement_worker = ExecutionWorker(
             repository=repository,
+            active_work=ActiveWorkRegistry(),
             providers={provider.name: provider},
             dispatch=InMemoryWorkflowDispatch(
                 {
@@ -894,6 +900,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         provider = StandaloneProvider()
         scheduler = ExecutionScheduler(
             repository=repository,
+            dispatch=InMemoryWorkflowDispatch({}),
             providers={provider.name: provider},
             known_workflows={"prostate-heatmap"},
             default_timeout=timedelta(hours=1),
@@ -902,6 +909,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         )
         worker = ExecutionWorker(
             repository=repository,
+            active_work=ActiveWorkRegistry(),
             providers={provider.name: provider},
             dispatch=InMemoryWorkflowDispatch({"prostate-heatmap": dispatch}),
             owner="worker-1",
@@ -951,6 +959,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         provider = StandaloneProvider()
         scheduler = ExecutionScheduler(
             repository=repository,
+            dispatch=InMemoryWorkflowDispatch({}),
             providers={provider.name: provider},
             known_workflows={"prostate-heatmap"},
             default_timeout=timedelta(hours=1),
@@ -959,6 +968,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         )
         worker = ExecutionWorker(
             repository=repository,
+            active_work=ActiveWorkRegistry(),
             providers={provider.name: provider},
             dispatch=InMemoryWorkflowDispatch({"prostate-heatmap": dispatch}),
             owner="worker-1",
@@ -1002,23 +1012,16 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
 
         repository = InMemoryExecutionRepository(clock=clock)
         provider = StandaloneProvider()
-        active_work = ActiveWorkRegistry()
         scheduler = ExecutionScheduler(
             repository=repository,
+            dispatch=InMemoryWorkflowDispatch({"prostate-heatmap": dispatch}),
             providers={provider.name: provider},
             known_workflows={"prostate-heatmap"},
             default_timeout=timedelta(hours=1),
             maximum_timeout=timedelta(hours=6),
             clock=clock,
-            active_work=active_work,
-        )
-        worker = ExecutionWorker(
-            repository=repository,
-            providers={provider.name: provider},
-            dispatch=InMemoryWorkflowDispatch({"prostate-heatmap": dispatch}),
-            owner="worker-1",
             lease_duration=timedelta(minutes=1),
-            active_work=active_work,
+            poll_interval=0.01,
         )
         admitted = await scheduler.schedule(
             ScheduleRequest(
@@ -1028,16 +1031,14 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
                 idempotency_key="request-1",
             )
         )
-        worker_task = asyncio.create_task(worker.run_once())
-        await started.wait()
+        async with scheduler.running():
+            await asyncio.wait_for(started.wait(), timeout=1)
+            cancelled = await scheduler.cancel(admitted.execution.id)
+            repeated = await scheduler.cancel(admitted.execution.id)
 
-        cancelled = await scheduler.cancel(admitted.execution.id)
-        repeated = await scheduler.cancel(admitted.execution.id)
-
-        self.assertEqual(cancelled.status, "cancelled")
-        self.assertEqual(repeated.status, "cancelled")
-        await asyncio.wait_for(stopped.wait(), timeout=1)
-        self.assertTrue(await worker_task)
+            self.assertEqual(cancelled.status, "cancelled")
+            self.assertEqual(repeated.status, "cancelled")
+            await asyncio.wait_for(stopped.wait(), timeout=1)
         durable = await repository.get(admitted.execution.id)
         self.assertEqual(durable.status, "cancelled")
         self.assertIsNone(durable.fencing_token)
@@ -1061,6 +1062,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         provider = StandaloneProvider()
         scheduler = ExecutionScheduler(
             repository=repository,
+            dispatch=InMemoryWorkflowDispatch({}),
             providers={provider.name: provider},
             known_workflows={"prostate-heatmap"},
             default_timeout=timedelta(hours=1),
@@ -1069,6 +1071,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         dispatch_adapter = InMemoryWorkflowDispatch({"prostate-heatmap": dispatch})
         first_worker = ExecutionWorker(
             repository=repository,
+            active_work=ActiveWorkRegistry(),
             providers={provider.name: provider},
             dispatch=dispatch_adapter,
             owner="worker-1",
@@ -1076,6 +1079,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         )
         replacement_worker = ExecutionWorker(
             repository=repository,
+            active_work=ActiveWorkRegistry(),
             providers={provider.name: provider},
             dispatch=dispatch_adapter,
             owner="worker-2",
@@ -1118,6 +1122,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             provider = StandaloneProviderAdapter(WorkflowCatalog.default())
             scheduler = ExecutionScheduler(
                 repository=repository,
+                dispatch=InMemoryWorkflowDispatch({}),
                 providers={provider.name: provider},
                 known_workflows={"prostate-heatmap"},
                 default_timeout=timedelta(hours=1),
@@ -1160,6 +1165,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             provider = StandaloneProviderAdapter(WorkflowCatalog.default())
             scheduler = ExecutionScheduler(
                 repository=repository,
+                dispatch=InMemoryWorkflowDispatch({}),
                 providers={provider.name: provider},
                 known_workflows={"prostate-heatmap"},
                 default_timeout=timedelta(hours=1),
@@ -1185,6 +1191,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             provider = StandaloneProviderAdapter(WorkflowCatalog.default())
             scheduler = ExecutionScheduler(
                 repository=repository,
+                dispatch=InMemoryWorkflowDispatch({}),
                 providers={provider.name: provider},
                 known_workflows={"prostate-heatmap"},
                 default_timeout=timedelta(hours=1),
@@ -1227,6 +1234,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
     ) -> tuple[ExecutionScheduler, ExecutionWorker]:
         scheduler = ExecutionScheduler(
             repository=repository,
+            dispatch=InMemoryWorkflowDispatch({}),
             providers={provider.name: provider},
             known_workflows={"prostate-heatmap"},
             default_timeout=timedelta(hours=1),
@@ -1235,6 +1243,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         )
         worker = ExecutionWorker(
             repository=repository,
+            active_work=ActiveWorkRegistry(),
             providers={provider.name: provider},
             dispatch=dispatch,
             owner="worker-1",

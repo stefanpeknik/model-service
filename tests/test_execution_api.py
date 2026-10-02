@@ -36,7 +36,6 @@ from execution_scheduler.repository import (
 )
 from execution_scheduler.scheduler import ExecutionScheduler
 from execution_scheduler.synchronous import SynchronousWorkflowService
-from execution_scheduler.worker import ExecutionWorker
 from tests.test_execution_scheduler import StandaloneProvider
 from workflow_execution.catalog import WorkflowCatalog
 from workflow_execution.contracts import (
@@ -81,6 +80,7 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         provider = StandaloneProvider()
         self.scheduler = ExecutionScheduler(
             repository=InMemoryExecutionRepository(clock=lambda: now),
+            dispatch=InMemoryWorkflowDispatch({}),
             providers={provider.name: provider},
             known_workflows={"prostate-heatmap"},
             default_timeout=timedelta(hours=1),
@@ -184,14 +184,8 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         now = datetime(2026, 9, 17, 8, tzinfo=UTC)
         provider = StandaloneProvider()
         repository = InMemoryExecutionRepository(clock=lambda: now)
-        scheduler = ExecutionScheduler(
-            repository=repository,
-            providers={provider.name: provider},
-            known_workflows={"prostate-heatmap"},
-            default_timeout=timedelta(hours=1),
-            maximum_timeout=timedelta(hours=6),
-            clock=lambda: now,
-        )
+        started = asyncio.Event()
+        release = asyncio.Event()
         result = WorkflowResult(
             outputs={
                 "heatmap": SharedArtifact(
@@ -200,19 +194,29 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
                 )
             }
         )
-        worker = ExecutionWorker(
+
+        async def dispatch(_invocation, _execution_context):
+            started.set()
+            await release.wait()
+            return result
+
+        scheduler = ExecutionScheduler(
             repository=repository,
             providers={provider.name: provider},
-            dispatch=InMemoryWorkflowDispatch(
-                {"prostate-heatmap": lambda _invocation, _execution_context: result}
-            ),
-            owner="worker-1",
-            lease_duration=timedelta(minutes=1),
+            dispatch=InMemoryWorkflowDispatch({"prostate-heatmap": dispatch}),
+            known_workflows={"prostate-heatmap"},
+            default_timeout=timedelta(hours=1),
+            maximum_timeout=timedelta(hours=6),
+            clock=lambda: now,
+            poll_interval=0.01,
         )
-        async with AsyncClient(
-            transport=ASGITransport(app=create_execution_app(scheduler)),
-            base_url="http://model-service",
-        ) as client:
+        async with (
+            scheduler.running(),
+            AsyncClient(
+                transport=ASGITransport(app=create_execution_app(scheduler)),
+                base_url="http://model-service",
+            ) as client,
+        ):
             response = await client.post(
                 "/v1/workflows/prostate-heatmap/schedule",
                 json={
@@ -222,10 +226,15 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
                 },
             )
             execution_id = response.json()["execution"]["id"]
-            await worker.run_once()
+            await asyncio.wait_for(started.wait(), timeout=1)
             running = await client.get(f"/v1/executions/{execution_id}")
-            await worker.run_once()
-            completed = await client.get(f"/v1/executions/{execution_id}")
+            release.set()
+            async with asyncio.timeout(1):
+                while True:
+                    completed = await client.get(f"/v1/executions/{execution_id}")
+                    if completed.json()["status"] == "succeeded":
+                        break
+                    await asyncio.sleep(0.001)
 
         self.assertEqual(response.status_code, 202)
         self.assertEqual(running.json()["status"], "running")
@@ -715,6 +724,7 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         provider = StandaloneProvider()
         scheduler = ExecutionScheduler(
             repository=UnavailableRepository(),
+            dispatch=InMemoryWorkflowDispatch({}),
             providers={provider.name: provider},
             known_workflows={"prostate-heatmap"},
             default_timeout=timedelta(hours=1),
@@ -744,6 +754,7 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         provider = StandaloneProvider()
         scheduler = ExecutionScheduler(
             repository=UnavailableRepository(),
+            dispatch=InMemoryWorkflowDispatch({}),
             providers={provider.name: provider},
             known_workflows={"prostate-heatmap"},
             default_timeout=timedelta(hours=1),

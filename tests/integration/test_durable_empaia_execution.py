@@ -17,9 +17,10 @@ import httpx
 from fastapi import FastAPI
 from psycopg import AsyncConnection, sql
 
+from execution_scheduler.active_work import ActiveWorkRegistry
 from execution_scheduler.api import create_execution_app
 from execution_scheduler.contracts import ScheduleRequest
-from execution_scheduler.dispatch import HTTPWorkflowDispatch
+from execution_scheduler.dispatch import HTTPWorkflowDispatch, InMemoryWorkflowDispatch
 from execution_scheduler.domain import RetryPolicy, WorkKind
 from execution_scheduler.postgres import PostgresExecutionRepository
 from execution_scheduler.scheduler import ExecutionScheduler
@@ -175,6 +176,7 @@ class DurableEmpaiaExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 )
                 scheduler = ExecutionScheduler(
                     repository=repository,
+                    dispatch=InMemoryWorkflowDispatch({}),
                     providers={provider.name: provider},
                     known_workflows=catalog.identifiers,
                     default_timeout=timedelta(minutes=5),
@@ -182,6 +184,7 @@ class DurableEmpaiaExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 )
                 worker = ExecutionWorker(
                     repository=repository,
+                    active_work=ActiveWorkRegistry(),
                     providers={provider.name: provider},
                     dispatch=dispatch,
                     owner="empaia-integration-worker",
@@ -301,6 +304,7 @@ class DurableEmpaiaExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 )
                 scheduler = ExecutionScheduler(
                     repository=repository,
+                    dispatch=InMemoryWorkflowDispatch({}),
                     providers={provider.name: provider},
                     known_workflows=catalog.identifiers,
                     default_timeout=timedelta(minutes=5),
@@ -308,6 +312,7 @@ class DurableEmpaiaExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 )
                 first_worker = ExecutionWorker(
                     repository=repository,
+                    active_work=ActiveWorkRegistry(),
                     providers={provider.name: provider},
                     dispatch=dispatch,
                     owner="scheduler-before-restart",
@@ -344,6 +349,7 @@ class DurableEmpaiaExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 )
                 replacement_worker = ExecutionWorker(
                     repository=replacement_repository,
+                    active_work=ActiveWorkRegistry(),
                     providers={provider.name: provider},
                     dispatch=dispatch,
                     owner="scheduler-after-restart",

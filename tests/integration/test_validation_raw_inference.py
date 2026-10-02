@@ -4,6 +4,8 @@ import os
 import unittest
 from datetime import timedelta
 
+from execution_scheduler.dispatch import InMemoryWorkflowDispatch
+
 
 os.environ.setdefault("RAY_ENABLE_UV_RUN_RUNTIME_ENV", "0")
 
@@ -32,6 +34,7 @@ class ValidationRawInferenceTests(unittest.IsolatedAsyncioTestCase):
         provider = StandaloneProviderAdapter(catalog)
         scheduler = ExecutionScheduler(
             repository=InMemoryExecutionRepository(),
+            dispatch=InMemoryWorkflowDispatch({}),
             providers={provider.name: provider},
             known_workflows=catalog.identifiers,
             default_timeout=timedelta(minutes=5),

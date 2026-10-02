@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+from contextlib import asynccontextmanager
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from execution_scheduler.active_work import ActiveWorkRegistry
 from execution_scheduler.contracts import (
@@ -19,11 +22,13 @@ from execution_scheduler.domain import (
     ExecutionRecord,
 )
 from execution_scheduler.repository import ExecutionRepositoryUnavailableError
+from execution_scheduler.worker import ExecutionWorker
 
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import AsyncIterator, Callable, Mapping
 
+    from execution_scheduler.dispatch import WorkflowDispatch
     from execution_scheduler.providers import ProviderAdapter
     from execution_scheduler.repository import ExecutionRepository
 
@@ -33,20 +38,55 @@ class ExecutionScheduler:
         self,
         *,
         repository: ExecutionRepository,
+        dispatch: WorkflowDispatch,
         providers: Mapping[str, ProviderAdapter],
         known_workflows: set[str] | frozenset[str],
         default_timeout: timedelta,
         maximum_timeout: timedelta,
         clock: Callable[[], datetime] | None = None,
-        active_work: ActiveWorkRegistry | None = None,
+        lease_duration: timedelta = timedelta(seconds=60),
+        poll_interval: float = 0.5,
     ) -> None:
+        if lease_duration <= timedelta(0):
+            raise ValueError("lease_duration must be positive")
+        if poll_interval <= 0:
+            raise ValueError("poll_interval must be positive")
         self._repository = repository
         self._providers = dict(providers)
         self._known_workflows = set(known_workflows)
         self._default_timeout = default_timeout
         self._maximum_timeout = maximum_timeout
         self._clock = clock or (lambda: datetime.now(UTC))
-        self._active_work = active_work or ActiveWorkRegistry()
+        self._active_work = ActiveWorkRegistry()
+        self._worker = ExecutionWorker(
+            repository=repository,
+            providers=self._providers,
+            dispatch=dispatch,
+            owner=f"execution-scheduler-{uuid4()}",
+            lease_duration=lease_duration,
+            active_work=self._active_work,
+        )
+        self._poll_interval = poll_interval
+        self._running = False
+
+    @asynccontextmanager
+    async def running(self) -> AsyncIterator[None]:
+        if self._running:
+            raise RuntimeError("execution scheduler is already running")
+        self._running = True
+        stop = asyncio.Event()
+        try:
+            async with asyncio.TaskGroup() as tasks:
+                worker_task = tasks.create_task(
+                    self._worker.run(stop, poll_interval=self._poll_interval)
+                )
+                try:
+                    yield
+                finally:
+                    stop.set()
+                    worker_task.cancel()
+        finally:
+            self._running = False
 
     async def check_ready(self) -> None:
         try:

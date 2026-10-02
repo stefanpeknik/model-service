@@ -8,6 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
+from execution_scheduler.active_work import ActiveWorkRegistry
 from execution_scheduler.contracts import (
     InvalidScheduleRequestError,
     ScheduleRequest,
@@ -137,6 +138,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         provider = EmpaiaProviderAdapter(catalog, service.gateway)
         scheduler = ExecutionScheduler(
             repository=repository,
+            dispatch=InMemoryWorkflowDispatch({}),
             providers={provider.name: provider},
             known_workflows=catalog.identifiers,
             default_timeout=timedelta(hours=1),
@@ -170,6 +172,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         provider = EmpaiaProviderAdapter(catalog, unavailable_gateway)
         scheduler = ExecutionScheduler(
             repository=InMemoryExecutionRepository(clock=lambda: now),
+            dispatch=InMemoryWorkflowDispatch({}),
             providers={provider.name: provider},
             known_workflows=catalog.identifiers,
             default_timeout=timedelta(hours=1),
@@ -232,6 +235,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         repository = InMemoryExecutionRepository(clock=lambda: now)
         scheduler = ExecutionScheduler(
             repository=repository,
+            dispatch=InMemoryWorkflowDispatch({}),
             providers={provider.name: provider},
             known_workflows=catalog.identifiers,
             default_timeout=timedelta(hours=1),
@@ -251,6 +255,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
             )
             worker = ExecutionWorker(
                 repository=repository,
+                active_work=ActiveWorkRegistry(),
                 providers={provider.name: provider},
                 dispatch=InMemoryWorkflowDispatch(
                     {"prostate-heatmap": application.run}
@@ -299,6 +304,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         repository = InMemoryExecutionRepository(clock=lambda: now)
         scheduler = ExecutionScheduler(
             repository=repository,
+            dispatch=InMemoryWorkflowDispatch({}),
             providers={provider.name: provider},
             known_workflows=catalog.identifiers,
             default_timeout=timedelta(hours=1),
@@ -333,6 +339,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         provider = EmpaiaProviderAdapter(catalog, service.gateway)
         scheduler = ExecutionScheduler(
             repository=repository,
+            dispatch=InMemoryWorkflowDispatch({}),
             providers={provider.name: provider},
             known_workflows=catalog.identifiers,
             default_timeout=timedelta(hours=1),
@@ -366,6 +373,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         )
         scheduler = ExecutionScheduler(
             repository=repository,
+            dispatch=InMemoryWorkflowDispatch({}),
             providers={provider.name: provider},
             known_workflows=catalog.identifiers,
             default_timeout=timedelta(hours=1),
@@ -396,6 +404,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
 
             worker = ExecutionWorker(
                 repository=repository,
+                active_work=ActiveWorkRegistry(),
                 providers={provider.name: provider},
                 dispatch=InMemoryWorkflowDispatch({"prostate-heatmap": run}),
                 owner="worker-1",
@@ -431,6 +440,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         )
         scheduler = ExecutionScheduler(
             repository=repository,
+            dispatch=InMemoryWorkflowDispatch({}),
             providers={provider.name: provider},
             known_workflows=catalog.identifiers,
             default_timeout=timedelta(hours=1),
@@ -450,6 +460,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
             )
             worker = ExecutionWorker(
                 repository=repository,
+                active_work=ActiveWorkRegistry(),
                 providers={provider.name: provider},
                 dispatch=InMemoryWorkflowDispatch(
                     {"prostate-heatmap": application.run}

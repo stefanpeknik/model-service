@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from execution_scheduler.active_work import ActiveWorkRegistry
 from execution_scheduler.contracts import ExecutionStatus, ScheduleRequest
 from execution_scheduler.dispatch import InMemoryWorkflowDispatch
 from execution_scheduler.repository import InMemoryExecutionRepository
@@ -345,6 +346,7 @@ class WorkflowResourceTests(unittest.IsolatedAsyncioTestCase):
             provider = StandaloneProviderAdapter(catalog)
             scheduler = ExecutionScheduler(
                 repository=repository,
+                dispatch=InMemoryWorkflowDispatch({}),
                 providers={provider.name: provider},
                 known_workflows=catalog.identifiers,
                 default_timeout=timedelta(minutes=1),
@@ -352,6 +354,7 @@ class WorkflowResourceTests(unittest.IsolatedAsyncioTestCase):
             )
             worker = ExecutionWorker(
                 repository=repository,
+                active_work=ActiveWorkRegistry(),
                 providers={provider.name: provider},
                 dispatch=InMemoryWorkflowDispatch({"artifact": dispatch}),
                 owner="test-worker",

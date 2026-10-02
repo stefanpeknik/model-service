@@ -5,7 +5,6 @@ import logging
 from contextlib import suppress
 from typing import TYPE_CHECKING
 
-from execution_scheduler.active_work import ActiveWorkRegistry
 from execution_scheduler.contracts import (
     ExecutionError,
     ExecutionErrorCode,
@@ -43,6 +42,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from datetime import timedelta
 
+    from execution_scheduler.active_work import ActiveWorkRegistry
     from execution_scheduler.dispatch import WorkflowDispatch
     from execution_scheduler.domain import Settlement
     from execution_scheduler.providers import ProviderAdapter
@@ -58,14 +58,14 @@ class ExecutionWorker:
         dispatch: WorkflowDispatch,
         owner: str,
         lease_duration: timedelta,
-        active_work: ActiveWorkRegistry | None = None,
+        active_work: ActiveWorkRegistry,
     ) -> None:
         self._repository = repository
         self._providers = dict(providers)
         self._dispatch = dispatch
         self._owner = owner
         self._lease_duration = lease_duration
-        self._active_work = active_work or ActiveWorkRegistry()
+        self._active_work = active_work
 
     async def run(self, stop: asyncio.Event, *, poll_interval: float) -> None:
         if poll_interval <= 0:

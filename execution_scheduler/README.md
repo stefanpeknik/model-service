@@ -7,15 +7,18 @@ workflow processing and provider finish.
 ## Start here
 
 - `main.py` exposes the ASGI application used by the container.
-- `runtime.py` wires production adapters and manages worker lifetime.
+- `runtime.py` wires production adapters, initializes persistence, and closes
+  the shared HTTP client after the scheduler stops.
 - `api.py` translates HTTP requests and failures to the scheduler interface.
 - `scheduler.py` implements admission, status reads, cancellation, and public
-  execution views.
+  execution views. Its `running()` context owns worker lifetime and shares a
+  private cancellation registry with that worker. Construction starts no tasks.
 - `worker.py` owns lease renewal, dispatch, settlement, and local cancellation.
   Maintenance runs independently of its single active claim, so queued
   deadlines and abandoned leases advance while processing is blocked.
 - `active_work.py` tracks locally running attempts so cancellation can stop
-  their tasks without making in-memory state authoritative.
+  their tasks without making in-memory state authoritative. Callers do not wire
+  this registry themselves.
 
 ## Durable state
 
@@ -56,3 +59,8 @@ The scheduler and worker depend on repository, dispatch, and provider
 interfaces. Concrete adapters translate their library-specific failures before
 those failures reach orchestration. Keep state decisions in `transitions.py`;
 PostgreSQL and the in-memory adapter persist the resulting record.
+
+Leaving `scheduler.running()` stops local work and joins worker tasks. It does
+not cancel durable executions; another worker can recover their expired leases.
+The context cannot be entered twice concurrently, but can be restarted after
+shutdown. Repository, dispatch, and provider resources remain caller-owned.

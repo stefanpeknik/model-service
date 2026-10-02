@@ -37,6 +37,7 @@ class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
         from ray import serve
 
         from execution_scheduler.api import create_execution_app
+        from execution_scheduler.contracts import ExecutionStatus
         from execution_scheduler.dispatch import HTTPWorkflowDispatch
         from execution_scheduler.domain import RetryPolicy
         from execution_scheduler.postgres import PostgresExecutionRepository
@@ -44,7 +45,6 @@ class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
         from execution_scheduler.security import ProtectedContextCipher
         from execution_scheduler.standalone import StandaloneProviderAdapter
         from execution_scheduler.synchronous import SynchronousWorkflowService
-        from execution_scheduler.worker import ExecutionWorker
         from tests.integration.ray_probe_application import ProbeWorkflow
         from workflow_execution.catalog import (
             WorkflowCatalog,
@@ -95,17 +95,13 @@ class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     )
                     scheduler = ExecutionScheduler(
                         repository=repository,
+                        dispatch=dispatch,
                         providers={provider.name: provider},
                         known_workflows=catalog.identifiers,
                         default_timeout=timedelta(minutes=3),
                         maximum_timeout=timedelta(minutes=3),
-                    )
-                    worker = ExecutionWorker(
-                        repository=repository,
-                        providers={provider.name: provider},
-                        dispatch=dispatch,
-                        owner="assembled-worker",
                         lease_duration=timedelta(seconds=30),
+                        poll_interval=0.01,
                     )
                     app = create_execution_app(
                         scheduler,
@@ -114,10 +110,13 @@ class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
                             dispatch,
                         ),
                     )
-                    async with httpx.AsyncClient(
-                        transport=httpx.ASGITransport(app=app),
-                        base_url="http://model-service",
-                    ) as api_client:
+                    async with (
+                        scheduler.running(),
+                        httpx.AsyncClient(
+                            transport=httpx.ASGITransport(app=app),
+                            base_url="http://model-service",
+                        ) as api_client,
+                    ):
                         invocation = self._standalone_invocation(directory)
                         scheduled = await api_client.post(
                             "/v1/workflows/probe/schedule",
@@ -137,11 +136,18 @@ class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
                         )
                         execution_id = scheduled.json()["execution"]["id"]
 
-                        self.assertTrue(await worker.run_once())
-                        self.assertTrue(await worker.run_once())
-                        completed = await api_client.get(
-                            f"/v1/executions/{execution_id}"
-                        )
+                        async with asyncio.timeout(30):
+                            while True:
+                                completed = await api_client.get(
+                                    f"/v1/executions/{execution_id}"
+                                )
+                                if completed.json()["status"] in {
+                                    ExecutionStatus.SUCCEEDED,
+                                    ExecutionStatus.FAILED,
+                                    ExecutionStatus.CANCELLED,
+                                }:
+                                    break
+                                await asyncio.sleep(0.01)
                         synchronous = await api_client.post(
                             "/v1/workflows/probe/run",
                             json={
