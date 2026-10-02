@@ -11,14 +11,12 @@ from ray import serve
 
 from workflow_execution.application import WorkflowApplication
 from workflow_execution.catalog import WorkflowCatalog
-from workflow_execution.contracts import (
-    WorkflowInvocation,
-    WorkflowResult,
-)
+from workflow_execution.contracts import WorkflowResult
 from workflow_execution.heatmap import SlideHeatmapProcessor
 from workflow_execution.http import (
     WorkflowErrorResponse,
     WorkflowHTTPErrorCode,
+    WorkflowRunRequest,
     run_workflow_http,
 )
 from workflow_execution.prostate_heatmap import (
@@ -99,7 +97,7 @@ class ProstateHeatmapApplication:
             503: {"model": WorkflowErrorResponse},
         },
     )
-    async def run(self, body: WorkflowInvocation) -> WorkflowResult:
+    async def run(self, body: WorkflowRunRequest) -> WorkflowResult:
         if self._application is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -109,7 +107,7 @@ class ProstateHeatmapApplication:
                     "retryable": True,
                 },
             )
-        return await run_workflow_http(self._application, body)
+        return await run_workflow_http(self._application, body, body.execution_context)
 
 
 app = ProstateHeatmapApplication.bind()  # type: ignore[attr-defined]

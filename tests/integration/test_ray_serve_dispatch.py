@@ -183,6 +183,7 @@ class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
         from tests.integration.ray_probe_application import ProbeWorkflow
         from workflow_execution.contracts import (
             InlineOutput,
+            WorkflowExecutionContext,
         )
 
         ray.init(num_cpus=2, include_dashboard=False)
@@ -200,7 +201,13 @@ class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     )
                     quick = self._invocation(0)
                     result = await asyncio.wait_for(
-                        dispatch.run("probe", "scale-from-zero", quick),
+                        dispatch.run(
+                            "probe",
+                            WorkflowExecutionContext(
+                                processing_attempt_id="scale-from-zero"
+                            ),
+                            quick,
+                        ),
                         timeout=120,
                     )
                     value = result.outputs["value"]
@@ -209,12 +216,28 @@ class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(value.value, 1)
 
                     slow = self._invocation(30)
-                    active = asyncio.create_task(dispatch.run("probe", "active", slow))
+                    active = asyncio.create_task(
+                        dispatch.run(
+                            "probe",
+                            WorkflowExecutionContext(processing_attempt_id="active"),
+                            slow,
+                        )
+                    )
                     await self._wait_for(Path(directory) / "active.started")
-                    queued = asyncio.create_task(dispatch.run("probe", "queued", slow))
+                    queued = asyncio.create_task(
+                        dispatch.run(
+                            "probe",
+                            WorkflowExecutionContext(processing_attempt_id="queued"),
+                            slow,
+                        )
+                    )
                     await asyncio.sleep(0.2)
                     with self.assertRaises(ConfirmedDispatchRejectionError):
-                        await dispatch.run("probe", "rejected", slow)
+                        await dispatch.run(
+                            "probe",
+                            WorkflowExecutionContext(processing_attempt_id="rejected"),
+                            slow,
+                        )
 
                     active.cancel()
                     await asyncio.gather(active, return_exceptions=True)

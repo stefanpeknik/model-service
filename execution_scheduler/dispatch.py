@@ -6,20 +6,25 @@ from typing import TYPE_CHECKING, Protocol
 
 import httpx
 
-from workflow_execution.serialization import invocation_to_dict, result_from_dict
+from workflow_execution.http import WorkflowRunRequest, run_request_to_dict
+from workflow_execution.serialization import result_from_dict
 
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
 
-    from workflow_execution.contracts import WorkflowInvocation, WorkflowResult
+    from workflow_execution.contracts import (
+        WorkflowExecutionContext,
+        WorkflowInvocation,
+        WorkflowResult,
+    )
 
 
 class WorkflowDispatch(Protocol):
     async def run(
         self,
         workflow_id: str,
-        processing_attempt_id: str,
+        execution_context: WorkflowExecutionContext,
         invocation: WorkflowInvocation,
     ) -> WorkflowResult: ...
 
@@ -76,7 +81,7 @@ class HTTPWorkflowDispatch:
     async def run(
         self,
         workflow_id: str,
-        processing_attempt_id: str,
+        execution_context: WorkflowExecutionContext,
         invocation: WorkflowInvocation,
     ) -> WorkflowResult:
         timeout = max(
@@ -86,8 +91,14 @@ class HTTPWorkflowDispatch:
         try:
             response = await self._client.post(
                 f"{self._origin}/workflows/{workflow_id}/",
-                json=invocation_to_dict(invocation),
-                headers={"x-processing-attempt-id": processing_attempt_id},
+                json=run_request_to_dict(
+                    WorkflowRunRequest.from_invocation(invocation, execution_context)
+                ),
+                headers=(
+                    {"x-processing-attempt-id": execution_context.processing_attempt_id}
+                    if execution_context.processing_attempt_id is not None
+                    else {}
+                ),
                 timeout=timeout,
             )
         except httpx.TransportError as error:
@@ -160,7 +171,10 @@ class InMemoryWorkflowDispatch:
         self,
         handlers: Mapping[
             str,
-            Callable[[WorkflowInvocation], WorkflowResult | Awaitable[WorkflowResult]],
+            Callable[
+                [WorkflowInvocation, WorkflowExecutionContext],
+                WorkflowResult | Awaitable[WorkflowResult],
+            ],
         ],
     ) -> None:
         self._handlers = dict(handlers)
@@ -168,10 +182,10 @@ class InMemoryWorkflowDispatch:
     async def run(
         self,
         workflow_id: str,
-        _processing_attempt_id: str,
+        execution_context: WorkflowExecutionContext,
         invocation: WorkflowInvocation,
     ) -> WorkflowResult:
-        value = self._handlers[workflow_id](invocation)
+        value = self._handlers[workflow_id](invocation, execution_context)
         if inspect.isawaitable(value):
             return await value
         return value

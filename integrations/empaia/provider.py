@@ -8,7 +8,9 @@ from contextlib import asynccontextmanager
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from typing import TYPE_CHECKING, Never
+from typing import TYPE_CHECKING, Annotated, Never
+
+from pydantic import Field, ValidationError
 
 from execution_scheduler.contracts import (
     InvalidScheduleRequestError,
@@ -27,6 +29,7 @@ from integrations.empaia.gateway import (
     EmpaiaGateway,
     EmpaiaGatewayError,
     EmpaiaGatewayFactory,
+    EmpaiaInputState,
     EmpaiaJobContext,
 )
 from workflow_execution.application import validate_workflow_invocation
@@ -50,6 +53,10 @@ class EmpaiaErrorCode(StrEnum):
     FINISH_FAILED = "empaia_finish_failed"
 
 
+class EmpaiaSchedulePayload(EmpaiaJobContext):
+    installation_id: Annotated[str, Field(min_length=1)]
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -65,12 +72,11 @@ class EmpaiaProviderAdapter:
         self._gateway_factory = gateway_factory
 
     def identify(self, request: ScheduleRequest) -> SubmissionIdentity:
-        installation_id = _required_string(request.body, "installation_id")
-        context = _job_context(request.body)
+        context = _schedule_payload(request.body)
         canonical = json.dumps(
             {
                 "workflow_id": request.workflow_id,
-                "installation_id": installation_id,
+                "installation_id": context.installation_id,
                 "job_id": context.job_id,
                 "api_url": context.api_url,
                 "requested_timeout_seconds": request.requested_timeout_seconds,
@@ -80,7 +86,7 @@ class EmpaiaProviderAdapter:
         ).encode()
         return SubmissionIdentity(
             provider=self.name,
-            key=f"{installation_id}:{context.job_id}",
+            key=f"{context.installation_id}:{context.job_id}",
             fingerprint=hashlib.sha256(canonical).hexdigest(),
         )
 
@@ -89,7 +95,7 @@ class EmpaiaProviderAdapter:
         request: ScheduleRequest,
         deadline_at: datetime,
     ) -> PreparedWorkflow:
-        context = _job_context(request.body)
+        context = _schedule_payload(request.body)
         credential_expires_at = _credential_expiry(context.credential)
         async with _preparation_gateway(
             self._gateway_factory,
@@ -119,7 +125,9 @@ class EmpaiaProviderAdapter:
             resolved_configuration=deepcopy(configuration),
             input_access=InputAccessContext(
                 kind="empaia",
-                state={"api_url": context.api_url, "job_id": context.job_id},
+                state=EmpaiaInputState(
+                    api_url=context.api_url, job_id=context.job_id
+                ).model_dump(mode="json"),
             ),
             deadline_at=effective_deadline,
         )
@@ -248,19 +256,22 @@ def _finish_failure(error: EmpaiaGatewayError) -> ProviderFinishFailureError:
     )
 
 
-def _required_string(values: dict[str, JsonValue], name: str) -> str:
-    value = values.get(name)
-    if not isinstance(value, str) or not value:
-        raise InvalidScheduleRequestError(f"{name} must be a non-empty string")
-    return value
+def _schedule_payload(values: dict[str, JsonValue]) -> EmpaiaSchedulePayload:
+    try:
+        return EmpaiaSchedulePayload.model_validate(values)
+    except ValidationError as error:
+        raise InvalidScheduleRequestError(
+            "EMPAIA schedule payload is invalid"
+        ) from error
 
 
 def _job_context(values: dict[str, JsonValue]) -> EmpaiaJobContext:
-    return EmpaiaJobContext(
-        api_url=_required_string(values, "api_url"),
-        job_id=_required_string(values, "job_id"),
-        credential=_required_string(values, "credential"),
-    )
+    try:
+        return EmpaiaJobContext.model_validate(values)
+    except ValidationError as error:
+        raise InvalidScheduleRequestError(
+            "EMPAIA protected job context is invalid"
+        ) from error
 
 
 def _credential_expiry(credential: str) -> datetime:

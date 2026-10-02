@@ -20,11 +20,11 @@ logic.
 - `application.py` validates an invocation, creates input access, enforces its
   deadline, runs the workflow, and validates the result.
 - `shared_storage.py` implements standalone shared-storage input and output
-  access.
+  access and owns its strict `SharedStorageState` schema.
 - `../integrations/empaia/input_access.py` materializes EMPAIA inputs without
   coupling the core workflow runtime to the provider.
 - `http.py` contains the workflow HTTP error envelope shared by ingress
-  adapters.
+  adapters and the dispatch-only `WorkflowRunRequest` transport schema.
 
 `prostate_heatmap.py` is the workflow implementation.
 It owns the prostate configuration schema and defaults. `heatmap.py` owns
@@ -43,6 +43,30 @@ Workflow code receives `WorkflowContext`. It does not inspect provider
 credentials, schedule records, leases, or publication state. New input systems
 implement the input-access interface; new scheduling providers implement the
 separate interface in `execution_scheduler/providers.py`.
+
+`InputAccessContext` is an extensible transport envelope. Each adapter validates
+its `state` once against its own strict Pydantic schema, then uses typed fields.
+Shared storage accepts only a non-empty `root`. EMPAIA accepts only non-empty
+`api_url` and `job_id` fields. Missing, incorrectly typed, and unexpected fields
+are invalid invocations; adapter state no longer accepts credentials or
+`processing_attempt_id`.
+
+`WorkflowExecutionContext` carries the optional processing-attempt ID and
+protected provider context separately. The worker supplies it only during
+dispatch, without modifying the persisted invocation. Protected values remain
+JSON at the encrypted-storage and generic transport seams; the EMPAIA adapter
+validates them as `EmpaiaJobContext`, including a required credential and a match
+against the public job location. These two context types hide credentials in
+their representations, and adapter validation failures become safe error
+responses. This does not add broader credential hardening to durable records.
+
+Scheduler-to-Ray requests retain the invocation fields and add an optional
+`execution_context` object. The Ray ingress passes that object separately to
+`WorkflowApplication.run` and adapter `create` methods. Deploy the scheduler
+and workflow images together when adopting this internal HTTP change. Direct
+shared-storage requests without execution metadata remain supported and retain
+their configured output paths. No SDK request or database schema change is
+required. `x-processing-attempt-id` is still sent for scheduled dispatches.
 
 Input access implements `aclose`, including a no-op for shared storage. The
 invocation deadline covers input acquisition and workflow computation. Cleanup

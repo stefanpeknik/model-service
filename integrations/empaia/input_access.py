@@ -4,10 +4,13 @@ import hashlib
 import logging
 from typing import TYPE_CHECKING
 
-from integrations.empaia.gateway import EmpaiaJobContext
+from pydantic import ValidationError
+
+from integrations.empaia.gateway import EmpaiaInputState, EmpaiaJobContext
 from workflow_execution.contracts import (
     InvalidWorkflowInvocation,
     ProviderInput,
+    WorkflowExecutionContext,
 )
 from workflow_execution.resources import close_resource
 
@@ -16,11 +19,10 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
     from pathlib import Path
 
     from integrations.empaia.gateway import EmpaiaGateway, EmpaiaGatewayFactory
-    from workflow_execution.contracts import JsonValue, WorkflowInvocation
+    from workflow_execution.contracts import WorkflowInvocation
 
 
 class EmpaiaInputAccess:
@@ -73,14 +75,29 @@ class EmpaiaInputAccessAdapter:
         self._gateway_factory = gateway_factory
         self._workspace_root = workspace_root
 
-    async def create(self, invocation: WorkflowInvocation) -> EmpaiaInputAccess:
-        state = invocation.input_access.state
-        context = EmpaiaJobContext(
-            api_url=_state_string(state, "api_url"),
-            job_id=_state_string(state, "job_id"),
-            credential=_state_string(state, "credential"),
-        )
-        processing_attempt_id = _state_string(state, "processing_attempt_id")
+    async def create(
+        self,
+        invocation: WorkflowInvocation,
+        execution_context: WorkflowExecutionContext,
+    ) -> EmpaiaInputAccess:
+        try:
+            state = EmpaiaInputState.model_validate(invocation.input_access.state)
+            context = EmpaiaJobContext.model_validate(
+                execution_context.protected_context
+            )
+        except ValidationError as error:
+            raise InvalidWorkflowInvocation(
+                "EMPAIA input access context is invalid"
+            ) from error
+        if state.api_url != context.api_url or state.job_id != context.job_id:
+            raise InvalidWorkflowInvocation(
+                "EMPAIA public and protected job contexts differ"
+            )
+        processing_attempt_id = execution_context.processing_attempt_id
+        if processing_attempt_id is None:
+            raise InvalidWorkflowInvocation(
+                "EMPAIA input access requires a processing attempt"
+            )
         gateway = self._gateway_factory(context)
         execution_key = hashlib.sha256(
             f"{context.api_url}\0{context.job_id}\0{processing_attempt_id}".encode()
@@ -109,12 +126,3 @@ class EmpaiaInputAccessAdapter:
                 logger.warning("EMPAIA input cleanup failed: %s", type(error).__name__)
             raise
         return EmpaiaInputAccess(root, gateway, paths)
-
-
-def _state_string(state: Mapping[str, JsonValue], name: str) -> str:
-    value = state.get(name)
-    if not isinstance(value, str) or not value:
-        raise InvalidWorkflowInvocation(
-            f"EMPAIA input access requires a non-empty {name}"
-        )
-    return value

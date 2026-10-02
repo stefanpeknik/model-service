@@ -49,6 +49,7 @@ from workflow_execution.catalog import WorkflowCatalog
 from workflow_execution.contracts import (
     InputAccessContext,
     SharedArtifact,
+    WorkflowExecutionContext,
     WorkflowInvocation,
     WorkflowResult,
 )
@@ -160,7 +161,10 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
 
-        async def dispatch(_invocation: WorkflowInvocation) -> WorkflowResult:
+        async def dispatch(
+            _invocation: WorkflowInvocation,
+            _execution_context: WorkflowExecutionContext,
+        ) -> WorkflowResult:
             clock.advance(timedelta(seconds=2))
             await asyncio.Event().wait()
             raise AssertionError("unreachable")
@@ -185,7 +189,10 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         started = asyncio.Event()
         stopped = asyncio.Event()
 
-        async def dispatch(_invocation: WorkflowInvocation) -> WorkflowResult:
+        async def dispatch(
+            _invocation: WorkflowInvocation,
+            _execution_context: WorkflowExecutionContext,
+        ) -> WorkflowResult:
             started.set()
             try:
                 await asyncio.Event().wait()
@@ -237,7 +244,11 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             repository,
             BlockingProvider(),
             InMemoryWorkflowDispatch(
-                {"prostate-heatmap": lambda _invocation: WorkflowResult(outputs={})}
+                {
+                    "prostate-heatmap": lambda _invocation, _execution_context: (
+                        WorkflowResult(outputs={})
+                    )
+                }
             ),
             lease_duration=timedelta(milliseconds=30),
         )
@@ -267,7 +278,10 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
                 await asyncio.Event().wait()
                 raise AssertionError("unreachable")
 
-        async def dispatch(_invocation: WorkflowInvocation) -> WorkflowResult:
+        async def dispatch(
+            _invocation: WorkflowInvocation,
+            _execution_context: WorkflowExecutionContext,
+        ) -> WorkflowResult:
             try:
                 await asyncio.Event().wait()
             finally:
@@ -297,7 +311,10 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         stopped = asyncio.Event()
         calls = 0
 
-        async def dispatch(_invocation: WorkflowInvocation) -> WorkflowResult:
+        async def dispatch(
+            _invocation: WorkflowInvocation,
+            _execution_context: WorkflowExecutionContext,
+        ) -> WorkflowResult:
             nonlocal calls
             calls += 1
             if calls == 1:
@@ -349,7 +366,10 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
                     raise ExecutionRepositoryUnavailableError("renewal unavailable")
                 return await super().renew(execution_id, fencing_token, lease_duration)
 
-        async def dispatch(_invocation: WorkflowInvocation) -> WorkflowResult:
+        async def dispatch(
+            _invocation: WorkflowInvocation,
+            _execution_context: WorkflowExecutionContext,
+        ) -> WorkflowResult:
             nonlocal calls
             calls += 1
             if calls == 1:
@@ -392,7 +412,10 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         started = asyncio.Event()
         calls = 0
 
-        async def dispatch(_invocation: WorkflowInvocation) -> WorkflowResult:
+        async def dispatch(
+            _invocation: WorkflowInvocation,
+            _execution_context: WorkflowExecutionContext,
+        ) -> WorkflowResult:
             nonlocal calls
             calls += 1
             started.set()
@@ -531,7 +554,10 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         result = WorkflowResult(outputs={})
         dispatches = 0
 
-        def dispatch(_invocation: WorkflowInvocation) -> WorkflowResult:
+        def dispatch(
+            _invocation: WorkflowInvocation,
+            _execution_context: WorkflowExecutionContext,
+        ) -> WorkflowResult:
             nonlocal dispatches
             dispatches += 1
             return result
@@ -578,7 +604,10 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         provider = RecordingProvider()
         repository = InMemoryExecutionRepository()
 
-        def fail(_invocation: WorkflowInvocation) -> WorkflowResult:
+        def fail(
+            _invocation: WorkflowInvocation,
+            _execution_context: WorkflowExecutionContext,
+        ) -> WorkflowResult:
             raise RemoteWorkflowFailureError(
                 code="invalid_slide",
                 safe_message="slide cannot be processed",
@@ -622,7 +651,10 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             finish_policy=RetryPolicy(2, timedelta(0), timedelta(0))
         )
 
-        def fail(_invocation: WorkflowInvocation) -> WorkflowResult:
+        def fail(
+            _invocation: WorkflowInvocation,
+            _execution_context: WorkflowExecutionContext,
+        ) -> WorkflowResult:
             raise RemoteWorkflowFailureError(
                 code="invalid_slide",
                 safe_message="slide cannot be processed",
@@ -667,7 +699,11 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             repository,
             provider,
             InMemoryWorkflowDispatch(
-                {"prostate-heatmap": lambda _invocation: WorkflowResult(outputs={})}
+                {
+                    "prostate-heatmap": lambda _invocation, _execution_context: (
+                        WorkflowResult(outputs={})
+                    )
+                }
             ),
         )
         admitted = await scheduler.schedule(self._request())
@@ -681,13 +717,19 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(failed.work_kind)
         self.assertFalse(await worker.run_once())
 
-    async def test_protected_context_is_injected_only_for_dispatch(self) -> None:
+    async def test_protected_context_stays_separate_from_durable_invocation(
+        self,
+    ) -> None:
         provider = RecordingProvider(protected_context={"credential": "secret"})
         repository = InMemoryExecutionRepository()
-        seen_state: dict[str, JsonValue] = {}
+        seen_contexts: list[WorkflowExecutionContext] = []
 
-        def dispatch(invocation: WorkflowInvocation) -> WorkflowResult:
-            seen_state.update(invocation.input_access.state)
+        def dispatch(
+            invocation: WorkflowInvocation, execution_context: WorkflowExecutionContext
+        ) -> WorkflowResult:
+            self.assertNotIn("credential", invocation.input_access.state)
+            self.assertNotIn("processing_attempt_id", invocation.input_access.state)
+            seen_contexts.append(execution_context)
             return WorkflowResult(outputs={})
 
         scheduler, worker = self._scheduler_and_worker(
@@ -700,7 +742,11 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         durable = await repository.get(admitted.execution.id)
         self.assertNotIn("credential", durable.invocation.input_access.state)
         await worker.run_once()
-        self.assertEqual(seen_state["credential"], "secret")
+        self.assertEqual(seen_contexts[0].protected_context, {"credential": "secret"})
+        self.assertIsNotNone(seen_contexts[0].processing_attempt_id)
+        durable = await repository.get(admitted.execution.id)
+        self.assertNotIn("credential", durable.invocation.input_access.state)
+        self.assertNotIn("processing_attempt_id", durable.invocation.input_access.state)
 
     async def test_scheduled_result_is_visible_after_provider_finish(self) -> None:
         now = datetime(2026, 9, 17, 8, tzinfo=UTC)
@@ -726,7 +772,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             repository=repository,
             providers={provider.name: provider},
             dispatch=InMemoryWorkflowDispatch(
-                {"prostate-heatmap": lambda _invocation: result}
+                {"prostate-heatmap": lambda _invocation, _execution_context: result}
             ),
             owner="worker-1",
             lease_duration=timedelta(minutes=1),
@@ -772,7 +818,10 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         )
         abandoned_started = asyncio.Event()
 
-        async def abandoned(_invocation: WorkflowInvocation) -> WorkflowResult:
+        async def abandoned(
+            _invocation: WorkflowInvocation,
+            _execution_context: WorkflowExecutionContext,
+        ) -> WorkflowResult:
             abandoned_started.set()
             await asyncio.Event().wait()
             raise AssertionError("unreachable")
@@ -788,7 +837,11 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             repository=repository,
             providers={provider.name: provider},
             dispatch=InMemoryWorkflowDispatch(
-                {"prostate-heatmap": lambda _invocation: WorkflowResult(outputs={})}
+                {
+                    "prostate-heatmap": lambda _invocation, _execution_context: (
+                        WorkflowResult(outputs={})
+                    )
+                }
             ),
             owner="scheduler-after-restart",
             lease_duration=timedelta(seconds=30),
@@ -821,7 +874,10 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             result,
         ]
 
-        def dispatch(_invocation: WorkflowInvocation) -> WorkflowResult:
+        def dispatch(
+            _invocation: WorkflowInvocation,
+            _execution_context: WorkflowExecutionContext,
+        ) -> WorkflowResult:
             outcome = outcomes.pop(0)
             if isinstance(outcome, Exception):
                 raise outcome
@@ -878,7 +934,10 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
 
-        def dispatch(_invocation: WorkflowInvocation) -> WorkflowResult:
+        def dispatch(
+            _invocation: WorkflowInvocation,
+            _execution_context: WorkflowExecutionContext,
+        ) -> WorkflowResult:
             raise UnknownDispatchOutcomeError
 
         repository = InMemoryExecutionRepository(
@@ -930,7 +989,10 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         started = asyncio.Event()
         stopped = asyncio.Event()
 
-        async def dispatch(_invocation: WorkflowInvocation) -> WorkflowResult:
+        async def dispatch(
+            _invocation: WorkflowInvocation,
+            _execution_context: WorkflowExecutionContext,
+        ) -> WorkflowResult:
             started.set()
             try:
                 await asyncio.Event().wait()
@@ -987,7 +1049,10 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         release = asyncio.Event()
         result = WorkflowResult(outputs={})
 
-        async def dispatch(_invocation: WorkflowInvocation) -> WorkflowResult:
+        async def dispatch(
+            _invocation: WorkflowInvocation,
+            _execution_context: WorkflowExecutionContext,
+        ) -> WorkflowResult:
             started.set()
             await release.wait()
             return result

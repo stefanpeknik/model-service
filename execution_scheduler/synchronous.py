@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from uuid import uuid4
 
 from execution_scheduler.contracts import UnknownWorkflowError
 from workflow_execution.application import validate_workflow_invocation
 from workflow_execution.catalog import UnknownWorkflow
-from workflow_execution.contracts import InvalidWorkflowInvocation
+from workflow_execution.contracts import (
+    InvalidWorkflowInvocation,
+    WorkflowExecutionContext,
+)
 
 
 if TYPE_CHECKING:
@@ -45,6 +47,6 @@ class SynchronousWorkflowService:
             raise InvalidWorkflowInvocation(str(error)) from error
         return await self._dispatch.run(
             workflow_id,
-            f"synchronous-{uuid4()}",
+            WorkflowExecutionContext(),
             invocation,
         )

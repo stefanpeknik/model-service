@@ -2,13 +2,23 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path, PurePosixPath
+from typing import Annotated
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from workflow_execution.contracts import (
     InvalidWorkflowInvocation,
     SharedPathInput,
+    WorkflowExecutionContext,
     WorkflowInput,
     WorkflowInvocation,
 )
+
+
+class SharedStorageState(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
+
+    root: Annotated[str, Field(min_length=1)]
 
 
 class SharedStorageAccess:
@@ -93,21 +103,19 @@ class SharedStorageAccess:
 
 
 class SharedStorageAccessAdapter:
-    def create(self, invocation: WorkflowInvocation) -> SharedStorageAccess:
-        root = invocation.input_access.state.get("root")
-        if not isinstance(root, str) or not root:
+    def create(
+        self,
+        invocation: WorkflowInvocation,
+        execution_context: WorkflowExecutionContext,
+    ) -> SharedStorageAccess:
+        try:
+            state = SharedStorageState.model_validate(invocation.input_access.state)
+        except ValidationError as error:
             raise InvalidWorkflowInvocation(
-                "shared storage input access requires a root"
-            )
-        processing_attempt_id = invocation.input_access.state.get(
-            "processing_attempt_id"
-        )
-        if processing_attempt_id is not None and (
-            not isinstance(processing_attempt_id, str) or not processing_attempt_id
-        ):
-            raise InvalidWorkflowInvocation("processing_attempt_id must be non-empty")
+                "shared storage input access requires only a non-empty root"
+            ) from error
         return SharedStorageAccess(
-            Path(root),
+            Path(state.root),
             invocation.inputs,
-            processing_attempt_id=processing_attempt_id,
+            processing_attempt_id=execution_context.processing_attempt_id,
         )

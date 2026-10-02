@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import importlib
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Annotated, Protocol
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 if TYPE_CHECKING:
@@ -27,11 +28,15 @@ class EmpaiaGatewayError(RuntimeError):
         self.outcome_unknown = outcome_unknown
 
 
-@dataclass(frozen=True, slots=True)
-class EmpaiaJobContext:
-    api_url: str
-    job_id: str
-    credential: str
+class EmpaiaInputState(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
+
+    api_url: Annotated[str, Field(min_length=1)]
+    job_id: Annotated[str, Field(min_length=1)]
+
+
+class EmpaiaJobContext(EmpaiaInputState):
+    credential: Annotated[str, Field(min_length=1, repr=False)]
 
     def protected_values(self) -> dict[str, JsonValue]:
         return {

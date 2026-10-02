@@ -39,9 +39,11 @@ from workflow_execution.catalog import (
 from workflow_execution.contracts import (
     JsonValue,
     SharedArtifact,
-    WorkflowInvocation,
     WorkflowOutput,
     WorkflowResult,
+)
+from workflow_execution.http import (
+    WorkflowRunRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations at runtime.
 )
 
 
@@ -159,8 +161,8 @@ class DurableEmpaiaExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
             workflow_app = FastAPI()
 
             @workflow_app.post("/workflows/empaia-probe/")
-            async def run_workflow(invocation: WorkflowInvocation) -> WorkflowResult:
-                return await workflow.run(invocation)
+            async def run_workflow(invocation: WorkflowRunRequest) -> WorkflowResult:
+                return await workflow.run(invocation, invocation.execution_context)
 
             await repository.initialize()
             async with httpx.AsyncClient(
@@ -283,10 +285,10 @@ class DurableEmpaiaExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
             workflow_app = FastAPI()
 
             @workflow_app.post("/workflows/empaia-probe/")
-            async def run_workflow(invocation: WorkflowInvocation) -> WorkflowResult:
+            async def run_workflow(invocation: WorkflowRunRequest) -> WorkflowResult:
                 nonlocal workflow_runs
                 workflow_runs += 1
-                return await workflow.run(invocation)
+                return await workflow.run(invocation, invocation.execution_context)
 
             await repository.initialize()
             async with httpx.AsyncClient(

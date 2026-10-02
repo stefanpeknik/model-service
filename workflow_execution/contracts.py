@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal
@@ -14,6 +14,7 @@ from pydantic import (
     ValidationError,
 )
 from pydantic import JsonValue as PydanticJsonValue
+from pydantic.dataclasses import dataclass as validated_dataclass
 
 
 _JSON_VALUE: TypeAdapter[PydanticJsonValue] = TypeAdapter(
@@ -82,6 +83,12 @@ type WorkflowInput = Annotated[
 class InputAccessContext:
     kind: _NonEmptyString
     state: _JsonObject
+
+
+@validated_dataclass(frozen=True, slots=True, config=ConfigDict(extra="forbid"))
+class WorkflowExecutionContext:
+    processing_attempt_id: _NonEmptyString | None = None
+    protected_context: _JsonObject = field(default_factory=dict, repr=False)
 
 
 @dataclass(frozen=True, slots=True)

@@ -10,6 +10,7 @@ from workflow_execution.contracts import (
     InputAccessContext,
     InvalidWorkflowInvocation,
     WorkflowContractViolation,
+    WorkflowExecutionContext,
     WorkflowFailure,
     WorkflowInvocation,
 )
@@ -20,7 +21,11 @@ class FailingApplication:
     def __init__(self, error: Exception) -> None:
         self._error = error
 
-    async def run(self, _invocation: WorkflowInvocation) -> Never:
+    async def run(
+        self,
+        _invocation: WorkflowInvocation,
+        _execution_context: WorkflowExecutionContext | None = None,
+    ) -> Never:
         raise self._error
 
 

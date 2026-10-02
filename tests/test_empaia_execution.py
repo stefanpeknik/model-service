@@ -26,6 +26,7 @@ from workflow_execution.application import WorkflowApplication
 from workflow_execution.catalog import WorkflowCatalog
 from workflow_execution.contracts import (
     SharedArtifact,
+    WorkflowExecutionContext,
     WorkflowInvocation,
     WorkflowResult,
 )
@@ -385,10 +386,13 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
                 },
             )
 
-            async def run(invocation: WorkflowInvocation) -> WorkflowResult:
+            async def run(
+                invocation: WorkflowInvocation,
+                execution_context: WorkflowExecutionContext,
+            ) -> WorkflowResult:
                 nonlocal workflow_runs
                 workflow_runs += 1
-                return await application.run(invocation)
+                return await application.run(invocation, execution_context)
 
             worker = ExecutionWorker(
                 repository=repository,

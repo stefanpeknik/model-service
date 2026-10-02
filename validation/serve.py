@@ -11,8 +11,12 @@ from ray import serve
 
 from workflow_execution.application import WorkflowApplication
 from workflow_execution.catalog import WorkflowCatalog
-from workflow_execution.contracts import WorkflowInvocation, WorkflowResult
-from workflow_execution.http import WorkflowErrorResponse, run_workflow_http
+from workflow_execution.contracts import WorkflowResult
+from workflow_execution.http import (
+    WorkflowErrorResponse,
+    WorkflowRunRequest,
+    run_workflow_http,
+)
 from workflow_execution.prostate_heatmap import ProstateHeatmapWorkflow
 
 
@@ -64,8 +68,8 @@ class ValidationProstateHeatmapApplication:
             503: {"model": WorkflowErrorResponse},
         },
     )
-    async def run(self, body: WorkflowInvocation) -> WorkflowResult:
-        return await run_workflow_http(self._application, body)
+    async def run(self, body: WorkflowRunRequest) -> WorkflowResult:
+        return await run_workflow_http(self._application, body, body.execution_context)
 
 
 app = ValidationProstateHeatmapApplication.bind()  # type: ignore[attr-defined]

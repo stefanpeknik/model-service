@@ -204,7 +204,7 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
             repository=repository,
             providers={provider.name: provider},
             dispatch=InMemoryWorkflowDispatch(
-                {"prostate-heatmap": lambda _invocation: result}
+                {"prostate-heatmap": lambda _invocation, _execution_context: result}
             ),
             owner="worker-1",
             lease_duration=timedelta(minutes=1),
@@ -246,7 +246,9 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         result = WorkflowResult(outputs={"score": InlineOutput(value=0.9)})
         runner = SynchronousWorkflowService(
             WorkflowCatalog.default(),
-            InMemoryWorkflowDispatch({"prostate-heatmap": lambda _invocation: result}),
+            InMemoryWorkflowDispatch(
+                {"prostate-heatmap": lambda _invocation, _execution_context: result}
+            ),
         )
         async with AsyncClient(
             transport=ASGITransport(
@@ -396,7 +398,9 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(forwarded[1].content, b"compressed-image")
 
     async def test_synchronous_workflow_validates_before_dispatch(self) -> None:
-        async def reject_dispatch(_invocation: object) -> WorkflowResult:
+        async def reject_dispatch(
+            _invocation: object, _execution_context: object
+        ) -> WorkflowResult:
             raise AssertionError("invalid invocation was dispatched")
 
         runner = SynchronousWorkflowService(
@@ -429,7 +433,11 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         runner = SynchronousWorkflowService(
             WorkflowCatalog.default(),
             InMemoryWorkflowDispatch(
-                {"prostate-heatmap": lambda _invocation: WorkflowResult(outputs={})}
+                {
+                    "prostate-heatmap": lambda _invocation, _execution_context: (
+                        WorkflowResult(outputs={})
+                    )
+                }
             ),
         )
         body = self._workflow_invocation()
@@ -453,7 +461,9 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_synchronous_workflow_rejects_nonfinite_context_values(self) -> None:
-        async def reject_dispatch(_invocation: object) -> WorkflowResult:
+        async def reject_dispatch(
+            _invocation: object, _execution_context: object
+        ) -> WorkflowResult:
             raise AssertionError("invalid invocation was dispatched")
 
         runner = SynchronousWorkflowService(
@@ -480,7 +490,9 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
                     self.assertFalse(response.json()["detail"]["retryable"])
 
     async def test_synchronous_backpressure_preserves_retry_after(self) -> None:
-        async def reject_for_capacity(_invocation: object) -> WorkflowResult:
+        async def reject_for_capacity(
+            _invocation: object, _execution_context: object
+        ) -> WorkflowResult:
             raise ConfirmedDispatchRejectionError(timedelta(seconds=7))
 
         runner = SynchronousWorkflowService(
@@ -513,7 +525,9 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         started = asyncio.Event()
         cancelled = asyncio.Event()
 
-        async def wait_for_cancellation(_invocation: object) -> WorkflowResult:
+        async def wait_for_cancellation(
+            _invocation: object, _execution_context: object
+        ) -> WorkflowResult:
             started.set()
             try:
                 await asyncio.Event().wait()
@@ -550,7 +564,9 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         started = asyncio.Event()
         cancelled = asyncio.Event()
 
-        async def wait_for_disconnect(_invocation: object) -> WorkflowResult:
+        async def wait_for_disconnect(
+            _invocation: object, _execution_context: object
+        ) -> WorkflowResult:
             started.set()
             try:
                 await asyncio.Event().wait()

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from uuid import uuid4
 
 from ray import serve
 from starlette.requests import Request
@@ -23,7 +24,7 @@ class ProbeWorkflow:
         self._marker_root = Path(marker_root)
 
     async def __call__(self, request: Request) -> dict[str, object]:
-        attempt = request.headers["x-processing-attempt-id"]
+        attempt = request.headers.get("x-processing-attempt-id", f"synchronous-{uuid4()}")
         body = await request.json()
         delay = body["resolved_configuration"]["delay_seconds"]
         (self._marker_root / f"{attempt}.started").touch()

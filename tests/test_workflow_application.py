@@ -21,6 +21,7 @@ from workflow_execution.contracts import (
     SharedArtifact,
     SharedPathInput,
     WorkflowContractViolation,
+    WorkflowExecutionContext,
     WorkflowFailure,
     WorkflowInvocation,
     WorkflowResult,
@@ -105,17 +106,29 @@ class FixedPathAccessAdapter:
     def __init__(self, root: Path) -> None:
         self._root = root
 
-    def create(self, _invocation: WorkflowInvocation) -> FixedPathAccess:
+    def create(
+        self,
+        _invocation: WorkflowInvocation,
+        _execution_context: WorkflowExecutionContext,
+    ) -> FixedPathAccess:
         return FixedPathAccess(self._root)
 
 
 class FailingAccessAdapter:
-    def create(self, _invocation: WorkflowInvocation) -> FixedPathAccess:
+    def create(
+        self,
+        _invocation: WorkflowInvocation,
+        _execution_context: WorkflowExecutionContext,
+    ) -> FixedPathAccess:
         raise OSError("provider credential is secret")
 
 
 class TimingOutAccessAdapter:
-    def create(self, _invocation: WorkflowInvocation) -> FixedPathAccess:
+    def create(
+        self,
+        _invocation: WorkflowInvocation,
+        _execution_context: WorkflowExecutionContext,
+    ) -> FixedPathAccess:
         raise TimeoutError("provider request timed out")
 
 
@@ -125,7 +138,11 @@ class FailingCloseAccess(FixedPathAccess):
 
 
 class FailingCloseAccessAdapter(FixedPathAccessAdapter):
-    def create(self, _invocation: WorkflowInvocation) -> FailingCloseAccess:
+    def create(
+        self,
+        _invocation: WorkflowInvocation,
+        _execution_context: WorkflowExecutionContext,
+    ) -> FailingCloseAccess:
         return FailingCloseAccess(self._root)
 
 
@@ -135,7 +152,11 @@ class TimingOutCloseAccess(FixedPathAccess):
 
 
 class TimingOutCloseAccessAdapter(FixedPathAccessAdapter):
-    def create(self, _invocation: WorkflowInvocation) -> TimingOutCloseAccess:
+    def create(
+        self,
+        _invocation: WorkflowInvocation,
+        _execution_context: WorkflowExecutionContext,
+    ) -> TimingOutCloseAccess:
         return TimingOutCloseAccess(self._root)
 
 

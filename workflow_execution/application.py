@@ -15,6 +15,7 @@ from workflow_execution.contracts import (
     JsonValue,
     SharedArtifact,
     WorkflowContractViolation,
+    WorkflowExecutionContext,
     WorkflowFailure,
     WorkflowFailureCode,
     WorkflowInvocation,
@@ -52,6 +53,7 @@ class WorkflowInputAccessAdapter(Protocol):
     def create(
         self,
         invocation: WorkflowInvocation,
+        execution_context: WorkflowExecutionContext,
     ) -> WorkflowInputAccess | Awaitable[WorkflowInputAccess]: ...
 
 
@@ -88,7 +90,11 @@ class WorkflowApplication:
         if access_adapters is not None:
             self._access_adapters.update(access_adapters)
 
-    async def run(self, invocation: WorkflowInvocation) -> WorkflowResult:
+    async def run(
+        self,
+        invocation: WorkflowInvocation,
+        execution_context: WorkflowExecutionContext | None = None,
+    ) -> WorkflowResult:
         validate_workflow_invocation(self._definition, invocation)
         access: WorkflowInputAccess | None = None
         primary_failure: BaseException | None = None
@@ -99,7 +105,9 @@ class WorkflowApplication:
             timeout = asyncio.timeout(max(0, timeout_seconds))
             try:
                 async with timeout:
-                    access = await self._create_access(invocation)
+                    access = await self._create_access(
+                        invocation, execution_context or WorkflowExecutionContext()
+                    )
                     context = WorkflowContext(
                         inputs=access,
                         configuration=invocation.resolved_configuration,
@@ -156,11 +164,12 @@ class WorkflowApplication:
     async def _create_access(
         self,
         invocation: WorkflowInvocation,
+        execution_context: WorkflowExecutionContext,
     ) -> WorkflowInputAccess:
         adapter = self._access_adapters.get(invocation.input_access.kind)
         if adapter is None:
             raise InvalidWorkflowInvocation("unsupported input access kind")
-        access = adapter.create(invocation)
+        access = adapter.create(invocation, execution_context)
         if inspect.isawaitable(access):
             return await access
         return access

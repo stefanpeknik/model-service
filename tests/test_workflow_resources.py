@@ -29,6 +29,7 @@ from workflow_execution.contracts import (
     InvalidWorkflowInvocation,
     ProviderInput,
     SharedArtifact,
+    WorkflowExecutionContext,
     WorkflowFailure,
     WorkflowInvocation,
     WorkflowResult,
@@ -52,7 +53,7 @@ class WorkflowResourceTests(unittest.IsolatedAsyncioTestCase):
         cancelled = asyncio.Event()
 
         class Adapter:
-            async def create(self, _invocation):
+            async def create(self, _invocation, _execution_context):
                 try:
                     await asyncio.Event().wait()
                 finally:
@@ -83,7 +84,7 @@ class WorkflowResourceTests(unittest.IsolatedAsyncioTestCase):
                 raise OSError("cleanup failure")
 
         class Adapter:
-            def create(self, _invocation):
+            def create(self, _invocation, _execution_context):
                 return Access()
 
         application = WorkflowApplication(
@@ -122,7 +123,7 @@ class WorkflowResourceTests(unittest.IsolatedAsyncioTestCase):
                 closed.set()
 
         class Adapter:
-            def create(self, _invocation):
+            def create(self, _invocation, _execution_context):
                 return Access()
 
         application = WorkflowApplication(
@@ -153,7 +154,7 @@ class WorkflowResourceTests(unittest.IsolatedAsyncioTestCase):
                     close_cancelled.set()
 
         class Adapter:
-            def create(self, _invocation):
+            def create(self, _invocation, _execution_context):
                 return Access()
 
         application = WorkflowApplication(
@@ -173,7 +174,7 @@ class WorkflowResourceTests(unittest.IsolatedAsyncioTestCase):
                 raise asyncio.CancelledError
 
         class Adapter:
-            def create(self, _invocation):
+            def create(self, _invocation, _execution_context):
                 return Access()
 
         class Workflow:
@@ -233,12 +234,10 @@ class WorkflowResourceTests(unittest.IsolatedAsyncioTestCase):
                         self.invocation(),
                         input_access=InputAccessContext(
                             kind="shared_storage",
-                            state={
-                                "root": directory,
-                                "processing_attempt_id": attempt,
-                            },
+                            state={"root": directory},
                         ),
-                    )
+                    ),
+                    WorkflowExecutionContext(processing_attempt_id=attempt),
                 )
 
             old_path = access("old").output_path("outputs/heatmap.tiff")
@@ -258,7 +257,8 @@ class WorkflowResourceTests(unittest.IsolatedAsyncioTestCase):
                     input_access=InputAccessContext(
                         kind="shared_storage", state={"root": directory}
                     ),
-                )
+                ),
+                WorkflowExecutionContext(),
             )
             self.assertEqual(
                 synchronous.output_path("outputs/heatmap.tiff"),
@@ -290,19 +290,29 @@ class WorkflowResourceTests(unittest.IsolatedAsyncioTestCase):
                     state={
                         "api_url": "https://example.invalid",
                         "job_id": "job",
-                        "credential": "secret",
-                        "processing_attempt_id": "attempt",
                     },
                 ),
             )
-            task = asyncio.create_task(adapter.create(invocation))
+            task = asyncio.create_task(
+                adapter.create(
+                    invocation,
+                    WorkflowExecutionContext(
+                        processing_attempt_id="attempt",
+                        protected_context={
+                            "api_url": "https://example.invalid",
+                            "job_id": "job",
+                            "credential": "secret",
+                        },
+                    ),
+                )
+            )
             await asyncio.wait_for(started.wait(), timeout=1)
             task.cancel()
             with self.assertRaises(asyncio.CancelledError):
                 await asyncio.wait_for(task, timeout=1)
             self.assertTrue(closed.is_set())
 
-    async def test_worker_overrides_caller_attempt_and_isolates_results(self) -> None:
+    async def test_worker_supplies_runtime_attempt_and_isolates_results(self) -> None:
         with TemporaryDirectory() as directory:
             attempts = []
 
@@ -326,9 +336,10 @@ class WorkflowResourceTests(unittest.IsolatedAsyncioTestCase):
             )
             application = WorkflowApplication(definition, Workflow())
 
-            async def dispatch(invocation):
-                attempts.append(invocation.input_access.state["processing_attempt_id"])
-                return await application.run(invocation)
+            async def dispatch(invocation, execution_context):
+                attempts.append(execution_context.processing_attempt_id)
+                self.assertEqual(invocation.input_access.state, {"root": directory})
+                return await application.run(invocation, execution_context)
 
             repository = InMemoryExecutionRepository()
             provider = StandaloneProviderAdapter(catalog)
@@ -350,7 +361,7 @@ class WorkflowResourceTests(unittest.IsolatedAsyncioTestCase):
                 self.invocation(),
                 input_access=InputAccessContext(
                     kind="shared_storage",
-                    state={"root": directory, "processing_attempt_id": "caller-value"},
+                    state={"root": directory},
                 ),
             )
             scheduled = []
@@ -376,7 +387,7 @@ class WorkflowResourceTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(paths[0].read_bytes(), b"1")
             self.assertEqual(paths[1].read_bytes(), b"2")
             self.assertEqual(len(set(attempts)), 2)
-            self.assertNotIn("caller-value", attempts)
+            self.assertNotIn(None, attempts)
 
 
 class EmptyWorkflow:

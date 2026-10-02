@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import suppress
-from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from execution_scheduler.active_work import ActiveWorkRegistry
@@ -34,6 +33,7 @@ from execution_scheduler.providers import (
     ProviderFinishOutcome,
     ProviderSuccess,
 )
+from workflow_execution.contracts import WorkflowExecutionContext
 
 
 logger = logging.getLogger(__name__)
@@ -47,7 +47,6 @@ if TYPE_CHECKING:
     from execution_scheduler.domain import Settlement
     from execution_scheduler.providers import ProviderAdapter
     from execution_scheduler.repository import ExecutionRepository
-    from workflow_execution.contracts import WorkflowInvocation
 
 
 class ExecutionWorker:
@@ -183,8 +182,11 @@ class ExecutionWorker:
             try:
                 result = await self._dispatch.run(
                     claim.workflow_id,
-                    claim.fencing_token,
-                    _invocation_with_protected_context(claim),
+                    WorkflowExecutionContext(
+                        processing_attempt_id=claim.fencing_token,
+                        protected_context=claim.protected_context,
+                    ),
+                    claim.invocation,
                 )
                 return ProcessingSucceeded(result)
             except ConfirmedDispatchRejectionError as error:
@@ -227,18 +229,6 @@ class ExecutionWorker:
                 retryable=error.retryable,
                 outcome_unknown=error.outcome_unknown,
             )
-
-
-def _invocation_with_protected_context(claim: WorkClaim) -> WorkflowInvocation:
-    access = replace(
-        claim.invocation.input_access,
-        state={
-            **claim.invocation.input_access.state,
-            **claim.protected_context,
-            "processing_attempt_id": claim.fencing_token,
-        },
-    )
-    return replace(claim.invocation, input_access=access)
 
 
 def _finish_outcome(claim: WorkClaim) -> ProviderFinishOutcome:

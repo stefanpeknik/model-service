@@ -13,6 +13,7 @@ from execution_scheduler.dispatch import (
 from workflow_execution.contracts import (
     InlineOutput,
     InputAccessContext,
+    WorkflowExecutionContext,
     WorkflowInvocation,
     WorkflowResult,
 )
@@ -67,7 +68,11 @@ class HttpWorkflowDispatchTests(unittest.IsolatedAsyncioTestCase):
         dispatch = HTTPWorkflowDispatch(client, origin="http://ray-serve:8000")
 
         with self.assertRaises(ConfirmedDispatchRejectionError) as raised:
-            await dispatch.run("prostate-heatmap", "attempt-1", self._invocation())
+            await dispatch.run(
+                "prostate-heatmap",
+                WorkflowExecutionContext(processing_attempt_id="attempt-1"),
+                self._invocation(),
+            )
 
         self.assertEqual(raised.exception.retry_after, timedelta(seconds=7))
 
@@ -78,7 +83,11 @@ class HttpWorkflowDispatchTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with self.assertRaises(UnknownDispatchOutcomeError):
-            await dispatch.run("prostate-heatmap", "attempt-1", self._invocation())
+            await dispatch.run(
+                "prostate-heatmap",
+                WorkflowExecutionContext(processing_attempt_id="attempt-1"),
+                self._invocation(),
+            )
 
     async def test_classified_workflow_failure_keeps_safe_error(self) -> None:
         dispatch = HTTPWorkflowDispatch(
@@ -98,7 +107,11 @@ class HttpWorkflowDispatchTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with self.assertRaises(RemoteWorkflowFailureError) as raised:
-            await dispatch.run("prostate-heatmap", "attempt-1", self._invocation())
+            await dispatch.run(
+                "prostate-heatmap",
+                WorkflowExecutionContext(processing_attempt_id="attempt-1"),
+                self._invocation(),
+            )
 
         self.assertEqual(raised.exception.code, "storage_temporarily_unavailable")
         self.assertTrue(raised.exception.retryable)
@@ -114,7 +127,7 @@ class HttpWorkflowDispatchTests(unittest.IsolatedAsyncioTestCase):
 
         result = await dispatch.run(
             "prostate-heatmap",
-            "attempt-1",
+            WorkflowExecutionContext(processing_attempt_id="attempt-1"),
             self._invocation(),
         )
 

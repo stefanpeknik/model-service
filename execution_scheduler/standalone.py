@@ -11,7 +11,7 @@ from execution_scheduler.contracts import (
 )
 from execution_scheduler.domain import PreparedWorkflow, SubmissionIdentity
 from workflow_execution.application import validate_workflow_invocation
-from workflow_execution.contracts import SharedPathInput
+from workflow_execution.contracts import SharedPathInput, WorkflowExecutionContext
 from workflow_execution.serialization import invocation_from_dict
 from workflow_execution.shared_storage import SharedStorageAccessAdapter
 
@@ -77,7 +77,9 @@ class StandaloneProviderAdapter:
                 raise ValueError(
                     "standalone scheduling requires shared-storage input access"
                 )
-            access = SharedStorageAccessAdapter().create(invocation)
+            access = SharedStorageAccessAdapter().create(
+                invocation, WorkflowExecutionContext()
+            )
             for name, value in invocation.inputs.items():
                 if isinstance(value, SharedPathInput):
                     access.input_path(name)
