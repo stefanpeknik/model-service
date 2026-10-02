@@ -14,7 +14,7 @@ ARG UV_CACHE_DIR=/home/ray/.cache/uv
 RUN uv pip install --python /home/ray/anaconda3/bin/python \
     "fastapi>=0.115.0" "httpx>=0.27.0" "pydantic>=2.10.0" "pyyaml>=6.0.2" \
     "onnxruntime-gpu==1.23.2" \
-    "mlflow<3.0" "lz4>=4.4.5" "ratiopath==1.0.3" \
+    "mlflow<3.0" "lz4>=4.4.5" "ratiopath==1.4.0" \
     "torch==2.8.0" "torchvision==0.23.0" \
     "openslide-bin==4.0.1.2" "pyvips[binary]>=3.0.0"
 
@@ -42,3 +42,6 @@ COPY misc misc
 COPY integrations integrations
 COPY workflow_execution workflow_execution
 COPY workflow-definitions workflow-definitions
+
+RUN uv --no-cache run --no-project python -c \
+    "from ratiopath.masks.mask_builders import MaskBuilder; from ratiopath.openslide import OpenSlide; from ratiopath.tiling import grid_tiles"
