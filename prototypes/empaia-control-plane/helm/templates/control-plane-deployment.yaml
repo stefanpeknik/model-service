@@ -1,0 +1,136 @@
+{{- if .Values.controlPlane.enabled }}
+{{- $secretName := required "controlPlane.auth.existingSecret is required" .Values.controlPlane.auth.existingSecret }}
+{{- $imageTag := required "controlPlane.image.tag is required" .Values.controlPlane.image.tag }}
+{{- $storageMappings := required "controlPlane.empaia.storageMappings is required" .Values.controlPlane.empaia.storageMappings }}
+{{- $appServiceUrl := required "controlPlane.empaia.appServiceUrl is required" .Values.controlPlane.empaia.appServiceUrl }}
+{{- $resolvedMappings := list }}
+{{- range $mapping := $storageMappings }}
+{{- $resolvedMappings = append $resolvedMappings (dict "storage_id" (required "storage_id is required" $mapping.storage_id) "source_prefix" (required "source_prefix is required" $mapping.source_prefix) "mount_root" (required "mount_root is required" $mapping.mount_root)) }}
+{{- end }}
+{{- if not .Values.controlPlane.empaia.pocAllowBroadAppServiceCredential }}
+{{- fail "controlPlane EMPAIA resolution currently requires explicit acceptance of the broad POC AppService credential" }}
+{{- end }}
+{{- if and (hasPrefix "http://" $appServiceUrl) (not .Values.controlPlane.empaia.pocAllowInsecureAppServiceHttp) }}
+{{- fail "plaintext AppService transport requires explicit POC acceptance" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-control-plane
+  namespace: {{ .Release.Namespace | default "rationai-jobs-ns" }}
+  labels:
+    app.kubernetes.io/name: model-service-control-plane
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: model-service-control-plane
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: model-service-control-plane
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: control-plane
+          image: "{{ .Values.controlPlane.image.repository }}:{{ $imageTag }}"
+          imagePullPolicy: {{ .Values.controlPlane.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: EMPAIA_EXECUTION_DATABASE_PATH
+              value: /var/lib/model-service/jobs.db
+            - name: EMPAIA_INSTALLATION_ALIAS
+              value: {{ required "controlPlane.empaia.installationAlias is required" .Values.controlPlane.empaia.installationAlias | quote }}
+            - name: EMPAIA_APP_MAPPINGS_JSON
+              value: {{ required "controlPlane.empaia.appMappings is required" .Values.controlPlane.empaia.appMappings | toJson | quote }}
+            - name: EMPAIA_JES_BEARER_TOKEN_FILE
+              value: /var/run/secrets/model-service/jes-token
+            - name: EMPAIA_APP_SERVICE_URL
+              value: {{ $appServiceUrl | quote }}
+            - name: EMPAIA_APP_SERVICE_BEARER_TOKEN_FILE
+              value: /var/run/secrets/model-service/app-service-token
+            - name: EMPAIA_STORAGE_MAPPINGS_JSON
+              value: {{ $resolvedMappings | toJson | quote }}
+            - name: EMPAIA_POC_ALLOW_BROAD_APP_SERVICE_CREDENTIAL
+              value: "true"
+            - name: EMPAIA_POC_ALLOW_INSECURE_APP_SERVICE_HTTP
+              value: {{ .Values.controlPlane.empaia.pocAllowInsecureAppServiceHttp | quote }}
+            {{- with .Values.controlPlane.maxInitialCapacityWaitSeconds }}
+            - name: EMPAIA_MAX_INITIAL_CAPACITY_WAIT_SECONDS
+              value: {{ . | quote }}
+            {{- end }}
+            - name: EMPAIA_RECONCILE_INTERVAL_SECONDS
+              value: {{ .Values.controlPlane.reconcileIntervalSeconds | quote }}
+            - name: EMPAIA_RESOLUTION_RETRY_SECONDS
+              value: {{ .Values.controlPlane.resolutionRetrySeconds | quote }}
+            - name: EMPAIA_WORKER_STALE_AFTER_SECONDS
+              value: {{ .Values.controlPlane.workerStaleAfterSeconds | quote }}
+            - name: EMPAIA_RETRY_BACKOFF_SECONDS
+              value: {{ .Values.controlPlane.retryBackoffSeconds | quote }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.controlPlane.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsUser: 10001
+            runAsGroup: 10001
+          volumeMounts:
+            - name: state
+              mountPath: /var/lib/model-service
+            - name: credentials
+              mountPath: /var/run/secrets/model-service
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            {{- range $index, $mapping := $storageMappings }}
+            - name: wsi-{{ $index }}
+              mountPath: {{ required "storage mapping mount_root is required" $mapping.mount_root | quote }}
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-control-plane" .Release.Name) .Values.controlPlane.persistence.existingClaim }}
+        - name: credentials
+          secret:
+            secretName: {{ $secretName }}
+            items:
+              - key: {{ .Values.controlPlane.auth.jesTokenKey }}
+                path: jes-token
+              - key: {{ .Values.controlPlane.auth.appServiceTokenKey }}
+                path: app-service-token
+        - name: tmp
+          emptyDir: {}
+        {{- range $index, $mapping := $storageMappings }}
+        - name: wsi-{{ $index }}
+          persistentVolumeClaim:
+            claimName: {{ required "storage mapping existingClaim is required" $mapping.existingClaim | quote }}
+        {{- end }}
+{{- end }}

@@ -1,0 +1,33 @@
+controlPlane:
+  enabled: false
+  image:
+    repository: cerit.io/rationai/model-service-control-plane
+    tag: ""
+    pullPolicy: IfNotPresent
+  auth:
+    existingSecret: ""
+    jesTokenKey: jes-token
+    appServiceTokenKey: app-service-token
+  empaia:
+    installationAlias: ""
+    appServiceUrl: ""
+    appMappings: []
+    storageMappings: []
+    pocAllowBroadAppServiceCredential: false
+    pocAllowInsecureAppServiceHttp: false
+  maxInitialCapacityWaitSeconds: null
+  reconcileIntervalSeconds: 5
+  resolutionRetrySeconds: 5
+  workerStaleAfterSeconds: 60
+  retryBackoffSeconds: 5
+  persistence:
+    existingClaim: ""
+    size: 2Gi
+    storageClassName: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 1
+      memory: 512Mi
