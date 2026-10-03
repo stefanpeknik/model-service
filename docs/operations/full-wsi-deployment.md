@@ -7,26 +7,70 @@ to the separate testing session described in
 
 ## Preparation status, 2026-10-02
 
-The scheduler and CPU head images are built locally with source revision
-`f1c4f89`. Their packaged source matches the local tree. The source checksums,
-including relative filenames and file contents, are:
+The scheduler image uses source revision `f9d52d4`; the CPU head uses `f1c4f89`
+and GPU worker uses `0930dfb`. Their packaged application source matches the
+local tree. Each checksum hashes sorted Python/YAML files as relative path,
+NUL byte, then file contents:
 
 - Scheduler, 44 Python and workflow-definition files:
-  `872698bce8e74aeb0f1db789c5dab27f2194b62795f47fed2e73e52e1ba20294`.
-- Head, 32 Python and workflow-definition files:
-  `d8d896cd814971ba630150461d4d6433e49b0efc1b91f86ae82b53fd7ba70c65`.
+  `adeab1bb944ae96944e20c21b970c976f4f83cbcdc1400da51ab3152131d06d4`.
+- Head and GPU worker, 32 Python and workflow-definition files:
+  `28325948851efbf1a715d7061781dc66b2a6b83d3dded470781e4bee2706a1bf`.
 
 The head imports both native applications and validates the exact rendered
 Serve configuration with Ray 2.58. Helm lint and Kubernetes server-side dry-run
-passed. The local suite passed 143 tests with 15 skipped.
+passed. The local suite passed 145 tests with 15 skipped. An isolated Mypy check
+passed for the three Python modules changed by the final routing fix.
 
-Deployment is **not ready**. Podman has no CERIT login, and the GPU base-image
-manifest read returned unauthorized. The GPU image has not been built or
-published; neither locally built image has been published. No Helm upgrade or
-namespace mutation has been performed. The live workflow still selects the
-dummy implementation. Restore registry access with `podman login cerit.io`,
-verify the GPU base tag, then build, publish, and deploy before the testing
-session starts. Do not submit the real WSI against the old deployment.
+Preparation is complete for the separate session's first real full-WSI test.
+All three images are published and verified. `model-service-validation` is
+deployed at Helm revision 5, with active Ray cluster
+`model-service-validation-jqq6z`. Both `prostate-heatmap` and
+`prostate-classifier-1` are `RUNNING`, with `HEALTHY` deployments and no pod
+restarts. The dummy application and temporary mock AppService are no longer
+deployed. The existing production and storage releases remain at revisions 3
+and 1 respectively; neither was changed.
+
+Readiness checks passed:
+
+- Public `/healthz`, `/readyz`, and `/healthz/workflows` return HTTP 200.
+- Serve exposes `/workflows/prostate-heatmap` and `/prostate-classifier-1`.
+- Deployed scheduler and GPU source fingerprints match those above.
+- CUDA sees one A100 80GB PCIe MIG 2g.20gb device, with 19.5 GiB usable memory.
+  TensorRT initialization produced a 49,322,060-byte FP16 engine in the new cache.
+- The WSI opens at 89,262 by 204,744 pixels, and target MPP selects level 1.
+  The staged mask checksum matches the request below.
+- Both new 32 GiB PVCs are bound. The worker can write output, attempt-output,
+  and scratch mounts as UID 1000; the scheduler can read the inputs and outputs.
+
+Offline image imports, CUDA/TensorRT shared-library resolution, and a small
+memmap-to-pyramidal-TIFF check also passed. A temporary restricted pod verified
+cluster image-pull access, then was removed. No registry credential was copied
+to Kubernetes and no new registry Secret was needed.
+
+No raw-inference or workflow execution request was submitted during preparation.
+Full-slide completion, output correctness, inference results, and peak resource
+usage remain for the testing session. Before the upgrade, all 168 existing
+execution records were terminal with no unfinished provider work.
+
+One non-fatal issue remains in unchanged `models/binary_classifier.py`:
+ONNX Runtime reports CPU-affinity errors during startup. The classifier passes
+`SessionOptions` as `session_options`, but the installed constructor expects
+`sess_options` and ignores the former keyword. Its intended thread settings
+therefore are not applied. The replica still initializes and builds its
+TensorRT engine. Model source was left unchanged as requested; the testing
+session should account for this when checking CPU usage and throughput.
+
+Published image manifests:
+
+| Image tag | Manifest SHA-256 |
+| --- | --- |
+| Scheduler `full-wsi-20261002-2` | `42aba937efa83059b621218e49275b22ab0ba8611d4b6a1b1f9520e25e549d54` |
+| Head `full-wsi-20261002-1` | `704fd69f326d0269e0e571492f2cb8c3e581f2b778158de6e452e3fbac9ad4f5` |
+| GPU worker `full-wsi-20261002-1` | `1e1d198b5a1ccc4b01bb7ad127e4f3af1aee9ae9bfd3ab73a880628747706308` |
+
+The local, registry, and deployed GPU image config digest is
+`770c36184ba18be64bc23cdc598c59ea8c7044aff4412582af376c92e9626feb`.
 
 ## Deployment
 
@@ -34,13 +78,68 @@ Build and publish these images in the existing `cerit.io/stefanpeknik` project:
 
 | Image | Build file |
 | --- | --- |
-| `model-service-scheduler:full-wsi-20261002-1` | `docker/Dockerfile.execution-scheduler` |
+| `model-service-scheduler:full-wsi-20261002-2` | `docker/Dockerfile.execution-scheduler` |
 | `model-service-ray-validation:full-wsi-20261002-1` | `docker/Dockerfile.workflow-head` |
 | `model-service-workflow-gpu:full-wsi-20261002-1` | `docker/Dockerfile.workflow-gpu` |
 
 Pass `--build-arg SOURCE_REVISION=<source commit>` to each build. The GPU image
-packages local source, including unchanged `models/`, over the existing CERIT
-Ray 2.58 GPU base. Neither application fetches a GitHub working-directory archive.
+packages local source, including unchanged `models/`, over the public
+`rayproject/ray:2.58.0-py312-gpu` base. Neither application fetches a GitHub
+working-directory archive.
+
+The inference dependencies are pinned to ONNX Runtime GPU `1.23.2`, TensorRT
+CUDA 12 `10.9.0.34`, PyTorch `2.8.0`, and torchvision `0.23.0`. The CUDA 12.8
+libraries installed with PyTorch take priority over the base image's CUDA 12.1
+system libraries. These pins follow the
+[ONNX Runtime compatibility documentation](https://onnxruntime.ai/docs/execution-providers/TensorRT-ExecutionProvider.html)
+and [PyTorch release instructions](https://pytorch.org/get-started/previous-versions/).
+TensorRT libraries come from NVIDIA's hash-verified binary wheel through `uv`;
+its PyPI source package is a download stub. OpenSlide is `4.0.1`, distributed in
+`openslide-bin==4.0.1.2`, and Ratiopath is pinned to the repository's locked
+`1.4.0` release. The GPU build checks the real heatmap and OpenSlide imports;
+the older `1.0.3` release does not provide the required mask-builder module.
+
+If the large NVIDIA transfer fails, retain a resumable copy in the ignored
+`.cache/container-artifacts` directory. Verify the complete wheel against the
+SHA-256 in `docker/Dockerfile.workflow-gpu` before building. Mount that directory
+with `--volume "$PWD/.cache/container-artifacts:/opt/build-wheels:ro,z"` and pass
+`--build-arg TENSORRT_WHEEL_URL=file:///opt/build-wheels/tensorrt_cu12_libs-10.9.0.34-py2.py3-none-manylinux_2_28_x86_64.whl`.
+The wheel mount is build-only; the wheel archive is not copied into the image.
+The `runtime-dependencies` build target can complete independently, and its
+layer remains cached when the TensorRT transfer needs a retry.
+For a retryable dependency download, pass `--build-arg UV_NO_CACHE=false` and
+mount the task-owned cache with
+`--volume "$PWD/.cache/container-artifacts/uv:/home/ray/.cache/uv:rw,z"`.
+Dependency installation runs as root during the build so rootless Podman can
+write the host-owned cache; the final image runs as UID 1000. The default build
+disables uv caching, and the bind-mounted cache stays outside the image.
+The HTTP timeout is 300 seconds instead of uv's 30-second default. Downloads
+are limited to four concurrent transfers.
+
+The initial GPU `podman push` failed with Harbor HTTP 502 on large layers.
+The upload was switched to a compressed OCI export and `regctl` with 64 MiB
+chunks, three concurrent requests, and at most three requests per second.
+This keeps individual upload requests short and reuses accepted layers. The
+image config digest and uncompressed layer contents stay unchanged.
+
+```sh
+skopeo copy --dest-compress-format gzip \
+  --dest-oci-accept-uncompressed-layers=false \
+  containers-storage:cerit.io/stefanpeknik/model-service-workflow-gpu:full-wsi-20261002-1 \
+  oci:.cache/full-wsi-gpu-oci:full-wsi-20261002-1
+
+export REGCTL_CONFIG="$PWD/.cache/upload-tools/regctl.json"
+regctl registry set cerit.io --blob-chunk 67108864 --blob-max 67108864 \
+  --req-concurrent 3 --req-per-sec 3 --repo-auth
+regctl image copy ocidir://.cache/full-wsi-gpu-oci:full-wsi-20261002-1 \
+  cerit.io/stefanpeknik/model-service-workflow-gpu:full-wsi-20261002-1
+```
+
+Use an existing local Harbor login. Do not package registry credentials in the
+image or copy them to Kubernetes. The temporary local uploader configuration
+must stay outside the build context. The
+[regctl upload options](https://regclient.org/cli/regctl/registry/set/) describe
+chunk sizes and request limits. No cluster-side builder or uploader was created.
 
 Deploy only this namespace and release:
 
@@ -49,13 +148,29 @@ helm upgrade model-service-validation helm/rayservice \
   -n peknik-ns --reset-values -f helm/rayservice/values.full-wsi.yaml
 ```
 
+The first upgrade hit a Helm 4 server-side apply conflict because the scheduler
+image field was owned by `kubectl-set`. Retrying with `--force-conflicts`
+transferred that field to Helm without replacing resources. The subsequent
+CPU-request adjustment created a replacement pending Ray cluster; its old head
+briefly held quota during termination. Both transitional failures are resolved.
+
+Later image updates need a controlled replacement if the warm GPU worker is
+still running. Two 23 GiB worker requests alone exceed the namespace's 40 GiB
+requested-memory quota, so a zero-downtime RayService upgrade cannot fit.
+Quiesce admitted work before replacing this RayService, and preserve PostgreSQL
+and the input/output/cache PVCs. Do not change namespace quota or other releases
+to work around this limit.
+
 Do not use `--reuse-values`: the previous release selected a dummy application
 and a 600-second deadline. A successful Helm upgrade is not evidence that the
 GPU worker or model is ready. Check RayService application status, pod readiness,
 and `/healthz/workflows` before admitting the real test.
 
 The native workflow and real classifier are in the same RayService. One warm
-MIG 2g.20gb worker provides eight CPUs and 24 GiB RAM. The model uses four CPUs
+MIG 2g.20gb worker requests four CPUs and 23 GiB RAM, with limits of eight CPUs
+and 24 GiB RAM. CPU throughput is best-effort up to that limit; it does not
+reserve eight physical cores on a busy node.
+The model uses four CPUs
 and the GPU; the workflow uses the remaining four CPUs. Ray's object store is
 limited to 1 GiB so both actors' memory reservations fit.
 
@@ -92,8 +207,17 @@ oc -n peknik-ns port-forward svc/model-service-validation-execution-scheduler 18
 Use `http://127.0.0.1:18080` as the SDK `base_url`. Scheduled calls use
 `POST /v1/workflows/prostate-heatmap/schedule`, followed by
 `GET /v1/executions/{id}`. Cancellation is
-`POST /v1/executions/{id}/cancel`. Raw inference continues forwarding to the
-existing production RayService in the same namespace; its origin is unchanged.
+`POST /v1/executions/{id}/cancel`. Raw `prostate-classifier-1` calls use the same
+warm classifier as the workflow, with the unchanged MLflow artifact. The
+`INFERENCE_MODEL_ORIGINS` map selects an exact first path component and preserves
+the full path, query, body, and inference headers. Other models retain the
+existing production RayService as their fallback origin. The namespace's
+40 GiB requested-memory quota cannot accommodate both old and new GPU workers
+at once. Sharing the classifier avoids that conflict without changing the old
+RayService or the quota; the 23 GiB request leaves room for its CPU worker.
+Routing is preserved for other legacy models, but their GPU worker cannot start
+alongside the warm full-WSI worker under this quota. Do not treat the fallback
+origin as a promise of concurrent GPU capacity for those models.
 
 ## Request for the testing session
 

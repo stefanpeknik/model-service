@@ -21,7 +21,7 @@ template:
         imagePullPolicy: {{ .Values.fullWsi.gpuImage.pullPolicy }}
         resources:
           requests:
-            cpu: 8
+            cpu: 4
             memory: 23Gi
             nvidia.com/mig-2g.20gb: 1
           limits:

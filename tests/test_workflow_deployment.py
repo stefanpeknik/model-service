@@ -56,6 +56,8 @@ class WorkflowDeploymentTests(unittest.TestCase):
         self.assertEqual(worker["minReplicas"], 1)
         self.assertEqual(worker["maxReplicas"], 1)
         worker_resources = worker["template"]["spec"]["containers"][0]["resources"]
+        self.assertEqual(worker_resources["requests"]["cpu"], 4)
+        self.assertEqual(worker_resources["limits"]["cpu"], 8)
         self.assertEqual(worker_resources["requests"]["memory"], "23Gi")
         self.assertEqual(worker_resources["limits"]["memory"], "24Gi")
         self.assertEqual(
