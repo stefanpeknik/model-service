@@ -22,6 +22,7 @@ from execution_scheduler.domain import (
 )
 from execution_scheduler.postgres import PostgresExecutionRepository
 from execution_scheduler.security import ProtectedContextCipher
+from tests.repository_contract import ExecutionRepositoryContract
 from workflow_execution.contracts import (
     InlineOutput,
     InputAccessContext,
@@ -34,7 +35,12 @@ DATABASE_DEADLINE_WINDOW = timedelta(milliseconds=500)
 DATABASE_DEADLINE_WAIT_SECONDS = 0.7
 
 
-class PostgresExecutionRepositoryTests(unittest.IsolatedAsyncioTestCase):
+class PostgresExecutionRepositoryTests(
+    ExecutionRepositoryContract, unittest.IsolatedAsyncioTestCase
+):
+    async def _advance_time(self, duration: timedelta) -> None:
+        await asyncio.sleep(duration.total_seconds())
+
     async def asyncSetUp(self) -> None:
         dsn = os.environ.get("TEST_POSTGRES_DSN")
         if dsn is None:

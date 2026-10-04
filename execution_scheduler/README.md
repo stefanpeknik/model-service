@@ -60,6 +60,15 @@ interfaces. Concrete adapters translate their library-specific failures before
 those failures reach orchestration. Keep state decisions in `transitions.py`;
 PostgreSQL and the in-memory adapter persist the resulting record.
 
+For sequential claims, due provider finish and terminal reports precede
+processing. Processing workflows are considered by their oldest eligible
+record's creation time; within that workflow, due time precedes creation time.
+Provider work is also ordered by due time, then creation time. Processing at
+capacity does not block another workflow. PostgreSQL locking can skip busy
+records, so concurrent claims do not promise global FIFO. Both adapters run the
+shared scenarios in `tests/repository_contract.py`; PostgreSQL concurrency
+checks remain in `tests/test_postgres_execution_repository.py`.
+
 Leaving `scheduler.running()` stops local work and joins worker tasks. It does
 not cancel durable executions; another worker can recover their expired leases.
 The context cannot be entered twice concurrently, but can be restarted after

@@ -171,16 +171,32 @@ class InMemoryExecutionRepository:
             self._expire_deadlines(now)
             self._recover_expired_leases(now)
             active_by_workflow = self._active_processing_by_workflow(now)
+            due = [
+                execution
+                for execution in self._executions.values()
+                if execution.work_kind is not None
+                and execution.next_attempt_at is not None
+                and execution.next_attempt_at <= now
+                and execution.fencing_token is None
+            ]
+            first_created: dict[str, datetime] = {}
+            for execution in due:
+                if execution.work_kind is WorkKind.PROCESSING:
+                    first_created[execution.workflow_id] = min(
+                        first_created.get(execution.workflow_id, execution.created_at),
+                        execution.created_at,
+                    )
             for execution in sorted(
-                self._executions.values(), key=lambda item: item.created_at
+                due,
+                key=lambda item: (
+                    item.work_kind is WorkKind.PROCESSING,
+                    first_created[item.workflow_id]
+                    if item.work_kind is WorkKind.PROCESSING
+                    else item.next_attempt_at,
+                    item.next_attempt_at,
+                    item.created_at,
+                ),
             ):
-                if (
-                    execution.work_kind is None
-                    or execution.next_attempt_at is None
-                    or execution.next_attempt_at > now
-                    or execution.fencing_token is not None
-                ):
-                    continue
                 if (
                     execution.work_kind is WorkKind.PROCESSING
                     and active_by_workflow.get(execution.workflow_id, 0)
