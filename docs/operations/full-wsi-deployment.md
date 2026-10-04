@@ -5,6 +5,20 @@ release in `peknik-ns`. It does not submit an execution. The full-WSI test belon
 to the separate testing session described in
 `/tmp/model-service-full-wsi-handoff-2026-10-02.md`.
 
+## Phase completion, 2026-10-04
+
+The core end-to-end implementation phase is complete. Scheduled and synchronous
+full-WSI invocations through the public RationAI SDK produced identical artifacts,
+and the public model-inference path passed its reference check. The
+[validation postmortem](full-wsi-validation-postmortem-2026-10-04.md) records the
+durable execution state, tile coverage, sampled numerical checks, and resource
+observations.
+
+This closes the standalone execution checkpoint, not production or medical
+validation. EMPAIA integration, cold startup, fault recovery, concurrent workloads,
+and future-dated scheduling remain separate validation work. Pixel-exact heatmap
+registration and the ONNX Runtime thread-option mismatch remain recorded follow-ups.
+
 ## Preparation status, 2026-10-02
 
 The scheduler image uses source revision `f9d52d4`; the CPU head uses `f1c4f89`
