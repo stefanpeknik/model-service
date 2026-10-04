@@ -142,7 +142,12 @@ class SlideHeatmapProcessor:
                 if tasks:
                     await asyncio.gather(*tasks)
                 result = np.asarray(mask_builder.finalize()["mask"])
-                vips_image = mask_builder.resize_to_source(result)
+                vips_image = pyvips.Image.new_from_array(result.transpose(1, 2, 0))
+                # Preserve tile spacing; resizing to the unpadded extent shifts scores.
+                scale_y, scale_x = mask_builder.span / np.asarray(result.shape[1:])
+                vips_image = vips_image.resize(
+                    float(scale_x), vscale=float(scale_y)
+                ).crop(0, 0, extent_x, extent_y)
                 vips_image = (vips_image * 255).cast(pyvips.BandFormat.UCHAR)
                 vips_image.tiffsave(
                     str(request.output_path),

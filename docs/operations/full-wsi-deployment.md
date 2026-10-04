@@ -19,6 +19,12 @@ validation. EMPAIA integration, cold startup, fault recovery, concurrent workloa
 and future-dated scheduling remain separate validation work. Pixel-exact heatmap
 registration and the ONNX Runtime thread-option mismatch remain recorded follow-ups.
 
+Local persistence-policy and heatmap-placement corrections are recorded in
+the [2026-10-05 regression report](../reviews/checkpoint-fixes-2026-10-05.md).
+They have not been deployed; image identities and live validation below refer to
+the original checkpoint. The corrected unaligned heatmap will have different
+pixels and must not be compared against the original artifact hash as a golden result.
+
 ## Preparation status, 2026-10-02
 
 The scheduler image uses source revision `f9d52d4`; the CPU head uses `f1c4f89`

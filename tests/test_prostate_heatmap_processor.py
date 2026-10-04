@@ -46,6 +46,12 @@ class FakeVipsImage:
     def __mul__(self, _value: int) -> FakeVipsImage:
         return self
 
+    def resize(self, _scale: float, *, vscale: float) -> FakeVipsImage:
+        return self
+
+    def crop(self, _x: int, _y: int, _width: int, _height: int) -> FakeVipsImage:
+        return self
+
     def cast(self, _format: object) -> FakeVipsImage:
         return self
 
@@ -58,16 +64,14 @@ class FakeMaskBuilder:
     def __init__(self, recorded: dict[str, Any], **options: object) -> None:
         self.recorded = recorded
         recorded["mask_options"] = options
+        self.span = np.asarray(options["source_extents"])
 
     def update_batch(self, *, batch: np.ndarray, coords: np.ndarray) -> None:
         self.recorded["batch"] = batch
         self.recorded["coords"] = coords
 
     def finalize(self) -> dict[str, np.ndarray]:
-        return {"mask": np.zeros((4, 4), dtype=np.float32)}
-
-    def resize_to_source(self, _result: np.ndarray) -> FakeVipsImage:
-        return FakeVipsImage(self.recorded)
+        return {"mask": np.zeros((1, 4, 4), dtype=np.float32)}
 
     def cleanup(self) -> None:
         if "check_cleanup" in self.recorded:
@@ -97,6 +101,9 @@ class ProstateHeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
         fake_modules = {
             "pyvips": module(
                 "pyvips",
+                Image=SimpleNamespace(
+                    new_from_array=lambda _value: FakeVipsImage(recorded)
+                ),
                 BandFormat=SimpleNamespace(UCHAR="uchar"),
                 enums=SimpleNamespace(
                     ForeignTiffCompression=SimpleNamespace(DEFLATE="deflate")

@@ -84,3 +84,25 @@ artifact. Synchronous invocations without a processing attempt identifier keep
 their configured relative output paths. These files remain available for
 consumers after input access closes; this module does not delete completed
 artifacts.
+
+## Native heatmap geometry regression
+
+The slide processor reconstructs scores at the padded tile-grid scale, then
+crops to the actual slide extent. It does not compress padding into the slide.
+For unaligned slides this intentionally changes output pixels and hashes from
+the first full-WSI validation run; inference and overlap aggregation are unchanged.
+
+`tests/test_heatmap_geometry.py` exercises `SlideHeatmapProcessor.build` with
+real Ratiopath, OpenSlide, and libvips, synthetic Aperio TIFFs, and a deterministic
+prediction adapter. Enable it only in an environment with the native libraries:
+
+```sh
+RUN_NATIVE_HEATMAP_TESTS=1 UV_CACHE_DIR=.cache/uv uv run --no-sync \
+  python -m unittest tests.test_heatmap_geometry -v
+```
+
+The tests check crop invariance, the original aligned-grid pixel baseline,
+overlap means, dense predictions, fractional scaling, downsampling, empty masks,
+and physical resolution. They require no model, GPU, or remote connection. The
+local verification command using the retained image is in
+[`checkpoint-fixes-2026-10-05.md`](../docs/reviews/checkpoint-fixes-2026-10-05.md).
