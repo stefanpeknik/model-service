@@ -74,6 +74,10 @@ The local, registry, and deployed GPU image config digest is
 
 ## Deployment
 
+The first real scheduled and synchronous full-WSI runs passed on 2026-10-04.
+Results, numerical checks, observed resource usage, and remaining registration
+limitations are in the [validation postmortem](full-wsi-validation-postmortem-2026-10-04.md).
+
 Build and publish these images in the existing `cerit.io/stefanpeknik` project:
 
 | Image | Build file |
