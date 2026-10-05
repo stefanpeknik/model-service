@@ -1,5 +1,9 @@
 # Responsibility and abstraction audit
 
+Historical audit, not the current backlog. Read
+[the resolution report](responsibility-refactor-2026-10-02.md) and
+[the documentation map](../README.md) before treating a finding as still open.
+
 Date: 2026-10-02. Source checkpoint: `68d677f`, plus the current working tree.
 
 Three GPT-6.1-Sol agents used low reasoning effort and inherited no conversation

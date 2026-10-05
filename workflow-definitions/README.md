@@ -7,14 +7,16 @@ The prostate heatmap definition is the runtime input/output contract.
 - `prostate-heatmap.yaml` owns the stable workflow identifier and its named
   input/output contract. It does not select model deployments. The Python
   workflow may invoke zero, one, or several model deployments.
-- The optional `empaia` metadata is reserved for later EAD generation from the
-  same input/output contract.
+- The optional `empaia` metadata supports EAD generation from the same
+  input/output contract. Local generation tooling is not EAD registration or
+  proof that JES routing is integrated.
 - JES deployment configuration will own the model-service address. It is not
   an EAD field.
 
 The model's `mpp` is fixed inside model-service for both RationAI SDK and
 EMPAIA calls. It is not a per-EMPAIA-job request or EAD option. Tile size also
 comes from the model deployment; neither value is copied into the workflow
-definition. How a workflow should handle a WSI whose available levels differ
-from the target MPP is TBD pending discussion with the model supervisor. No
-resampling behavior is assumed.
+definition. The current heatmap processor selects the closest available slide
+level and uses its actual resolution metadata. Model-owner approval of the
+level-selection and resampling policy is still pending; this implementation
+choice does not settle that question.

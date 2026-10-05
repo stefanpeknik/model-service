@@ -1,5 +1,12 @@
 # Full-WSI validation postmortem, 2026-10-04
 
+This is evidence for the original deployed checkpoint. The later
+[October 5 local corrections](../reviews/checkpoint-fixes-2026-10-05.md) fixed
+padded-grid placement and in-memory claim ordering but were not deployed.
+Preserve the measurements and hashes below as historical observations; the
+corrected unaligned heatmap is not expected to match this old artifact hash.
+Use [the documentation map](../README.md) for current progress.
+
 ## Summary
 
 The deployed model-service completed both scheduled and synchronous processing of the full supplied Mirax WSI with the real prostate classifier. The scheduled execution succeeded on its first attempt in 68.03 seconds according to PostgreSQL, and the synchronous call returned in 61.61 seconds. Both produced byte-identical pyramidal TIFFs. The raw-inference SDK check returned its reference score exactly.

@@ -19,6 +19,12 @@ theme:
 
 nav:
   - Home: index.md
+  - Documentation map: README.md
+  - Workflow operations:
+      - Durable execution: operations/durable-workflow-execution.md
+      - Full-WSI deployment: operations/full-wsi-deployment.md
+      - Full-WSI validation, 2026-10-04: operations/full-wsi-validation-postmortem-2026-10-04.md
+      - Local corrections, 2026-10-05: reviews/checkpoint-fixes-2026-10-05.md
   - Get Started:
       - Quick Start: get-started/quick-start.md
       - Installation: https://docs.ray.io/en/latest/cluster/kubernetes/getting-started/kuberay-operator-installation.html

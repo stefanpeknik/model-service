@@ -4,7 +4,7 @@ Model deployment infrastructure for RationAI using Ray Serve on Kubernetes.
 
 This repository contains:
 
-- `builders/`: WSI output aggregation services (e.g., `heatmap_builder.py`).
+- `builders/`: Legacy heatmap HTTP compatibility adapter, delegating to the workflow processor.
 - `docker/`: Dockerfiles for building CPU and GPU environments.
 - `docs/`: MkDocs documentation and architecture guides.
 - `execution_scheduler/`: Durable admission, leases, retries, provider finish,
@@ -20,20 +20,17 @@ This repository contains:
 
 ## Documentation
 
-- MkDocs content: `docs/`
-- Key pages:
-  - `docs/available-models.md`
-  - `docs/get-started/quick-start.md`
-  - `docs/guides/deployment-guide.md`
-  - `docs/guides/adding-models.md`
-  - `docs/guides/configuration-reference.md`
-  - `docs/guides/troubleshooting.md`
-  - `docs/architecture/overview.md`
-  - `docs/architecture/request-lifecycle.md`
-  - `docs/architecture/queues-and-backpressure.md`
-  - `docs/architecture/batching.md`
+Start at [the documentation map](docs/README.md) for the primary specification,
+current ticket progress, implementation navigation, and validation evidence.
+It distinguishes the standalone full-WSI checkpoint from unfinished EMPAIA and
+failure-validation work, and identifies superseded plans and dummy-profile tests.
+
+Model-only deployment and tuning references remain under `docs/guides/`.
 
 ## Quick Start (Kubernetes)
+
+This example concerns the default model-inference chart. For the native workflow
+checkpoint in `peknik-ns`, use [the full-WSI runbook](docs/operations/full-wsi-deployment.md).
 
 Full walkthrough: `docs/get-started/quick-start.md`.
 
@@ -73,7 +70,7 @@ The reference deployment in `helm/rayservice/applications/prostate-classifier-1.
 Example (Python):
 
 ```bash
-pip install numpy lz4 requests
+UV_CACHE_DIR=.cache/uv uv sync --locked
 ```
 
 ```python

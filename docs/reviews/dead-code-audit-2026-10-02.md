@@ -1,5 +1,9 @@
 # Dead-code audit
 
+Historical audit with its resolution recorded below. Use
+[the documentation map](../README.md) for current module ownership and progress,
+not this candidate list as a new removal task.
+
 Source: `009426d` and the current working tree, 2026-10-02.
 Two fresh GPT-6-Luna agents used high reasoning effort and inherited no
 conversation history. One inspected the scheduler and deployment/support

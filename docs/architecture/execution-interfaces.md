@@ -1,7 +1,12 @@
 # Workflow execution interfaces
 
-Status: design and code vocabulary settled for the first generic execution
-slice, 2026-09-16. Concrete HTTP paths remain implementation work.
+Status: historical interface sketches, 2026-09-16. Use
+[the documentation map](../README.md) for the primary specification and current
+package contracts. HTTP routes now exist; these sketches are not their schema.
+Persistence now also exposes readiness, independent maintenance, and fenced
+provider-mutation marking. In particular, a lost provider-finish lease after a
+mutation was marked must not automatically replay publication. The original
+sketches below predate that safety rule.
 
 This page turns the decisions in
 [`workflow-execution-proposal.md`](workflow-execution-proposal.md) into small

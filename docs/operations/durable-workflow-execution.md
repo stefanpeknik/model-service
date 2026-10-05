@@ -1,5 +1,12 @@
 # Durable workflow execution
 
+For current ticket status and deployment selection, start at
+[the documentation map](../README.md). The API and durable-state guidance here
+remains useful; the September deployment and fault-test sections are dated
+CPU/dummy/mock evidence. Their demo and deployed-test commands do not match the
+native full-WSI preset. Use [the full-WSI runbook](full-wsi-deployment.md) for that
+profile, and distinguish later local fixes from live validation.
+
 The execution scheduler accepts workflow requests, stores them in PostgreSQL,
 and dispatches due work to Ray Serve. It is a long-lived deployment. It does
 not create a Kubernetes pod for each execution.
@@ -265,7 +272,12 @@ GPU starvation followed by recovery remains a target-cluster release check.
 The CPU validation RayService does not deploy the GPU model applications, so
 its own inference tests cannot prove that path.
 
-## First-phase checkpoint entry points
+## Historical September dummy-profile entry points
+
+This section records the September split-inference profile, not the later native
+full-WSI deployment. The latter routes the classifier to its own GPU worker and
+disables EMPAIA/mock applications. Keep these commands for compatible fixtures
+only; use the full-WSI runbook for current validation.
 
 The public caller origin for this validation release is the execution scheduler
 service at `model-service-validation-execution-scheduler.peknik-ns.svc.cluster.local:8080`.

@@ -1,5 +1,10 @@
 # Model Service Documentation
 
+For workflow execution, scheduling, EMPAIA, or continuation of the current
+implementation, start at [the documentation map](README.md). It links the primary
+specification, current progress, and dated evidence. The model-deployment guides
+below describe the lower-level inference layer, not the full workflow platform.
+
 ## Overview
 
 Model Service is a Helm based deployment framework for serving ML models on Kubernetes with Ray Serve.

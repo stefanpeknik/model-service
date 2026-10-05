@@ -1,5 +1,9 @@
 # Architecture Overview
 
+This page describes the Ray model-inference layer. For the workflow application,
+durable scheduler, and provider boundaries, start at
+[the documentation map](../README.md) and its package guides.
+
 This section provides a structured overview of Model Service's architecture.
 
 If you are new to the project, start here and then follow the links to the deeper pages.

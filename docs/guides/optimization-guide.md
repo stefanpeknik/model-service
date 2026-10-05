@@ -319,7 +319,7 @@ sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL  # Sequential = l
 
 self.session = ort.InferenceSession(
   provider_path,
-  session_options=sess_options,
+  sess_options=sess_options,
   providers=[...],
 )
 ```

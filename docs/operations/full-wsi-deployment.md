@@ -1,9 +1,10 @@
 # Full-WSI deployment for prostate heatmap
 
 This preset replaces the dummy workflow in the `model-service-validation`
-release in `peknik-ns`. It does not submit an execution. The full-WSI test belongs
-to the separate testing session described in
-`/tmp/model-service-full-wsi-handoff-2026-10-02.md`.
+release in `peknik-ns`. It does not submit an execution. Start at
+[the documentation map](../README.md) for current progress. The old
+`/tmp/model-service-full-wsi-handoff-2026-10-02.md` is preparation history; the
+durable test record is the postmortem linked below.
 
 ## Phase completion, 2026-10-04
 
@@ -15,9 +16,11 @@ durable execution state, tile coverage, sampled numerical checks, and resource
 observations.
 
 This closes the standalone execution checkpoint, not production or medical
-validation. EMPAIA integration, cold startup, fault recovery, concurrent workloads,
-and future-dated scheduling remain separate validation work. Pixel-exact heatmap
-registration and the ONNX Runtime thread-option mismatch remain recorded follow-ups.
+validation. EMPAIA integration, cold startup, fault recovery, and concurrent
+workloads remain separate validation work. Calendar or future-dated scheduling
+was not part of this implementation contract. Heatmap registration was corrected
+locally on October 5; deployment validation and the ONNX Runtime thread-option
+mismatch remain follow-ups.
 
 Local persistence-policy and heatmap-placement corrections are recorded in
 the [2026-10-05 regression report](../reviews/checkpoint-fixes-2026-10-05.md).
@@ -28,8 +31,9 @@ pixels and must not be compared against the original artifact hash as a golden r
 ## Preparation status, 2026-10-02
 
 The scheduler image uses source revision `f9d52d4`; the CPU head uses `f1c4f89`
-and GPU worker uses `0930dfb`. Their packaged application source matches the
-local tree. Each checksum hashes sorted Python/YAML files as relative path,
+and GPU worker uses `0930dfb`. Their packaged application source matched the
+October 2 preparation tree, not later local changes. Each checksum hashes sorted
+Python/YAML files as relative path,
 NUL byte, then file contents:
 
 - Scheduler, 44 Python and workflow-definition files:
@@ -93,6 +97,13 @@ The local, registry, and deployed GPU image config digest is
 `770c36184ba18be64bc23cdc598c59ea8c7044aff4412582af376c92e9626feb`.
 
 ## Deployment
+
+The image tags, digests, commands, and first-request payload below record the
+October 2 checkpoint. For an authorized deployment of later source, use new
+image tags and source revisions, update the Helm preset, and use a fresh
+idempotency key. Reusing the recorded key retrieves its old execution, not a new
+validation run. Reusing old tags also obscures which geometry produced an artifact.
+Verify new artifacts against the corrected geometry, not the historical TIFF hash.
 
 The first real scheduled and synchronous full-WSI runs passed on 2026-10-04.
 Results, numerical checks, observed resource usage, and remaining registration

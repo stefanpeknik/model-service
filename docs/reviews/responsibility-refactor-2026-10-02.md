@@ -1,5 +1,9 @@
 # Responsibility refactor checkpoint
 
+This is a dated resolution record. Its no-deployment statements describe this
+session, not later live state. Use [the documentation map](../README.md) for
+current progress and deployment evidence.
+
 This implements the local architecture audit in
 `responsibility-audit-2026-10-02.md`. `models/` is unchanged. No deployment,
 remote execution, registry publication, or Git push was performed.

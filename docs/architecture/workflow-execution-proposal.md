@@ -1,9 +1,9 @@
 # Workflow execution proposal
 
-Status: work in progress, last reviewed 2026-09-16. This records the current
-design discussion, not an approved implementation specification. Update this
-page when a decision changes; do not treat the exploratory
-archived `prototypes/empaia-control-plane/` code or notes 16 and 17 as the source of truth.
+Status: historical design discussion, last reviewed 2026-09-16. The primary
+grilling specification and current implementation supersede this proposal.
+Use [the documentation map](../README.md) to find them. Keep this page for rationale;
+do not update it as a second specification or use its sketches as current APIs.
 
 The small module interfaces and durable work model for the first generic slice
 are settled in [`execution-interfaces.md`](execution-interfaces.md).

@@ -1,6 +1,9 @@
 # Available Models & Endpoints
 
-This document outlines the models currently running on the Model Service. It provides the necessary details for SDK developers and clients to construct valid requests, including the endpoints, expected input formats, and output formats.
+This document describes implemented model endpoints and their request and response
+formats. It is not a live deployment inventory; enabled applications depend on
+the deployment profile. For workflow APIs and the native GPU checkpoint, start
+at [the documentation map](README.md).
 
 ## Overview of Endpoints
 
