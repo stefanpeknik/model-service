@@ -4,6 +4,7 @@
   deployments:
     - name: BinaryClassifier
       num_replicas: 1
+      autoscaling_config: null
       max_ongoing_requests: 128
       max_queued_requests: 1024
       ray_actor_options:

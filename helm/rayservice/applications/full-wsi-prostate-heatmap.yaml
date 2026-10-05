@@ -4,6 +4,7 @@
   deployments:
     - name: ProstateHeatmapApplication
       num_replicas: 1
+      autoscaling_config: null
       max_ongoing_requests: 1
       max_queued_requests: 1
       backpressure_config:

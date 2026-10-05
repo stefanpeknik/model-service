@@ -34,6 +34,7 @@ substitute a September proposal or old EMPAIA note.
 | Prepare or change the native GPU validation deployment | [Full-WSI runbook](operations/full-wsi-deployment.md), then `helm/rayservice/values.full-wsi.yaml` |
 | Understand what the real WSI test proved | [2026-10-04 postmortem](operations/full-wsi-validation-postmortem-2026-10-04.md) |
 | Validate the later local persistence and geometry fixes | [2026-10-05 regression report](reviews/checkpoint-fixes-2026-10-05.md) |
+| Follow the final standalone rebuild and validation | [2026-10-06 validation record](operations/final-standalone-validation-2026-10-06.md), currently in progress |
 | Change public SDK methods or types | [SDK workflows](../../rationai-sdk-python/docs/reference/resources/workflows.md), [executions](../../rationai-sdk-python/docs/reference/resources/executions.md), and [types](../../rationai-sdk-python/docs/reference/types/workflows.md) |
 | Understand an earlier architecture choice | The historical references below, only as needed |
 | Add or tune a low-level model deployment | [Model deployment guide](guides/deployment-guide.md) and [inference architecture](architecture/overview.md), not the workflow checkpoint runbook |
