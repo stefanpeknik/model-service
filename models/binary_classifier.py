@@ -115,7 +115,7 @@ class BinaryClassifier:
                 "CUDAExecutionProvider",
                 "CPUExecutionProvider",
             ],
-            session_options=sess_options,
+            sess_options=sess_options,
         )
 
         self.input_name = self.session.get_inputs()[0].name
