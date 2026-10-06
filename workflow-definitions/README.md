@@ -20,3 +20,17 @@ definition. The current heatmap processor selects the closest available slide
 level and uses its actual resolution metadata. Model-owner approval of the
 level-selection and resampling policy is still pending; this implementation
 choice does not settle that question.
+
+## Local EAD generation
+
+Generate the draft EAD from the workflow's optional EMPAIA metadata:
+
+```sh
+UV_CACHE_DIR=.cache/uv uv run --no-sync python scripts/generate_ead.py \
+  workflow-definitions/prostate-heatmap.yaml eads/prostate-heatmap.json
+```
+
+Add `--check` to verify that the checked-in JSON matches without writing it.
+The generation tests check workflow names and references; they do not validate
+the external EMPAIA schema or register an application. Real EMPAIA integration
+remains a separate phase.

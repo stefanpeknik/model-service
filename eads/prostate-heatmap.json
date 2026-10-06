@@ -1,0 +1,37 @@
+{
+  "$schema": "https://gitlab.com/empaia/integration/definitions/-/raw/main/ead/ead-schema.v3.json",
+  "name": "Prostate Classifier",
+  "name_short": "ProstCls",
+  "namespace": "org.empaia.rationai.prostate_cls.v3.0",
+  "description": "Classifies prostate tissue and produces a heatmap",
+  "permissions": {
+    "data_transmission_to_external_service_provider": true
+  },
+  "io": {
+    "slide": {
+      "type": "wsi"
+    },
+    "region_of_interest": {
+      "type": "rectangle",
+      "reference": "io.slide",
+      "classes": [
+        "org.empaia.global.v1.classes.roi"
+      ]
+    },
+    "heatmap": {
+      "type": "continuous_pixelmap",
+      "reference": "io.slide"
+    }
+  },
+  "modes": {
+    "standalone": {
+      "inputs": [
+        "slide",
+        "region_of_interest"
+      ],
+      "outputs": [
+        "heatmap"
+      ]
+    }
+  }
+}
