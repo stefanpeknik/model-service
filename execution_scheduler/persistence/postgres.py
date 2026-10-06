@@ -2,13 +2,16 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from psycopg import AsyncConnection, sql
+from psycopg import AsyncConnection
 from psycopg import Error as PsycopgError
-from psycopg.rows import DictRow, dict_row
-from psycopg.types.json import Jsonb
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from execution_scheduler.contracts import (
     ExecutionError,
@@ -27,15 +30,10 @@ from execution_scheduler.domain import (
     WorkClaim,
     WorkKind,
 )
+from execution_scheduler.persistence.models import DEFAULT_SCHEMA, ExecutionRow
 from execution_scheduler.persistence.schema import initialize_execution_schema
 from execution_scheduler.repository import ExecutionRepositoryUnavailableError
 from execution_scheduler.transitions import ExecutionTransitions
-from workflow_execution.serialization import (
-    invocation_from_dict,
-    invocation_to_dict,
-    result_from_dict,
-    result_to_dict,
-)
 
 
 if TYPE_CHECKING:
@@ -50,7 +48,7 @@ class PostgresExecutionRepository:
         dsn: str,
         *,
         cipher: ProtectedContextCipher,
-        schema: str = "model_service",
+        schema: str = DEFAULT_SCHEMA,
         per_workflow_limit: int = 1,
         processing_policy: RetryPolicy | None = None,
         finish_policy: RetryPolicy | None = None,
@@ -59,122 +57,99 @@ class PostgresExecutionRepository:
             raise ValueError("PostgreSQL schema must be an identifier")
         if per_workflow_limit <= 0:
             raise ValueError("per_workflow_limit must be positive")
-        self._dsn = dsn
         self._cipher = cipher
         self._schema = schema
-        self._table = sql.Identifier(schema, "executions")
+
+        async def connect() -> AsyncConnection:
+            # Accept existing libpq DSNs as well as PostgreSQL URLs.
+            return await AsyncConnection.connect(dsn)
+
+        engine = create_async_engine(
+            "postgresql+psycopg://",
+            async_creator=connect,
+            poolclass=NullPool,
+            hide_parameters=True,
+            execution_options={"schema_translate_map": {DEFAULT_SCHEMA: schema}},
+        )
+        self._sessions = async_sessionmaker(engine, expire_on_commit=False)
         self._per_workflow_limit = per_workflow_limit
-        self._processing_policy = processing_policy or RetryPolicy(
-            max_attempts=3,
-            initial_backoff=timedelta(seconds=5),
-            maximum_backoff=timedelta(minutes=1),
-        )
-        self._finish_policy = finish_policy or RetryPolicy(
-            max_attempts=3,
-            initial_backoff=timedelta(seconds=5),
-            maximum_backoff=timedelta(minutes=1),
-        )
         self._transitions = ExecutionTransitions(
-            self._processing_policy,
-            self._finish_policy,
+            processing_policy
+            or RetryPolicy(
+                max_attempts=3,
+                initial_backoff=timedelta(seconds=5),
+                maximum_backoff=timedelta(minutes=1),
+            ),
+            finish_policy
+            or RetryPolicy(
+                max_attempts=3,
+                initial_backoff=timedelta(seconds=5),
+                maximum_backoff=timedelta(minutes=1),
+            ),
         )
 
     async def initialize(self) -> None:
-        async with self._connection() as connection:
-            await initialize_execution_schema(
-                connection,
-                schema=self._schema,
-            )
+        async with self._transaction() as session:
+            await initialize_execution_schema(session, schema=self._schema)
 
     async def check_ready(self) -> None:
-        async with self._connection() as connection:
-            await connection.execute(
-                sql.SQL("SELECT id FROM {} LIMIT 1").format(self._table)
-            )
+        async with self._transaction() as session:
+            await session.execute(select(ExecutionRow.id).limit(1))
 
     async def maintain(self) -> None:
-        async with self._connection() as connection:
-            now = await self._database_now(connection)
-            await self._expire_deadlines(connection, now)
-            await self._recover_expired_leases(connection, now)
+        async with self._transaction() as session:
+            now = await self._database_now(session)
+            await self._expire_deadlines(session, now)
+            await self._recover_expired_leases(session, now)
 
     async def find_submission(
         self,
         identity: SubmissionIdentity,
     ) -> ExecutionRecord | None:
-        async with self._connection() as connection:
-            cursor = await connection.execute(
-                sql.SQL(
-                    "SELECT * FROM {} WHERE provider = %s AND submission_key = %s"
-                ).format(self._table),
-                (identity.provider, identity.key),
-            )
-            row = await cursor.fetchone()
-        if row is None:
-            return None
-        execution = self._record(row)
-        self._check_fingerprint(execution, identity)
-        return execution
+        async with self._transaction() as session:
+            row = await self._find_submission(session, identity)
+            if row is None:
+                return None
+            execution = self._record(row)
+            self._check_fingerprint(execution, identity)
+            return execution
 
     async def admit(self, admission: Admission) -> AdmissionResult:
         encrypted_context = self._cipher.encrypt(admission.protected_context)
-        async with self._connection() as connection:
-            now = await self._database_now(connection)
+        async with self._transaction() as session:
             execution = self._transitions.admit(
-                admission,
-                str(uuid4()),
-                now,
+                admission, str(uuid4()), await self._database_now(session)
             )
-            cursor = await connection.execute(
-                sql.SQL(
-                    """
-                    INSERT INTO {} (
-                        id, provider, submission_key, request_fingerprint,
-                        workflow_id, status, invocation, protected_context,
-                        deadline_at, terminal_report_deadline_at, work_kind,
-                        next_attempt_at, processing_attempts,
-                        processing_rejections, finish_attempts,
-                        finish_mutation_started, created_at,
-                        updated_at
-                    ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s, %s
-                    )
-                    ON CONFLICT (provider, submission_key) DO NOTHING
-                    RETURNING *
-                    """
-                ).format(self._table),
-                (
-                    execution.id,
-                    execution.identity.provider,
-                    execution.identity.key,
-                    execution.identity.fingerprint,
-                    execution.workflow_id,
-                    execution.status,
-                    Jsonb(invocation_to_dict(execution.invocation)),
-                    encrypted_context,
-                    execution.deadline_at,
-                    execution.terminal_report_deadline_at,
-                    execution.work_kind,
-                    execution.next_attempt_at,
-                    execution.processing_attempts,
-                    execution.processing_rejections,
-                    execution.finish_attempts,
-                    execution.finish_mutation_started,
-                    execution.created_at,
-                    execution.updated_at,
-                ),
+            row = await session.scalar(
+                insert(ExecutionRow)
+                .values(
+                    id=execution.id,
+                    provider=execution.identity.provider,
+                    submission_key=execution.identity.key,
+                    request_fingerprint=execution.identity.fingerprint,
+                    workflow_id=execution.workflow_id,
+                    status=execution.status,
+                    invocation=execution.invocation,
+                    protected_context=encrypted_context,
+                    deadline_at=execution.deadline_at,
+                    terminal_report_deadline_at=execution.terminal_report_deadline_at,
+                    work_kind=execution.work_kind,
+                    next_attempt_at=execution.next_attempt_at,
+                    processing_attempts=execution.processing_attempts,
+                    processing_rejections=execution.processing_rejections,
+                    finish_attempts=execution.finish_attempts,
+                    finish_mutation_started=execution.finish_mutation_started,
+                    created_at=execution.created_at,
+                    updated_at=execution.updated_at,
+                )
+                .on_conflict_do_nothing(
+                    index_elements=[ExecutionRow.provider, ExecutionRow.submission_key]
+                )
+                .returning(ExecutionRow)
             )
-            row = await cursor.fetchone()
             if row is not None:
                 return AdmissionResult(self._record(row), created=True)
-            existing_cursor = await connection.execute(
-                sql.SQL(
-                    "SELECT * FROM {} WHERE provider = %s AND submission_key = %s"
-                ).format(self._table),
-                (admission.identity.provider, admission.identity.key),
-            )
-            existing = await existing_cursor.fetchone()
+            existing = await self._find_submission(session, admission.identity)
             if existing is None:
                 raise RuntimeError("conflicting admission disappeared")
             execution = self._record(existing)
@@ -182,46 +157,42 @@ class PostgresExecutionRepository:
             return AdmissionResult(execution, created=False)
 
     async def get(self, execution_id: str) -> ExecutionRecord:
-        async with self._connection() as connection:
-            row = await self._fetch(connection, execution_id)
-        return self._record(row)
+        async with self._transaction() as session:
+            return self._record(await self._fetch(session, execution_id))
 
     async def request_cancel(self, execution_id: str) -> ExecutionRecord:
-        async with self._connection() as connection:
-            row = await self._fetch(connection, execution_id, for_update=True)
+        async with self._transaction() as session:
+            row = await self._fetch(session, execution_id, for_update=True)
             execution = self._record(row)
             cancelled = self._transitions.cancel(
-                execution,
-                await self._database_now(connection),
+                execution, await self._database_now(session)
             )
             if cancelled is execution:
                 return execution
-            return await self._persist_state(connection, cancelled)
+            return await self._persist_state(session, row, cancelled)
 
     async def claim_due(
         self,
         owner: str,
         lease_duration: timedelta,
     ) -> WorkClaim | None:
-        async with self._connection() as connection:
-            now = await self._database_now(connection)
-            await self._expire_deadlines(connection, now)
-            await self._recover_expired_leases(connection, now)
-            row = await self._select_finish(connection, now)
+        async with self._transaction() as session:
+            now = await self._database_now(session)
+            await self._expire_deadlines(session, now)
+            await self._recover_expired_leases(session, now)
+            row = await self._select_finish(session, now)
             if row is None:
-                row = await self._select_processing(connection, now)
+                row = await self._select_processing(session, now)
             if row is None:
                 return None
-            execution = self._record(row)
-            token = str(uuid4())
             claimed = self._transitions.claim(
-                execution,
+                self._record(row),
                 owner=owner,
-                fencing_token=token,
+                fencing_token=str(uuid4()),
                 lease_duration=lease_duration,
                 now=now,
             )
-            await self._persist_state(connection, claimed.execution)
+            await self._persist_state(session, row, claimed.execution)
             return claimed.claim
 
     async def renew(
@@ -230,18 +201,16 @@ class PostgresExecutionRepository:
         fencing_token: str,
         lease_duration: timedelta,
     ) -> RenewDirective:
-        async with self._connection() as connection:
-            row = await self._fetch(connection, execution_id, for_update=True)
-            execution = self._record(row)
-            now = await self._database_now(connection)
+        async with self._transaction() as session:
+            row = await self._fetch(session, execution_id, for_update=True)
             decision = self._transitions.decide_renewal(
-                execution,
+                self._record(row),
                 fencing_token=fencing_token,
                 lease_duration=lease_duration,
-                now=now,
+                now=await self._database_now(session),
             )
             if decision.execution is not None:
-                await self._persist_state(connection, decision.execution)
+                await self._persist_state(session, row, decision.execution)
             return decision.directive
 
     async def settle(
@@ -250,18 +219,16 @@ class PostgresExecutionRepository:
         fencing_token: str,
         settlement: Settlement,
     ) -> ExecutionRecord:
-        async with self._connection() as connection:
-            row = await self._fetch(connection, execution_id, for_update=True)
-            execution = self._record(row)
-            now = await self._database_now(connection)
+        async with self._transaction() as session:
+            row = await self._fetch(session, execution_id, for_update=True)
             decision = self._transitions.decide_settlement(
-                execution,
+                self._record(row),
                 fencing_token,
                 settlement,
-                now,
+                await self._database_now(session),
             )
             if decision.execution is not None:
-                await self._persist_state(connection, decision.execution)
+                await self._persist_state(session, row, decision.execution)
         return decision.accepted_execution()
 
     async def mark_finish_mutation_started(
@@ -269,281 +236,242 @@ class PostgresExecutionRepository:
         execution_id: str,
         fencing_token: str,
     ) -> None:
-        async with self._connection() as connection:
-            row = await self._fetch(connection, execution_id, for_update=True)
-            execution = self._record(row)
+        async with self._transaction() as session:
+            row = await self._fetch(session, execution_id, for_update=True)
             marked = self._transitions.mark_finish_mutation_started(
-                execution,
+                self._record(row),
                 fencing_token,
-                await self._database_now(connection),
+                await self._database_now(session),
             )
-            await self._persist_state(connection, marked)
+            await self._persist_state(session, row, marked)
 
     async def _select_finish(
-        self,
-        connection: AsyncConnection[DictRow],
-        now: datetime,
-    ) -> DictRow | None:
-        cursor = await connection.execute(
-            sql.SQL(
-                """
-                SELECT * FROM {}
-                WHERE work_kind IN (
-                    'provider_finish',
-                    'provider_failure_report',
-                    'provider_cancellation_report'
-                )
-                  AND fencing_token IS NULL
-                  AND next_attempt_at <= %s
-                  AND (
-                    (work_kind = 'provider_finish' AND deadline_at > %s)
-                    OR (
-                      work_kind IN (
-                        'provider_failure_report',
-                        'provider_cancellation_report'
-                      )
-                      AND COALESCE(terminal_report_deadline_at, deadline_at) > %s
-                    )
-                  )
-                ORDER BY next_attempt_at, created_at
-                FOR UPDATE SKIP LOCKED
-                LIMIT 1
-                """
-            ).format(self._table),
-            (now, now, now),
+        self, session: AsyncSession, now: datetime
+    ) -> ExecutionRow | None:
+        reports = (
+            WorkKind.PROVIDER_FAILURE_REPORT,
+            WorkKind.PROVIDER_CANCELLATION_REPORT,
         )
-        return await cursor.fetchone()
+        return await session.scalar(
+            select(ExecutionRow)
+            .where(
+                ExecutionRow.work_kind.in_((WorkKind.PROVIDER_FINISH, *reports)),
+                ExecutionRow.fencing_token.is_(None),
+                ExecutionRow.next_attempt_at <= now,
+                or_(
+                    and_(
+                        ExecutionRow.work_kind == WorkKind.PROVIDER_FINISH,
+                        ExecutionRow.deadline_at > now,
+                    ),
+                    and_(
+                        ExecutionRow.work_kind.in_(reports),
+                        func.coalesce(
+                            ExecutionRow.terminal_report_deadline_at,
+                            ExecutionRow.deadline_at,
+                        )
+                        > now,
+                    ),
+                ),
+            )
+            .order_by(ExecutionRow.next_attempt_at, ExecutionRow.created_at)
+            .with_for_update(skip_locked=True)
+            .limit(1)
+        )
 
     async def _select_processing(
-        self,
-        connection: AsyncConnection[DictRow],
-        now: datetime,
-    ) -> DictRow | None:
-        workflows_cursor = await connection.execute(
-            sql.SQL(
-                """
-                SELECT workflow_id, min(created_at) AS first_created
-                FROM {}
-                WHERE work_kind = 'processing'
-                  AND fencing_token IS NULL
-                  AND next_attempt_at <= %s
-                  AND deadline_at > %s
-                GROUP BY workflow_id
-                ORDER BY first_created
-                """
-            ).format(self._table),
-            (now, now),
+        self, session: AsyncSession, now: datetime
+    ) -> ExecutionRow | None:
+        eligible = (
+            ExecutionRow.work_kind == WorkKind.PROCESSING,
+            ExecutionRow.fencing_token.is_(None),
+            ExecutionRow.next_attempt_at <= now,
+            ExecutionRow.deadline_at > now,
         )
-        for workflow in await workflows_cursor.fetchall():
-            workflow_id = cast("str", workflow["workflow_id"])
-            lock_cursor = await connection.execute(
-                "SELECT pg_try_advisory_xact_lock(hashtextextended(%s, 0)) AS locked",
-                (workflow_id,),
+        workflows = await session.scalars(
+            select(ExecutionRow.workflow_id)
+            .where(*eligible)
+            .group_by(ExecutionRow.workflow_id)
+            .order_by(func.min(ExecutionRow.created_at))
+        )
+        for workflow_id in workflows:
+            locked = await session.scalar(
+                select(
+                    func.pg_try_advisory_xact_lock(
+                        func.hashtextextended(workflow_id, 0)
+                    )
+                )
             )
-            lock_row = await lock_cursor.fetchone()
-            if lock_row is None or not lock_row["locked"]:
+            if not locked:
                 continue
-            active_cursor = await connection.execute(
-                sql.SQL(
-                    """
-                    SELECT count(*) AS active FROM {}
-                    WHERE workflow_id = %s
-                      AND work_kind = 'processing'
-                      AND fencing_token IS NOT NULL
-                      AND lease_expires_at > %s
-                    """
-                ).format(self._table),
-                (workflow_id, now),
+            active = await session.scalar(
+                select(func.count())
+                .select_from(ExecutionRow)
+                .where(
+                    ExecutionRow.workflow_id == workflow_id,
+                    ExecutionRow.work_kind == WorkKind.PROCESSING,
+                    ExecutionRow.fencing_token.is_not(None),
+                    ExecutionRow.lease_expires_at > now,
+                )
             )
-            active_row = await active_cursor.fetchone()
-            assert active_row is not None
-            if active_row["active"] >= self._per_workflow_limit:
+            assert active is not None
+            if active >= self._per_workflow_limit:
                 continue
-            candidate_cursor = await connection.execute(
-                sql.SQL(
-                    """
-                    SELECT * FROM {}
-                    WHERE workflow_id = %s
-                      AND work_kind = 'processing'
-                      AND fencing_token IS NULL
-                      AND next_attempt_at <= %s
-                      AND deadline_at > %s
-                    ORDER BY next_attempt_at, created_at
-                    FOR UPDATE SKIP LOCKED
-                    LIMIT 1
-                    """
-                ).format(self._table),
-                (workflow_id, now, now),
+            candidate = await session.scalar(
+                select(ExecutionRow)
+                .where(ExecutionRow.workflow_id == workflow_id, *eligible)
+                .order_by(ExecutionRow.next_attempt_at, ExecutionRow.created_at)
+                .with_for_update(skip_locked=True)
+                .limit(1)
             )
-            candidate = await candidate_cursor.fetchone()
             if candidate is not None:
                 return candidate
         return None
 
     async def _recover_expired_leases(
-        self,
-        connection: AsyncConnection[DictRow],
-        now: datetime,
+        self, session: AsyncSession, now: datetime
     ) -> None:
-        cursor = await connection.execute(
-            sql.SQL(
-                """
-                SELECT * FROM {}
-                WHERE fencing_token IS NOT NULL AND lease_expires_at <= %s
-                FOR UPDATE SKIP LOCKED
-                """
-            ).format(self._table),
-            (now,),
+        rows = await session.scalars(
+            select(ExecutionRow)
+            .where(
+                ExecutionRow.fencing_token.is_not(None),
+                ExecutionRow.lease_expires_at <= now,
+            )
+            .with_for_update(skip_locked=True)
         )
-        for row in await cursor.fetchall():
-            execution = self._record(row)
-            recovered = self._transitions.recover_expired(execution, now)
-            await self._persist_state(connection, recovered)
+        for row in rows:
+            recovered = self._transitions.recover_expired(self._record(row), now)
+            await self._persist_state(session, row, recovered)
 
-    async def _expire_deadlines(
-        self,
-        connection: AsyncConnection[DictRow],
-        now: datetime,
-    ) -> None:
-        cursor = await connection.execute(
-            sql.SQL(
-                """
-                SELECT * FROM {}
-                WHERE (
-                    status NOT IN ('succeeded', 'failed', 'cancelled')
-                    AND deadline_at <= %s
-                  ) OR (
-                    status IN ('failed', 'cancelled')
-                    AND work_kind IN (
-                      'provider_failure_report',
-                      'provider_cancellation_report'
-                    )
-                    AND COALESCE(terminal_report_deadline_at, deadline_at) <= %s
-                  )
-                FOR UPDATE SKIP LOCKED
-                """
-            ).format(self._table),
-            (now, now),
+    async def _expire_deadlines(self, session: AsyncSession, now: datetime) -> None:
+        rows = await session.scalars(
+            select(ExecutionRow)
+            .where(
+                or_(
+                    and_(
+                        ExecutionRow.status.not_in(
+                            (
+                                ExecutionStatus.SUCCEEDED,
+                                ExecutionStatus.FAILED,
+                                ExecutionStatus.CANCELLED,
+                            )
+                        ),
+                        ExecutionRow.deadline_at <= now,
+                    ),
+                    and_(
+                        ExecutionRow.status.in_(
+                            (ExecutionStatus.FAILED, ExecutionStatus.CANCELLED)
+                        ),
+                        ExecutionRow.work_kind.in_(
+                            (
+                                WorkKind.PROVIDER_FAILURE_REPORT,
+                                WorkKind.PROVIDER_CANCELLATION_REPORT,
+                            )
+                        ),
+                        func.coalesce(
+                            ExecutionRow.terminal_report_deadline_at,
+                            ExecutionRow.deadline_at,
+                        )
+                        <= now,
+                    ),
+                )
+            )
+            .with_for_update(skip_locked=True)
         )
-        for row in await cursor.fetchall():
-            execution = self._record(row)
+        for row in rows:
             await self._persist_state(
-                connection,
-                self._transitions.deadline(execution, now),
+                session, row, self._transitions.deadline(self._record(row), now)
             )
 
     async def _persist_state(
-        self,
-        connection: AsyncConnection[DictRow],
-        execution: ExecutionRecord,
+        self, session: AsyncSession, row: ExecutionRow, execution: ExecutionRecord
     ) -> ExecutionRecord:
-        cursor = await connection.execute(
-            sql.SQL(
-                """
-                UPDATE {} SET
-                    status = %s, work_kind = %s, next_attempt_at = %s,
-                    processing_attempts = %s, processing_rejections = %s,
-                    finish_attempts = %s, finish_mutation_started = %s,
-                    lease_owner = %s,
-                    fencing_token = %s, lease_expires_at = %s,
-                    result = %s, error_code = %s, error_message = %s,
-                    updated_at = %s
-                WHERE id = %s
-                RETURNING *
-                """
-            ).format(self._table),
-            (
-                execution.status,
-                execution.work_kind.value if execution.work_kind is not None else None,
-                execution.next_attempt_at,
-                execution.processing_attempts,
-                execution.processing_rejections,
-                execution.finish_attempts,
-                execution.finish_mutation_started,
-                execution.lease_owner,
-                execution.fencing_token,
-                execution.lease_expires_at,
-                Jsonb(result_to_dict(execution.result))
-                if execution.result is not None
-                else None,
-                execution.error.code if execution.error is not None else None,
-                execution.error.message if execution.error is not None else None,
-                execution.updated_at,
-                execution.id,
-            ),
+        row.status = execution.status
+        row.work_kind = execution.work_kind
+        row.next_attempt_at = execution.next_attempt_at
+        row.processing_attempts = execution.processing_attempts
+        row.processing_rejections = execution.processing_rejections
+        row.finish_attempts = execution.finish_attempts
+        row.finish_mutation_started = execution.finish_mutation_started
+        row.lease_owner = execution.lease_owner
+        row.fencing_token = execution.fencing_token
+        row.lease_expires_at = execution.lease_expires_at
+        row.result = execution.result
+        row.error_code = execution.error.code if execution.error is not None else None
+        row.error_message = (
+            execution.error.message if execution.error is not None else None
         )
-        row = await cursor.fetchone()
-        assert row is not None
+        row.updated_at = execution.updated_at
+        await session.flush()
         return self._record(row)
 
     async def _fetch(
-        self,
-        connection: AsyncConnection[DictRow],
-        execution_id: str,
-        *,
-        for_update: bool = False,
-    ) -> DictRow:
-        suffix = sql.SQL(" FOR UPDATE") if for_update else sql.SQL("")
-        cursor = await connection.execute(
-            sql.SQL("SELECT * FROM {} WHERE id = %s").format(self._table) + suffix,
-            (execution_id,),
-        )
-        row = await cursor.fetchone()
+        self, session: AsyncSession, execution_id: str, *, for_update: bool = False
+    ) -> ExecutionRow:
+        statement = select(ExecutionRow).where(ExecutionRow.id == execution_id)
+        if for_update:
+            statement = statement.with_for_update()
+        row = await session.scalar(statement)
         if row is None:
             raise UnknownExecutionError(execution_id)
         return row
 
-    async def _database_now(self, connection: AsyncConnection[DictRow]) -> datetime:
-        cursor = await connection.execute("SELECT clock_timestamp() AS now")
-        row = await cursor.fetchone()
-        assert row is not None
-        return cast("datetime", row["now"])
+    @staticmethod
+    async def _find_submission(
+        session: AsyncSession, identity: SubmissionIdentity
+    ) -> ExecutionRow | None:
+        return await session.scalar(
+            select(ExecutionRow).where(
+                ExecutionRow.provider == identity.provider,
+                ExecutionRow.submission_key == identity.key,
+            )
+        )
+
+    @staticmethod
+    async def _database_now(session: AsyncSession) -> datetime:
+        result = await session.execute(select(func.clock_timestamp()))
+        return result.scalar_one()
 
     @asynccontextmanager
-    async def _connection(self) -> AsyncIterator[AsyncConnection[DictRow]]:
+    async def _transaction(self) -> AsyncIterator[AsyncSession]:
         try:
-            async with await AsyncConnection.connect(
-                self._dsn,
-                row_factory=dict_row,
-            ) as connection:
-                yield connection
-        except PsycopgError as error:
+            async with self._sessions.begin() as session:
+                yield session
+        except (SQLAlchemyError, PsycopgError) as error:
             raise ExecutionRepositoryUnavailableError(
                 "execution repository is unavailable"
             ) from error
 
-    def _record(self, row: DictRow) -> ExecutionRecord:
+    def _record(self, row: ExecutionRow) -> ExecutionRecord:
         error = None
-        if row["error_code"] is not None:
-            error = ExecutionError(row["error_code"], row["error_message"])
+        if row.error_code is not None:
+            assert row.error_message is not None
+            error = ExecutionError(row.error_code, row.error_message)
         return ExecutionRecord(
-            id=str(row["id"]),
+            id=row.id,
             identity=SubmissionIdentity(
-                provider=row["provider"],
-                key=row["submission_key"],
-                fingerprint=row["request_fingerprint"],
+                provider=row.provider,
+                key=row.submission_key,
+                fingerprint=row.request_fingerprint,
             ),
-            workflow_id=row["workflow_id"],
-            status=ExecutionStatus(row["status"]),
-            invocation=invocation_from_dict(row["invocation"]),
-            protected_context=self._cipher.decrypt(bytes(row["protected_context"])),
-            deadline_at=row["deadline_at"],
-            terminal_report_deadline_at=row["terminal_report_deadline_at"],
-            work_kind=WorkKind(row["work_kind"]) if row["work_kind"] else None,
-            next_attempt_at=row["next_attempt_at"],
-            processing_attempts=row["processing_attempts"],
-            processing_rejections=row["processing_rejections"],
-            finish_attempts=row["finish_attempts"],
-            finish_mutation_started=row["finish_mutation_started"],
-            lease_owner=row["lease_owner"],
-            fencing_token=(
-                str(row["fencing_token"]) if row["fencing_token"] is not None else None
-            ),
-            lease_expires_at=row["lease_expires_at"],
-            result=result_from_dict(row["result"]) if row["result"] else None,
+            workflow_id=row.workflow_id,
+            status=row.status,
+            invocation=row.invocation,
+            protected_context=self._cipher.decrypt(row.protected_context),
+            deadline_at=row.deadline_at,
+            terminal_report_deadline_at=row.terminal_report_deadline_at,
+            work_kind=row.work_kind,
+            next_attempt_at=row.next_attempt_at,
+            processing_attempts=row.processing_attempts,
+            processing_rejections=row.processing_rejections,
+            finish_attempts=row.finish_attempts,
+            finish_mutation_started=row.finish_mutation_started,
+            lease_owner=row.lease_owner,
+            fencing_token=row.fencing_token,
+            lease_expires_at=row.lease_expires_at,
+            result=row.result,
             error=error,
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
+            created_at=row.created_at,
+            updated_at=row.updated_at,
         )
 
     @staticmethod

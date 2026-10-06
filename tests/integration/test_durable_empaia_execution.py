@@ -49,7 +49,7 @@ from workflow_execution.http import (
 
 
 if TYPE_CHECKING:
-    from integrations.empaia.gateway import EmpaiaJobContext
+    from integrations.empaia.gateway import EmpaiaJobContext, MutationGuard
 
 
 @dataclass(slots=True)
@@ -66,6 +66,10 @@ class ControlledEmpaiaService:
 class ControlledEmpaiaGateway:
     def __init__(self, service: ControlledEmpaiaService) -> None:
         self._service = service
+        self._before_mutation: MutationGuard | None = None
+
+    def set_before_mutation(self, callback: MutationGuard) -> None:
+        self._before_mutation = callback
 
     async def get_configuration(self) -> dict[str, JsonValue]:
         return {}
@@ -74,9 +78,13 @@ class ControlledEmpaiaGateway:
         shutil.copyfile(self._service.source, destination)
 
     async def publish_output(self, name: str, output: WorkflowOutput) -> None:
+        if self._before_mutation is not None:
+            await self._before_mutation()
         self._service.published[name] = output
 
     async def finalize(self) -> None:
+        if self._before_mutation is not None:
+            await self._before_mutation()
         self._service.finalized = True
 
     async def report_failure(self, message: str) -> None:

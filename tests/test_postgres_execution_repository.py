@@ -4,12 +4,17 @@ import asyncio
 import base64
 import os
 import unittest
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from uuid import uuid4
 
 from psycopg import AsyncConnection, sql
+from psycopg.conninfo import conninfo_to_dict, make_conninfo
+from psycopg.errors import CheckViolation
+from psycopg.types.json import Jsonb
 
-from execution_scheduler.contracts import ScheduleConflictError
+from execution_scheduler.contracts import ExecutionStatus, ScheduleConflictError
 from execution_scheduler.domain import (
     Admission,
     ProcessingSucceeded,
@@ -22,13 +27,18 @@ from execution_scheduler.domain import (
 )
 from execution_scheduler.persistence.postgres import PostgresExecutionRepository
 from execution_scheduler.persistence.protected_context import ProtectedContextCipher
+from execution_scheduler.repository import ExecutionRepositoryUnavailableError
 from tests.repository_contract import ExecutionRepositoryContract
 from workflow_execution.contracts import (
+    InlineInput,
     InlineOutput,
     InputAccessContext,
+    SharedArtifact,
+    SharedPathInput,
     WorkflowInvocation,
     WorkflowResult,
 )
+from workflow_execution.serialization import invocation_to_dict, result_to_dict
 
 
 DATABASE_DEADLINE_WINDOW = timedelta(milliseconds=500)
@@ -78,6 +88,277 @@ class PostgresExecutionRepositoryTests(
 
     async def test_readiness_checks_initialized_execution_storage(self) -> None:
         await self.repository.check_ready()
+
+    async def test_initialize_is_safe_for_concurrent_repositories(self) -> None:
+        admitted = await self.repository.admit(self._admission("existing"))
+
+        await asyncio.gather(*(self._repository().initialize() for _ in range(4)))
+
+        self.assertEqual(
+            await self.repository.get(admitted.execution.id), admitted.execution
+        )
+
+    async def test_initialize_preserves_pre_orm_record_and_completes_its_finish(
+        self,
+    ) -> None:
+        execution_id, admission, result = await self._install_pre_orm_record()
+        before = await self._stored_record(execution_id)
+
+        await asyncio.gather(
+            self.repository.initialize(), self._repository().initialize()
+        )
+
+        self.assertEqual(await self._stored_record(execution_id), before)
+        execution = await self._repository().get(execution_id)
+        self.assertIs(execution.status, ExecutionStatus.RUNNING)
+        self.assertIs(execution.work_kind, WorkKind.PROVIDER_FINISH)
+        self.assertEqual(execution.invocation, admission.invocation)
+        self.assertEqual(execution.protected_context, admission.protected_context)
+        self.assertEqual(execution.result, result)
+        replay = await self.repository.admit(admission)
+        self.assertFalse(replay.created)
+        self.assertEqual(replay.execution, execution)
+        finish = await self.repository.claim_due("new-worker", timedelta(seconds=30))
+        assert finish is not None
+        succeeded = await self.repository.settle(
+            execution_id, finish.fencing_token, ProviderFinishSucceeded()
+        )
+        self.assertIs(succeeded.status, ExecutionStatus.SUCCEEDED)
+        self.assertEqual(succeeded.result, result)
+        self.assertEqual(succeeded.processing_attempts, 1)
+
+    async def test_initialize_adds_legacy_columns_and_indexes_without_losing_data(
+        self,
+    ) -> None:
+        execution_id, admission, result = await self._install_pre_orm_record()
+        async with await AsyncConnection.connect(self.dsn) as connection:
+            await connection.execute(
+                sql.SQL(
+                    "ALTER TABLE {} DROP COLUMN terminal_report_deadline_at, "
+                    "DROP COLUMN finish_mutation_started"
+                ).format(sql.Identifier(self.schema, "executions"))
+            )
+
+        await asyncio.gather(
+            self.repository.initialize(), self._repository().initialize()
+        )
+        await self.repository.initialize()
+
+        execution = await self.repository.get(execution_id)
+        self.assertEqual(execution.invocation, admission.invocation)
+        self.assertEqual(execution.protected_context, admission.protected_context)
+        self.assertEqual(execution.result, result)
+        self.assertIsNone(execution.terminal_report_deadline_at)
+        self.assertFalse(execution.finish_mutation_started)
+        async with await AsyncConnection.connect(self.dsn) as connection:
+            indexes = await connection.execute(
+                "SELECT indexname FROM pg_indexes WHERE schemaname = %s",
+                (self.schema,),
+            )
+            index_names = {row[0] for row in await indexes.fetchall()}
+        self.assertTrue(
+            {"executions_due_idx", "executions_active_processing_idx"} <= index_names
+        )
+
+    async def test_libpq_connection_string_remains_supported(self) -> None:
+        repository = PostgresExecutionRepository(
+            make_conninfo(**conninfo_to_dict(self.dsn)),
+            cipher=self.cipher,
+            schema=self.schema,
+        )
+
+        await repository.initialize()
+        admitted = await repository.admit(self._admission("libpq"))
+
+        self.assertEqual(
+            await self.repository.get(admitted.execution.id), admitted.execution
+        )
+
+    async def test_schema_translation_keeps_repositories_isolated(self) -> None:
+        other_schema = f"test_execution_{uuid4().hex}"
+        self.addAsyncCleanup(self._drop_schema, other_schema)
+        other = self._repository(schema=other_schema)
+        await other.initialize()
+        admission = self._admission("same-key")
+
+        first = await self.repository.admit(admission)
+        second = await other.admit(admission)
+
+        self.assertTrue(first.created)
+        self.assertTrue(second.created)
+        self.assertNotEqual(first.execution.id, second.execution.id)
+        first_found = await self.repository.find_submission(admission.identity)
+        second_found = await other.find_submission(admission.identity)
+        assert first_found is not None
+        assert second_found is not None
+        self.assertEqual(first_found.id, first.execution.id)
+        self.assertEqual(second_found.id, second.execution.id)
+
+    async def test_parallel_claims_respect_capacity_greater_than_one(self) -> None:
+        repository = self._repository(per_workflow_limit=2)
+        for index in range(6):
+            await repository.admit(self._admission(f"capacity-{index}"))
+        claims = []
+
+        for _ in range(3):
+            competing = await asyncio.gather(
+                *(
+                    self._repository(per_workflow_limit=2).claim_due(
+                        f"worker-{index}", timedelta(seconds=30)
+                    )
+                    for index in range(6)
+                )
+            )
+            claims.extend(claim for claim in competing if claim is not None)
+
+        self.assertEqual(len(claims), 2)
+        self.assertEqual(len({claim.execution_id for claim in claims}), 2)
+        self.assertIsNone(
+            await repository.claim_due("extra-worker", timedelta(seconds=30))
+        )
+
+    async def test_locked_execution_does_not_block_another_workflow(self) -> None:
+        locked_id = await self._admit_execution("locked", "first-workflow")
+        available_id = await self._admit_execution("available", "second-workflow")
+
+        async with await AsyncConnection.connect(self.dsn) as connection:
+            await connection.execute(
+                sql.SQL("SELECT id FROM {} WHERE id = %s FOR UPDATE").format(
+                    sql.Identifier(self.schema, "executions")
+                ),
+                (locked_id,),
+            )
+            claim = await asyncio.wait_for(
+                self.repository.claim_due("worker", timedelta(seconds=30)), timeout=2
+            )
+
+        assert claim is not None
+        self.assertEqual(claim.execution_id, available_id)
+        self.assertEqual((await self.repository.get(locked_id)).processing_attempts, 0)
+
+    async def test_failed_claim_rolls_back_and_releases_workflow_lock(self) -> None:
+        admitted = await self.repository.admit(self._admission("rollback"))
+        table = sql.Identifier(self.schema, "executions")
+        async with await AsyncConnection.connect(self.dsn) as connection:
+            await connection.execute(
+                sql.SQL(
+                    "ALTER TABLE {} ADD CONSTRAINT reject_running CHECK (status <> 'running')"
+                ).format(table)
+            )
+
+        with self.assertRaises(ExecutionRepositoryUnavailableError):
+            await self.repository.claim_due("rejected-worker", timedelta(seconds=30))
+
+        self.assertEqual(
+            await self.repository.get(admitted.execution.id), admitted.execution
+        )
+        async with await AsyncConnection.connect(self.dsn) as connection:
+            await connection.execute(
+                sql.SQL("ALTER TABLE {} DROP CONSTRAINT reject_running").format(table)
+            )
+        claim = await self._repository().claim_due("replacement", timedelta(seconds=30))
+        assert claim is not None
+        self.assertEqual(claim.execution_id, admitted.execution.id)
+        self.assertEqual(claim.attempt, 1)
+
+    async def test_orm_schema_retains_database_state_constraints(self) -> None:
+        admitted = await self.repository.admit(self._admission("constraints"))
+        for assignment in (
+            "processing_attempts = -1",
+            "processing_rejections = -1",
+            "finish_attempts = -1",
+            "lease_owner = 'worker-without-token'",
+            "error_code = 'code-without-message'",
+            "result = '{}'::jsonb",
+            "status = 'invalid-status'",
+            "work_kind = 'invalid-work-kind'",
+        ):
+            with self.subTest(assignment=assignment), self.assertRaises(CheckViolation):
+                async with await AsyncConnection.connect(self.dsn) as connection:
+                    await connection.execute(
+                        sql.SQL("UPDATE {} SET {} WHERE id = %s").format(
+                            sql.Identifier(self.schema, "executions"),
+                            sql.SQL(assignment),
+                        ),
+                        (admitted.execution.id,),
+                    )
+        self.assertEqual(
+            await self.repository.get(admitted.execution.id), admitted.execution
+        )
+
+    async def _drop_schema(self, schema: str) -> None:
+        async with await AsyncConnection.connect(self.dsn) as connection:
+            await connection.execute(
+                sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema))
+            )
+
+    async def _install_pre_orm_record(self) -> tuple[str, Admission, WorkflowResult]:
+        admission = self._admission("pre-orm")
+        admission = replace(
+            admission,
+            invocation=replace(
+                admission.invocation,
+                inputs={
+                    "slide": SharedPathInput(path="/shared/input.tiff"),
+                    "threshold": InlineInput(value=0.5),
+                },
+                resolved_configuration={"level": 2, "optional": None},
+            ),
+            protected_context={"credential": "historical-test-token"},
+        )
+        result = WorkflowResult(
+            outputs={
+                "score": InlineOutput(value=0.9),
+                "empty": InlineOutput(value={}),
+                "artifact": SharedArtifact(
+                    path="/shared/result.tiff", media_type="image/tiff"
+                ),
+            }
+        )
+        execution_id = str(uuid4())
+        table = sql.Identifier(self.schema, "executions")
+        fixture = Path(__file__).with_name("fixtures") / "executions_pre_orm.sql"
+        async with await AsyncConnection.connect(self.dsn) as connection:
+            await connection.execute(
+                sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(self.schema))
+            )
+            await connection.execute(
+                sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(self.schema))
+            )
+            await connection.execute(sql.SQL(fixture.read_text()).format(table=table))
+            await connection.execute(
+                sql.SQL(
+                    "INSERT INTO {} (id, provider, submission_key, request_fingerprint, "
+                    "workflow_id, status, invocation, protected_context, deadline_at, "
+                    "work_kind, next_attempt_at, processing_attempts, result) "
+                    "VALUES (%s, %s, %s, %s, %s, 'running', %s, %s, %s, "
+                    "'provider_finish', clock_timestamp(), 1, %s)"
+                ).format(table),
+                (
+                    execution_id,
+                    admission.identity.provider,
+                    admission.identity.key,
+                    admission.identity.fingerprint,
+                    admission.workflow_id,
+                    Jsonb(invocation_to_dict(admission.invocation)),
+                    self.cipher.encrypt(admission.protected_context),
+                    admission.deadline_at,
+                    Jsonb(result_to_dict(result)),
+                ),
+            )
+        return execution_id, admission, result
+
+    async def _stored_record(self, execution_id: str) -> dict[str, object]:
+        async with await AsyncConnection.connect(self.dsn) as connection:
+            cursor = await connection.execute(
+                sql.SQL("SELECT row_to_json(executions) FROM {} WHERE id = %s").format(
+                    sql.Identifier(self.schema, "executions")
+                ),
+                (execution_id,),
+            )
+            row = await cursor.fetchone()
+        assert row is not None
+        return row[0]
 
     async def test_maintenance_expires_queued_work_without_claiming(self) -> None:
         admission = self._admission("queued-expiry")
@@ -411,12 +692,14 @@ class PostgresExecutionRepositoryTests(
             {"credential": "secret-job-token"},
         )
 
-    def _repository(self) -> PostgresExecutionRepository:
+    def _repository(
+        self, *, schema: str | None = None, per_workflow_limit: int = 1
+    ) -> PostgresExecutionRepository:
         return PostgresExecutionRepository(
             self.dsn,
             cipher=self.cipher,
-            schema=self.schema,
-            per_workflow_limit=1,
+            schema=schema or self.schema,
+            per_workflow_limit=per_workflow_limit,
             processing_policy=self.processing_policy,
             finish_policy=self.processing_policy,
         )

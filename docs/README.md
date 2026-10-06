@@ -51,6 +51,11 @@ and heatmap code to `workflows/heatmap/`. Imports and deployment entry points ha
 been updated locally; tests and image rebuilds are deferred. Dated validation
 reports describe their original revisions, not a validation of these moves.
 
+The subsequent [October 7 ORM refactor](reviews/postgres-orm-2026-10-07.md)
+replaces handwritten persistence SQL with typed SQLAlchemy ORM models. Local
+PostgreSQL and application regression tests now cover the reorganized source
+and ORM adapter. Neither change has been rebuilt into images or deployed.
+
 ## Validation boundaries
 
 The October 4 live postmortem concerns the original warm GPU images. The October 5

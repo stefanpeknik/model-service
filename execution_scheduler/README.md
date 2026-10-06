@@ -30,8 +30,16 @@ workflow processing and provider finish.
 - `repository.py` defines persistence and maintenance operations and their
   availability error. It imports neither persistence implementation.
 - `persistence/memory.py` implements the interface in memory.
-- `persistence/postgres.py` implements the interface with PostgreSQL.
-- `persistence/schema.py` owns PostgreSQL schema creation.
+- `persistence/postgres.py` implements the interface with SQLAlchemy ORM sessions
+  over PostgreSQL. Each operation has its own transaction and connection; no
+  session or idle pooled connection is shared between worker tasks.
+- `persistence/models.py` defines the typed execution row, database constraints
+  and indexes, and JSONB conversion for workflow invocations and results. ORM
+  rows stay inside persistence; callers receive the domain records above.
+- `persistence/schema.py` creates the mapped schema and indexes. It uses Alembic
+  operations for the two pre-existing additive column upgrades, under the same
+  initialization advisory lock. It does not rewrite stored records or maintain
+  an Alembic revision history.
 - `persistence/protected_context.py` encrypts protected provider context at rest.
 
 ## External adapters
@@ -65,6 +73,9 @@ capacity does not block another workflow. PostgreSQL locking can skip busy
 records, so concurrent claims do not promise global FIFO. Both adapters run the
 shared scenarios in `tests/repository_contract.py`; PostgreSQL concurrency
 checks remain in `tests/test_postgres_execution_repository.py`.
+The [October 7 ORM regression record](../docs/reviews/postgres-orm-2026-10-07.md)
+covers local concurrency, schema compatibility, and application checks. It is
+not a deployment validation of the ORM adapter.
 
 Leaving `scheduler.running()` stops local work and joins worker tasks. It does
 not cancel durable executions; another worker can recover their expired leases.
