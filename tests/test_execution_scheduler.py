@@ -15,12 +15,6 @@ from execution_scheduler.contracts import (
     ScheduleRequest,
     SchedulingUnavailableError,
 )
-from execution_scheduler.dispatch import (
-    ConfirmedDispatchRejectionError,
-    InMemoryWorkflowDispatch,
-    RemoteWorkflowFailureError,
-    UnknownDispatchOutcomeError,
-)
 from execution_scheduler.domain import (
     Admission,
     PreparedWorkflow,
@@ -32,6 +26,7 @@ from execution_scheduler.domain import (
     SubmissionIdentity,
     WorkKind,
 )
+from execution_scheduler.persistence.memory import InMemoryExecutionRepository
 from execution_scheduler.providers import (
     ProviderCancellation,
     ProviderFailure,
@@ -40,11 +35,10 @@ from execution_scheduler.providers import (
 )
 from execution_scheduler.repository import (
     ExecutionRepositoryUnavailableError,
-    InMemoryExecutionRepository,
 )
 from execution_scheduler.scheduler import ExecutionScheduler
-from execution_scheduler.standalone import StandaloneProviderAdapter
 from execution_scheduler.worker import ExecutionWorker
+from integrations.standalone import StandaloneProviderAdapter
 from workflow_execution.catalog import WorkflowCatalog
 from workflow_execution.contracts import (
     InputAccessContext,
@@ -52,6 +46,12 @@ from workflow_execution.contracts import (
     WorkflowExecutionContext,
     WorkflowInvocation,
     WorkflowResult,
+)
+from workflow_execution.dispatch import (
+    ConfirmedDispatchRejectionError,
+    InMemoryWorkflowDispatch,
+    RemoteWorkflowFailureError,
+    UnknownDispatchOutcomeError,
 )
 
 

@@ -6,12 +6,12 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 from execution_scheduler.contracts import ExecutionStatus, ScheduleRequest
-from execution_scheduler.dispatch import InMemoryWorkflowDispatch
 from execution_scheduler.domain import RetryPolicy
-from execution_scheduler.repository import InMemoryExecutionRepository
+from execution_scheduler.persistence.memory import InMemoryExecutionRepository
 from execution_scheduler.scheduler import ExecutionScheduler
 from tests.test_execution_scheduler import MutableClock, StandaloneProvider
 from workflow_execution.contracts import WorkflowResult
+from workflow_execution.dispatch import InMemoryWorkflowDispatch
 
 
 class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):

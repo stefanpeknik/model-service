@@ -9,11 +9,6 @@ from execution_scheduler.contracts import (
     ExecutionError,
     ExecutionErrorCode,
 )
-from execution_scheduler.dispatch import (
-    ConfirmedDispatchRejectionError,
-    RemoteWorkflowFailureError,
-    UnknownDispatchOutcomeError,
-)
 from execution_scheduler.domain import (
     ProcessingFailed,
     ProcessingRejected,
@@ -33,6 +28,11 @@ from execution_scheduler.providers import (
     ProviderSuccess,
 )
 from workflow_execution.contracts import WorkflowExecutionContext
+from workflow_execution.dispatch import (
+    ConfirmedDispatchRejectionError,
+    RemoteWorkflowFailureError,
+    UnknownDispatchOutcomeError,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -43,10 +43,10 @@ if TYPE_CHECKING:
     from datetime import timedelta
 
     from execution_scheduler.active_work import ActiveWorkRegistry
-    from execution_scheduler.dispatch import WorkflowDispatch
     from execution_scheduler.domain import Settlement
     from execution_scheduler.providers import ProviderAdapter
     from execution_scheduler.repository import ExecutionRepository
+    from workflow_execution.dispatch import WorkflowDispatch
 
 
 class ExecutionWorker:

@@ -12,12 +12,12 @@ from unittest.mock import AsyncMock, patch
 
 import numpy as np
 
-from workflow_execution.heatmap import (
+from workflows.heatmap.processor import (
     HeatmapBuildRequest,
     ModelTileConfiguration,
     SlideHeatmapProcessor,
 )
-from workflow_execution.ray_heatmap import RayHeatmapPredictor
+from workflows.heatmap.ray_predictor import RayHeatmapPredictor
 
 
 class FakeSlide:
@@ -117,8 +117,8 @@ class ProstateHeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
             ),
             "ratiopath.openslide": module("ratiopath.openslide", OpenSlide=FakeSlide),
             "ratiopath.tiling": module("ratiopath.tiling", grid_tiles=grid_tiles),
-            "misc.fetch_tissue_tile": module(
-                "misc.fetch_tissue_tile",
+            "workflows.heatmap.tile_reader": module(
+                "workflows.heatmap.tile_reader",
                 fetch_tissue_tile=lambda *_args: np.zeros((4, 4, 3)),
             ),
         }

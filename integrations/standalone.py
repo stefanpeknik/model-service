@@ -10,10 +10,10 @@ from execution_scheduler.contracts import (
     ScheduleRequest,
 )
 from execution_scheduler.domain import PreparedWorkflow, SubmissionIdentity
+from integrations.shared_storage import SharedStorageAccessAdapter
 from workflow_execution.application import validate_workflow_invocation
 from workflow_execution.contracts import SharedPathInput, WorkflowExecutionContext
 from workflow_execution.serialization import invocation_from_dict
-from workflow_execution.shared_storage import SharedStorageAccessAdapter
 
 
 if TYPE_CHECKING:

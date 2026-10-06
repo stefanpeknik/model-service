@@ -12,28 +12,29 @@ logic.
   persistence using Pydantic's contract schemas.
 - `catalog.py` validates workflow declarations and requires configuration
   validation for every registered workflow.
-- `registry.py` composes the built-in declarations, configuration rules, and
+- `../workflows/registry.py` composes the built-in declarations, configuration rules, and
   workflow defaults. Adding YAML without registering its configuration fails
   at startup. Each workflow ID maps to one `WorkflowConfiguration` containing
   its validator and optional defaults. Configuration-free workflows register
   `validate_empty_configuration`.
 - `application.py` validates an invocation, creates input access, enforces its
   deadline, runs the workflow, and validates the result.
-- `shared_storage.py` implements standalone shared-storage input and output
+- `../integrations/shared_storage.py` implements standalone shared-storage input and output
   access and owns its strict `SharedStorageState` schema.
 - `../integrations/empaia/input_access.py` materializes EMPAIA inputs without
   coupling the core workflow runtime to the provider.
 - `http.py` contains the workflow HTTP error envelope shared by ingress
   adapters and the dispatch-only `WorkflowRunRequest` transport schema.
+- `dispatch.py` owns the workflow invocation interface and HTTP adapter used by
+  both immediate and durable execution.
+- `cleanup.py` closes resources under cancellation with a bounded wait and
+  tracks cleanup tasks until they stop.
 
-`prostate_heatmap.py` is the workflow implementation.
-It owns the prostate configuration schema and defaults. `heatmap.py` owns
-slide tiling, prediction reconstruction, mask aggregation, and TIFF writing;
-`ray_heatmap.py` supplies model predictions. The legacy
-`builders/heatmap_builder.py` route delegates to that same slide processor.
-`prostate_heatmap_serve.py` is its Ray Serve and FastAPI adapter. Deployment
-configuration imports `workflow_execution.prostate_heatmap_serve:app`, so that
-module remains a stable entry point.
+Concrete workflow code lives in [`../workflows/`](../workflows/README.md).
+The heatmap workflow, processor, Ray prediction adapter, tile reader, and Serve
+entry point are neighbors under `workflows/heatmap/`. The legacy
+`builders/heatmap_builder.py` route still delegates to that same processor.
+Deployment configuration imports `workflows.heatmap.prostate_serve:app`.
 
 `tests/test_workflow_deployment.py` checks declarations against the enabled
 Helm applications. Deployment-file inspection is test-only; the runtime uses

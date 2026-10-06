@@ -184,7 +184,7 @@ workflow body with provider `standalone`. The scheduler's
 [`ExecutionScheduler`](../../execution_scheduler/scheduler.py) validated the
 workflow and provider, prepared shared-storage access, and admitted a row in
 `model_service.executions` through
-[`PostgresExecutionRepository`](../../execution_scheduler/postgres.py). A
+[`PostgresExecutionRepository`](../../execution_scheduler/persistence/postgres.py). A
 background [`ExecutionWorker`](../../execution_scheduler/worker.py) claimed it
 under a lease and dispatched the invocation over HTTP to the validation
 RayService. The scheduler, not Ray, owned the durable state and polling API.
@@ -192,7 +192,7 @@ The database row's deadline was 10:46:10.737 CEST.
 
 Both workflow calls reached the validation
 [`ValidationProstateHeatmapApplication`](../../validation/serve.py). Its
-[`ProstateHeatmapWorkflow`](../../workflow_execution/prostate_heatmap.py)
+[`ProstateHeatmapWorkflow`](../../workflows/heatmap/prostate.py)
 resolved the two input paths and an output path on the shared volume. The
 validation processor read the input bytes and wrote an 8 by 8 grayscale TIFF
 to a temporary path. The workflow atomically moved the completed TIFF to its
@@ -220,7 +220,7 @@ intentionally unique.
 For inference, the script built one all-zero 512 by 512 RGB `uint8` tile. The
 SDK compressed its bytes with LZ4 and posted them to the same public scheduler
 origin, with a 900-second client timeout. The
-[`HttpInferenceProxy`](../../execution_scheduler/inference.py) sent the body to
+[`HttpInferenceProxy`](../../model_service/inference.py) sent the body to
 the existing production RayService with its own 900-second timeout. It followed
 the production Serve proxy's internal 307 redirect to the trailing-slash
 route, then passed the 200 response back to the SDK. The production GPU worker

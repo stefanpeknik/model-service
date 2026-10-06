@@ -20,8 +20,8 @@ from execution_scheduler.domain import (
     SubmissionIdentity,
     WorkKind,
 )
-from execution_scheduler.postgres import PostgresExecutionRepository
-from execution_scheduler.security import ProtectedContextCipher
+from execution_scheduler.persistence.postgres import PostgresExecutionRepository
+from execution_scheduler.persistence.protected_context import ProtectedContextCipher
 from tests.repository_contract import ExecutionRepositoryContract
 from workflow_execution.contracts import (
     InlineOutput,

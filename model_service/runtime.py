@@ -6,20 +6,20 @@ from typing import TYPE_CHECKING
 import httpx
 from fastapi import FastAPI
 
-from execution_scheduler.api import create_execution_app
-from execution_scheduler.dispatch import HTTPWorkflowDispatch
 from execution_scheduler.domain import RetryPolicy
-from execution_scheduler.health import WorkflowDeploymentHealth
-from execution_scheduler.inference import HttpInferenceProxy
-from execution_scheduler.postgres import PostgresExecutionRepository
+from execution_scheduler.persistence.postgres import PostgresExecutionRepository
+from execution_scheduler.persistence.protected_context import ProtectedContextCipher
 from execution_scheduler.scheduler import ExecutionScheduler
-from execution_scheduler.security import ProtectedContextCipher
-from execution_scheduler.settings import SchedulerSettings
-from execution_scheduler.standalone import StandaloneProviderAdapter
-from execution_scheduler.synchronous import SynchronousWorkflowService
 from integrations.empaia.gateway import load_gateway_factory
 from integrations.empaia.provider import EmpaiaProviderAdapter
+from integrations.standalone import StandaloneProviderAdapter
+from model_service.api import create_execution_app
+from model_service.health import WorkflowDeploymentHealth
+from model_service.inference import HttpInferenceProxy
+from model_service.settings import SchedulerSettings
+from model_service.synchronous import SynchronousWorkflowService
 from workflow_execution.catalog import WorkflowCatalog
+from workflow_execution.dispatch import HTTPWorkflowDispatch
 
 
 if TYPE_CHECKING:

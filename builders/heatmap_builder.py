@@ -4,8 +4,8 @@ from typing import TypedDict
 from fastapi import FastAPI
 from ray import serve
 
-from workflow_execution.heatmap import HeatmapBuildRequest, SlideHeatmapProcessor
-from workflow_execution.ray_heatmap import RayHeatmapPredictor
+from workflows.heatmap.processor import HeatmapBuildRequest, SlideHeatmapProcessor
+from workflows.heatmap.ray_predictor import RayHeatmapPredictor
 
 
 class Config(TypedDict):

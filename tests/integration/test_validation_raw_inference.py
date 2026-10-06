@@ -4,7 +4,7 @@ import os
 import unittest
 from datetime import timedelta
 
-from execution_scheduler.dispatch import InMemoryWorkflowDispatch
+from workflow_execution.dispatch import InMemoryWorkflowDispatch
 
 
 os.environ.setdefault("RAY_ENABLE_UV_RUN_RUNTIME_ENV", "0")
@@ -22,11 +22,11 @@ class ValidationRawInferenceTests(unittest.IsolatedAsyncioTestCase):
         from rationai import AsyncClient
         from ray import serve
 
-        from execution_scheduler.api import create_execution_app
-        from execution_scheduler.inference import HttpInferenceProxy
-        from execution_scheduler.repository import InMemoryExecutionRepository
+        from execution_scheduler.persistence.memory import InMemoryExecutionRepository
         from execution_scheduler.scheduler import ExecutionScheduler
-        from execution_scheduler.standalone import StandaloneProviderAdapter
+        from integrations.standalone import StandaloneProviderAdapter
+        from model_service.api import create_execution_app
+        from model_service.inference import HttpInferenceProxy
         from validation.classifier_serve import ValidationProstateClassifier
         from workflow_execution.catalog import WorkflowCatalog
 

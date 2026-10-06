@@ -38,9 +38,9 @@ WORKDIR /app
 ENV PYTHONPATH=/app
 COPY models models
 COPY providers providers
-COPY misc misc
 COPY integrations integrations
 COPY workflow_execution workflow_execution
+COPY workflows workflows
 COPY workflow-definitions workflow-definitions
 
 RUN uv --no-cache run --no-project python -c \

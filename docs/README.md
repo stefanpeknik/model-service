@@ -27,8 +27,10 @@ substitute a September proposal or old EMPAIA note.
 | Task | Read |
 | --- | --- |
 | Check the meaning of workflow, execution, provider, and artifact terminology | [Project glossary](../CONTEXT.md), which defines vocabulary rather than ticket status |
+| Navigate public HTTP routes, raw inference, immediate execution, and application wiring | [Public application package map](../model_service/README.md) |
 | Navigate scheduler ownership, transactions, retries, leases, and provider finish | [Scheduler package map](../execution_scheduler/README.md) |
-| Navigate invocation types, input access, heatmap processing, and Ray ingress | [Workflow package map](../workflow_execution/README.md) |
+| Navigate invocation types, input access, dispatch, and resource cleanup | [Workflow runtime package map](../workflow_execution/README.md) |
+| Navigate heatmap processing and its Ray ingress | [Built-in workflows package map](../workflows/README.md) |
 | Change named workflow inputs, outputs, or configuration | [Workflow definition guide](../workflow-definitions/README.md), then the definition and validator |
 | Use public HTTP routes or understand the operating defaults | [Durable execution guide](operations/durable-workflow-execution.md), using its API guidance rather than its September deployment journal |
 | Prepare or change the native GPU validation deployment | [Full-WSI runbook](operations/full-wsi-deployment.md), then `helm/rayservice/values.full-wsi.yaml` |
@@ -39,9 +41,15 @@ substitute a September proposal or old EMPAIA note.
 | Understand an earlier architecture choice | The historical references below, only as needed |
 | Add or tune a low-level model deployment | [Model deployment guide](guides/deployment-guide.md) and [inference architecture](architecture/overview.md), not the workflow checkpoint runbook |
 
-The two package READMEs describe current ownership. The operational guide mixes
+The package READMEs describe current ownership. The operational guide mixes
 maintained semantics with dated observations; its September dummy-profile commands
 are not instructions for the native full-WSI deployment.
+
+The October 7 source reorganization moves public application code to
+`model_service/`, persistence implementations to `execution_scheduler/persistence/`,
+and heatmap code to `workflows/heatmap/`. Imports and deployment entry points have
+been updated locally; tests and image rebuilds are deferred. Dated validation
+reports describe their original revisions, not a validation of these moves.
 
 ## Validation boundaries
 

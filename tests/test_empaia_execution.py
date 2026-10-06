@@ -14,10 +14,9 @@ from execution_scheduler.contracts import (
     ScheduleRequest,
     SchedulingUnavailableError,
 )
-from execution_scheduler.dispatch import InMemoryWorkflowDispatch
 from execution_scheduler.domain import RetryPolicy
+from execution_scheduler.persistence.memory import InMemoryExecutionRepository
 from execution_scheduler.providers import ProviderFinishFailureError, ProviderSuccess
-from execution_scheduler.repository import InMemoryExecutionRepository
 from execution_scheduler.scheduler import ExecutionScheduler
 from execution_scheduler.worker import ExecutionWorker
 from integrations.empaia.gateway import EmpaiaGatewayError, EmpaiaJobContext
@@ -31,6 +30,7 @@ from workflow_execution.contracts import (
     WorkflowInvocation,
     WorkflowResult,
 )
+from workflow_execution.dispatch import InMemoryWorkflowDispatch
 
 
 if TYPE_CHECKING:

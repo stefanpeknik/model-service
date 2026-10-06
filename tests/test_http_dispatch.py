@@ -4,12 +4,6 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from execution_scheduler.dispatch import (
-    ConfirmedDispatchRejectionError,
-    HTTPWorkflowDispatch,
-    RemoteWorkflowFailureError,
-    UnknownDispatchOutcomeError,
-)
 from workflow_execution.contracts import (
     InlineOutput,
     InputAccessContext,
@@ -17,12 +11,18 @@ from workflow_execution.contracts import (
     WorkflowInvocation,
     WorkflowResult,
 )
+from workflow_execution.dispatch import (
+    ConfirmedDispatchRejectionError,
+    HTTPWorkflowDispatch,
+    RemoteWorkflowFailureError,
+    UnknownDispatchOutcomeError,
+)
 
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from execution_scheduler.dispatch import HTTPResponse
+    from workflow_execution.dispatch import HTTPResponse
 
 
 class FakeResponse:

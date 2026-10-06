@@ -18,16 +18,15 @@ from fastapi import FastAPI
 from psycopg import AsyncConnection, sql
 
 from execution_scheduler.active_work import ActiveWorkRegistry
-from execution_scheduler.api import create_execution_app
 from execution_scheduler.contracts import ScheduleRequest
-from execution_scheduler.dispatch import HTTPWorkflowDispatch, InMemoryWorkflowDispatch
 from execution_scheduler.domain import RetryPolicy, WorkKind
-from execution_scheduler.postgres import PostgresExecutionRepository
+from execution_scheduler.persistence.postgres import PostgresExecutionRepository
+from execution_scheduler.persistence.protected_context import ProtectedContextCipher
 from execution_scheduler.scheduler import ExecutionScheduler
-from execution_scheduler.security import ProtectedContextCipher
 from execution_scheduler.worker import ExecutionWorker
 from integrations.empaia.input_access import EmpaiaInputAccessAdapter
 from integrations.empaia.provider import EmpaiaProviderAdapter
+from model_service.api import create_execution_app
 from workflow_execution.application import WorkflowApplication, WorkflowContext
 from workflow_execution.catalog import (
     WorkflowCatalog,
@@ -43,6 +42,7 @@ from workflow_execution.contracts import (
     WorkflowOutput,
     WorkflowResult,
 )
+from workflow_execution.dispatch import HTTPWorkflowDispatch, InMemoryWorkflowDispatch
 from workflow_execution.http import (
     WorkflowRunRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations at runtime.
 )

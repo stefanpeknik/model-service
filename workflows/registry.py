@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from workflow_execution.catalog import WorkflowCatalog, WorkflowConfiguration
-from workflow_execution.prostate_heatmap import (
+from workflows.heatmap.prostate import (
     default_configuration,
     validate_configuration,
 )

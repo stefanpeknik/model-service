@@ -7,9 +7,9 @@ from unittest.mock import AsyncMock, patch
 
 from httpx import ASGITransport, AsyncClient, MockTransport, Request, Response
 
-from execution_scheduler.repository import InMemoryExecutionRepository
-from execution_scheduler.runtime import create_app
-from execution_scheduler.settings import SchedulerSettings
+from execution_scheduler.persistence.memory import InMemoryExecutionRepository
+from model_service.runtime import create_app
+from model_service.settings import SchedulerSettings
 
 
 class ExecutionRuntimeTests(unittest.IsolatedAsyncioTestCase):
@@ -35,10 +35,10 @@ class ExecutionRuntimeTests(unittest.IsolatedAsyncioTestCase):
             patch.object(repository, "initialize", initialized, create=True),
             patch.object(repository, "maintain", side_effect=maintained.set),
             patch(
-                "execution_scheduler.runtime.PostgresExecutionRepository",
+                "model_service.runtime.PostgresExecutionRepository",
                 return_value=repository,
             ),
-            patch("execution_scheduler.runtime.httpx.AsyncClient", return_value=client),
+            patch("model_service.runtime.httpx.AsyncClient", return_value=client),
         ):
             app = create_app(self.settings())
             async with app.router.lifespan_context(app):
@@ -55,10 +55,10 @@ class ExecutionRuntimeTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(repository, "initialize", initialized, create=True),
             patch(
-                "execution_scheduler.runtime.PostgresExecutionRepository",
+                "model_service.runtime.PostgresExecutionRepository",
                 return_value=repository,
             ),
-            patch("execution_scheduler.runtime.httpx.AsyncClient", return_value=client),
+            patch("model_service.runtime.httpx.AsyncClient", return_value=client),
         ):
             app = create_app(self.settings())
             with self.assertRaisesRegex(RuntimeError, "database unavailable"):
@@ -91,7 +91,7 @@ class ExecutionRuntimeTests(unittest.IsolatedAsyncioTestCase):
         )
         async with AsyncClient(transport=MockTransport(serve_handler)) as serve_client:
             with patch(
-                "execution_scheduler.runtime.httpx.AsyncClient",
+                "model_service.runtime.httpx.AsyncClient",
                 return_value=serve_client,
             ):
                 app = create_app(settings)
@@ -136,7 +136,7 @@ class ExecutionRuntimeTests(unittest.IsolatedAsyncioTestCase):
         )
         async with AsyncClient(transport=MockTransport(serve_handler)) as serve_client:
             with patch(
-                "execution_scheduler.runtime.httpx.AsyncClient",
+                "model_service.runtime.httpx.AsyncClient",
                 return_value=serve_client,
             ):
                 app = create_app(settings)

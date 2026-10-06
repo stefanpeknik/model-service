@@ -40,7 +40,7 @@ class WorkflowDeploymentTests(unittest.TestCase):
         )
         workflow, classifier = applications
         self.assertEqual(
-            workflow["import_path"], "workflow_execution.prostate_heatmap_serve:app"
+            workflow["import_path"], "workflows.heatmap.prostate_serve:app"
         )
         self.assertEqual(classifier["import_path"], "models.binary_classifier:app")
         self.assertNotIn("working_dir", str(applications))

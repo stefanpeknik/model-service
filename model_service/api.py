@@ -20,18 +20,18 @@ from execution_scheduler.contracts import (
     UnknownExecutionError,
     UnknownWorkflowError,
 )
-from execution_scheduler.dispatch import (
-    ConfirmedDispatchRejectionError,
-    RemoteWorkflowFailureError,
-    UnknownDispatchOutcomeError,
-)
-from execution_scheduler.health import WorkflowDeploymentState, WorkflowDeploymentStatus
-from execution_scheduler.inference import create_inference_router
+from model_service.health import WorkflowDeploymentState, WorkflowDeploymentStatus
+from model_service.inference import create_inference_router
 from workflow_execution.contracts import (
     InvalidWorkflowInvocation,
     JsonValue,
     WorkflowInvocation,
     WorkflowResult,
+)
+from workflow_execution.dispatch import (
+    ConfirmedDispatchRejectionError,
+    RemoteWorkflowFailureError,
+    UnknownDispatchOutcomeError,
 )
 from workflow_execution.http import WorkflowErrorResponse
 
@@ -39,7 +39,7 @@ from workflow_execution.http import WorkflowErrorResponse
 if TYPE_CHECKING:
     from collections.abc import Awaitable
 
-    from execution_scheduler.inference import InferenceProxy
+    from model_service.inference import InferenceProxy
 
 
 class ApiErrorCode(StrEnum):

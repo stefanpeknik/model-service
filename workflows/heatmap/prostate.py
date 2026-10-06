@@ -11,7 +11,7 @@ from workflow_execution.contracts import (
     SharedArtifact,
     WorkflowResult,
 )
-from workflow_execution.heatmap import HeatmapBuildRequest
+from workflows.heatmap.processor import HeatmapBuildRequest
 
 
 if TYPE_CHECKING:

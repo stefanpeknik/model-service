@@ -5,6 +5,10 @@ remains blocked by the EPISeg artifact and simultaneous-capacity limits below.
 Scheduling remains workflow-only, confirmed by the user on October 6. Raw-model
 calls retain their existing synchronous contract. EMPAIA remains disabled.
 
+The source layout changed on October 7. Paths below describe the validated
+October 6 revision; use [the current package maps](../README.md) to navigate
+the reorganized source. This report does not validate that later reorganization.
+
 ## API call paths
 
 ```text

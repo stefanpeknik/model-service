@@ -12,17 +12,17 @@ from ray import serve
 from workflow_execution.application import WorkflowApplication
 from workflow_execution.catalog import WorkflowCatalog
 from workflow_execution.contracts import WorkflowResult
-from workflow_execution.heatmap import SlideHeatmapProcessor
 from workflow_execution.http import (
     WorkflowErrorResponse,
     WorkflowHTTPErrorCode,
     WorkflowRunRequest,
     run_workflow_http,
 )
-from workflow_execution.prostate_heatmap import (
+from workflows.heatmap.processor import SlideHeatmapProcessor
+from workflows.heatmap.prostate import (
     ProstateHeatmapWorkflow,
 )
-from workflow_execution.ray_heatmap import RayHeatmapPredictor
+from workflows.heatmap.ray_predictor import RayHeatmapPredictor
 
 
 class Config(TypedDict):

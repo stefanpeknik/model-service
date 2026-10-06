@@ -101,7 +101,7 @@ class WorkflowCatalog:
 
     @classmethod
     def default(cls) -> WorkflowCatalog:
-        from workflow_execution.registry import default_catalog
+        from workflows.registry import default_catalog
 
         return default_catalog()
 

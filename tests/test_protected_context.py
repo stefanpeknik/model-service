@@ -3,7 +3,10 @@ from __future__ import annotations
 import base64
 import unittest
 
-from execution_scheduler.security import ProtectedContextCipher, ProtectedContextError
+from execution_scheduler.persistence.protected_context import (
+    ProtectedContextCipher,
+    ProtectedContextError,
+)
 
 
 class ProtectedContextCipherTests(unittest.TestCase):

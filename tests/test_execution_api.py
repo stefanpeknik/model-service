@@ -16,7 +16,6 @@ from httpx import (
 )
 from starlette.types import Message, Scope
 
-from execution_scheduler.api import create_execution_app
 from execution_scheduler.contracts import (
     ExecutionStatus,
     ExecutionView,
@@ -24,24 +23,25 @@ from execution_scheduler.contracts import (
     ScheduleResult,
     SchedulingUnavailableError,
 )
-from execution_scheduler.dispatch import (
-    ConfirmedDispatchRejectionError,
-    InMemoryWorkflowDispatch,
-)
-from execution_scheduler.health import WorkflowDeploymentHealth
-from execution_scheduler.inference import HttpInferenceProxy
+from execution_scheduler.persistence.memory import InMemoryExecutionRepository
 from execution_scheduler.repository import (
     ExecutionRepositoryUnavailableError,
-    InMemoryExecutionRepository,
 )
 from execution_scheduler.scheduler import ExecutionScheduler
-from execution_scheduler.synchronous import SynchronousWorkflowService
+from model_service.api import create_execution_app
+from model_service.health import WorkflowDeploymentHealth
+from model_service.inference import HttpInferenceProxy
+from model_service.synchronous import SynchronousWorkflowService
 from tests.test_execution_scheduler import StandaloneProvider
 from workflow_execution.catalog import WorkflowCatalog
 from workflow_execution.contracts import (
     InlineOutput,
     SharedArtifact,
     WorkflowResult,
+)
+from workflow_execution.dispatch import (
+    ConfirmedDispatchRejectionError,
+    InMemoryWorkflowDispatch,
 )
 
 

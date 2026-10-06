@@ -10,13 +10,10 @@ from fastapi import FastAPI
 from pydantic import TypeAdapter, ValidationError
 
 from execution_scheduler.contracts import InvalidScheduleRequestError, ScheduleRequest
-from execution_scheduler.dispatch import (
-    HTTPWorkflowDispatch,
-    RemoteWorkflowFailureError,
-)
 from integrations.empaia.gateway import EmpaiaJobContext
 from integrations.empaia.input_access import EmpaiaInputAccessAdapter
 from integrations.empaia.provider import EmpaiaProviderAdapter
+from integrations.shared_storage import SharedStorageAccessAdapter
 from workflow_execution.application import WorkflowApplication
 from workflow_execution.catalog import (
     WorkflowCatalog,
@@ -31,9 +28,12 @@ from workflow_execution.contracts import (
     WorkflowInvocation,
     WorkflowResult,
 )
+from workflow_execution.dispatch import (
+    HTTPWorkflowDispatch,
+    RemoteWorkflowFailureError,
+)
 from workflow_execution.http import WorkflowRunRequest, run_workflow_http
 from workflow_execution.serialization import invocation_to_dict
-from workflow_execution.shared_storage import SharedStorageAccessAdapter
 
 
 def invocation(kind: str, state: dict) -> WorkflowInvocation:

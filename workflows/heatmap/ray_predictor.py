@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from workflow_execution.heatmap import ModelTileConfiguration
+from workflows.heatmap.processor import ModelTileConfiguration
 
 
 if TYPE_CHECKING:

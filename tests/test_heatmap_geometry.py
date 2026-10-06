@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 
-from workflow_execution.heatmap import (
+from workflows.heatmap.processor import (
     HeatmapBuildRequest,
     ModelTileConfiguration,
     SlideHeatmapProcessor,

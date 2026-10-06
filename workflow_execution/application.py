@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
+from integrations.shared_storage import SharedStorageAccessAdapter
+from workflow_execution.cleanup import close_resource
 from workflow_execution.contracts import (
     InlineOutput,
     InvalidWorkflowInvocation,
@@ -22,8 +24,6 @@ from workflow_execution.contracts import (
     WorkflowResult,
     is_json_value,
 )
-from workflow_execution.resources import close_resource
-from workflow_execution.shared_storage import SharedStorageAccessAdapter
 
 
 logger = logging.getLogger(__name__)

@@ -4,7 +4,7 @@ import unittest
 from datetime import UTC, datetime, timedelta
 
 from execution_scheduler.domain import RetryPolicy
-from execution_scheduler.repository import InMemoryExecutionRepository
+from execution_scheduler.persistence.memory import InMemoryExecutionRepository
 from tests.repository_contract import ExecutionRepositoryContract
 
 

@@ -12,9 +12,9 @@ from workflow_execution.contracts import (
 
 
 if TYPE_CHECKING:
-    from execution_scheduler.dispatch import WorkflowDispatch
     from workflow_execution.catalog import WorkflowCatalog
     from workflow_execution.contracts import WorkflowInvocation, WorkflowResult
+    from workflow_execution.dispatch import WorkflowDispatch
 
 
 class SynchronousWorkflowService:

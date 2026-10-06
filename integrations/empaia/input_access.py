@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING
 from pydantic import ValidationError
 
 from integrations.empaia.gateway import EmpaiaInputState, EmpaiaJobContext
+from workflow_execution.cleanup import close_resource
 from workflow_execution.contracts import (
     InvalidWorkflowInvocation,
     ProviderInput,
     WorkflowExecutionContext,
 )
-from workflow_execution.resources import close_resource
 
 
 logger = logging.getLogger(__name__)

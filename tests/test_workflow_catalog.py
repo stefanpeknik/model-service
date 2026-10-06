@@ -12,7 +12,7 @@ from workflow_execution.catalog import (
     validate_empty_configuration,
 )
 from workflow_execution.contracts import WorkflowInputKind, WorkflowOutputKind
-from workflow_execution.prostate_heatmap import (
+from workflows.heatmap.prostate import (
     default_configuration,
     validate_configuration,
 )

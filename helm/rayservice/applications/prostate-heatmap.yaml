@@ -1,5 +1,5 @@
 - name: prostate-heatmap
-  import_path: workflow_execution.prostate_heatmap_serve:app
+  import_path: workflows.heatmap.prostate_serve:app
   route_prefix: /workflows/prostate-heatmap
   runtime_env:
     working_dir: https://github.com/RationAI/model-service/archive/refs/heads/main.zip

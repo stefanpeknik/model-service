@@ -16,12 +16,14 @@ RUN uv pip install --system --no-cache \
 WORKDIR /app
 ARG SOURCE_REVISION
 LABEL org.opencontainers.image.revision=${SOURCE_REVISION}
+COPY model_service model_service
 COPY execution_scheduler execution_scheduler
 COPY integrations integrations
 COPY workflow_execution workflow_execution
+COPY workflows workflows
 COPY workflow-definitions workflow-definitions
 
 USER 10001:10001
 EXPOSE 8080
 
-CMD ["uvicorn", "execution_scheduler.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "model_service.main:app", "--host", "0.0.0.0", "--port", "8080"]

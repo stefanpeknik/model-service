@@ -17,6 +17,6 @@ RUN uv pip install --python /home/ray/anaconda3/bin/python --no-cache \
 WORKDIR /app
 COPY validation validation
 COPY integrations integrations
-COPY misc misc
 COPY workflow_execution workflow_execution
+COPY workflows workflows
 COPY workflow-definitions workflow-definitions

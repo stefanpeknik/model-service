@@ -36,15 +36,16 @@ class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
         from psycopg import AsyncConnection, sql
         from ray import serve
 
-        from execution_scheduler.api import create_execution_app
         from execution_scheduler.contracts import ExecutionStatus
-        from execution_scheduler.dispatch import HTTPWorkflowDispatch
         from execution_scheduler.domain import RetryPolicy
-        from execution_scheduler.postgres import PostgresExecutionRepository
+        from execution_scheduler.persistence.postgres import PostgresExecutionRepository
+        from execution_scheduler.persistence.protected_context import (
+            ProtectedContextCipher,
+        )
         from execution_scheduler.scheduler import ExecutionScheduler
-        from execution_scheduler.security import ProtectedContextCipher
-        from execution_scheduler.standalone import StandaloneProviderAdapter
-        from execution_scheduler.synchronous import SynchronousWorkflowService
+        from integrations.standalone import StandaloneProviderAdapter
+        from model_service.api import create_execution_app
+        from model_service.synchronous import SynchronousWorkflowService
         from tests.integration.ray_probe_application import ProbeWorkflow
         from workflow_execution.catalog import (
             WorkflowCatalog,
@@ -53,6 +54,7 @@ class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
             WorkflowValueDefinition,
             validate_empty_configuration,
         )
+        from workflow_execution.dispatch import HTTPWorkflowDispatch
 
         schema = f"test_assembled_{uuid4().hex}"
         policy = RetryPolicy(3, timedelta(0), timedelta(0))
@@ -182,14 +184,14 @@ class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
         import ray
         from ray import serve
 
-        from execution_scheduler.dispatch import (
-            ConfirmedDispatchRejectionError,
-            HTTPWorkflowDispatch,
-        )
         from tests.integration.ray_probe_application import ProbeWorkflow
         from workflow_execution.contracts import (
             InlineOutput,
             WorkflowExecutionContext,
+        )
+        from workflow_execution.dispatch import (
+            ConfirmedDispatchRejectionError,
+            HTTPWorkflowDispatch,
         )
 
         ray.init(num_cpus=2, include_dashboard=False)

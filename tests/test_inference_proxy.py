@@ -4,7 +4,7 @@ import unittest
 
 import httpx
 
-from execution_scheduler.inference import HttpInferenceProxy, InferenceRequest
+from model_service.inference import HttpInferenceProxy, InferenceRequest
 
 
 class HttpInferenceProxyTests(unittest.IsolatedAsyncioTestCase):
@@ -22,9 +22,7 @@ class HttpInferenceProxyTests(unittest.IsolatedAsyncioTestCase):
                 },
             )
 
-        async with httpx.AsyncClient(
-            transport=httpx.MockTransport(handler)
-        ) as client:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             proxy = HttpInferenceProxy(client, origin="http://ray-serve")
             response = await proxy.forward(
                 InferenceRequest(

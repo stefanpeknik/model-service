@@ -65,7 +65,7 @@ class SlideHeatmapProcessor:
         from ratiopath.openslide import OpenSlide
         from ratiopath.tiling import grid_tiles
 
-        from misc.fetch_tissue_tile import fetch_tissue_tile
+        from workflows.heatmap.tile_reader import fetch_tissue_tile
 
         model_config = await self._predictor.configuration()
         tile_size = model_config.tile_size

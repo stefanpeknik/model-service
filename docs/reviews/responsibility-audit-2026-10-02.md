@@ -16,7 +16,7 @@ This was an exploratory design audit. Production source was not changed.
 
 ### 1. The inference proxy loses a supported model option
 
-Evidence: [`inference.py:15`](../../execution_scheduler/inference.py#L15)
+Evidence: [`inference.py:15`](../../model_service/inference.py#L15)
 allows `x-output-dtype` but drops `x-pool-tokens` when the public router builds
 its request. [`virchow2.py:99`](../../models/virchow2.py#L99) reads that option
 to select pooled versus token embeddings. Calling the upstream model directly
@@ -36,7 +36,7 @@ Evidence: [`scheduler.py:104`](../../execution_scheduler/scheduler.py#L104)
 calls the repository directly for status and cancellation. Admission and
 readiness translate the same repository failure into
 `SchedulingUnavailableError`. The corresponding
-[`HTTP handlers`](../../execution_scheduler/api.py#L307) catch only unknown
+[`HTTP handlers`](../../model_service/api.py#L307) catch only unknown
 execution errors.
 
 A local HTTP reproduction with a repository raising
@@ -82,7 +82,7 @@ after successful processing, which misses exception precedence.
 ### 4. Two supported heatmap paths implement different algorithms
 
 Evidence: [`HeatmapBuilder`](../../builders/heatmap_builder.py#L54) and
-[`RayProstateHeatmapProcessor`](../../workflow_execution/prostate_heatmap.py#L141)
+[`RayProstateHeatmapProcessor`](../../workflows/heatmap/prostate.py#L141)
 repeat slide selection, tissue scaling, tile scheduling, prediction
 reconstruction, mask aggregation, and TIFF writing. Both applications appear
 in the default Helm application list; this audit did not inspect a live
@@ -200,7 +200,7 @@ the current adapters.
 ## Policy choices to resolve before changing behavior
 
 - **Artifact identity.** Shared-storage results reference a caller-selected
-  path, and [`publication replaces that path`](../../workflow_execution/prostate_heatmap.py#L63).
+  path, and [`publication replaces that path`](../../workflows/heatmap/prostate.py#L63).
   Different executions or overlapping remote attempts can overwrite the same
   file. Database fencing protects settlement, not filesystem writes. Decide
   whether scheduled results should reference immutable attempt artifacts or

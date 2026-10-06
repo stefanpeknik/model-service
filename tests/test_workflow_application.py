@@ -26,19 +26,19 @@ from workflow_execution.contracts import (
     WorkflowInvocation,
     WorkflowResult,
 )
-from workflow_execution.prostate_heatmap import ProstateHeatmapWorkflow
 from workflow_execution.serialization import (
     invocation_from_dict,
     invocation_to_dict,
     result_from_dict,
     result_to_dict,
 )
+from workflows.heatmap.prostate import ProstateHeatmapWorkflow
 
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from workflow_execution.heatmap import HeatmapBuildRequest
+    from workflows.heatmap.processor import HeatmapBuildRequest
 
 
 class FunctionWorkflow:

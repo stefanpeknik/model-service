@@ -11,6 +11,14 @@ checkpoint. The [October 6 validation record](final-standalone-validation-2026-1
 tracks the later deployment and fault tests. PostgreSQL persistence ownership
 and migration safeguards are documented below.
 
+The October 7 source reorganization changes the ASGI entry point to
+`model_service.main:app` and the heatmap Serve import to
+`workflows.heatmap.prostate_serve:app`. The Dockerfiles and application YAMLs
+use those paths now. The preset's pinned October 6 images still contain the old
+layout: rebuild the scheduler, head, and GPU images under new tags and update
+the preset together before deploying this source. No rebuild, deployment, or
+test run accompanies the reorganization.
+
 ## Phase completion, 2026-10-04
 
 The core end-to-end implementation phase is complete. Scheduled and synchronous

@@ -11,12 +11,12 @@ from tempfile import TemporaryDirectory
 
 from execution_scheduler.active_work import ActiveWorkRegistry
 from execution_scheduler.contracts import ExecutionStatus, ScheduleRequest
-from execution_scheduler.dispatch import InMemoryWorkflowDispatch
-from execution_scheduler.repository import InMemoryExecutionRepository
+from execution_scheduler.persistence.memory import InMemoryExecutionRepository
 from execution_scheduler.scheduler import ExecutionScheduler
-from execution_scheduler.standalone import StandaloneProviderAdapter
 from execution_scheduler.worker import ExecutionWorker
 from integrations.empaia.input_access import EmpaiaInputAccessAdapter
+from integrations.shared_storage import SharedStorageAccessAdapter
+from integrations.standalone import StandaloneProviderAdapter
 from workflow_execution.application import WorkflowApplication
 from workflow_execution.catalog import (
     WorkflowCatalog,
@@ -25,6 +25,7 @@ from workflow_execution.catalog import (
     WorkflowValueDefinition,
     validate_empty_configuration,
 )
+from workflow_execution.cleanup import close_resource
 from workflow_execution.contracts import (
     InputAccessContext,
     InvalidWorkflowInvocation,
@@ -35,9 +36,8 @@ from workflow_execution.contracts import (
     WorkflowInvocation,
     WorkflowResult,
 )
-from workflow_execution.resources import close_resource
+from workflow_execution.dispatch import InMemoryWorkflowDispatch
 from workflow_execution.serialization import invocation_to_dict
-from workflow_execution.shared_storage import SharedStorageAccessAdapter
 
 
 class WorkflowResourceTests(unittest.IsolatedAsyncioTestCase):

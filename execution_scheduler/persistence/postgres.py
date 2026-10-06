@@ -27,7 +27,7 @@ from execution_scheduler.domain import (
     WorkClaim,
     WorkKind,
 )
-from execution_scheduler.postgres_schema import initialize_execution_schema
+from execution_scheduler.persistence.schema import initialize_execution_schema
 from execution_scheduler.repository import ExecutionRepositoryUnavailableError
 from execution_scheduler.transitions import ExecutionTransitions
 from workflow_execution.serialization import (
@@ -41,7 +41,7 @@ from workflow_execution.serialization import (
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
-    from execution_scheduler.security import ProtectedContextCipher
+    from execution_scheduler.persistence.protected_context import ProtectedContextCipher
 
 
 class PostgresExecutionRepository:

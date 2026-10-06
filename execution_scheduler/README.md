@@ -6,10 +6,9 @@ workflow processing and provider finish.
 
 ## Start here
 
-- `main.py` exposes the ASGI application used by the container.
-- `runtime.py` wires production adapters, initializes persistence, and closes
-  the shared HTTP client after the scheduler stops.
-- `api.py` translates HTTP requests and failures to the scheduler interface.
+- The public HTTP application and dependency wiring are in
+  [`../model_service/`](../model_service/README.md). This package owns durable
+  executions, not raw inference or immediate workflow execution.
 - `scheduler.py` implements admission, status reads, cancellation, and public
   execution views. Its `running()` context owns worker lifetime and shares a
   private cancellation registry with that worker. Construction starts no tasks.
@@ -28,19 +27,19 @@ workflow processing and provider finish.
 - `transitions.py` is the only module that creates or changes execution state,
   including admission, claims, cancellation, settlement, lease recovery, and
   deadlines.
-- `repository.py` defines persistence and maintenance operations and provides the
-  in-memory test adapter.
-- `postgres.py` implements those operations with PostgreSQL.
-- `postgres_schema.py` owns PostgreSQL schema creation.
-- `security.py` encrypts protected provider context at rest.
+- `repository.py` defines persistence and maintenance operations and their
+  availability error. It imports neither persistence implementation.
+- `persistence/memory.py` implements the interface in memory.
+- `persistence/postgres.py` implements the interface with PostgreSQL.
+- `persistence/schema.py` owns PostgreSQL schema creation.
+- `persistence/protected_context.py` encrypts protected provider context at rest.
 
 ## External adapters
 
-- `dispatch.py` invokes workflow applications through Ray Serve HTTP.
-- `inference.py` forwards legacy model and slide requests from the public
-  model-service origin to Ray Serve.
+- `../workflow_execution/dispatch.py` invokes workflow applications through Ray
+  Serve HTTP. Both immediate and scheduled execution use this interface.
 - `providers.py` defines the provider-adapter interface and finish outcomes.
-- `standalone.py` prepares shared-storage schedule requests.
+- `../integrations/standalone.py` prepares shared-storage schedule requests.
 - `../integrations/empaia/provider.py` prepares and finishes EMPAIA-backed
   executions.
 - `../integrations/empaia/http_gateway.py` implements the AppService HTTP and
@@ -49,11 +48,9 @@ workflow processing and provider finish.
   fields; `materialization.py` owns local input linking and writing.
 - `../integrations/empaia/image_io.py` materializes rectangle masks and
   publishes TIFF artifacts as EMPAIA pixelmaps.
-- `health.py` reports Ray availability and missing workflow routes through
-  `/healthz/workflows`. Durable API readiness at `/readyz` checks repository
-  access without requiring Ray.
-- `synchronous.py` runs the same workflow contract without creating a durable
-  execution.
+- `../model_service/health.py` reports Ray availability and missing workflow
+  routes through `/healthz/workflows`. Durable API readiness at `/readyz` checks
+  repository access without requiring Ray.
 
 The scheduler and worker depend on repository, dispatch, and provider
 interfaces. Concrete adapters translate their library-specific failures before

@@ -28,9 +28,9 @@ from execution_scheduler.worker import ExecutionWorker
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Mapping
 
-    from execution_scheduler.dispatch import WorkflowDispatch
     from execution_scheduler.providers import ProviderAdapter
     from execution_scheduler.repository import ExecutionRepository
+    from workflow_execution.dispatch import WorkflowDispatch
 
 
 class ExecutionScheduler:

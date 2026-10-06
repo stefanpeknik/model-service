@@ -17,11 +17,11 @@ from workflow_execution.http import (
     WorkflowRunRequest,
     run_workflow_http,
 )
-from workflow_execution.prostate_heatmap import ProstateHeatmapWorkflow
+from workflows.heatmap.prostate import ProstateHeatmapWorkflow
 
 
 if TYPE_CHECKING:
-    from workflow_execution.heatmap import HeatmapBuildRequest
+    from workflows.heatmap.processor import HeatmapBuildRequest
 
 
 class ValidationHeatmapProcessor:
