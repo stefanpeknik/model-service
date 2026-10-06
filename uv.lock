@@ -1935,6 +1935,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "ratiopath" },
     { name = "ray", extra = ["serve"] },
+    { name = "uvicorn" },
 ]
 
 [package.dev-dependencies]
@@ -1962,6 +1963,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "ratiopath", specifier = ">=1.0.3" },
     { name = "ray", extras = ["serve"], specifier = ">=2.58.0" },
+    { name = "uvicorn", specifier = ">=0.30.0" },
 ]
 
 [package.metadata.requires-dev]
