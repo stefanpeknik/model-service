@@ -25,6 +25,7 @@ nav:
       - Full-WSI deployment: operations/full-wsi-deployment.md
       - Full-WSI validation, 2026-10-04: operations/full-wsi-validation-postmortem-2026-10-04.md
       - Local corrections, 2026-10-05: reviews/checkpoint-fixes-2026-10-05.md
+      - Final validation, 2026-10-06: operations/final-standalone-validation-2026-10-06.md
   - Get Started:
       - Quick Start: get-started/quick-start.md
       - Installation: https://docs.ray.io/en/latest/cluster/kubernetes/getting-started/kuberay-operator-installation.html
@@ -37,6 +38,9 @@ nav:
       - Troubleshooting: guides/troubleshooting.md
   - Architecture:
       - Overview: architecture/overview.md
+      - Workflow execution proposal: architecture/workflow-execution-proposal.md
+      - Workflow execution interfaces: architecture/execution-interfaces.md
+      - Superseded EMPAIA prototype: architecture/empaia-control-plane.md
       - Request Lifecycle: architecture/request-lifecycle.md
       - Batching: architecture/batching.md
       - Queues and Backpressure: architecture/queues-and-backpressure.md

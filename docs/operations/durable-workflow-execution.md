@@ -308,6 +308,32 @@ inspect the result and worker state before sending another. The deployed
 EMPAIA suite uses only the in-namespace mock AppService; it does not validate
 a real EMPAIA installation.
 
+### Known-output inference check
+
+The classifier case in `tests/integration/test_deployed_legacy_inference.py`
+checks the public SDK to scheduler to configured classifier path, including
+one all-zero 512 by 512 RGB tile.
+The reference score, `0.256591796875`, was observed in separate validation
+runs on September 25 and 26, 2026. The test allows an absolute difference of
+`0.001` for inference-engine variation. It is opt-in because a cold request can
+start a GPU worker and wait up to 900 seconds:
+
+```sh
+RUN_DEPLOYED_LEGACY_INFERENCE=1 LEGACY_MODEL_ROUTES=prostate-classifier-1 \
+  VALIDATION_ORIGIN=http://127.0.0.1:18080 PYTHONPATH=../rationai-sdk-python \
+  UV_CACHE_DIR=.cache/uv uv run --no-sync python -m unittest discover \
+  -s tests/integration -p test_deployed_legacy_inference.py -v
+```
+
+The command imports the sibling RationAI SDK from its checkout. Use the
+[current validation record](final-standalone-validation-2026-10-06.md) to select
+the deployment and understand its capacity limits. This is a technical regression
+check, not a clinically meaningful classification fixture. The upstream `feature/tests`
+branch also describes positive and negative tissue cases, but it does not
+include the WSI files under `/mnt/data/MOU` or the reference scores and arrays
+under `/mnt/test_refs`. Those fixtures need approved access and an independent
+reference before the branch's tests can validate medical input and output here.
+
 ## Checkpoint review fixes, 2026-09-27
 
 The local source now keeps the worker loop alive after an individual claim
