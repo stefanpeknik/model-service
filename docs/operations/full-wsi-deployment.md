@@ -6,6 +6,11 @@ release in `peknik-ns`. It does not submit an execution. Start at
 `/tmp/model-service-full-wsi-handoff-2026-10-02.md` is preparation history; the
 durable test record is the postmortem linked below.
 
+The October 2 image and deployment records below describe the original warm
+checkpoint. The [October 6 validation record](final-standalone-validation-2026-10-06.md)
+tracks the later deployment and fault tests. PostgreSQL persistence ownership
+and migration safeguards are documented below.
+
 ## Phase completion, 2026-10-04
 
 The core end-to-end implementation phase is complete. Scheduled and synchronous
@@ -230,6 +235,78 @@ Scheduled output paths are attempt-scoped; the latter mount is essential.
 `TMPDIR=/mnt/scratch` also keeps processor and libvips temporary files off the
 small input PVC. These sizes are a preparation budget, not measured peak usage;
 the test session should monitor them.
+
+### External PostgreSQL persistence, 2026-10-06
+
+The validation PostgreSQL Deployment and Service are both named
+`model-service-validation-postgres`. They and the data PVC are managed
+separately from the RayService Helm release. The chart consumes the existing
+database Secret; it does not provision PostgreSQL or its storage. Preserve these
+external resources during Helm upgrades and RayService replacement.
+
+The database Deployment's `database` volume must reference
+`model-service-validation-postgres-data` in `peknik-ns`. The
+[PVC manifest](../../deployments/peknik-ns/validation-postgres-data.yaml) declares
+2 GiB on `nfs-csi` with `ReadWriteOnce`. It creates only the claim and contains no
+database credentials or PostgreSQL workload. Existing claims must be inspected
+and retained. For an authorized fresh installation where this exact claim is
+absent, provision it separately:
+
+```sh
+oc -n peknik-ns create -f deployments/peknik-ns/validation-postgres-data.yaml
+```
+
+The PostgreSQL Deployment uses one replica and `Recreate` strategy. Preserve its
+`postgres:16-alpine` container, UID/GID/fsGroup 70, mount at
+`/var/lib/postgresql/data`, existing environment and `PGDATA`, including any
+existing data subdirectory. `ReadWriteOnce` alone does
+not prevent two database processes on the same node from writing the volume.
+Stop the temporary restore pod before starting the Deployment on the claim.
+
+The October 6 migration discovered that the previous database volume was
+`emptyDir`. A dump and restore preserved all 176 executions at the migration
+boundary, checked with a full-row fingerprint. The subsequent PostgreSQL pod
+replacement preserved the same count and fingerprint on the PVC. One queued
+execution expired during the maintenance window; that is deadline behavior,
+not evidence that it resumed successfully. Detailed outcomes belong in the
+October 6 validation record linked above.
+
+For a future migration from `emptyDir`, keep the source pod alive until the
+restored database has passed verification:
+
+1. Capture the Deployment and source pod metadata/specification privately with
+   mode `0600`, and record their UIDs and the Deployment template fingerprint.
+   Quiesce every scheduler process before taking a complete PostgreSQL dump.
+   Wait for terminating scheduler pods to leave, and protect the dump with
+   mode `0600`. Keep environment values, credentials, and database rows out of
+   command output and documentation.
+2. Create the new claim and a uniquely named temporary PostgreSQL pod in
+   `peknik-ns`. Copy the existing PostgreSQL environment, security settings and
+   `PGDATA`; give the pod distinct labels so the existing Service does not route
+   callers to it. Restore the complete dump while the original database pod
+   remains available for verification.
+3. Compare the source and restored `model_service.executions` table counts and
+   ordered full-row SHA-256 fingerprints. Print only those safe aggregates.
+   Record approval against the source Deployment/pod UIDs, template fingerprint,
+   PVC UID/specification, temporary pod UID and recovery dump checksum. Recheck
+   these identities and both table fingerprints before stopping the temporary
+   pod gracefully. Wait until it is fully gone.
+4. With the scheduler still quiesced, check that no other pod mounts the target
+   claim and that the source fingerprint has not changed. Patch only the
+   Deployment's `database` volume and `Recreate` strategy, preserving its UID and
+   all other fields. Test the current UID and resource version atomically so a
+   concurrent Deployment change stops the cutover.
+5. Wait for PostgreSQL readiness and compare the same table count and fingerprint
+   before resuming the scheduler. Verify the database volume references the
+   intended PVC. A later PostgreSQL pod replacement must retain the execution
+   records; public API readiness alone does not establish persistence.
+
+Before cutover, an aborted migration leaves the original pod authoritative.
+After cutover replaces that pod, its `emptyDir` data is gone. Never roll back to
+the old `emptyDir` specification as a data recovery step. Keep the scheduler
+quiesced and recover from the verified PVC or private dump. Retain both the PVC
+and private recovery backup after success. Do not delete the claim, source
+database pod, or backup as routine validation cleanup.
 
 The public origin remains
 `http://model-service-validation-execution-scheduler.peknik-ns.svc.cluster.local:8080`.
