@@ -62,7 +62,7 @@ and ORM adapter. Neither change has been rebuilt into images or deployed.
 The [October 8 library adoption review](reviews/library-adoption-2026-10-08.md)
 records local Pydantic Settings, shared error-schema, PyJWT parsing, and offline
 EAD schema-validation changes, the replacement of Alembic operations with Yoyo
-migrations, their regression checks, and unimplemented EMPAIA client options.
+migrations, their regression checks, and subsequent EMPAIA client consolidation.
 Existing pre-Yoyo databases need a deliberate reset or verified adoption before
 the new scheduler can start. It does not change ticket acceptance or
 validate a new deployment.

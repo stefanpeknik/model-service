@@ -52,8 +52,10 @@ workflow processing and provider finish.
 - `../integrations/standalone.py` prepares shared-storage schedule requests.
 - `../integrations/empaia/provider.py` prepares and finishes EMPAIA-backed
   executions.
-- `../integrations/empaia/http_gateway.py` implements the AppService HTTP and
-  direct-access boundary.
+- `../integrations/empaia/http_gateway.py` delegates AppService requests and
+  direct access to the sibling EMPAIA client's `AppServiceClient`. It translates
+  SDK failures into safe retry and outcome-unknown classifications. The SDK
+  invokes the scheduler's guard immediately before every external write.
 - `../integrations/empaia/responses.py` validates consumed AppService response
   fields; `materialization.py` owns local input linking and writing.
 - `../integrations/empaia/image_io.py` materializes rectangle masks and

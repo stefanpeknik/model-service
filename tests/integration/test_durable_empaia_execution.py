@@ -1,7 +1,7 @@
 """Check assembled EMPAIA execution through real PostgreSQL and local ASGI HTTP boundaries.
 
 Requires TEST_POSTGRES_DSN and creates an isolated schema; provider communication is
-controlled locally through ASGI transports.
+controlled locally through a loopback AppService and ASGI workflow transports.
 """
 
 from __future__ import annotations
@@ -20,6 +20,8 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import httpx
+from aiohttp import web
+from aiohttp.test_utils import TestServer
 from fastapi import FastAPI
 from psycopg import AsyncConnection, sql
 
@@ -30,6 +32,7 @@ from execution_scheduler.persistence.postgres import PostgresExecutionRepository
 from execution_scheduler.persistence.protected_context import ProtectedContextCipher
 from execution_scheduler.scheduler import ExecutionScheduler
 from execution_scheduler.worker import ExecutionWorker
+from integrations.empaia.http_gateway import HttpEmpaiaGateway
 from integrations.empaia.input_access import EmpaiaInputAccessAdapter
 from integrations.empaia.provider import EmpaiaProviderAdapter
 from model_service.api import create_execution_app
@@ -43,9 +46,9 @@ from workflow_execution.catalog import (
     validate_empty_configuration,
 )
 from workflow_execution.contracts import (
+    InlineOutput,
     JsonValue,
     SharedArtifact,
-    WorkflowOutput,
     WorkflowResult,
 )
 from workflow_execution.dispatch import HTTPWorkflowDispatch, InMemoryWorkflowDispatch
@@ -55,122 +58,64 @@ from workflow_execution.http import (
 
 
 if TYPE_CHECKING:
-    from integrations.empaia.gateway import EmpaiaJobContext, MutationGuard
+    from integrations.empaia.gateway import EmpaiaJobContext
+
+
+class BinaryArtifactPublisher:
+    async def publish(
+        self, gateway: HttpEmpaiaGateway, name: str, artifact: SharedArtifact
+    ) -> None:
+        await gateway.publish_output(
+            name, InlineOutput(value=Path(artifact.path).read_text())
+        )
 
 
 @dataclass(slots=True)
 class ControlledEmpaiaService:
-    """Keep observable configuration, publication state, and injected failures for fake job gateways."""
-
     source: Path
-    published: dict[str, WorkflowOutput] = field(default_factory=dict)
+    published: dict[str, dict[str, JsonValue]] = field(default_factory=dict)
     finalized: bool = False
+    api_url: str = ""
+    requests: list[str] = field(default_factory=list)
+    output_status: int = 200
 
-    def gateway(self, context: EmpaiaJobContext) -> ControlledEmpaiaGateway:
-        """Construct a job gateway backed by shared observable test state.
+    async def start(self) -> TestServer:
+        app = web.Application()
 
-        Args:
-            context: External job origin/ID and protected bearer credential.
+        async def handle(request: web.Request) -> web.Response:
+            self.requests.append(request.path)
+            if request.path.endswith("/configuration"):
+                return web.json_response({"global": {}, "customer": {}})
+            if request.path.endswith("/direct-access"):
+                return web.json_response(
+                    {
+                        "slide_id": "slide-1",
+                        "storage_path": str(self.source),
+                        "direct_access_supported": True,
+                    }
+                )
+            if "/outputs/" in request.path:
+                name = request.path.rsplit("/", 1)[-1]
+                self.published[name] = await request.json()
+                return web.json_response({"id": "output-1"}, status=self.output_status)
+            if request.path.endswith("/finalize"):
+                self.finalized = True
+                return web.Response(status=204)
+            return web.Response(status=404)
 
-        Returns:
-            ControlledEmpaiaGateway: A local controlled gateway without external HTTP
-                communication.
-        """
-        del context
-        return ControlledEmpaiaGateway(self)
+        app.router.add_route("*", "/{path:.*}", handle)
+        server = TestServer(app)
+        await server.start_server()
+        self.api_url = str(server.make_url("/"))
+        return server
 
-
-class ControlledEmpaiaGateway:
-    """Materialize local fixture inputs and record guarded publication without real AppService HTTP."""
-
-    def __init__(self, service: ControlledEmpaiaService) -> None:
-        """Retain the shared service state and start without a mutation guard.
-
-        Args:
-            service: Shared controlled provider state used by a fake gateway.
-        """
-        self._service = service
-        self._before_mutation: MutationGuard | None = None
-
-    def set_before_mutation(self, callback: MutationGuard) -> None:
-        """Store the callback required before fake external mutations.
-
-        Args:
-            callback: Async callback invoked before an external provider mutation.
-
-        Returns:
-            None: No return value.
-        """
-        self._before_mutation = callback
-
-    async def get_configuration(self) -> dict[str, JsonValue]:
-        """Return empty provider overrides so catalog defaults resolve the invocation.
-
-        Returns:
-            dict[str, JsonValue]: Decoded, serialized, or recorded fields described
-                above.
-        """
-        return {}
-
-    async def materialize_input(self, _name: str, destination: str) -> None:
-        """Copy the service fixture file to the requested materialization destination.
-
-        Args:
-            _name: Unused input/output name or configuration field selected by this
-                operation; retained to match the interface.
-            destination: Local path where input materialization or mask writing must
-                produce a file.
-
-        Returns:
-            None: No return value.
-        """
-        shutil.copyfile(self._service.source, destination)
-
-    async def publish_output(self, name: str, output: WorkflowOutput) -> None:
-        """Await the mutation guard and store the named result in shared service state.
-
-        Args:
-            name: Input/output name or configuration field selected by this operation.
-            output: Inline JSON value or completed shared artifact to publish.
-
-        Returns:
-            None: No return value.
-        """
-        if self._before_mutation is not None:
-            await self._before_mutation()
-        self._service.published[name] = output
-
-    async def finalize(self) -> None:
-        """Await the mutation guard and mark the fake job finalized.
-
-        Returns:
-            None: No return value.
-        """
-        if self._before_mutation is not None:
-            await self._before_mutation()
-        self._service.finalized = True
-
-    async def report_failure(self, message: str) -> None:
-        """Fail if this success-path fixture unexpectedly receives a terminal failure report.
-
-        Args:
-            message: Safe user-facing failure or cancellation text.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
-        raise AssertionError(message)
-
-    async def close(self) -> None:
-        """Complete without cleanup because this gateway owns no network resources.
-
-        Returns:
-            None: No return value.
-        """
-        return None
+    def gateway(self, context: EmpaiaJobContext) -> HttpEmpaiaGateway:
+        return HttpEmpaiaGateway(
+            context.api_url,
+            context.job_id,
+            context.credential,
+            artifact_publisher=BinaryArtifactPublisher(),
+        )
 
 
 class CopyWorkflow:
@@ -218,6 +163,12 @@ class DurableEmpaiaExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
         Raises:
             AssertionError: An expected invariant or fixture interaction does not hold.
         """
+        await self._assert_lifecycle(output_status=200)
+
+    async def test_unknown_publication_is_not_retried_after_scheduler_replacement(self):
+        await self._assert_lifecycle(output_status=503)
+
+    async def _assert_lifecycle(self, *, output_status: int) -> None:
         dsn = os.environ["TEST_POSTGRES_DSN"]
         schema = f"test_empaia_assembled_{uuid4().hex}"
         policy = RetryPolicy(3, timedelta(0), timedelta(0))
@@ -257,6 +208,9 @@ class DurableEmpaiaExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
             source = root / "source.bin"
             source.write_bytes(b"assembled EMPAIA lifecycle")
             service = ControlledEmpaiaService(source)
+            service.output_status = output_status
+            appservice = await service.start()
+            self.addAsyncCleanup(appservice.close)
             provider = EmpaiaProviderAdapter(catalog, service.gateway)
             workflow = WorkflowApplication(
                 definition,
@@ -316,7 +270,7 @@ class DurableEmpaiaExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 ) as api_client:
                     request = {
                         "installation_id": "installation-1",
-                        "api_url": "https://empaia.invalid",
+                        "api_url": service.api_url,
                         "job_id": "job-1",
                         "credential": self._credential(),
                     }
@@ -332,16 +286,44 @@ class DurableEmpaiaExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
                     self.assertTrue(await worker.run_once())
                     self.assertTrue(await worker.run_once())
+                    if output_status == 503:
+                        replacement = PostgresExecutionRepository(
+                            dsn,
+                            schema=schema,
+                            cipher=ProtectedContextCipher(bytes(range(32))),
+                            processing_policy=policy,
+                            finish_policy=policy,
+                        )
+                        replacement_worker = ExecutionWorker(
+                            repository=replacement,
+                            active_work=ActiveWorkRegistry(),
+                            providers={provider.name: provider},
+                            dispatch=dispatch,
+                            owner="replacement-after-unknown-write",
+                            lease_duration=timedelta(seconds=30),
+                        )
+                        self.assertFalse(await replacement_worker.run_once())
                     completed = await api_client.get(f"/v1/executions/{execution_id}")
 
             self.assertEqual(scheduled.status_code, 202)
             self.assertEqual(replay.status_code, 200)
-            self.assertEqual(completed.json()["status"], "succeeded")
-            self.assertTrue(service.finalized)
-            artifact = service.published["result"]
-            self.assertIsInstance(artifact, SharedArtifact)
-            assert isinstance(artifact, SharedArtifact)
-            self.assertEqual(Path(artifact.path).read_bytes(), source.read_bytes())
+            self.assertEqual(service.published["result"]["value"], source.read_text())
+            self.assertEqual(service.published["result"]["creator_id"], "job-1")
+            self.assertEqual(service.requests.count("/v3/job-1/outputs/result"), 1)
+            if output_status == 200:
+                self.assertEqual(completed.json()["status"], "succeeded")
+                self.assertTrue(service.finalized)
+                artifact = completed.json()["result"]["outputs"]["result"]
+                self.assertEqual(
+                    Path(artifact["path"]).read_bytes(), source.read_bytes()
+                )
+            else:
+                self.assertEqual(completed.json()["status"], "failed")
+                self.assertEqual(
+                    completed.json()["error"]["code"], "empaia_finish_failed"
+                )
+                self.assertFalse(service.finalized)
+                self.assertIsNone(completed.json()["result"])
 
         async with await AsyncConnection.connect(dsn) as connection:
             await connection.execute(
@@ -400,6 +382,8 @@ class DurableEmpaiaExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
             source = root / "source.bin"
             source.write_bytes(b"finish recovery")
             service = ControlledEmpaiaService(source)
+            appservice = await service.start()
+            self.addAsyncCleanup(appservice.close)
             provider = EmpaiaProviderAdapter(catalog, service.gateway)
             workflow_runs = 0
             workflow = WorkflowApplication(
@@ -461,7 +445,7 @@ class DurableEmpaiaExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
                         provider="empaia",
                         body={
                             "installation_id": "installation-1",
-                            "api_url": "https://empaia.invalid",
+                            "api_url": service.api_url,
                             "job_id": "job-1",
                             "credential": self._credential(),
                         },

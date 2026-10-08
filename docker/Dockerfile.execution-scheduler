@@ -4,6 +4,11 @@ FROM python:3.12-slim
 
 COPY --from=uv /uv /usr/local/bin/uv
 
+COPY --from=empaia-sdk pyproject.toml README.md LICENSE /opt/empaia-sdk/
+COPY --from=empaia-sdk rationai /opt/empaia-sdk/rationai
+RUN uv pip install --system --no-cache "aiohttp>=3.9.5,<4" \
+    && uv pip install --system --no-cache --no-deps /opt/empaia-sdk
+
 RUN uv pip install --system --no-cache \
     "cryptography>=45.0.0" \
     "fastapi>=0.115.0" \

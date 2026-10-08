@@ -6,6 +6,12 @@ FROM ${GPU_BASE_IMAGE} AS runtime-dependencies
 COPY --from=uv /uv /usr/local/bin/uv
 
 USER root
+
+COPY --from=empaia-sdk pyproject.toml README.md LICENSE /opt/empaia-sdk/
+COPY --from=empaia-sdk rationai /opt/empaia-sdk/rationai
+RUN uv pip install --python /home/ray/anaconda3/bin/python --no-cache "aiohttp>=3.9.5,<4" \
+    && uv pip install --python /home/ray/anaconda3/bin/python --no-cache --no-deps /opt/empaia-sdk
+
 ARG UV_HTTP_TIMEOUT=300
 ARG UV_CONCURRENT_DOWNLOADS=4
 ARG UV_NO_CACHE=true

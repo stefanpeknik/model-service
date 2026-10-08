@@ -11,9 +11,9 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
-from urllib.parse import quote
 
-import httpx
+from aiohttp import ClientError, ClientResponseError
+from rationai.empaia.app_service import AppServiceClient, AppServiceDecodeError
 
 from integrations.empaia.gateway import EmpaiaGatewayError, EmpaiaJobContext
 from integrations.empaia.materialization import link_direct_input, write_rectangle_input
@@ -28,6 +28,8 @@ from workflow_execution.contracts import InlineOutput, SharedArtifact
 
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
+
     from integrations.empaia.gateway import MutationGuard
     from workflow_execution.contracts import JsonValue, WorkflowOutput
 
@@ -153,18 +155,18 @@ class HttpEmpaiaGateway:
         job_id: str,
         credential: str,
         *,
-        client: httpx.AsyncClient | None = None,
+        client: AppServiceClient | None = None,
         artifact_publisher: ArtifactPublisher | None = None,
         rectangle_writer: RectangleMaskWriter | None = None,
     ) -> None:
-        """Require complete connection settings and select the HTTP client, TIFF publisher, and rectangle writer. close() closes even an injected client.
+        """Require complete connection settings and select the SDK client, TIFF publisher, and rectangle writer. close() closes even an injected client.
 
         Args:
             api_url: AppService origin for the external job.
             job_id: External EMPAIA job identifier.
             credential: Private bearer credential for the external job; never include it
                 in public errors.
-            client: Optional HTTP client; the gateway closes it, including when supplied
+            client: Optional job-scoped SDK client; the gateway closes it, including when supplied
                 by the caller.
             artifact_publisher: Artifact conversion/publication adapter; defaults to the
                 TIFF pixelmap publisher.
@@ -179,9 +181,7 @@ class HttpEmpaiaGateway:
                 retryable=False,
             )
         self._job_id = job_id
-        self._before_mutation: MutationGuard | None = None
-        self._headers = {"Authorization": f"Bearer {credential}"}
-        self._client = client or httpx.AsyncClient(base_url=api_url.rstrip("/"))
+        self._client = client or AppServiceClient(api_url, job_id, credential)
         if artifact_publisher is None or rectangle_writer is None:
             from integrations.empaia.image_io import (
                 TiffPixelmapPublisher,
@@ -200,7 +200,7 @@ class HttpEmpaiaGateway:
         Returns:
             None: No return value.
         """
-        self._before_mutation = callback
+        self._client.set_before_mutation(callback)
 
     async def get_configuration(self) -> dict[str, JsonValue]:
         """GET and validate job configuration, rejecting overlapping global/customer keys.
@@ -213,10 +213,7 @@ class HttpEmpaiaGateway:
             EmpaiaGatewayError: AppService transport, authentication, response data, or
                 image conversion fails.
         """
-        value = await self._request_json(
-            "GET",
-            f"/v3/{self._job()}/configuration",
-        )
+        value = await self._call(self._client.get_configuration())
         return ConfigurationResponse.parse(value).merged()
 
     async def materialize_input(self, name: str, destination: str) -> None:
@@ -240,12 +237,7 @@ class HttpEmpaiaGateway:
             link_direct_input(direct, target)
             return
         slide = await self._slide_metadata()
-        rectangle = _rectangle(
-            await self._request_json(
-                "GET",
-                f"/v3/{self._job()}/inputs/{quote(name, safe='')}",
-            )
-        )
+        rectangle = _rectangle(await self._call(self._client.get_input_data(name)))
         write_rectangle_input(self._rectangle_writer, target, slide, rectangle)
 
     async def publish_output(self, name: str, output: WorkflowOutput) -> None:
@@ -263,10 +255,10 @@ class HttpEmpaiaGateway:
                 image conversion fails.
         """
         if isinstance(output, InlineOutput):
-            await self._request_json(
-                "POST",
-                f"/v3/{self._job()}/outputs/{quote(name, safe='')}",
-                body=_primitive_output(name, self._job_id, output.value),
+            await self._call(
+                self._client.post_output_data(
+                    name, _primitive_output(name, self._job_id, output.value)
+                ),
                 mutation=True,
             )
             return
@@ -285,11 +277,7 @@ class HttpEmpaiaGateway:
             EmpaiaGatewayError: AppService transport, authentication, response data, or
                 image conversion fails.
         """
-        await self._request(
-            "PUT",
-            f"/v3/{self._job()}/finalize",
-            mutation=True,
-        )
+        await self._call(self._client.put_finalize(), mutation=True)
 
     async def report_failure(self, message: str) -> None:
         """PUT a guarded failure request with the safe user message truncated to 255 characters.
@@ -304,12 +292,7 @@ class HttpEmpaiaGateway:
             EmpaiaGatewayError: AppService transport, authentication, response data, or
                 image conversion fails.
         """
-        await self._request(
-            "PUT",
-            f"/v3/{self._job()}/failure",
-            body={"user_message": message[:255]},
-            mutation=True,
-        )
+        await self._call(self._client.put_failure(message[:255]), mutation=True)
 
     async def close(self) -> None:
         """Close the gateway's HTTP client and release its network resources.
@@ -317,7 +300,7 @@ class HttpEmpaiaGateway:
         Returns:
             None: No return value.
         """
-        await self._client.aclose()
+        await self._client.close()
 
     @property
     def job_id(self) -> str:
@@ -359,13 +342,15 @@ class HttpEmpaiaGateway:
             EmpaiaGatewayError: AppService transport, authentication, response data, or
                 image conversion fails.
         """
-        value = await self._request_json(
-            "POST",
-            f"/v3/{self._job()}/outputs/{quote(name, safe='')}",
-            body=body,
-            mutation=True,
+        value = await self._call(
+            self._client.post_output_data(name, body), mutation=True
         )
-        return PixelmapResponse.parse(value).id
+        try:
+            return PixelmapResponse.parse(value).id
+        except EmpaiaGatewayError as error:
+            raise EmpaiaGatewayError(
+                error.safe_message, retryable=False, outcome_unknown=True
+            ) from error
 
     async def put_pixelmap_tile(
         self,
@@ -391,11 +376,8 @@ class HttpEmpaiaGateway:
             EmpaiaGatewayError: AppService transport, authentication, response data, or
                 image conversion fails.
         """
-        await self._request(
-            "PUT",
-            f"/v3/{self._job()}/pixelmaps/{quote(pixelmap_id, safe='')}"
-            f"/level/{level}/position/{tile_x}/{tile_y}/data",
-            content=data,
+        await self._call(
+            self._client.put_tile(pixelmap_id, level, tile_x, tile_y, data),
             mutation=True,
         )
 
@@ -413,11 +395,10 @@ class HttpEmpaiaGateway:
             EmpaiaGatewayError: AppService transport, authentication, response data, or
                 image conversion fails.
         """
-        path = f"/v3/rationai/{self._job()}/inputs/{quote(name, safe='')}/direct-access"
-        response = await self._send("GET", path, allow_not_found=True)
-        if response.status_code == 404:
+        value = await self._call(self._client.get_direct_access(name))
+        if value is None:
             return None
-        direct = DirectAccessResponse.parse(_response_json(response))
+        direct = DirectAccessResponse.parse(value)
         return DirectAccess(
             storage_path=Path(direct.storage_path),
             supported=direct.direct_access_supported,
@@ -434,146 +415,48 @@ class HttpEmpaiaGateway:
             EmpaiaGatewayError: AppService transport, authentication, response data, or
                 image conversion fails.
         """
-        value = await self._request_json(
-            "GET",
-            f"/v3/{self._job()}/inputs/slide",
-        )
+        value = await self._call(self._client.get_input_data("slide"))
         return _slide_metadata(value)
 
-    async def _request_json(
-        self,
-        method: str,
-        path: str,
-        *,
-        body: dict[str, object] | None = None,
-        mutation: bool = False,
-    ) -> object:
-        """Send a classified request and require a decodable JSON response.
+    async def _call[T](self, operation: Awaitable[T], *, mutation: bool = False) -> T:
+        """Translate SDK failures without exposing upstream details.
 
         Args:
-            method: HTTP method used by the request or test client.
-            path: AppService endpoint path relative to the configured API origin.
-            body: Typed or JSON request payload accepted by this boundary.
-            mutation: Whether the request changes external job state and therefore
-                requires mutation guarding.
+            operation: SDK operation to await once, including its mutation guard.
+            mutation: Whether a lost acknowledgment can hide a remote state change.
 
         Returns:
-            object: Decoded JSON body from a successful AppService response.
+            T: The SDK result, validated by the caller when fields are consumed.
 
         Raises:
-            EmpaiaGatewayError: AppService transport, authentication, response data, or
-                image conversion fails.
+            EmpaiaGatewayError: HTTP rejection, transport failure, or invalid JSON.
+                Transient writes and invalid write acknowledgments are outcome-unknown.
+                Guard failures and cancellation propagate unchanged.
         """
-        response = await self._send(method, path, body=body, mutation=mutation)
-        return _response_json(response)
-
-    async def _request(
-        self,
-        method: str,
-        path: str,
-        *,
-        body: dict[str, object] | None = None,
-        content: bytes | None = None,
-        mutation: bool = False,
-    ) -> None:
-        """Send a classified request whose response body is not needed.
-
-        Args:
-            method: HTTP method used by the request or test client.
-            path: AppService endpoint path relative to the configured API origin.
-            body: Typed or JSON request payload accepted by this boundary.
-            content: Optional binary request payload sent unchanged.
-            mutation: Whether the request changes external job state and therefore
-                requires mutation guarding.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            EmpaiaGatewayError: AppService transport, authentication, response data, or
-                image conversion fails.
-        """
-        await self._send(
-            method,
-            path,
-            body=body,
-            content=content,
-            mutation=mutation,
-        )
-
-    async def _send(
-        self,
-        method: str,
-        path: str,
-        *,
-        body: dict[str, object] | None = None,
-        content: bytes | None = None,
-        mutation: bool = False,
-        allow_not_found: bool = False,
-    ) -> httpx.Response:
-        """Apply the mutation guard, send authenticated HTTP, and classify transport/status failures.
-
-        A failed mutation may have reached AppService, so transport errors, 429s, and
-        server failures mark its outcome uncertain. The direct-access probe alone may
-        accept a 404.
-
-        Args:
-            method: HTTP method used by the request or test client.
-            path: AppService endpoint path relative to the configured API origin.
-            body: Typed or JSON request payload accepted by this boundary.
-            content: Optional binary request payload sent unchanged.
-            mutation: Whether the request changes external job state and therefore
-                requires mutation guarding.
-            allow_not_found: Whether a 404 is an expected probe outcome instead of a
-                gateway error.
-
-        Returns:
-            httpx.Response: Successful AppService response, or an allowed 404 response
-                for optional direct access.
-
-        Raises:
-            EmpaiaGatewayError: AppService transport, authentication, response data, or
-                image conversion fails.
-            StaleWorkClaimError: The token, lease, deadline, or work kind no longer
-                permits this operation.
-        """
-        if mutation and self._before_mutation is not None:
-            await self._before_mutation()
         try:
-            response = await self._client.request(
-                method,
-                path,
-                headers=self._headers,
-                json=body,
-                content=content,
-            )
-        except httpx.TransportError as error:
+            return await operation
+        except ClientResponseError as error:
+            if error.status == 429 or error.status >= 500:
+                raise EmpaiaGatewayError(
+                    "EMPAIA AppService is temporarily unavailable",
+                    retryable=True,
+                    outcome_unknown=mutation,
+                ) from error
+            if error.status in {401, 403}:
+                raise _invalid("EMPAIA rejected the job credential") from error
+            raise _invalid("EMPAIA rejected the application request") from error
+        except (ClientError, TimeoutError) as error:
             raise EmpaiaGatewayError(
                 "EMPAIA AppService is temporarily unavailable",
                 retryable=True,
                 outcome_unknown=mutation,
             ) from error
-        if response.status_code == 404 and allow_not_found:
-            return response
-        if response.is_success:
-            return response
-        if response.status_code == 429 or response.status_code >= 500:
+        except AppServiceDecodeError as error:
             raise EmpaiaGatewayError(
-                "EMPAIA AppService is temporarily unavailable",
-                retryable=True,
+                "EMPAIA AppService returned an invalid response",
+                retryable=False,
                 outcome_unknown=mutation,
-            )
-        if response.status_code in {401, 403}:
-            raise _invalid("EMPAIA rejected the job credential")
-        raise _invalid("EMPAIA rejected the application request")
-
-    def _job(self) -> str:
-        """URL-encode the complete job ID as one path component.
-
-        Returns:
-            str: URL-encoded job ID safe to embed as a single HTTP path component.
-        """
-        return quote(self._job_id, safe="")
+            ) from error
 
 
 def create_http_gateway(context: EmpaiaJobContext) -> HttpEmpaiaGateway:
@@ -672,24 +555,6 @@ def _rectangle(value: object) -> Rectangle:
         width=math.ceil(rectangle.width),
         height=math.ceil(rectangle.height),
     )
-
-
-def _response_json(response: httpx.Response) -> object:
-    """Decode response JSON or raise a safe nonretryable response error.
-
-    Args:
-        response: Successful AppService response whose body must decode as JSON.
-
-    Returns:
-        object: Decoded AppService response JSON.
-
-    Raises:
-        EmpaiaGatewayError: The AppService response body cannot be decoded as JSON.
-    """
-    try:
-        return response.json()
-    except ValueError as error:
-        raise _invalid("EMPAIA AppService returned an invalid response") from error
 
 
 def _invalid(message: str) -> EmpaiaGatewayError:

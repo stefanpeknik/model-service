@@ -84,7 +84,7 @@ unchanged. Both assembled tests and five additional repeats of the recovery
 scenario passed after that correction. The disposable PostgreSQL fixture was
 removed after validation; its test data was discarded.
 
-## EMPAIA client consolidation options
+## EMPAIA client comparison before consolidation
 
 The current sibling client is
 `../empaia/rationai/empaia/client/client.py`. It already exposes job
@@ -103,7 +103,7 @@ Keep these responsibilities in model-service even if transport is delegated:
   mutation acknowledgment can mean AppService already changed state, so it must
   not be retried as an ordinary safe failure.
 
-The SDK currently lacks the gateway's before-mutation hook and RationAI
+At the initial review, the SDK lacked the gateway's before-mutation hook and RationAI
 direct-access extension. Its HTTP exceptions also need translation into our
 safe, retryable, or outcome-unknown failures. A replacement should preserve
 bounded calls and explicit client lifetime and should not add automatic mutation
@@ -114,7 +114,60 @@ A practical next-phase direction is to improve the SDK's transport capabilities,
 then make our gateway delegate standard AppService requests to it. Keep workflow
 artifact conversion and scheduler policy here. Confirm both callers against the
 same controlled AppService contracts before deleting duplicate transport code.
-This is a recommendation, not a change made in this session.
+The follow-up below implements this direction locally.
+
+## EMPAIA client consolidation, implemented locally
+
+The sibling `empaia/` package now exposes `AppServiceClient`. It owns the shared
+aiohttp transport, route encoding, bearer headers, direct-access extension, and
+standard AppService operations. Its existing `Client` inherits that transport
+and retains typed input/output conversion and image-region processing. Every
+write awaits an optional mutation guard. Requests have a positive finite timeout,
+defaulting to five seconds total, and do not follow redirects or retry mutations.
+Clients close explicitly, including injected sessions. The unused-client
+destructor was removed so interpreter shutdown cannot allocate a session.
+Aiohttp's internal connection retry is disabled for owned and injected sessions.
+Review caught that its default behavior can resend PUT after accepting a write
+and losing the acknowledgment. A controlled disconnect test now proves one send
+and one guard invocation; the gateway reports an unknown mutation outcome.
+
+Model-service's gateway delegates to this client. It retains strict validation
+of consumed response fields, safe error classification, configuration merging,
+shared-input materialization, and TIFF-to-pixelmap conversion. The provider and
+scheduler retain admission, original-credential deadlines, durable publication
+ownership, and retry policy. A malformed JSON acknowledgment or unusable created
+pixelmap ID now explicitly marks the write's outcome unknown.
+
+The sibling is version 0.1.2 with an explicit wheel build and PyJWT lower bound
+2.15.1. Its formerly untracked UV lockfile now resolves 2.15.1. Model-service
+locks an editable dependency at `../empaia`; local setup therefore requires that
+sibling checkout and its typing-model submodule. The scheduler and workflow
+image recipes install the same SDK from the named `empaia-sdk` build context,
+documented in the full-WSI runbook. Their transport-only installation imports
+without Ray, NumPy, imageio, or Pydantic. The typed client still needs its declared
+dependencies. No image was built.
+
+Controlled loopback tests cover both SDK clients, encoded routes, bodies,
+authentication headers, mutation guarding, timeout, cancellation, closure,
+direct-access fallback, and invalid acknowledgments. Gateway tests preserve
+subset validation and distinguish permanent HTTP rejection from transient read
+errors and uncertain writes. Three assembled tests use real PostgreSQL, the
+SDK-backed HTTP gateway, an ASGI workflow, and a fixture binary-artifact
+publisher. They cover successful polling, recovery before publication without
+redispatch, and suppression of further writes after an output is stored but its
+acknowledgment is 503. The fixture publisher converts binary test artifacts to
+inline primitives; the existing TIFF publication test separately checks the
+default pixelmap path.
+
+The eleven SDK transport tests, fifteen focused HTTP gateway tests, and three
+assembled PostgreSQL tests passed. Focused mypy, Ruff, wheel construction, and
+a transport-only wheel import passed. Final top-level discovery ran 219 tests,
+with 214 passing and five native dependency/profile skips. All PostgreSQL cases
+ran against the disposable loopback PostgreSQL 16 fixture. These are local results.
+No live AppService,
+JES, GPU workflow, image build, deployment, or Git push was performed. Issues 07
+and 08 retain their acceptance status and unresolved authentication, filesystem
+trust, failure-reporting, rectangle-clipping, and report-delay findings.
 
 ## JWT parsing, implemented locally
 
@@ -130,13 +183,14 @@ its existing deadline policy. Expiry must be numeric, finite, and representable
 as a UTC datetime; malformed values become safe admission errors before any
 gateway preparation. This does not implement service authentication.
 
-The sibling's currently
-untracked local lockfile resolves PyJWT 2.13.0. The relevant
+At the initial review, the sibling's
+untracked local lockfile resolved PyJWT 2.13.0. The relevant
 [unverified-payload parsing advisory](https://github.com/jpadilla/pyjwt/security/advisories/GHSA-42vr-xj54-vc7v)
 lists 2.15.0 as its first patched release. This is a dependency-version concern,
 not evidence that our deployed service uses that SDK lockfile or that its current
 token-handling paths satisfy every advisory's exploit conditions. The sibling
-repository was not modified; its dependency refresh belongs to the SDK follow-up.
+repository was not modified during JWT adoption. The consolidation follow-up
+above raises its dependency floor and refreshes that lockfile to 2.15.1.
 
 Seven new provider-preparation tests cover integer/fractional expiry, deadline
 caps, expired claims delegated to scheduler policy, inspection without signature

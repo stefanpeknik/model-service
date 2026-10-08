@@ -23,6 +23,8 @@ logic.
   access and owns its strict `SharedStorageState` schema.
 - `../integrations/empaia/input_access.py` materializes EMPAIA inputs without
   coupling the core workflow runtime to the provider.
+  Its gateway uses the sibling EMPAIA client's transport; shared-file linking,
+  rectangle-mask conversion, and consumed-response validation remain here.
 - `http.py` contains the workflow HTTP error envelope shared by ingress
   adapters and the dispatch-only `WorkflowRunRequest` transport schema. Error
   codes and messages are nonempty strings, and retry decisions are strict

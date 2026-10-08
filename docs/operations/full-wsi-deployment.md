@@ -135,6 +135,13 @@ packages local source, including unchanged `models/`, over the public
 `rayproject/ray:2.58.0-py312-gpu` base. Neither application fetches a GitHub
 working-directory archive.
 
+The current source also needs the sibling EMPAIA client build context. Pass
+`--build-context empaia-sdk=../empaia` to Podman when building the scheduler,
+workflow head, workflow GPU, or validation Ray Dockerfile. Initialize the sibling's
+typing-model submodule first. These images install its local wheel and aiohttp;
+the scheduler uses only its lightweight AppService transport. Record both source
+revisions for a later build. The October 6 images predate this dependency.
+
 The inference dependencies are pinned to ONNX Runtime GPU `1.23.2`, TensorRT
 CUDA 12 `10.9.0.34`, PyTorch `2.8.0`, and torchvision `0.23.0`. The CUDA 12.8
 libraries installed with PyTorch take priority over the base image's CUDA 12.1

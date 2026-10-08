@@ -10,6 +10,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import httpx
+from aiohttp import web
+from aiohttp.test_utils import TestServer
+from rationai.empaia.app_service import AppServiceClient
 
 from integrations.empaia.gateway import EmpaiaGatewayError
 from integrations.empaia.http_gateway import (
@@ -186,6 +189,50 @@ class FakeVipsImageType:
 class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
     """Exercise AppService HTTP shapes, input materialization, and uncertain publication outcomes."""
 
+    async def appservice(self, transport: httpx.MockTransport) -> AppServiceClient:
+        """Serve HTTP response fixtures over loopback using the real SDK transport.
+
+        Args:
+            transport: Controlled HTTP response handler. Transport errors disconnect
+                the server; handler assertion failures fail the test during cleanup.
+
+        Returns:
+            AppServiceClient: Job client whose session and server have test cleanup.
+        """
+        errors = []
+
+        async def handle(request: web.Request) -> web.Response:
+            external_request = httpx.Request(
+                request.method,
+                str(request.url),
+                headers=request.headers,
+                content=await request.read(),
+            )
+            try:
+                response = await transport.handle_async_request(external_request)
+            except httpx.TransportError:
+                assert request.transport is not None
+                request.transport.close()
+                return web.Response()
+            except Exception as error:
+                errors.append(error)
+                return web.Response(status=500)
+            return web.Response(
+                status=response.status_code,
+                headers=response.headers,
+                body=response.content,
+            )
+
+        self.addCleanup(self.assertEqual, errors, [])
+        app = web.Application()
+        app.router.add_route("*", "/{path:.*}", handle)
+        server = TestServer(app)
+        await server.start_server()
+        self.addAsyncCleanup(server.close)
+        client = AppServiceClient(str(server.make_url("/")), "job-1", "credential")
+        self.addAsyncCleanup(client.close)
+        return client
+
     async def test_invalid_rectangle_geometry_is_a_safe_integration_error(self) -> None:
         """Verify invalid rectangle geometry is a safe integration error.
 
@@ -240,10 +287,7 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
                     "https://empaia.example",
                     "job-1",
                     "credential",
-                    client=httpx.AsyncClient(
-                        transport=httpx.MockTransport(handle),
-                        base_url="https://empaia.example",
-                    ),
+                    client=await self.appservice(httpx.MockTransport(handle)),
                     rectangle_writer=writer,
                 )
                 try:
@@ -269,14 +313,13 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             "https://empaia.example",
             "job-1",
             "credential",
-            client=httpx.AsyncClient(
-                transport=httpx.MockTransport(
+            client=await self.appservice(
+                httpx.MockTransport(
                     lambda _request: httpx.Response(
                         200,
                         content='{"global": {"nested": [NaN]}, "customer": {}}',
                     )
-                ),
-                base_url="https://empaia.example",
+                )
             ),
         )
         try:
@@ -323,10 +366,7 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             "https://empaia.example",
             "job-1",
             "credential",
-            client=httpx.AsyncClient(
-                transport=httpx.MockTransport(handle),
-                base_url="https://empaia.example",
-            ),
+            client=await self.appservice(httpx.MockTransport(handle)),
         )
         gateway.set_before_mutation(guard)
         try:
@@ -382,10 +422,7 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
                     )
                 raise AssertionError(request.url.path)
 
-            client = httpx.AsyncClient(
-                transport=httpx.MockTransport(handle),
-                base_url="https://empaia.example",
-            )
+            client = await self.appservice(httpx.MockTransport(handle))
             gateway = HttpEmpaiaGateway(
                 "https://empaia.example",
                 "job-1",
@@ -432,10 +469,7 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             "https://empaia.example",
             "job-1",
             "credential",
-            client=httpx.AsyncClient(
-                transport=httpx.MockTransport(handle),
-                base_url="https://empaia.example",
-            ),
+            client=await self.appservice(httpx.MockTransport(handle)),
         )
 
         await gateway.publish_output("score", InlineOutput(value=0.75))
@@ -519,10 +553,7 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
                 "https://empaia.example",
                 "job-1",
                 "credential",
-                client=httpx.AsyncClient(
-                    transport=httpx.MockTransport(handle),
-                    base_url="https://empaia.example",
-                ),
+                client=await self.appservice(httpx.MockTransport(handle)),
                 rectangle_writer=writer,
             )
 
@@ -552,11 +583,8 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             "https://empaia.example",
             "job-1",
             "credential",
-            client=httpx.AsyncClient(
-                transport=httpx.MockTransport(
-                    lambda _request: httpx.Response(200, json={})
-                ),
-                base_url="https://empaia.example",
+            client=await self.appservice(
+                httpx.MockTransport(lambda _request: httpx.Response(200, json={}))
             ),
             artifact_publisher=publisher,
         )
@@ -624,10 +652,7 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
                 "https://empaia.example",
                 "job-1",
                 "credential",
-                client=httpx.AsyncClient(
-                    transport=httpx.MockTransport(handle),
-                    base_url="https://empaia.example",
-                ),
+                client=await self.appservice(httpx.MockTransport(handle)),
             )
 
             with patch.dict(
@@ -673,10 +698,7 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             "https://empaia.example",
             "job-1",
             "credential",
-            client=httpx.AsyncClient(
-                transport=httpx.MockTransport(fail),
-                base_url="https://empaia.example",
-            ),
+            client=await self.appservice(httpx.MockTransport(fail)),
         )
 
         with self.assertRaises(EmpaiaGatewayError) as raised:
@@ -700,14 +722,13 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             "https://empaia.example",
             "job-1",
             "credential",
-            client=httpx.AsyncClient(
-                transport=httpx.MockTransport(
+            client=await self.appservice(
+                httpx.MockTransport(
                     lambda _request: httpx.Response(
                         200,
                         json={"global": {"tiles": 8}, "customer": {"tiles": 16}},
                     )
-                ),
-                base_url="https://empaia.example",
+                )
             ),
         )
 
