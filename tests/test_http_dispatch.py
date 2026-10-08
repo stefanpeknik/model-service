@@ -215,6 +215,65 @@ class HttpWorkflowDispatchTests(unittest.IsolatedAsyncioTestCase):
             {"x-processing-attempt-id": "attempt-1"},
         )
 
+    async def test_invalid_error_responses_remain_unknown_outcomes(self) -> None:
+        """Do not coerce malformed remote failures into a known retry decision."""
+        valid = {
+            "code": "input_unavailable",
+            "message": "input unavailable",
+            "retryable": True,
+        }
+        bodies = [None, [], "failure", {}, {"detail": None}, {"detail": []}]
+        for name, values in (
+            ("code", (None, "", 1, False, b"failure")),
+            ("message", (None, "", 1, False, b"failure")),
+            ("retryable", (None, "false", "true", 0, 1, [], {})),
+        ):
+            bodies.extend({"detail": {**valid, name: value}} for value in values)
+            bodies.append(
+                {"detail": {key: value for key, value in valid.items() if key != name}}
+            )
+        for body in bodies:
+            with self.subTest(body=body):
+                dispatch = HTTPWorkflowDispatch(
+                    FakeHttpClient(FakeResponse(503, body)),
+                    origin="http://ray-serve:8000",
+                )
+                with self.assertRaises(UnknownDispatchOutcomeError):
+                    await dispatch.run(
+                        "prostate-heatmap",
+                        WorkflowExecutionContext(),
+                        self._invocation(),
+                    )
+
+    async def test_valid_error_responses_allow_extra_fields_and_preserve_false(
+        self,
+    ) -> None:
+        """Keep forward-compatible metadata and an explicit nonretryable decision."""
+        dispatch = HTTPWorkflowDispatch(
+            FakeHttpClient(
+                FakeResponse(
+                    422,
+                    {
+                        "detail": {
+                            "code": "invalid_input",
+                            "message": "input is invalid",
+                            "retryable": False,
+                            "future_metadata": "ignored",
+                        },
+                        "request_id": "ignored",
+                    },
+                )
+            ),
+            origin="http://ray-serve:8000",
+        )
+        with self.assertRaises(RemoteWorkflowFailureError) as raised:
+            await dispatch.run(
+                "prostate-heatmap", WorkflowExecutionContext(), self._invocation()
+            )
+        self.assertEqual(raised.exception.code, "invalid_input")
+        self.assertEqual(raised.exception.safe_message, "input is invalid")
+        self.assertFalse(raised.exception.retryable)
+
     @staticmethod
     def _invocation() -> WorkflowInvocation:
         """Build a typed workflow invocation with the fixture access context and a bounded future deadline.

@@ -86,6 +86,7 @@ class PostgresExecutionRepository:
             raise ValueError("per_workflow_limit must be positive")
         self._cipher = cipher
         self._schema = schema
+        self._dsn = dsn
 
         async def connect() -> AsyncConnection:
             # Accept existing libpq DSNs as well as PostgreSQL URLs.
@@ -121,17 +122,16 @@ class PostgresExecutionRepository:
         )
 
     async def initialize(self) -> None:
-        """Create or add compatible schema elements inside a transaction guarded by a schema advisory lock.
+        """Apply pending Yoyo migrations under a schema-specific initialization lock.
 
         Returns:
             None: No return value.
 
         Raises:
             ExecutionRepositoryUnavailableError: Storage cannot create or upgrade the
-                execution schema in its initialization transaction.
+                execution schema through versioned migrations.
         """
-        async with self._transaction() as session:
-            await initialize_execution_schema(session, schema=self._schema)
+        await initialize_execution_schema(self._dsn, schema=self._schema)
 
     async def check_ready(self) -> None:
         """Query the execution table to confirm database connectivity and schema availability.

@@ -7,16 +7,17 @@ outcome is uncertain.
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 import logging
+import math
 from contextlib import asynccontextmanager
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated, Never
 
+import jwt
 from pydantic import Field, ValidationError
 
 from execution_scheduler.contracts import (
@@ -449,14 +450,30 @@ def _credential_expiry(credential: str) -> datetime:
             effective deadline are invalid.
     """
     try:
-        _header, payload, _signature = credential.split(".")
-        padding = "=" * (-len(payload) % 4)
-        claims = json.loads(base64.urlsafe_b64decode(payload + padding))
+        claims = jwt.decode(
+            credential,
+            options={
+                "verify_signature": False,
+                "verify_exp": False,
+                "require": ["exp"],
+            },
+        )
         expires_at = claims["exp"]
-        if not isinstance(expires_at, int | float) or isinstance(expires_at, bool):
+        if (
+            not isinstance(expires_at, int | float)
+            or isinstance(expires_at, bool)
+            or not math.isfinite(expires_at)
+        ):
             raise TypeError
         return datetime.fromtimestamp(expires_at, tz=UTC)
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+    except (
+        jwt.InvalidTokenError,
+        KeyError,
+        TypeError,
+        ValueError,
+        OverflowError,
+        OSError,
+    ) as error:
         raise InvalidScheduleRequestError(
             "EMPAIA credential does not contain a valid expiry"
         ) from error

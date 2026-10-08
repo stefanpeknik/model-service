@@ -1,82 +1,83 @@
-"""Initialize execution tables and supported additive upgrades under a PostgreSQL advisory lock.
-
-This preserves the two pre-ORM upgrades; it does not maintain an Alembic revision
-history or rewrite stored executions.
-"""
+"""Apply versioned Yoyo migrations without blocking the scheduler's event loop."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import argparse
+import asyncio
+import os
+from pathlib import Path
+from urllib.parse import urlencode
 
-from alembic.migration import MigrationContext
-from alembic.operations import Operations
-from sqlalchemy import Boolean, Column, DateTime, false, func, inspect, select
-from sqlalchemy.schema import CreateSchema
+from psycopg import Connection, Error, sql
+from psycopg.conninfo import conninfo_to_dict
+from yoyo import get_backend, read_migrations
+from yoyo.exceptions import BadMigration, LockTimeout, MigrationConflict
 
-from execution_scheduler.persistence.models import Base, ExecutionRow
-
-
-if TYPE_CHECKING:
-    from sqlalchemy import Connection
-    from sqlalchemy.ext.asyncio import AsyncSession
+from execution_scheduler.persistence.models import DEFAULT_SCHEMA
+from execution_scheduler.repository import ExecutionRepositoryUnavailableError
 
 
-async def initialize_execution_schema(session: AsyncSession, *, schema: str) -> None:
-    """Serialize initialization by schema name, create the schema if absent, and initialize tables in the caller's transaction.
+MIGRATIONS_DIRECTORY = Path(__file__).with_name("migrations")
+
+
+async def initialize_execution_schema(dsn: str, *, schema: str) -> None:
+    """Apply pending migrations in a worker thread, closing all database connections.
 
     Args:
-        session: Operation-scoped SQLAlchemy session inside the caller's transaction.
-        schema: Validated PostgreSQL schema name, or a separate isolated schema for the
-            test.
+        dsn: PostgreSQL URL or libpq DSN, also used by the ORM repository.
+        schema: Target PostgreSQL schema for both execution and Yoyo tables.
 
     Returns:
-        None: No return value.
+        None: Pending migrations have committed and migration locks are released.
+
+    Raises:
+        ExecutionRepositoryUnavailableError: Database access, migration execution,
+            or acquisition of Yoyo's migration lock fails.
     """
-    await session.execute(
-        select(
-            func.pg_advisory_xact_lock(
-                func.hashtextextended(f"model-service-schema:{schema}", 0)
-            )
+    try:
+        await asyncio.to_thread(_apply_migrations, dsn, schema)
+    except (Error, BadMigration, LockTimeout, MigrationConflict) as error:
+        raise ExecutionRepositoryUnavailableError(
+            "execution schema migrations could not be applied"
+        ) from error
+
+
+def _apply_migrations(dsn: str, schema: str) -> None:
+    """Bootstrap the target schema and apply migrations under initialization locks."""
+    migrations = read_migrations(str(MIGRATIONS_DIRECTORY))
+    if not migrations:
+        raise BadMigration("execution migration directory is empty")
+    with Connection.connect(dsn, autocommit=True) as connection:
+        # Serialize schema creation and Yoyo's own bootstrap, not just migration steps.
+        connection.execute(
+            "SELECT pg_advisory_lock(hashtextextended(%s, 0))",
+            (f"model-service-schema:{schema}",),
         )
-    )
-    connection = await session.connection()
-    await connection.execute(CreateSchema(schema, if_not_exists=True))
-    await connection.run_sync(_initialize_tables, schema)
+        connection.execute(
+            sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(schema))
+        )
+        parameters = conninfo_to_dict(dsn)
+        parameters["schema"] = sql.Identifier(schema).as_string(connection)
+        uri = "postgresql+psycopg:///?" + urlencode(parameters)
+        with get_backend(uri) as backend, backend.lock():
+            backend.apply_migrations(backend.to_apply(migrations))
+            if backend.to_apply(migrations):
+                raise BadMigration("execution migrations remain unapplied")
 
 
-def _initialize_tables(connection: Connection, schema: str) -> None:
-    """Add missing reporting-deadline and mutation-marker columns, then create missing tables and indexes without rewriting rows.
+def main() -> None:
+    """Apply migrations using DATABASE_URL without putting credentials in CLI arguments."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--schema", default=DEFAULT_SCHEMA)
+    args = parser.parse_args()
+    dsn = os.environ.get("DATABASE_URL")
+    if not dsn:
+        parser.error("set DATABASE_URL to the target PostgreSQL database")
+    try:
+        asyncio.run(initialize_execution_schema(dsn, schema=args.schema))
+    except ExecutionRepositoryUnavailableError:
+        parser.exit(1, "execution schema migrations could not be applied\n")
 
-    Args:
-        connection: Database connection owned by the enclosing operation or transaction.
-        schema: Validated PostgreSQL schema name, or a separate isolated schema for the
-            test.
 
-    Returns:
-        None: No return value.
-    """
-    inspector = inspect(connection)
-    if inspector.has_table(ExecutionRow.__tablename__, schema=schema):
-        columns = {
-            column["name"]
-            for column in inspector.get_columns(
-                ExecutionRow.__tablename__, schema=schema
-            )
-        }
-        # Preserve the two additive upgrades supported by the pre-ORM repository.
-        operations = Operations(MigrationContext.configure(connection))
-        for column in (
-            Column("terminal_report_deadline_at", DateTime(timezone=True)),
-            Column(
-                "finish_mutation_started",
-                Boolean,
-                nullable=False,
-                server_default=false(),
-            ),
-        ):
-            if column.name not in columns:
-                operations.add_column(ExecutionRow.__tablename__, column, schema=schema)
-    Base.metadata.create_all(connection)
-    for table in Base.metadata.sorted_tables:
-        for index in table.indexes:
-            index.create(connection, checkfirst=True)
+if __name__ == "__main__":
+    main()

@@ -727,7 +727,8 @@ def _credential(expiry: datetime, marker: str) -> str:
     """
     header = _base64_json({"alg": "test"})
     payload = _base64_json({"exp": expiry.timestamp(), "marker": marker})
-    return f"{header}.{payload}.test-signature"
+    signature = base64.urlsafe_b64encode(b"test-signature").rstrip(b"=").decode()
+    return f"{header}.{payload}.{signature}"
 
 
 def _base64_json(value: dict[str, object]) -> str:

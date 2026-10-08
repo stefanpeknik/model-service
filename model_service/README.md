@@ -10,8 +10,12 @@ processing remains in `../workflow_execution/` and `../workflows/`.
 - `runtime.py` constructs the catalog, repository, providers, workflow dispatch,
   inference proxy, and health checker. Its lifespan initializes persistence,
   owns the scheduler's running scope, and closes the shared HTTP client.
-- `settings.py` reads environment configuration. Existing setting names and
-  defaults are unchanged by the package move.
+- `settings.py` uses Pydantic Settings for environment configuration and field
+  validation. Existing setting names, numeric-seconds units, and defaults remain
+  unchanged. `from_environment()` reads the process environment; an explicit
+  mapping replaces it completely, including an empty mapping. Direct construction
+  validates Python field values without reading environment variables. Counts
+  and durations obey their declared bounds; the poll interval must be finite.
 - `api.py` translates HTTP requests and failures. It exposes immediate workflow
   invocation, durable admission, EMPAIA admission, polling, cancellation, and
   health routes. It includes the legacy inference router after specific routes.

@@ -487,7 +487,10 @@ class DeployedEmpaiaTests(unittest.TestCase):
             )
 
         expiry = int((datetime.now(UTC) + timedelta(seconds=valid_seconds)).timestamp())
-        return f"{encode({})}.{encode({'exp': expiry})}.synthetic-signature"
+        signature = (
+            base64.urlsafe_b64encode(b"synthetic-signature").rstrip(b"=").decode()
+        )
+        return f"{encode({})}.{encode({'exp': expiry})}.{signature}"
 
 
 class _ClientPair:

@@ -453,7 +453,7 @@ class DurableEmpaiaExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     providers={provider.name: provider},
                     dispatch=dispatch,
                     owner="scheduler-before-restart",
-                    lease_duration=timedelta(milliseconds=30),
+                    lease_duration=timedelta(seconds=30),
                 )
                 admitted = await scheduler.schedule(
                     ScheduleRequest(
@@ -520,7 +520,8 @@ class DurableEmpaiaExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 {"exp": int((datetime.now(UTC) + timedelta(hours=1)).timestamp())}
             ).encode()
         ).rstrip(b"=")
-        return b".".join((header, payload, b"signature")).decode()
+        signature = base64.urlsafe_b64encode(b"signature").rstrip(b"=")
+        return b".".join((header, payload, signature)).decode()
 
 
 if __name__ == "__main__":

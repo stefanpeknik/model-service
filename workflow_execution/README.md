@@ -24,7 +24,10 @@ logic.
 - `../integrations/empaia/input_access.py` materializes EMPAIA inputs without
   coupling the core workflow runtime to the provider.
 - `http.py` contains the workflow HTTP error envelope shared by ingress
-  adapters and the dispatch-only `WorkflowRunRequest` transport schema.
+  adapters and the dispatch-only `WorkflowRunRequest` transport schema. Error
+  codes and messages are nonempty strings, and retry decisions are strict
+  booleans. The dispatch adapter validates remote failures against that same
+  schema; malformed failures remain unknown dispatch outcomes.
 - `dispatch.py` owns the workflow invocation interface and HTTP adapter used by
   both immediate and durable execution.
 - `cleanup.py` closes resources under cancellation with a bounded wait and

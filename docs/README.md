@@ -30,6 +30,7 @@ substitute a September proposal or old EMPAIA note.
 | Check the meaning of workflow, execution, provider, and artifact terminology | [Project glossary](../CONTEXT.md), which defines vocabulary rather than ticket status |
 | Navigate public HTTP routes, raw inference, immediate execution, and application wiring | [Public application package map](../model_service/README.md) |
 | Navigate scheduler ownership, transactions, retries, leases, and provider finish | [Scheduler package map](../execution_scheduler/README.md) |
+| Change the execution database schema | [Yoyo migration guide](../execution_scheduler/persistence/migrations/README.md), including the WIP baseline and upgrade testing |
 | Understand why durable scheduling runs outside Ray Serve | [Accepted scheduler placement decision](adr/0001-run-scheduler-outside-ray-serve.md), including the separate question of immediate HTTP routing |
 | Navigate invocation types, input access, dispatch, and resource cleanup | [Workflow runtime package map](../workflow_execution/README.md) |
 | Navigate heatmap processing and its Ray ingress | [Built-in workflows package map](../workflows/README.md) |
@@ -57,6 +58,14 @@ The subsequent [October 7 ORM refactor](reviews/postgres-orm-2026-10-07.md)
 replaces handwritten persistence SQL with typed SQLAlchemy ORM models. Local
 PostgreSQL and application regression tests now cover the reorganized source
 and ORM adapter. Neither change has been rebuilt into images or deployed.
+
+The [October 8 library adoption review](reviews/library-adoption-2026-10-08.md)
+records local Pydantic Settings, shared error-schema, PyJWT parsing, and offline
+EAD schema-validation changes, the replacement of Alembic operations with Yoyo
+migrations, their regression checks, and unimplemented EMPAIA client options.
+Existing pre-Yoyo databases need a deliberate reset or verified adoption before
+the new scheduler can start. It does not change ticket acceptance or
+validate a new deployment.
 
 ## Validation boundaries
 

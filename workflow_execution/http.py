@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Annotated, Protocol
 
 from fastapi import HTTPException, status
-from pydantic import TypeAdapter
+from pydantic import Field, StrictBool, TypeAdapter
 
 from workflow_execution.contracts import (
     InvalidWorkflowInvocation,
@@ -134,9 +134,9 @@ class WorkflowErrorDetail:
         retryable: Whether this classified failure permits another attempt.
     """
 
-    code: str
-    message: str
-    retryable: bool
+    code: Annotated[str, Field(strict=True, min_length=1)]
+    message: Annotated[str, Field(strict=True, min_length=1)]
+    retryable: StrictBool
 
 
 @dataclass(frozen=True, slots=True)

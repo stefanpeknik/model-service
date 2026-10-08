@@ -91,7 +91,10 @@ class DeployedNativeProcessorTests(unittest.TestCase):
             )
 
         expiry = int((datetime.now(UTC) + timedelta(minutes=10)).timestamp())
-        credential = f"{encode({})}.{encode({'exp': expiry})}.synthetic-signature"
+        signature = (
+            base64.urlsafe_b64encode(b"synthetic-signature").rstrip(b"=").decode()
+        )
+        credential = f"{encode({})}.{encode({'exp': expiry})}.{signature}"
         with (
             httpx.Client(base_url=scheduler_origin, timeout=30) as scheduler,
             httpx.Client(base_url=appservice_origin, timeout=30) as appservice,

@@ -9,10 +9,13 @@ from __future__ import annotations
 import asyncio
 import base64
 import os
+import shutil
 import unittest
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 from uuid import uuid4
 
 from psycopg import AsyncConnection, sql
@@ -20,7 +23,7 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from psycopg.errors import CheckViolation
 from psycopg.types.json import Jsonb
 
-from execution_scheduler.contracts import ExecutionStatus, ScheduleConflictError
+from execution_scheduler.contracts import ScheduleConflictError
 from execution_scheduler.domain import (
     Admission,
     ProcessingSucceeded,
@@ -31,8 +34,10 @@ from execution_scheduler.domain import (
     SubmissionIdentity,
     WorkKind,
 )
+from execution_scheduler.persistence.models import ExecutionRow
 from execution_scheduler.persistence.postgres import PostgresExecutionRepository
 from execution_scheduler.persistence.protected_context import ProtectedContextCipher
+from execution_scheduler.persistence.schema import MIGRATIONS_DIRECTORY
 from execution_scheduler.repository import ExecutionRepositoryUnavailableError
 from tests.repository_contract import ExecutionRepositoryContract
 from workflow_execution.contracts import (
@@ -149,83 +154,146 @@ class PostgresExecutionRepositoryTests(
             await self.repository.get(admitted.execution.id), admitted.execution
         )
 
-    async def test_initialize_preserves_pre_orm_record_and_completes_its_finish(
+    async def test_untracked_legacy_database_is_rejected_without_losing_data(
         self,
     ) -> None:
-        """Verify initialize preserves pre ORM record and completes its finish.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
-        execution_id, admission, result = await self._install_pre_orm_record()
+        execution_id, _, _ = await self._install_pre_orm_record()
         before = await self._stored_record(execution_id)
 
-        await asyncio.gather(
-            self.repository.initialize(), self._repository().initialize()
-        )
+        with self.assertRaises(ExecutionRepositoryUnavailableError):
+            await self.repository.initialize()
 
         self.assertEqual(await self._stored_record(execution_id), before)
-        execution = await self._repository().get(execution_id)
-        self.assertIs(execution.status, ExecutionStatus.RUNNING)
-        self.assertIs(execution.work_kind, WorkKind.PROVIDER_FINISH)
-        self.assertEqual(execution.invocation, admission.invocation)
-        self.assertEqual(execution.protected_context, admission.protected_context)
-        self.assertEqual(execution.result, result)
-        replay = await self.repository.admit(admission)
-        self.assertFalse(replay.created)
-        self.assertEqual(replay.execution, execution)
-        finish = await self.repository.claim_due("new-worker", timedelta(seconds=30))
-        assert finish is not None
-        succeeded = await self.repository.settle(
-            execution_id, finish.fencing_token, ProviderFinishSucceeded()
-        )
-        self.assertIs(succeeded.status, ExecutionStatus.SUCCEEDED)
-        self.assertEqual(succeeded.result, result)
-        self.assertEqual(succeeded.processing_attempts, 1)
+        self.assertEqual(await self._applied_migrations(), set())
 
-    async def test_initialize_adds_legacy_columns_and_indexes_without_losing_data(
-        self,
-    ) -> None:
-        """Verify initialize adds legacy columns and indexes without losing data.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
-        execution_id, admission, result = await self._install_pre_orm_record()
+    async def test_initial_migration_matches_orm_columns_and_indexes(self) -> None:
         async with await AsyncConnection.connect(self.dsn) as connection:
-            await connection.execute(
-                sql.SQL(
-                    "ALTER TABLE {} DROP COLUMN terminal_report_deadline_at, "
-                    "DROP COLUMN finish_mutation_started"
-                ).format(sql.Identifier(self.schema, "executions"))
+            columns = await connection.execute(
+                "SELECT column_name, is_nullable FROM information_schema.columns "
+                "WHERE table_schema = %s AND table_name = 'executions'",
+                (self.schema,),
             )
-
-        await asyncio.gather(
-            self.repository.initialize(), self._repository().initialize()
-        )
-        await self.repository.initialize()
-
-        execution = await self.repository.get(execution_id)
-        self.assertEqual(execution.invocation, admission.invocation)
-        self.assertEqual(execution.protected_context, admission.protected_context)
-        self.assertEqual(execution.result, result)
-        self.assertIsNone(execution.terminal_report_deadline_at)
-        self.assertFalse(execution.finish_mutation_started)
-        async with await AsyncConnection.connect(self.dsn) as connection:
+            actual_columns = dict(await columns.fetchall())
             indexes = await connection.execute(
                 "SELECT indexname FROM pg_indexes WHERE schemaname = %s",
                 (self.schema,),
             )
             index_names = {row[0] for row in await indexes.fetchall()}
+        self.assertEqual(
+            actual_columns,
+            {
+                column.name: "YES" if column.nullable else "NO"
+                for column in ExecutionRow.__table__.columns
+            },
+        )
         self.assertTrue(
             {"executions_due_idx", "executions_active_processing_idx"} <= index_names
         )
+        self.assertEqual(await self._applied_migrations(), {"0001-create-executions"})
+
+    async def test_concurrent_initialization_of_fresh_schema(self) -> None:
+        other_schema = f"test_execution_{uuid4().hex}"
+        self.addAsyncCleanup(self._drop_schema, other_schema)
+        repositories = [self._repository(schema=other_schema) for _ in range(4)]
+        await asyncio.gather(*(repository.initialize() for repository in repositories))
+        await repositories[0].check_ready()
+        admitted = await repositories[0].admit(self._admission("fresh-schema"))
+        self.assertEqual(
+            await repositories[1].get(admitted.execution.id), admitted.execution
+        )
+
+    async def test_pending_migration_runs_once_without_changing_records(self) -> None:
+        admitted = await self.repository.admit(self._admission("before-upgrade"))
+        before = await self._stored_record(admitted.execution.id)
+        with TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            shutil.copy(MIGRATIONS_DIRECTORY / "0001-create-executions.sql", directory)
+            (directory / "0002-test-upgrade.sql").write_text(
+                "-- depends: 0001-create-executions\n"
+                "ALTER TABLE executions ADD COLUMN migration_test_marker TEXT;\n",
+                encoding="utf-8",
+            )
+            with patch(
+                "execution_scheduler.persistence.schema.MIGRATIONS_DIRECTORY", directory
+            ):
+                await asyncio.gather(
+                    self.repository.initialize(), self._repository().initialize()
+                )
+                await self.repository.initialize()
+
+        after = await self._stored_record(admitted.execution.id)
+        self.assertIsNone(after.pop("migration_test_marker"))
+        self.assertEqual(after, before)
+        self.assertEqual(
+            await self._applied_migrations(),
+            {"0001-create-executions", "0002-test-upgrade"},
+        )
+        self.assertEqual(
+            await self.repository.get(admitted.execution.id), admitted.execution
+        )
+
+    async def test_failed_migration_rolls_back_and_can_be_retried(self) -> None:
+        admitted = await self.repository.admit(self._admission("before-failure"))
+        before = await self._stored_record(admitted.execution.id)
+        with TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            shutil.copy(MIGRATIONS_DIRECTORY / "0001-create-executions.sql", directory)
+            migration = directory / "0002-test-upgrade.sql"
+            migration.write_text(
+                "-- depends: 0001-create-executions\n"
+                "ALTER TABLE executions ADD COLUMN migration_test_marker TEXT;\n"
+                "SELECT 1 / 0;\n",
+                encoding="utf-8",
+            )
+            with patch(
+                "execution_scheduler.persistence.schema.MIGRATIONS_DIRECTORY", directory
+            ):
+                with self.assertRaises(ExecutionRepositoryUnavailableError):
+                    await self.repository.initialize()
+                self.assertEqual(
+                    await self._stored_record(admitted.execution.id), before
+                )
+                self.assertEqual(
+                    await self._applied_migrations(), {"0001-create-executions"}
+                )
+                migration.write_text(
+                    "-- depends: 0001-create-executions\n"
+                    "ALTER TABLE executions ADD COLUMN migration_test_marker TEXT;\n",
+                    encoding="utf-8",
+                )
+                await self.repository.initialize()
+
+        self.assertEqual(
+            await self._applied_migrations(),
+            {"0001-create-executions", "0002-test-upgrade"},
+        )
+        self.assertEqual(
+            await self.repository.get(admitted.execution.id), admitted.execution
+        )
+
+    async def test_empty_migration_directory_fails_initialization(self) -> None:
+        admitted = await self.repository.admit(self._admission("missing-migrations"))
+        with (
+            TemporaryDirectory() as temporary_directory,
+            patch(
+                "execution_scheduler.persistence.schema.MIGRATIONS_DIRECTORY",
+                Path(temporary_directory),
+            ),
+            self.assertRaises(ExecutionRepositoryUnavailableError),
+        ):
+            await self.repository.initialize()
+        self.assertEqual(
+            await self.repository.get(admitted.execution.id), admitted.execution
+        )
+
+    async def _applied_migrations(self) -> set[str]:
+        async with await AsyncConnection.connect(self.dsn) as connection:
+            cursor = await connection.execute(
+                sql.SQL("SELECT migration_id FROM {}").format(
+                    sql.Identifier(self.schema, "_yoyo_migration")
+                )
+            )
+            return {row[0] for row in await cursor.fetchall()}
 
     async def test_libpq_connection_string_remains_supported(self) -> None:
         """Verify libpq connection string remains supported.

@@ -134,7 +134,7 @@ class WorkflowResultType(TypeDecorator[WorkflowResult]):
 
 
 class Base(DeclarativeBase):
-    """Collect execution ORM metadata for schema initialization and schema-name translation."""
+    """Collect execution ORM mappings for schema-name translation; Yoyo owns DDL."""
 
 
 class ExecutionRow(Base):

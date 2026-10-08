@@ -6,24 +6,42 @@ and per-model origins. Parsed durations feed runtime wiring and retry policies.
 
 from __future__ import annotations
 
-import os
-from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Self
 
-from pydantic import HttpUrl, StringConstraints, TypeAdapter
+from pydantic import (
+    BeforeValidator,
+    Field,
+    FiniteFloat,
+    HttpUrl,
+    StringConstraints,
+    TypeAdapter,
+    field_validator,
+    model_validator,
+)
+from pydantic_settings import BaseSettings, EnvSettingsSource, SettingsConfigDict
 
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from pydantic_settings import PydanticBaseSettingsSource
+
 
 _ModelPrefix = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9._-]+$")]
-_MODEL_ORIGINS = TypeAdapter(dict[_ModelPrefix, HttpUrl])
+_SECONDS = TypeAdapter(FiniteFloat)
 
 
-@dataclass(frozen=True, slots=True)
-class SchedulerSettings:
+def _duration_from_seconds(value: object) -> timedelta | float:
+    """Accept typed durations or finite numeric seconds for duration validation."""
+    return value if isinstance(value, timedelta) else _SECONDS.validate_python(value)
+
+
+_SecondsDuration = Annotated[timedelta, BeforeValidator(_duration_from_seconds)]
+_RequiredString = Annotated[str, StringConstraints(min_length=1)]
+
+
+class SchedulerSettings(BaseSettings):
     """Hold database, transport, retry, lease, capacity, and deadline settings for the public scheduler process.
 
     Attributes:
@@ -47,22 +65,80 @@ class SchedulerSettings:
         empaia_gateway_factory: Optional module:attribute enabling EMPAIA integration.
     """
 
-    database_url: str
-    provider_context_key: str
-    ray_serve_origin: str
-    inference_serve_origin: str | None = None
-    inference_model_origins: Mapping[str, HttpUrl] = field(default_factory=dict)
-    inference_timeout: timedelta = timedelta(minutes=15)
-    lease_duration: timedelta = timedelta(seconds=60)
-    poll_interval: float = 0.5
-    processing_attempts: int = 3
-    provider_finish_attempts: int = 3
-    initial_backoff: timedelta = timedelta(seconds=5)
-    maximum_backoff: timedelta = timedelta(minutes=5)
-    default_deadline: timedelta = timedelta(hours=6)
-    maximum_deadline: timedelta = timedelta(hours=24)
-    per_workflow_limit: int = 1
-    empaia_gateway_factory: str | None = None
+    model_config = SettingsConfigDict(
+        frozen=True,
+        case_sensitive=True,
+        populate_by_name=True,
+        str_strip_whitespace=True,
+        hide_input_in_errors=True,
+    )
+
+    database_url: _RequiredString = Field(validation_alias="DATABASE_URL", repr=False)
+    provider_context_key: _RequiredString = Field(
+        validation_alias="PROVIDER_CONTEXT_KEY", repr=False
+    )
+    ray_serve_origin: _RequiredString = Field(validation_alias="RAY_SERVE_ORIGIN")
+    inference_serve_origin: str | None = Field(
+        default=None, validation_alias="INFERENCE_SERVE_ORIGIN"
+    )
+    inference_model_origins: dict[_ModelPrefix, HttpUrl] = Field(
+        default_factory=dict, validation_alias="INFERENCE_MODEL_ORIGINS"
+    )
+    inference_timeout: _SecondsDuration = Field(
+        default=timedelta(minutes=15),
+        gt=timedelta(0),
+        validation_alias="INFERENCE_TIMEOUT_SECONDS",
+    )
+    lease_duration: _SecondsDuration = Field(
+        default=timedelta(seconds=60), gt=timedelta(0), validation_alias="LEASE_SECONDS"
+    )
+    poll_interval: FiniteFloat = Field(
+        default=0.5, gt=0, validation_alias="WORKER_POLL_SECONDS"
+    )
+    processing_attempts: int = Field(
+        default=3, gt=0, validation_alias="PROCESSING_ATTEMPTS"
+    )
+    provider_finish_attempts: int = Field(
+        default=3, gt=0, validation_alias="PROVIDER_FINISH_ATTEMPTS"
+    )
+    initial_backoff: _SecondsDuration = Field(
+        default=timedelta(seconds=5),
+        ge=timedelta(0),
+        validation_alias="INITIAL_BACKOFF_SECONDS",
+    )
+    maximum_backoff: _SecondsDuration = Field(
+        default=timedelta(minutes=5),
+        ge=timedelta(0),
+        validation_alias="MAXIMUM_BACKOFF_SECONDS",
+    )
+    default_deadline: _SecondsDuration = Field(
+        default=timedelta(hours=6),
+        gt=timedelta(0),
+        validation_alias="DEFAULT_DEADLINE_SECONDS",
+    )
+    maximum_deadline: _SecondsDuration = Field(
+        default=timedelta(hours=24),
+        gt=timedelta(0),
+        validation_alias="MAXIMUM_DEADLINE_SECONDS",
+    )
+    per_workflow_limit: int = Field(
+        default=1, gt=0, validation_alias="PER_WORKFLOW_LIMIT"
+    )
+    empaia_gateway_factory: str | None = Field(
+        default=None, validation_alias="EMPAIA_GATEWAY_FACTORY"
+    )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Keep direct construction isolated; from_environment selects the environment source."""
+        return (init_settings,)
 
     @classmethod
     def from_environment(
@@ -79,52 +155,29 @@ class SchedulerSettings:
             SchedulerSettings: Parsed and validated scheduler process configuration.
 
         Raises:
-            ValueError: A required setting is missing, a numeric setting fails its
-                bounds, or maximum durations are shorter than their defaults.
-            ValidationError: INFERENCE_MODEL_ORIGINS is invalid JSON or contains an
-                invalid model prefix or HTTP URL.
+            SettingsError: INFERENCE_MODEL_ORIGINS cannot be decoded as JSON.
+            ValidationError: Required values, numeric bounds, model origins, or
+                cross-field policy constraints are invalid.
         """
-        values = environment or os.environ
-        return cls(
-            database_url=_required(values, "DATABASE_URL"),
-            provider_context_key=_required(values, "PROVIDER_CONTEXT_KEY"),
-            ray_serve_origin=_required(values, "RAY_SERVE_ORIGIN"),
-            inference_serve_origin=values.get("INFERENCE_SERVE_ORIGIN", "").strip()
-            or None,
-            inference_model_origins=_MODEL_ORIGINS.validate_json(
-                values.get("INFERENCE_MODEL_ORIGINS", "{}")
-            ),
-            inference_timeout=timedelta(
-                seconds=_positive_float(values, "INFERENCE_TIMEOUT_SECONDS", 900)
-            ),
-            lease_duration=timedelta(
-                seconds=_positive_float(values, "LEASE_SECONDS", 60)
-            ),
-            poll_interval=_positive_float(values, "WORKER_POLL_SECONDS", 0.5),
-            processing_attempts=_positive_int(values, "PROCESSING_ATTEMPTS", 3),
-            provider_finish_attempts=_positive_int(
-                values,
-                "PROVIDER_FINISH_ATTEMPTS",
-                3,
-            ),
-            initial_backoff=timedelta(
-                seconds=_nonnegative_float(values, "INITIAL_BACKOFF_SECONDS", 5)
-            ),
-            maximum_backoff=timedelta(
-                seconds=_nonnegative_float(values, "MAXIMUM_BACKOFF_SECONDS", 300)
-            ),
-            default_deadline=timedelta(
-                seconds=_positive_float(values, "DEFAULT_DEADLINE_SECONDS", 21_600)
-            ),
-            maximum_deadline=timedelta(
-                seconds=_positive_float(values, "MAXIMUM_DEADLINE_SECONDS", 86_400)
-            ),
-            per_workflow_limit=_positive_int(values, "PER_WORKFLOW_LIMIT", 1),
-            empaia_gateway_factory=values.get("EMPAIA_GATEWAY_FACTORY") or None,
-        )
+        source = EnvSettingsSource(cls)
+        if environment is not None:
+            source.env_vars = dict(environment)
+        return cls(**source())
 
-    def __post_init__(self) -> None:
+    @field_validator("inference_serve_origin", "empaia_gateway_factory", mode="before")
+    @classmethod
+    def _empty_optional_setting(cls, value: object) -> object:
+        """Treat blank optional origins and factory settings as absent."""
+        if isinstance(value, str):
+            return value.strip() or None
+        return value
+
+    @model_validator(mode="after")
+    def _validate_policy_bounds(self) -> Self:
         """Reject maximum backoff or deadline values shorter than their corresponding initial/default values.
+
+        Returns:
+            Self: Validated settings with consistent backoff and deadline limits.
 
         Raises:
             ValueError: maximum_backoff is shorter than initial_backoff, or
@@ -136,92 +189,4 @@ class SchedulerSettings:
             raise ValueError(
                 "maximum deadline must not be shorter than default deadline"
             )
-
-
-def _required(values: Mapping[str, str], name: str) -> str:
-    """Return a nonempty stripped environment value or raise ValueError naming the missing setting.
-
-    Args:
-        values: Environment variable names mapped to string settings.
-        name: Required environment setting whose value must be nonempty after stripping.
-
-    Returns:
-        str: Nonempty stripped environment setting.
-
-    Raises:
-        ValueError: The named setting is missing or empty after stripping whitespace.
-    """
-    value = values.get(name, "").strip()
-    if not value:
-        raise ValueError(f"{name} is required")
-    return value
-
-
-def _positive_int(values: Mapping[str, str], name: str, default: int) -> int:
-    """Parse a positive integer setting or its default, raising a setting-specific validation error.
-
-    Args:
-        values: Environment variable names mapped to string settings.
-        name: Environment variable name to parse.
-        default: Fallback value used when the setting or optional field is absent.
-
-    Returns:
-        int: Parsed setting, or default when absent, validated as greater than zero.
-
-    Raises:
-        ValueError: The named setting cannot be parsed as an integer or is nonpositive.
-    """
-    try:
-        value = int(values.get(name, str(default)))
-    except ValueError as error:
-        raise ValueError(f"{name} must be an integer") from error
-    if value <= 0:
-        raise ValueError(f"{name} must be positive")
-    return value
-
-
-def _positive_float(values: Mapping[str, str], name: str, default: float) -> float:
-    """Parse a numeric setting greater than zero using the shared nonnegative parser.
-
-    Args:
-        values: Environment variable names mapped to string settings.
-        name: Environment variable name to parse.
-        default: Fallback value used when the setting or optional field is absent.
-
-    Returns:
-        float: Parsed setting, or default when absent, validated as greater than zero.
-
-    Raises:
-        ValueError: The named setting cannot be parsed as a number or is nonpositive.
-    """
-    value = _nonnegative_float(values, name, default)
-    if value == 0:
-        raise ValueError(f"{name} must be positive")
-    return value
-
-
-def _nonnegative_float(
-    values: Mapping[str, str],
-    name: str,
-    default: float,
-) -> float:
-    """Parse a numeric setting or default and reject negative values.
-
-    Args:
-        values: Environment variable names mapped to string settings.
-        name: Environment variable name to parse.
-        default: Fallback value used when the setting or optional field is absent.
-
-    Returns:
-        float: Parsed setting, or default when absent, validated as nonnegative.
-
-    Raises:
-        ValueError: The named setting cannot be parsed as a number or is negative.
-    """
-    try:
-        value = float(values.get(name, str(default)))
-    except ValueError as error:
-        raise ValueError(f"{name} must be a number") from error
-    if value < 0:
-        raise ValueError(f"{name} cannot be negative")
-    return value
+        return self

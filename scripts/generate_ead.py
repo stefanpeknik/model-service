@@ -8,10 +8,14 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from jsonschema import Draft7Validator, validate
 
 
 EAD_SCHEMA = "https://gitlab.com/empaia/integration/definitions/-/raw/main/ead/ead-schema.v3.json"
 ROOT = Path(__file__).resolve().parents[1]
+_EAD_SCHEMA = json.loads(
+    (ROOT / "eads" / "schemas" / "ead-v3.schema.json").read_text(encoding="utf-8")
+)
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -33,7 +37,7 @@ def load_yaml(path: Path) -> dict[str, Any]:
 
 
 def generate_ead(definition: dict[str, Any]) -> dict[str, Any]:
-    """Translate workflow EMPAIA metadata and I/O into an executable app description, validating distinct names and input references.
+    """Translate workflow metadata and I/O into an EAD and validate its pinned schema.
 
     Args:
         definition: Workflow input/output contract or loaded YAML mapping to translate.
@@ -43,7 +47,8 @@ def generate_ead(definition: dict[str, Any]) -> dict[str, Any]:
             and one declared execution mode.
 
     Raises:
-        ValueError: A value fails the validation described above.
+        ValueError: Input/output names overlap or an I/O reference targets a missing input.
+        jsonschema.ValidationError: The generated EAD violates the pinned EMPAIA schema.
     """
     empaia = definition["empaia"]
     inputs = definition["inputs"]
@@ -61,7 +66,7 @@ def generate_ead(definition: dict[str, Any]) -> dict[str, Any]:
             entry["reference"] = f"io.{target}"
         io[name] = entry
 
-    return {
+    ead = {
         "$schema": EAD_SCHEMA,
         "name": empaia["name"],
         "name_short": empaia["name_short"],
@@ -76,6 +81,8 @@ def generate_ead(definition: dict[str, Any]) -> dict[str, Any]:
             }
         },
     }
+    validate(ead, _EAD_SCHEMA, cls=Draft7Validator)
+    return ead
 
 
 def generate_file(

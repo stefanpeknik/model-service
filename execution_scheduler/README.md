@@ -36,10 +36,12 @@ workflow processing and provider finish.
 - `persistence/models.py` defines the typed execution row, database constraints
   and indexes, and JSONB conversion for workflow invocations and results. ORM
   rows stay inside persistence; callers receive the domain records above.
-- `persistence/schema.py` creates the mapped schema and indexes. It uses Alembic
-  operations for the two pre-existing additive column upgrades, under the same
-  initialization advisory lock. It does not rewrite stored records or maintain
-  an Alembic revision history.
+- `persistence/schema.py` applies pending Yoyo migrations at startup, in a worker
+  thread. Initialization is serialized per schema, including Yoyo's bootstrap.
+  `persistence/migrations/` owns database DDL and migration history; ORM metadata
+  no longer creates or repairs tables. Read the
+  [migration guide](persistence/migrations/README.md) before changing a column.
+  Untracked pre-Yoyo databases require an explicit reset or verified adoption.
 - `persistence/protected_context.py` encrypts protected provider context at rest.
 
 ## External adapters
@@ -75,7 +77,8 @@ shared scenarios in `tests/repository_contract.py`; PostgreSQL concurrency
 checks remain in `tests/test_postgres_execution_repository.py`.
 The [October 7 ORM regression record](../docs/reviews/postgres-orm-2026-10-07.md)
 covers local concurrency, schema compatibility, and application checks. It is
-not a deployment validation of the ORM adapter.
+not a deployment validation of the ORM adapter. Its historical automatic
+missing-column repair is superseded by the migration guide above.
 
 Leaving `scheduler.running()` stops local work and joins worker tasks. It does
 not cancel durable executions; another worker can recover their expired leases.

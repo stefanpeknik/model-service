@@ -31,6 +31,16 @@ UV_CACHE_DIR=.cache/uv uv run --no-sync python scripts/generate_ead.py \
 ```
 
 Add `--check` to verify that the checked-in JSON matches without writing it.
-The generation tests check workflow names and references; they do not validate
-the external EMPAIA schema or register an application. Real EMPAIA integration
-remains a separate phase.
+Both generation and checking validate against the official Draft 7 schema in
+[`../eads/schemas/ead-v3.schema.json`](../eads/schemas/ead-v3.schema.json),
+without network access. Invalid definitions are rejected before writing output.
+The generation tests also check workflow names and references. These checks do
+not register an application or prove compatibility with the deployed AppService.
+Real EMPAIA integration remains a separate phase.
+
+The schema is an unchanged copy from EMPAIA's definitions repository at commit
+[`2b324f13f73eaa5950794ce9befeffa4769e8a78`](https://gitlab.com/empaia/integration/definitions/-/raw/2b324f13f73eaa5950794ce9befeffa4769e8a78/ead/ead-schema.v3.json).
+Its upstream MIT license is preserved in `../eads/schemas/LICENSE`. To update it,
+choose the version supported by the target EMPAIA installation, replace the copy
+from a pinned upstream commit, update this reference, and rerun the generation
+tests and `--check`. Do not hand-edit the upstream schema.

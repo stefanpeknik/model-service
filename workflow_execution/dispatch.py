@@ -11,8 +11,13 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Protocol
 
 import httpx
+from pydantic import TypeAdapter, ValidationError
 
-from workflow_execution.http import WorkflowRunRequest, run_request_to_dict
+from workflow_execution.http import (
+    WorkflowErrorResponse,
+    WorkflowRunRequest,
+    run_request_to_dict,
+)
 from workflow_execution.serialization import result_from_dict
 
 
@@ -24,6 +29,9 @@ if TYPE_CHECKING:
         WorkflowInvocation,
         WorkflowResult,
     )
+
+
+_ERROR_RESPONSE = TypeAdapter(WorkflowErrorResponse)
 
 
 class WorkflowDispatch(Protocol):
@@ -284,26 +292,14 @@ def _remote_failure(body: object) -> RemoteWorkflowFailureError | None:
         RemoteWorkflowFailureError | None: Safe structured remote failure, or None if
             response fields do not match the failure contract.
     """
-    if not isinstance(body, dict):
-        return None
-    detail = body.get("detail")
-    if not isinstance(detail, dict):
-        return None
-    code = detail.get("code")
-    message = detail.get("message")
-    retryable = detail.get("retryable")
-    if (
-        not isinstance(code, str)
-        or not code
-        or not isinstance(message, str)
-        or not message
-        or not isinstance(retryable, bool)
-    ):
+    try:
+        detail = _ERROR_RESPONSE.validate_python(body).detail
+    except ValidationError:
         return None
     return RemoteWorkflowFailureError(
-        code=code,
-        safe_message=message,
-        retryable=retryable,
+        code=detail.code,
+        safe_message=detail.message,
+        retryable=detail.retryable,
     )
 
 

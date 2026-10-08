@@ -923,7 +923,8 @@ def _credential() -> str:
         )
 
     expiry = int((datetime.now(UTC) + timedelta(minutes=10)).timestamp())
-    return f"{encode({})}.{encode({'exp': expiry})}.synthetic-signature"
+    signature = base64.urlsafe_b64encode(b"synthetic-signature").rstrip(b"=").decode()
+    return f"{encode({})}.{encode({'exp': expiry})}.{signature}"
 
 
 if __name__ == "__main__":
