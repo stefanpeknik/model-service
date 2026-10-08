@@ -1,3 +1,10 @@
+"""Provide an in-memory AppService mock with observable calls and failure scenarios.
+
+Job ID prefixes select deterministic behavior for deployment tests. This mock checks
+bearer-header presence only and does not establish real EMPAIA authentication or
+interoperability.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -11,6 +18,8 @@ from pydantic import BaseModel
 
 
 class ValidationScenario(StrEnum):
+    """Name the job ID prefixes that trigger delays, publication failures, restarts, or native fixture behavior."""
+
     AUTH_REJECTED = "auth-rejected"
     CANCELLATION = "cancellation"
     DIRECT_ACCESS = "direct-access"
@@ -29,14 +38,48 @@ class ValidationScenario(StrEnum):
 
 
 class PixelmapRequest(BaseModel):
+    """Accept the output type needed by the mock heatmap creation endpoint.
+
+    Attributes:
+        type: Mock output representation, required to be continuous_pixelmap for
+            heatmaps.
+    """
+
     type: str
 
 
 class FailureRequest(BaseModel):
+    """Accept the safe user message sent by provider terminal reporting.
+
+    Attributes:
+        user_message: Safe provider failure/cancellation report text.
+    """
+
     user_message: str
 
 
 class JobView(BaseModel):
+    """Expose call counters, sampled tile values, and terminal state for test assertions.
+
+    Attributes:
+        configuration_reads: Number of provider configuration GETs observed.
+        direct_access_reads: Number of direct-access input probes observed.
+        rectangle_reads: Number of region rectangle GETs observed.
+        slide_metadata_reads: Number of slide geometry GETs observed.
+        output_create_attempts: Number of attempted external pixelmap registrations.
+        tile_attempts: Number of attempted tile uploads, including failures.
+        tile_count: Number of successfully accepted tile uploads.
+        tile_sample: Sampled native heatmap value from the uploaded float32 payload.
+        tile_background_sample: Sampled excluded-region value used by rectangle
+            validation.
+        finalize_attempts: Number of external finalization requests observed.
+        finalize_ack_blocked: Whether the mock currently withholds finalization
+            acknowledgment.
+        finalized: Whether the mock job has accepted finalization.
+        failure: Latest provider failure/cancellation message.
+        failure_reports: Number of terminal failure reports observed.
+    """
+
     configuration_reads: int = 0
     direct_access_reads: int = 0
     rectangle_reads: int = 0
@@ -55,6 +98,30 @@ class JobView(BaseModel):
 
 @dataclass(slots=True)
 class JobRecord:
+    """Keep mutable per-job mock state, including coordination flags used by restart scenarios.
+
+    Attributes:
+        configuration_reads: Number of provider configuration GETs observed.
+        direct_access_reads: Number of direct-access input probes observed.
+        rectangle_reads: Number of region rectangle GETs observed.
+        slide_metadata_reads: Number of slide geometry GETs observed.
+        output_create_attempts: Number of attempted external pixelmap registrations.
+        tile_attempts: Number of attempted tile uploads, including failures.
+        tile_count: Number of successfully accepted tile uploads.
+        tile_sample: Sampled native heatmap value from the uploaded float32 payload.
+        tile_background_sample: Sampled excluded-region value used by rectangle
+            validation.
+        finalize_attempts: Number of external finalization requests observed.
+        output_created: Whether external pixelmap registration occurred.
+        metadata_released: Whether the restart test released blocked slide metadata.
+        finalize_ack_blocked: Whether the mock currently withholds finalization
+            acknowledgment.
+        finalize_ack_released: Whether the test released the withheld acknowledgment.
+        finalized: Whether the mock job has accepted finalization.
+        failure: Latest provider failure/cancellation message.
+        failure_reports: Number of terminal failure reports observed.
+    """
+
     configuration_reads: int = 0
     direct_access_reads: int = 0
     rectangle_reads: int = 0
@@ -80,6 +147,18 @@ _lock = Lock()
 
 
 def _authorize(authorization: str | None) -> None:
+    """Require a nonempty Bearer header without validating the credential signature.
+
+    Args:
+        authorization: Incoming bearer header checked by the validation mock.
+
+    Returns:
+        None: No return value.
+
+    Raises:
+        HTTPException: The request fails the route's safe validation, availability, or
+            execution contract.
+    """
     if authorization is None or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
     if not authorization.removeprefix("Bearer "):
@@ -87,14 +166,40 @@ def _authorize(authorization: str | None) -> None:
 
 
 def _job(job_id: str) -> JobRecord:
+    """Get or create a mock record; callers hold the shared lock when updating it.
+
+    Args:
+        job_id: External EMPAIA job identifier.
+
+    Returns:
+        JobRecord: Existing or newly created mutable mock record; callers coordinate
+            updates with the shared lock.
+    """
     return _jobs.setdefault(job_id, JobRecord())
 
 
 def _is_scenario(job_id: str, scenario: ValidationScenario) -> bool:
+    """Match a job ID against a scenario prefix followed by a dash.
+
+    Args:
+        job_id: External EMPAIA job identifier.
+        scenario: Validation job prefix selecting deterministic mock behavior.
+
+    Returns:
+        bool: True when the job ID begins with the selected scenario prefix.
+    """
     return job_id.startswith(f"{scenario.value}-")
 
 
 def _is_native(job_id: str) -> bool:
+    """Identify scenarios using real synthetic TIFF inputs instead of dummy byte fixtures.
+
+    Args:
+        job_id: External EMPAIA job identifier.
+
+    Returns:
+        bool: True when the job uses the native processor or native rectangle fixture.
+    """
     return _is_scenario(job_id, ValidationScenario.NATIVE_PROCESSOR) or _is_scenario(
         job_id, ValidationScenario.NATIVE_RECTANGLE
     )
@@ -104,6 +209,19 @@ def _is_native(job_id: str) -> bool:
 def configuration(
     job_id: str, authorization: str | None = Header(default=None)
 ) -> dict[str, object]:
+    """Count configuration reads and return scenario-specific values or authentication/service failures.
+
+    Args:
+        job_id: External EMPAIA job identifier.
+        authorization: Incoming bearer header checked by the validation mock.
+
+    Returns:
+        dict[str, object]: Decoded, serialized, or recorded fields described above.
+
+    Raises:
+        HTTPException: The request fails the route's safe validation, availability, or
+            execution contract.
+    """
     _authorize(authorization)
     with _lock:
         _job(job_id).configuration_reads += 1
@@ -125,6 +243,20 @@ async def direct_access(
     name: str,
     authorization: str | None = Header(default=None),
 ) -> dict[str, object]:
+    """Return fixture paths, with scenario-controlled delays, missing inputs, or a 404 to exercise rectangle fallback.
+
+    Args:
+        job_id: External EMPAIA job identifier.
+        name: Input/output name or configuration field selected by this operation.
+        authorization: Incoming bearer header checked by the validation mock.
+
+    Returns:
+        dict[str, object]: Decoded, serialized, or recorded fields described above.
+
+    Raises:
+        HTTPException: The request fails the route's safe validation, availability, or
+            execution contract.
+    """
     _authorize(authorization)
     if name not in {"slide", "region_of_interest"}:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
@@ -164,6 +296,15 @@ async def direct_access(
 async def slide(
     job_id: str, authorization: str | None = Header(default=None)
 ) -> dict[str, object]:
+    """Return dummy or native slide geometry, optionally blocking publication until a restart test releases metadata.
+
+    Args:
+        job_id: External EMPAIA job identifier.
+        authorization: Incoming bearer header checked by the validation mock.
+
+    Returns:
+        dict[str, object]: Decoded, serialized, or recorded fields described above.
+    """
     _authorize(authorization)
     with _lock:
         record = _job(job_id)
@@ -190,6 +331,15 @@ def rectangle(
     job_id: str,
     authorization: str | None = Header(default=None),
 ) -> dict[str, object]:
+    """Count region reads and return the fixed slide-space rectangle used by mask tests.
+
+    Args:
+        job_id: External EMPAIA job identifier.
+        authorization: Incoming bearer header checked by the validation mock.
+
+    Returns:
+        dict[str, object]: Decoded, serialized, or recorded fields described above.
+    """
     _authorize(authorization)
     with _lock:
         _job(job_id).rectangle_reads += 1
@@ -203,6 +353,21 @@ def create_output(
     body: PixelmapRequest,
     authorization: str | None = Header(default=None),
 ) -> dict[str, object]:
+    """Require a continuous heatmap pixelmap, count its creation, and return a stable mock output ID.
+
+    Args:
+        job_id: External EMPAIA job identifier.
+        name: Input/output name or configuration field selected by this operation.
+        body: Mock pixelmap output type used to validate heatmap creation.
+        authorization: Incoming bearer header checked by the validation mock.
+
+    Returns:
+        dict[str, object]: Decoded, serialized, or recorded fields described above.
+
+    Raises:
+        HTTPException: The request fails the route's safe validation, availability, or
+            execution contract.
+    """
     _authorize(authorization)
     if name != "heatmap" or body.type != "continuous_pixelmap":
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT)
@@ -226,6 +391,25 @@ async def put_tile(
     request: Request,
     authorization: str | None = Header(default=None),
 ) -> None:
+    """Validate tile coordinates and payload, record native sample values, and optionally fail publication.
+
+    Args:
+        job_id: External EMPAIA job identifier.
+        pixelmap_id: External output pixelmap identifier returned by AppService.
+        level: Selected pyramid level index.
+        tile_x: Horizontal pixelmap tile position.
+        tile_y: Vertical pixelmap tile position.
+        request: Request to validate, admit, dispatch, forward, or process, as specified
+            by its declared type.
+        authorization: Incoming bearer header checked by the validation mock.
+
+    Returns:
+        None: No return value.
+
+    Raises:
+        HTTPException: The request fails the route's safe validation, availability, or
+            execution contract.
+    """
     _authorize(authorization)
     data = await request.body()
     if (
@@ -267,6 +451,19 @@ async def put_tile(
 async def finalize(
     job_id: str, authorization: str | None = Header(default=None)
 ) -> None:
+    """Require published output tiles and record success, optionally failing or withholding the first acknowledgment.
+
+    Args:
+        job_id: External EMPAIA job identifier.
+        authorization: Incoming bearer header checked by the validation mock.
+
+    Returns:
+        None: No return value.
+
+    Raises:
+        HTTPException: The request fails the route's safe validation, availability, or
+            execution contract.
+    """
     _authorize(authorization)
     with _lock:
         record = _job(job_id)
@@ -296,6 +493,16 @@ def failure(
     body: FailureRequest,
     authorization: str | None = Header(default=None),
 ) -> None:
+    """Record a provider failure or cancellation report and increment its call count.
+
+    Args:
+        job_id: External EMPAIA job identifier.
+        body: Safe external failure message to record in mock job state.
+        authorization: Incoming bearer header checked by the validation mock.
+
+    Returns:
+        None: No return value.
+    """
     _authorize(authorization)
     with _lock:
         record = _job(job_id)
@@ -305,6 +512,18 @@ def failure(
 
 @app.get("/validation/jobs/{job_id}", response_model=JobView)
 def inspect_job(job_id: str) -> JobView:
+    """Return a locked snapshot of observable job state or 404 for an unknown job.
+
+    Args:
+        job_id: External EMPAIA job identifier.
+
+    Returns:
+        JobView: Observable mock call counters, tile samples, and terminal job state.
+
+    Raises:
+        HTTPException: The request fails the route's safe validation, availability, or
+            execution contract.
+    """
     with _lock:
         record = _jobs.get(job_id)
         if record is None:
@@ -329,6 +548,18 @@ def inspect_job(job_id: str) -> JobView:
 
 @app.post("/validation/jobs/{job_id}/release-metadata", status_code=204)
 def release_metadata(job_id: str) -> None:
+    """Unblock the metadata read in a provider-finish restart scenario.
+
+    Args:
+        job_id: External EMPAIA job identifier.
+
+    Returns:
+        None: No return value.
+
+    Raises:
+        HTTPException: The request fails the route's safe validation, availability, or
+            execution contract.
+    """
     if not _is_scenario(job_id, ValidationScenario.FINISH_RESTART):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     with _lock:
@@ -337,6 +568,18 @@ def release_metadata(job_id: str) -> None:
 
 @app.post("/validation/jobs/{job_id}/release-finalize", status_code=204)
 def release_finalize(job_id: str) -> None:
+    """Unblock the withheld acknowledgment in a finalization outcome-unknown scenario.
+
+    Args:
+        job_id: External EMPAIA job identifier.
+
+    Returns:
+        None: No return value.
+
+    Raises:
+        HTTPException: The request fails the route's safe validation, availability, or
+            execution contract.
+    """
     if not _is_scenario(job_id, ValidationScenario.FINALIZATION_ACK_LOST):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     with _lock:

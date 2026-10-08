@@ -15,6 +15,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
+    """Read a UTF-8 YAML document and require its top-level value to be a mapping.
+
+    Args:
+        path: File, storage locator, or HTTP endpoint selected by this operation.
+
+    Returns:
+        dict[str, Any]: Top-level YAML mapping with its workflow and EMPAIA fields.
+
+    Raises:
+        TypeError: A value or configured adapter has an unsupported type.
+    """
     value = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
         raise TypeError(f"{path} must contain a YAML mapping")
@@ -22,6 +33,18 @@ def load_yaml(path: Path) -> dict[str, Any]:
 
 
 def generate_ead(definition: dict[str, Any]) -> dict[str, Any]:
+    """Translate workflow EMPAIA metadata and I/O into an executable app description, validating distinct names and input references.
+
+    Args:
+        definition: Workflow input/output contract or loaded YAML mapping to translate.
+
+    Returns:
+        dict[str, Any]: EAD schema/name/permission metadata, translated io references,
+            and one declared execution mode.
+
+    Raises:
+        ValueError: A value fails the validation described above.
+    """
     empaia = definition["empaia"]
     inputs = definition["inputs"]
     outputs = definition["outputs"]
@@ -58,6 +81,17 @@ def generate_ead(definition: dict[str, Any]) -> dict[str, Any]:
 def generate_file(
     definition_path: Path, output_path: Path, *, check: bool = False
 ) -> bool:
+    """Render deterministic EAD JSON and write it, or in check mode compare it with the existing file without modifying it.
+
+    Args:
+        definition_path: Source YAML workflow definition file.
+        output_path: Destination artifact path or configured relative output path.
+        check: Whether to compare generated metadata without writing the output file.
+
+    Returns:
+        bool: True after writing, or when check mode finds identical generated content;
+            False for missing/stale checked output.
+    """
     definition = load_yaml(definition_path)
     ead = generate_ead(definition)
     rendered = json.dumps(ead, indent=2, ensure_ascii=False) + "\n"
@@ -71,6 +105,11 @@ def generate_file(
 
 
 def main() -> None:
+    """Parse definition/output paths and optional check mode; report a CLI error if generated metadata is missing or stale.
+
+    Returns:
+        None: No return value.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("definition", type=Path)
     parser.add_argument("output", type=Path)

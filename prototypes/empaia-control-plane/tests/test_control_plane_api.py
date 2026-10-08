@@ -1,3 +1,9 @@
+"""Check historical prototype authentication and safe public lifecycle responses.
+
+These cases describe the archived SQLite prototype rather than the current production
+scheduler.
+"""
+
 from __future__ import annotations
 
 import tempfile
@@ -14,7 +20,14 @@ from control_plane.storage import StorageMapping
 
 
 class ControlPlaneApiTestCase(unittest.TestCase):
+    """Exercise historical prototype authentication and safe public lifecycle responses."""
+
     def setUp(self) -> None:
+        """Create isolated fixtures and clients for historical prototype authentication and safe public lifecycle responses.
+
+        Returns:
+            None: No return value.
+        """
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
         root = Path(self.temp_dir.name)
@@ -62,6 +75,19 @@ class ControlPlaneApiTestCase(unittest.TestCase):
         json_body: dict[str, str] | None = None,
         authenticated: bool = False,
     ) -> Response:
+        """Send a prototype ASGI request with optional authentication and JSON body.
+
+        Args:
+            method: HTTP method used by the request or test client.
+            path: File, storage locator, or HTTP endpoint selected by this operation.
+            json_body: Optional prototype request payload sent through its ASGI test
+                client.
+            authenticated: Whether to attach the configured JES test bearer header.
+
+        Returns:
+            Response: HTTP response returned by the transport or controlled scenario
+                handler.
+        """
         return self.client.request(
             method,
             path,
@@ -70,6 +96,14 @@ class ControlPlaneApiTestCase(unittest.TestCase):
         )
 
     def test_provider_routes_require_authentication(self) -> None:
+        """Verify provider routes require authentication.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         response = self.request(
             "POST", "/v1/empaia/executions", json_body=self.submission
         )
@@ -94,6 +128,14 @@ class ControlPlaneApiTestCase(unittest.TestCase):
         self.assertEqual(202, rotated_token.status_code)
 
     def test_submission_is_idempotent_and_status_is_safe(self) -> None:
+        """Verify submission is idempotent and status is safe.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         first = self.request(
             "POST",
             "/v1/empaia/executions",
@@ -133,6 +175,14 @@ class ControlPlaneApiTestCase(unittest.TestCase):
         )
 
     def test_cancellation_is_idempotent(self) -> None:
+        """Verify cancellation is idempotent.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         submitted = self.request(
             "POST",
             "/v1/empaia/executions",

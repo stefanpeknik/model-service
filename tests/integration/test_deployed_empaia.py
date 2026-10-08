@@ -1,3 +1,9 @@
+"""Check live scheduler-to-mock-AppService admission, publication, and terminal reporting.
+
+These tests contact configured live services and may create executions and artifacts.
+They are not part of offline unit validation.
+"""
+
 from __future__ import annotations
 
 import base64
@@ -14,7 +20,17 @@ from validation.empaia_app_service import ValidationScenario
 
 
 class DeployedEmpaiaTests(unittest.TestCase):
+    """Exercise live scheduler-to-mock-AppService admission, publication, and terminal reporting."""
+
     def test_public_empaia_schedule_publishes_and_finalizes(self) -> None:
+        """Verify public EMPAIA schedule publishes and finalizes.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with self._clients() as (scheduler, appservice):
             job_id, request = self._request(ValidationScenario.DIRECT_ACCESS)
             execution_id = self._schedule(scheduler, request, replay=True)
@@ -28,6 +44,14 @@ class DeployedEmpaiaTests(unittest.TestCase):
             self.assertIsNone(recorded["failure"])
 
     def test_job_replay_accepts_new_credential_but_rejects_changed_origin(self) -> None:
+        """Verify job replay accepts new credential but rejects changed origin.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with self._clients() as (scheduler, appservice):
             job_id, request = self._request(ValidationScenario.DIRECT_ACCESS)
             execution_id = self._schedule(scheduler, request)
@@ -57,6 +81,14 @@ class DeployedEmpaiaTests(unittest.TestCase):
             self.assertEqual(recorded["finalize_attempts"], 1)
 
     def test_rectangle_input_is_materialized_before_publication(self) -> None:
+        """Verify rectangle input is materialized before publication.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with self._clients() as (scheduler, appservice):
             job_id, request = self._request(ValidationScenario.RECTANGLE)
             execution_id = self._schedule(scheduler, request)
@@ -69,6 +101,14 @@ class DeployedEmpaiaTests(unittest.TestCase):
             self.assertEqual(recorded["tile_count"], 1)
 
     def test_invalid_configuration_is_rejected_before_admission(self) -> None:
+        """Verify invalid configuration is rejected before admission.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with self._clients() as (scheduler, appservice):
             job_id, request = self._request(ValidationScenario.INVALID_CONFIGURATION)
             response = scheduler.post(
@@ -84,6 +124,14 @@ class DeployedEmpaiaTests(unittest.TestCase):
             self.assertEqual(recorded["direct_access_reads"], 0)
 
     def test_rejected_credential_is_a_permanent_admission_error(self) -> None:
+        """Verify rejected credential is a permanent admission error.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with self._clients() as (scheduler, appservice):
             job_id, request = self._request(ValidationScenario.AUTH_REJECTED)
             response = scheduler.post(
@@ -98,6 +146,14 @@ class DeployedEmpaiaTests(unittest.TestCase):
             self.assertEqual(recorded["configuration_reads"], 1)
 
     def test_per_workflow_limit_queues_then_releases_capacity(self) -> None:
+        """Verify per workflow limit queues then releases capacity.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with self._clients() as (scheduler, appservice):
             first_job_id, first_request = self._request(ValidationScenario.CANCELLATION)
             first_id = self._schedule(scheduler, first_request)
@@ -118,6 +174,14 @@ class DeployedEmpaiaTests(unittest.TestCase):
             self.assertEqual(second["status"], "succeeded", second)
 
     def test_temporary_appservice_failure_rejects_admission_as_retryable(self) -> None:
+        """Verify temporary AppService failure rejects admission as retryable.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with self._clients() as (scheduler, appservice):
             job_id, request = self._request(ValidationScenario.SERVICE_UNAVAILABLE)
             response = scheduler.post(
@@ -132,6 +196,14 @@ class DeployedEmpaiaTests(unittest.TestCase):
             self.assertEqual(recorded["configuration_reads"], 1)
 
     def test_unknown_tile_upload_outcome_is_not_replayed(self) -> None:
+        """Verify unknown tile upload outcome is not replayed.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with self._clients() as (scheduler, appservice):
             job_id, request = self._request(ValidationScenario.PUBLICATION_FAILURE)
             execution_id = self._schedule(scheduler, request)
@@ -149,6 +221,14 @@ class DeployedEmpaiaTests(unittest.TestCase):
             self.assertFalse(recorded["finalized"])
 
     def test_unknown_finalization_outcome_is_not_replayed(self) -> None:
+        """Verify unknown finalization outcome is not replayed.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with self._clients() as (scheduler, appservice):
             job_id, request = self._request(ValidationScenario.FINALIZATION_FAILURE)
             execution_id = self._schedule(scheduler, request)
@@ -166,6 +246,14 @@ class DeployedEmpaiaTests(unittest.TestCase):
             self.assertFalse(recorded["finalized"])
 
     def test_workflow_failure_is_reported_to_appservice(self) -> None:
+        """Verify workflow failure is reported to AppService.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with self._clients() as (scheduler, appservice):
             job_id, request = self._request(ValidationScenario.WORKFLOW_FAILURE)
             execution_id = self._schedule(scheduler, request)
@@ -186,6 +274,14 @@ class DeployedEmpaiaTests(unittest.TestCase):
             self.assertFalse(recorded["finalized"])
 
     def test_cancellation_is_reported_to_appservice(self) -> None:
+        """Verify cancellation is reported to AppService.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with self._clients() as (scheduler, appservice):
             job_id, request = self._request(ValidationScenario.CANCELLATION)
             execution_id = self._schedule(scheduler, request)
@@ -205,6 +301,14 @@ class DeployedEmpaiaTests(unittest.TestCase):
             self.assertFalse(recorded["finalized"])
 
     def test_credential_expiry_caps_a_blocked_execution(self) -> None:
+        """Verify credential expiry caps a blocked execution.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with self._clients() as (scheduler, appservice):
             job_id, request = self._request(ValidationScenario.CANCELLATION)
             request["credential"] = self._credential(valid_seconds=20)
@@ -221,6 +325,11 @@ class DeployedEmpaiaTests(unittest.TestCase):
             self.assertEqual(recorded["tile_count"], 0)
 
     def _clients(self) -> _ClientPair:
+        """Require configured live scheduler/AppService origins and return a context that closes both clients.
+
+        Returns:
+            _ClientPair: Context owning scheduler and mock AppService clients.
+        """
         origin = os.environ.get("VALIDATION_ORIGIN")
         appservice_origin = os.environ.get("VALIDATION_APPSERVICE_ORIGIN")
         if origin is None or appservice_origin is None:
@@ -228,6 +337,15 @@ class DeployedEmpaiaTests(unittest.TestCase):
         return _ClientPair(origin, appservice_origin)
 
     def _request(self, scenario: ValidationScenario) -> tuple[str, dict[str, object]]:
+        """Build a provider request for the selected fixture identity and deadline settings.
+
+        Args:
+            scenario: Validation job prefix selecting deterministic mock behavior.
+
+        Returns:
+            tuple[str, dict[str, object]]: Selected records, identifiers, or fixture
+                values in the ordering described above.
+        """
         job_id = f"{scenario.value}-{uuid4().hex}"
         return job_id, {
             "installation_id": "validation",
@@ -246,6 +364,19 @@ class DeployedEmpaiaTests(unittest.TestCase):
         *,
         replay: bool = False,
     ) -> str:
+        """Submit a live mock EMPAIA job, require new admission, and return its durable execution ID.
+
+        Args:
+            scheduler: Durable scheduler boundary or its live HTTP client, according to
+                the declared type.
+            request: Request to validate, admit, dispatch, forward, or process, as
+                specified by its declared type.
+            replay: Whether to repeat live admission and verify the same execution ID.
+
+        Returns:
+            str: Durable execution ID returned by newly accepted live provider
+                admission.
+        """
         path = "/v1/providers/empaia/workflows/prostate-heatmap/schedule"
         admitted = scheduler.post(path, json=request)
         self.assertEqual(admitted.status_code, 202, admitted.text)
@@ -259,6 +390,16 @@ class DeployedEmpaiaTests(unittest.TestCase):
     def _wait_terminal(
         self, scheduler: httpx.Client, execution_id: str
     ) -> dict[str, object]:
+        """Poll a live execution for a terminal outcome within the scenario time budget.
+
+        Args:
+            scheduler: Durable scheduler boundary or its live HTTP client, according to
+                the declared type.
+            execution_id: Durable execution identifier, not an external provider job ID.
+
+        Returns:
+            dict[str, object]: Decoded, serialized, or recorded fields described above.
+        """
         deadline = time.monotonic() + 630
         while time.monotonic() < deadline:
             response = scheduler.get(f"/v1/executions/{execution_id}")
@@ -272,6 +413,18 @@ class DeployedEmpaiaTests(unittest.TestCase):
     def _wait_status(
         self, scheduler: httpx.Client, execution_id: str, expected: str
     ) -> dict[str, object]:
+        """Poll for a requested live status, failing if another terminal outcome wins or waiting expires.
+
+        Args:
+            scheduler: Durable scheduler boundary or its live HTTP client, according to
+                the declared type.
+            execution_id: Durable execution identifier, not an external provider job ID.
+            expected: Required status, work kind, or permitted lifecycle states for this
+                check.
+
+        Returns:
+            dict[str, object]: Decoded, serialized, or recorded fields described above.
+        """
         deadline = time.monotonic() + 630
         while time.monotonic() < deadline:
             response = scheduler.get(f"/v1/executions/{execution_id}")
@@ -287,6 +440,16 @@ class DeployedEmpaiaTests(unittest.TestCase):
     def _wait_job(
         self, appservice: httpx.Client, job_id: str, field: str
     ) -> dict[str, object]:
+        """Poll mock AppService counters until the requested publication/lifecycle event is observed.
+
+        Args:
+            appservice: HTTP client connected to the validation AppService mock.
+            job_id: External EMPAIA job identifier.
+            field: Observable mock job field to wait for.
+
+        Returns:
+            dict[str, object]: Decoded, serialized, or recorded fields described above.
+        """
         deadline = time.monotonic() + 60
         while time.monotonic() < deadline:
             response = appservice.get(f"/validation/jobs/{job_id}")
@@ -298,7 +461,25 @@ class DeployedEmpaiaTests(unittest.TestCase):
 
     @staticmethod
     def _credential(valid_seconds: int = 600) -> str:
+        """Build an unsigned synthetic JWT-shaped credential with an expiry claim for validation fixtures.
+
+        Args:
+            valid_seconds: Lifetime encoded in a synthetic validation credential.
+
+        Returns:
+            str: Synthetic unsigned JWT-shaped test credential with an expiration claim.
+        """
+
         def encode(value: dict[str, object]) -> str:
+            """Encode a synthetic credential section as unpadded URL-safe base64 JSON.
+
+            Args:
+                value: Value being validated, serialized, converted, or checked by this
+                    helper.
+
+            Returns:
+                str: Unpadded URL-safe base64 JSON section for a synthetic credential.
+            """
             return (
                 base64.urlsafe_b64encode(json.dumps(value).encode())
                 .rstrip(b"=")
@@ -310,14 +491,37 @@ class DeployedEmpaiaTests(unittest.TestCase):
 
 
 class _ClientPair:
+    """Own synchronous HTTP clients for the live scheduler and mock AppService."""
+
     def __init__(self, scheduler_origin: str, appservice_origin: str) -> None:
+        """Construct scheduler and mock AppService HTTP clients with bounded request timeouts.
+
+        Args:
+            scheduler_origin: Public HTTP origin of the validation scheduler.
+            appservice_origin: HTTP origin of the validation AppService mock.
+        """
         self._scheduler = httpx.Client(base_url=scheduler_origin, timeout=30)
         self._appservice = httpx.Client(base_url=appservice_origin, timeout=30)
 
     def __enter__(self) -> tuple[httpx.Client, httpx.Client]:
+        """Return both clients for live provider validation requests.
+
+        Returns:
+            tuple[httpx.Client, httpx.Client]: Selected records, identifiers, or fixture
+                values in the ordering described above.
+        """
         return self._scheduler, self._appservice
 
     def __exit__(self, *_args: object) -> None:
+        """Close both HTTP clients on every context exit.
+
+        Args:
+            *_args: Positional arguments forwarded to the delegated operation or
+                accepted by the fixture interface.
+
+        Returns:
+            None: No return value.
+        """
         self._scheduler.close()
         self._appservice.close()
 

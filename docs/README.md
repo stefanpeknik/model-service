@@ -26,9 +26,11 @@ substitute a September proposal or old EMPAIA note.
 
 | Task | Read |
 | --- | --- |
+| Read function contracts and navigate through source | [Source docstrings guide](guides/docstrings.md), covering arguments, returns, exceptions, field meanings, and links to the package maps |
 | Check the meaning of workflow, execution, provider, and artifact terminology | [Project glossary](../CONTEXT.md), which defines vocabulary rather than ticket status |
 | Navigate public HTTP routes, raw inference, immediate execution, and application wiring | [Public application package map](../model_service/README.md) |
 | Navigate scheduler ownership, transactions, retries, leases, and provider finish | [Scheduler package map](../execution_scheduler/README.md) |
+| Understand why durable scheduling runs outside Ray Serve | [Accepted scheduler placement decision](adr/0001-run-scheduler-outside-ray-serve.md), including the separate question of immediate HTTP routing |
 | Navigate invocation types, input access, dispatch, and resource cleanup | [Workflow runtime package map](../workflow_execution/README.md) |
 | Navigate heatmap processing and its Ray ingress | [Built-in workflows package map](../workflows/README.md) |
 | Change named workflow inputs, outputs, or configuration | [Workflow definition guide](../workflow-definitions/README.md), then the definition and validator |

@@ -1,3 +1,9 @@
+"""Generate synthetic pyramidal slide and region-mask TIFFs for native processor validation.
+
+The fixtures have known 256-pixel geometry and 0.5 micrometer pixel resolution, verified
+by reopening them through OpenSlide.
+"""
+
 from __future__ import annotations
 
 import sys
@@ -8,6 +14,17 @@ from ratiopath.openslide import OpenSlide
 
 
 def write_inputs(directory: Path) -> None:
+    """Write a constant-color slide and full-region mask, then verify their geometry, selected level, and physical resolution.
+
+    Args:
+        directory: Directory containing definitions or generated validation fixtures.
+
+    Returns:
+        None: No return value.
+
+    Raises:
+        RuntimeError: The required lifecycle state or operation result is inconsistent.
+    """
     directory.mkdir(parents=True, exist_ok=True)
     slide = pyvips.Image.black(256, 256, bands=3).new_from_image([180, 120, 90])
     mask = pyvips.Image.black(256, 256).new_from_image(255)

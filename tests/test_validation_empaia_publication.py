@@ -1,3 +1,5 @@
+"""Check TIFF-to-pixelmap publication through the mock AppService."""
+
 from __future__ import annotations
 
 import tempfile
@@ -21,7 +23,17 @@ else:
 
 @unittest.skipUnless(HAS_VIPS, "libvips is unavailable")
 class ValidationEmpaiaPublicationTests(unittest.IsolatedAsyncioTestCase):
+    """Exercise TIFF-to-pixelmap publication through the mock AppService."""
+
     async def test_tiff_pixelmap_publication(self) -> None:
+        """Verify TIFF pixelmap publication.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "heatmap.tiff"
             pyvips.Image.black(8, 8).new_from_image(128).tiffsave(str(path))

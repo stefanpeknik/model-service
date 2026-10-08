@@ -1,3 +1,9 @@
+"""Execute a workflow behind input validation, deadline enforcement, and resource cleanup.
+
+Access adapters translate integration-specific data into paths. Workflows receive
+WorkflowContext and return typed results without owning HTTP or scheduler state.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -36,41 +42,148 @@ if TYPE_CHECKING:
 
 
 class Workflow(Protocol):
-    async def run(self, context: WorkflowContext) -> WorkflowResult: ...
+    """Define the computation hook implemented by each workflow."""
+
+    async def run(self, context: WorkflowContext) -> WorkflowResult:
+        """Compute declared outputs from prepared input access and configuration within the supplied deadline.
+
+        Args:
+            context: Invocation-scoped input/output access, resolved configuration, and
+                absolute deadline.
+
+        Returns:
+            WorkflowResult: Named inline outputs and/or references to completed artifact
+                files.
+        """
+        ...
 
 
 class WorkflowInputAccess(Protocol):
-    def input_path(self, name: str) -> Path: ...
+    """Provide invocation-scoped input/output paths, artifact visibility checks, and cleanup."""
 
-    def output_path(self, relative_path: str) -> Path: ...
+    def input_path(self, name: str) -> Path:
+        """Resolve a named input to a local readable path or reject unsupported input access.
 
-    def is_visible_artifact(self, path: Path) -> bool: ...
+        Args:
+            name: Declared workflow input name to resolve.
 
-    async def aclose(self) -> None: ...
+        Returns:
+            Path: Existing local file for the named input; invalid or unavailable inputs
+                raise an invocation error.
+
+        Raises:
+            InvalidWorkflowInvocation: The named input cannot be resolved through this
+                access adapter.
+        """
+        ...
+
+    def output_path(self, relative_path: str) -> Path:
+        """Allocate an output path within this invocation's permitted storage root.
+
+        Args:
+            relative_path: Output path relative to the permitted root.
+
+        Returns:
+            Path: Permitted output destination; allocating the path does not itself
+                create or complete the file.
+        """
+        ...
+
+    def is_visible_artifact(self, path: Path) -> bool:
+        """Check that an artifact is a completed file visible to the caller of this invocation.
+
+        Args:
+            path: Completed artifact path to check within this invocation's storage
+                boundary.
+
+        Returns:
+            bool: True only for a completed regular file visible within this
+                invocation's storage root.
+        """
+        ...
+
+    async def aclose(self) -> None:
+        """Release invocation-scoped sessions and temporary input resources.
+
+        Returns:
+            None: No return value.
+        """
+        ...
 
 
 class WorkflowInputAccessAdapter(Protocol):
+    """Create input access for one invocation using public and protected execution context."""
+
     def create(
         self,
         invocation: WorkflowInvocation,
         execution_context: WorkflowExecutionContext,
-    ) -> WorkflowInputAccess | Awaitable[WorkflowInputAccess]: ...
+    ) -> WorkflowInputAccess | Awaitable[WorkflowInputAccess]:
+        """Construct input access synchronously or asynchronously, materializing provider data when necessary.
+
+        Args:
+            invocation: Named inputs, resolved configuration, public access state, and
+                absolute workflow deadline.
+            execution_context: Private attempt identity and provider context kept
+                separate from the invocation.
+
+        Returns:
+            WorkflowInputAccess | Awaitable[WorkflowInputAccess]: Created invocation
+                access, or an awaitable that resolves to it.
+        """
+        ...
 
 
 @dataclass(frozen=True, slots=True)
 class WorkflowContext:
+    """Expose input/output access, resolved configuration, and the deadline to provider-neutral workflow code.
+
+    Attributes:
+        inputs: Input names mapped to the invocation's typed input values.
+        configuration: Fully resolved JSON workflow settings.
+        deadline_at: Absolute aware deadline, including input acquisition and execution.
+    """
+
     inputs: WorkflowInputAccess
     configuration: dict[str, JsonValue]
     deadline_at: datetime
 
     def input_path(self, name: str) -> Path:
+        """Resolve a declared input name through the active access adapter.
+
+        Args:
+            name: Declared workflow input name to resolve.
+
+        Returns:
+            Path: Existing local file for the named input; invalid or unavailable inputs
+                raise an invocation error.
+
+        Raises:
+            InvalidWorkflowInvocation: The selected access adapter cannot resolve the
+                named input.
+        """
         return self.inputs.input_path(name)
 
     def output_path(self, relative_path: str) -> Path:
+        """Allocate a workflow output path through the active access adapter.
+
+        Args:
+            relative_path: Output path relative to the permitted root.
+
+        Returns:
+            Path: Permitted output destination; allocating the path does not itself
+                create or complete the file.
+
+        Raises:
+            InvalidWorkflowInvocation: The selected access adapter rejects the output
+                path.
+        """
         return self.inputs.output_path(relative_path)
 
 
 class WorkflowApplication:
+    """Wrap computation with contract checks, absolute deadlines, safe failures, and bounded cleanup."""
+
     def __init__(
         self,
         definition: WorkflowDefinition,
@@ -79,6 +192,21 @@ class WorkflowApplication:
         access_adapters: Mapping[str, WorkflowInputAccessAdapter] | None = None,
         cleanup_timeout_seconds: float = 10,
     ) -> None:
+        """Register access adapters, including shared storage, and require a finite positive cleanup timeout.
+
+        Args:
+            definition: Workflow input/output contract or loaded YAML mapping to
+                translate.
+            workflow: Provider-neutral computation implementation wrapped by
+                WorkflowApplication.
+            access_adapters: Additional access-kind adapters; shared storage is
+                registered by default.
+            cleanup_timeout_seconds: Maximum wait for closing invocation-owned
+                resources.
+
+        Raises:
+            ValueError: cleanup_timeout_seconds is non-finite or nonpositive.
+        """
         if not math.isfinite(cleanup_timeout_seconds) or cleanup_timeout_seconds <= 0:
             raise ValueError("cleanup timeout must be finite and positive")
         self._definition = definition
@@ -95,6 +223,32 @@ class WorkflowApplication:
         invocation: WorkflowInvocation,
         execution_context: WorkflowExecutionContext | None = None,
     ) -> WorkflowResult:
+        """Validate the invocation, create access, execute under its deadline, validate outputs, and close access.
+
+        Unexpected errors become retryable safe failures. Cleanup runs even on
+        cancellation; cleanup errors preserve an existing primary failure but fail an
+        otherwise successful run.
+
+        Args:
+            invocation: Named inputs, resolved configuration, public access state, and
+                absolute workflow deadline.
+            execution_context: Private attempt identity and provider context kept
+                separate from the invocation.
+
+        Returns:
+            WorkflowResult: Named inline outputs and/or references to completed artifact
+                files.
+
+        Raises:
+            InvalidWorkflowInvocation: Inputs, resolved configuration, access context,
+                or deadline violate the workflow contract.
+            WorkflowContractViolation: The computation returned invalid or incomplete
+                declared outputs.
+            WorkflowFailure: Execution or resource cleanup fails with a safe classified
+                workflow error.
+            asyncio.CancelledError: The owning task, caller, deadline, or lease monitor
+                cancels the operation.
+        """
         validate_workflow_invocation(self._definition, invocation)
         access: WorkflowInputAccess | None = None
         primary_failure: BaseException | None = None
@@ -166,6 +320,22 @@ class WorkflowApplication:
         invocation: WorkflowInvocation,
         execution_context: WorkflowExecutionContext,
     ) -> WorkflowInputAccess:
+        """Select the invocation's access adapter, support sync or async creation, and reject an unknown kind.
+
+        Args:
+            invocation: Named inputs, resolved configuration, public access state, and
+                absolute workflow deadline.
+            execution_context: Private attempt identity and provider context kept
+                separate from the invocation.
+
+        Returns:
+            WorkflowInputAccess: Invocation-scoped paths, visibility checks, and cleanup
+                boundary.
+
+        Raises:
+            InvalidWorkflowInvocation: Inputs, resolved configuration, access context,
+                or deadline violate the workflow contract.
+        """
         adapter = self._access_adapters.get(invocation.input_access.kind)
         if adapter is None:
             raise InvalidWorkflowInvocation("unsupported input access kind")
@@ -179,6 +349,19 @@ class WorkflowApplication:
         result: WorkflowResult,
         access: WorkflowInputAccess,
     ) -> None:
+        """Require exactly the declared outputs, matching kinds/media types, finite inline JSON, and completed visible artifact files.
+
+        Args:
+            result: Typed workflow outputs to validate or serialize.
+            access: Invocation-scoped file access used to verify artifact visibility.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            WorkflowContractViolation: The computation returned invalid or incomplete
+                declared outputs.
+        """
         if not isinstance(result, WorkflowResult):
             raise WorkflowContractViolation("workflow returned an invalid result")
         if set(result.outputs) != set(self._definition.outputs):
@@ -218,6 +401,21 @@ def validate_workflow_invocation(
     *,
     now: datetime | None = None,
 ) -> None:
+    """Require a future timezone-aware deadline and exactly the declared input names with accepted kinds.
+
+    Args:
+        definition: Workflow input/output contract or loaded YAML mapping to translate.
+        invocation: Named inputs, resolved configuration, public access state, and
+            absolute workflow deadline.
+        now: Aware current time supplied by the repository or validation clock.
+
+    Returns:
+        None: No return value.
+
+    Raises:
+        InvalidWorkflowInvocation: Inputs, resolved configuration, access context, or
+            deadline violate the workflow contract.
+    """
     deadline = invocation.deadline_at
     if deadline.tzinfo is None or deadline.utcoffset() is None:
         raise InvalidWorkflowInvocation("deadline_at must include a timezone")

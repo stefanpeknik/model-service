@@ -1,3 +1,9 @@
+"""Host the historical dummy heatmap workflow used for deployment plumbing checks.
+
+This processor writes an 8-by-8 synthetic TIFF, not a native whole-slide heatmap. It can
+delay cancellation scenarios and optionally exercise mock EMPAIA input access.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -25,7 +31,18 @@ if TYPE_CHECKING:
 
 
 class ValidationHeatmapProcessor:
+    """Produce a fixed synthetic TIFF to exercise workflow I/O and cancellation without model inference."""
+
     async def build(self, request: HeatmapBuildRequest) -> None:
+        """Read both fixture files, optionally pause a cancellation scenario, and write the synthetic 8-by-8 TIFF.
+
+        Args:
+            request: Slide/mask files, destination, stride fraction, and TIFF tile
+                geometry.
+
+        Returns:
+            None: No return value.
+        """
         request.slide_path.read_bytes()
         request.tissue_mask_path.read_bytes()
         if "cancellation" in request.output_path.parts:
@@ -39,7 +56,10 @@ fastapi = FastAPI()
 @serve.deployment(num_replicas="auto")
 @serve.ingress(fastapi)
 class ValidationProstateHeatmapApplication:
+    """Expose the dummy processor through the same workflow contract as the native application."""
+
     def __init__(self) -> None:
+        """Wire the dummy workflow wrapper and optionally register EMPAIA workspace access from environment settings."""
         definition = WorkflowCatalog.default().get("prostate-heatmap")
         access_adapters = None
         gateway_factory_path = os.environ.get("EMPAIA_GATEWAY_FACTORY")
@@ -69,6 +89,16 @@ class ValidationProstateHeatmapApplication:
         },
     )
     async def run(self, body: WorkflowRunRequest) -> WorkflowResult:
+        """Execute the internal workflow request through the shared safe HTTP adapter.
+
+        Args:
+            body: Internal invocation envelope including private processing attempt
+                context.
+
+        Returns:
+            WorkflowResult: Named inline outputs and/or references to completed artifact
+                files.
+        """
         return await run_workflow_http(self._application, body, body.execution_context)
 
 

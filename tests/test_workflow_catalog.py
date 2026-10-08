@@ -1,3 +1,5 @@
+"""Check YAML contracts, configuration registration, defaults, and strict validation."""
+
 from __future__ import annotations
 
 import json
@@ -19,12 +21,30 @@ from workflows.heatmap.prostate import (
 
 
 class WorkflowCatalogTests(unittest.TestCase):
+    """Exercise YAML contracts, configuration registration, defaults, and strict validation."""
+
     def test_catalog_fails_closed_when_workflow_validator_is_missing(self) -> None:
+        """Verify catalog fails closed when workflow validator is missing.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         definition = WorkflowDefinition("unregistered", {}, {})
         with self.assertRaisesRegex(ValueError, "configuration registration"):
             WorkflowCatalog((definition,), configurations={})
 
     def test_configuration_free_workflow_explicitly_rejects_parameters(self) -> None:
+        """Verify configuration free workflow explicitly rejects parameters.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         catalog = WorkflowCatalog(
             (WorkflowDefinition("empty", {}, {}),),
             configurations={
@@ -38,6 +58,14 @@ class WorkflowCatalogTests(unittest.TestCase):
     def test_yaml_declarations_validate_consumed_fields_and_preserve_metadata(
         self,
     ) -> None:
+        """Verify YAML declarations validate consumed fields and preserve metadata.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         definition = {
             "identifier": "probe",
             "inputs": {"source": {"kinds": ["provider"], "empaia": {"type": "wsi"}}},
@@ -78,6 +106,14 @@ class WorkflowCatalogTests(unittest.TestCase):
     def test_submitted_configuration_overrides_defaults_without_mutating_them(
         self,
     ) -> None:
+        """Verify submitted configuration overrides defaults without mutating them.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         catalog = WorkflowCatalog.default()
         resolved = catalog.resolve_configuration(
             "prostate-heatmap",
@@ -96,6 +132,14 @@ class WorkflowCatalogTests(unittest.TestCase):
     def test_prostate_configuration_rejects_coercion_and_nonfinite_numbers(
         self,
     ) -> None:
+        """Verify prostate configuration rejects coercion and nonfinite numbers.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         values = WorkflowCatalog.default().resolve_configuration("prostate-heatmap", {})
         for invalid in [True, "0.5", float("inf"), float("nan")]:
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
@@ -106,6 +150,14 @@ class WorkflowCatalogTests(unittest.TestCase):
             validate_configuration({})
 
     def test_registration_validates_defaults_at_construction(self) -> None:
+        """Verify registration validates defaults at construction.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with self.assertRaisesRegex(ValueError, "must be empty"):
             WorkflowCatalog(
                 (WorkflowDefinition("empty", {}, {}),),
@@ -118,6 +170,14 @@ class WorkflowCatalogTests(unittest.TestCase):
             )
 
     def test_registration_rejects_configuration_for_undeclared_workflow(self) -> None:
+        """Verify registration rejects configuration for undeclared workflow.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with self.assertRaisesRegex(ValueError, "configuration registration"):
             WorkflowCatalog(
                 (WorkflowDefinition("empty", {}, {}),),
@@ -130,6 +190,14 @@ class WorkflowCatalogTests(unittest.TestCase):
             )
 
     def test_registration_retains_its_own_copy_of_defaults(self) -> None:
+        """Verify registration retains its own copy of defaults.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         defaults = default_configuration()
         catalog = WorkflowCatalog(
             (WorkflowCatalog.default().get("prostate-heatmap"),),
@@ -148,6 +216,14 @@ class WorkflowCatalogTests(unittest.TestCase):
     def test_registration_supports_required_configuration_without_defaults(
         self,
     ) -> None:
+        """Verify registration supports required configuration without defaults.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         catalog = WorkflowCatalog(
             (WorkflowCatalog.default().get("prostate-heatmap"),),
             configurations={

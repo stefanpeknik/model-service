@@ -1,3 +1,5 @@
+"""Check mock AppService scenario behavior and recorded publication state."""
+
 from __future__ import annotations
 
 import unittest
@@ -9,7 +11,17 @@ from validation.empaia_app_service import ValidationScenario, app
 
 
 class ValidationAppServiceTests(unittest.TestCase):
+    """Exercise mock AppService scenario behavior and recorded publication state."""
+
     def test_configuration_scenarios_are_explicit(self) -> None:
+        """Verify configuration scenarios are explicit.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         headers = {"Authorization": "Bearer synthetic-token"}
         with TestClient(app) as client:
             invalid = client.get(
@@ -26,6 +38,14 @@ class ValidationAppServiceTests(unittest.TestCase):
             self.assertEqual(unavailable.status_code, 503)
 
     def test_workflow_failure_points_at_an_unavailable_slide(self) -> None:
+        """Verify workflow failure points at an unavailable slide.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         job_id = f"{ValidationScenario.WORKFLOW_FAILURE}-contract"
         headers = {"Authorization": "Bearer synthetic-token"}
         with TestClient(app) as client:
@@ -46,6 +66,14 @@ class ValidationAppServiceTests(unittest.TestCase):
             self.assertEqual(recorded.json()["failure"], "safe failure")
 
     def test_publication_and_finalization_failures_are_counted(self) -> None:
+        """Verify publication and finalization failures are counted.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         headers = {"Authorization": "Bearer synthetic-token"}
         with TestClient(app) as client:
             publication_job = f"{ValidationScenario.PUBLICATION_FAILURE}-contract"
@@ -85,6 +113,14 @@ class ValidationAppServiceTests(unittest.TestCase):
             self.assertEqual(finalization["finalize_attempts"], 1)
 
     def test_scheduler_restart_delays_only_the_first_slide_access(self) -> None:
+        """Verify scheduler restart delays only the first slide access.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         job_id = f"{ValidationScenario.SCHEDULER_RESTART}-contract"
         headers = {"Authorization": "Bearer synthetic-token"}
         path = f"/v3/rationai/{job_id}/inputs/slide/direct-access"
@@ -103,6 +139,14 @@ class ValidationAppServiceTests(unittest.TestCase):
         sleep.assert_awaited_once_with(45)
 
     def test_ray_restart_delays_only_the_first_slide_access(self) -> None:
+        """Verify Ray restart delays only the first slide access.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         job_id = f"{ValidationScenario.RAY_RESTART}-contract"
         headers = {"Authorization": "Bearer synthetic-token"}
         path = f"/v3/rationai/{job_id}/inputs/slide/direct-access"
@@ -121,6 +165,14 @@ class ValidationAppServiceTests(unittest.TestCase):
         sleep.assert_awaited_once_with(45)
 
     def test_rectangle_input_has_no_direct_access(self) -> None:
+        """Verify rectangle input has no direct access.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         job_id = f"{ValidationScenario.RECTANGLE}-contract"
         headers = {"Authorization": "Bearer synthetic-token"}
         with TestClient(app) as client:
@@ -141,6 +193,14 @@ class ValidationAppServiceTests(unittest.TestCase):
             self.assertEqual(recorded.json()["rectangle_reads"], 1)
 
     def test_records_public_contract(self) -> None:
+        """Verify records public contract.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         job_id = "validation-contract"
         headers = {"Authorization": "Bearer synthetic-token"}
         with TestClient(app) as client:

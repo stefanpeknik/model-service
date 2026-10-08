@@ -1,3 +1,9 @@
+"""Demonstrate SDK workflow and raw inference calls against the historical dummy deployment.
+
+The .dat input paths belong to that profile; this demo is not suitable unchanged for the
+native full-WSI preset.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -15,6 +21,12 @@ from rationai.types.workflows import (
 
 
 def workflow_request() -> WorkflowRequest:
+    """Create a shared-storage dummy request with a unique TIFF destination and fully resolved configuration.
+
+    Returns:
+        WorkflowRequest: Typed SDK request using the selected shared-storage fixture
+            inputs.
+    """
     return WorkflowRequest(
         inputs={
             "slide": SharedPathInput("input/slide.dat"),
@@ -34,6 +46,20 @@ def workflow_request() -> WorkflowRequest:
 
 
 def demonstrate_workflows(client: Client) -> None:
+    """Schedule and poll a dummy workflow to success, then run an immediate request and print both results.
+
+    Args:
+        client: HTTP or SDK client used for requests; resource ownership is described
+            above.
+
+    Returns:
+        None: No return value.
+
+    Raises:
+        RuntimeError: The required lifecycle state or operation result is inconsistent.
+        TimeoutError: The described request, cleanup, or polling wait exceeds its time
+            budget.
+    """
     scheduled = client.workflows.schedule("prostate-heatmap", workflow_request())
     execution_id = scheduled.execution.id
     print(f"Scheduled execution: {execution_id}", flush=True)
@@ -72,12 +98,26 @@ def demonstrate_workflows(client: Client) -> None:
 
 
 def demonstrate_inference(client: Client) -> None:
+    """Send an all-zero 512-pixel tile through the SDK raw classifier endpoint and print its score.
+
+    Args:
+        client: HTTP or SDK client used for requests; resource ownership is described
+            above.
+
+    Returns:
+        None: No return value.
+    """
     tile = np.zeros((512, 512, 3), dtype=np.uint8)
     score = client.models.classify_image("prostate-classifier-1", tile, timeout=900)
     print(f"Classifier score for an all-zero tile: {score}", flush=True)
 
 
 def main() -> None:
+    """Parse the validation origin and selected demo part, then own the SDK client while performing live requests.
+
+    Returns:
+        None: No return value.
+    """
     parser = argparse.ArgumentParser(
         description="Historical dummy-profile SDK demo; not for the native full-WSI preset."
     )

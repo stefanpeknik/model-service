@@ -1,3 +1,10 @@
+"""Expose the prostate workflow as a Ray Serve HTTP application.
+
+Serve reconfiguration wires slide processing to the classifier's Ray handle and optional
+EMPAIA input access. This replica owns computation, not the durable scheduler or
+database.
+"""
+
 from __future__ import annotations
 
 import os
@@ -26,6 +33,13 @@ from workflows.heatmap.ray_predictor import RayHeatmapPredictor
 
 
 class Config(TypedDict):
+    """Declare thread and tile-concurrency settings supplied by Ray Serve user configuration.
+
+    Attributes:
+        num_threads: Number of synchronous slide-read threads.
+        max_concurrent_tasks: Maximum in-flight tile read/prediction tasks.
+    """
+
     num_threads: int
     max_concurrent_tasks: int
 
@@ -38,6 +52,17 @@ async def invalid_request(
     _request: Request,
     _error: RequestValidationError,
 ) -> JSONResponse:
+    """Return a safe 422 validation envelope without reflecting the internal request or protected context.
+
+    Args:
+        _request: Unused request to validate, admit, dispatch, forward, or process, as
+            specified by its declared type; retained to match the interface.
+        _error: Unused safe domain error or injected integration exception to classify;
+            retained to match the interface.
+
+    Returns:
+        JSONResponse: Safe JSON validation or availability response.
+    """
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content={
@@ -53,10 +78,22 @@ async def invalid_request(
 @serve.deployment(num_replicas="auto")
 @serve.ingress(fastapi)
 class ProstateHeatmapApplication:
+    """Host one configured workflow application behind Ray Serve's internal ingress."""
+
     def __init__(self) -> None:
+        """Start unconfigured until Ray Serve supplies user configuration."""
         self._application: WorkflowApplication | None = None
 
     def reconfigure(self, config: Config) -> None:
+        """Build the processor, classifier handle adapter, workflow wrapper, and optional provider access from configuration/environment.
+
+        Args:
+            config: Ray Serve user configuration for read-thread and tile-concurrency
+                limits.
+
+        Returns:
+            None: No return value.
+        """
         catalog = WorkflowCatalog.default()
         definition = catalog.get("prostate-heatmap")
         processor = SlideHeatmapProcessor(
@@ -98,6 +135,20 @@ class ProstateHeatmapApplication:
         },
     )
     async def run(self, body: WorkflowRunRequest) -> WorkflowResult:
+        """Reject an unconfigured replica or execute the internal request through the shared safe HTTP adapter.
+
+        Args:
+            body: Internal invocation envelope including private processing attempt
+                context.
+
+        Returns:
+            WorkflowResult: Named inline outputs and/or references to completed artifact
+                files.
+
+        Raises:
+            HTTPException: The request fails the route's safe validation, availability,
+                or execution contract.
+        """
         if self._application is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

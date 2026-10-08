@@ -1,3 +1,5 @@
+"""Check strict public/private context validation and internal HTTP context separation."""
+
 from __future__ import annotations
 
 import unittest
@@ -37,6 +39,17 @@ from workflow_execution.serialization import invocation_to_dict
 
 
 def invocation(kind: str, state: dict) -> WorkflowInvocation:
+    """Build an invocation with the test access kind/state and a future absolute deadline.
+
+    Args:
+        kind: Input access adapter name or prototype timeout category.
+        state: Public serializable access-adapter configuration without provider
+            secrets.
+
+    Returns:
+        WorkflowInvocation: Typed inputs, resolved configuration, access settings, and
+            absolute deadline.
+    """
     return WorkflowInvocation(
         inputs={},
         resolved_configuration={},
@@ -46,7 +59,17 @@ def invocation(kind: str, state: dict) -> WorkflowInvocation:
 
 
 class InputAccessContextTests(unittest.IsolatedAsyncioTestCase):
+    """Exercise strict public/private context validation and internal HTTP context separation."""
+
     def test_shared_storage_rejects_missing_coerced_and_unexpected_fields(self) -> None:
+        """Verify shared storage rejects missing coerced and unexpected fields.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         adapter = SharedStorageAccessAdapter()
         for state in (
             {},
@@ -68,6 +91,14 @@ class InputAccessContextTests(unittest.IsolatedAsyncioTestCase):
     def test_runtime_context_rejects_invalid_attempts_and_non_json_secrets(
         self,
     ) -> None:
+        """Verify runtime context rejects invalid attempts and non JSON secrets.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         for attempt in ("", True, 1):
             with self.subTest(attempt=attempt), self.assertRaises(ValidationError):
                 WorkflowExecutionContext(processing_attempt_id=attempt)
@@ -79,7 +110,26 @@ class InputAccessContextTests(unittest.IsolatedAsyncioTestCase):
     async def test_empaia_validates_state_and_runtime_before_creating_gateway(
         self,
     ) -> None:
+        """Verify EMPAIA validates state and runtime before creating gateway.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
+
         def unexpected_gateway(_context):
+            """Fail if invalid or identity-only context handling unexpectedly opens a provider gateway.
+
+            Args:
+                _context: Unused workflow access/configuration or private provider job
+                    context, according to the declared type; retained to match the
+                    interface.
+
+            Returns:
+                None: No return value.
+            """
             self.fail("invalid context must not open an AppService gateway")
 
         public = {"api_url": "https://empaia.invalid", "job_id": "job"}
@@ -117,7 +167,26 @@ class InputAccessContextTests(unittest.IsolatedAsyncioTestCase):
     def test_empaia_admission_uses_strict_payload_schema_without_echoing_credentials(
         self,
     ) -> None:
+        """Verify EMPAIA admission uses strict payload schema without echoing credentials.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
+
         def unexpected_gateway(_context):
+            """Fail if invalid or identity-only context handling unexpectedly opens a provider gateway.
+
+            Args:
+                _context: Unused workflow access/configuration or private provider job
+                    context, according to the declared type; retained to match the
+                    interface.
+
+            Returns:
+                None: No return value.
+            """
             self.fail("identifying a schedule must not contact AppService")
 
         provider = EmpaiaProviderAdapter(WorkflowCatalog.default(), unexpected_gateway)
@@ -144,6 +213,14 @@ class InputAccessContextTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("secret", str(raised.exception))
 
     def test_context_representations_do_not_expose_credentials(self) -> None:
+        """Verify context representations do not expose credentials.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         protected = {
             "api_url": "https://empaia.invalid",
             "job_id": "job",
@@ -159,19 +236,57 @@ class InputAccessContextTests(unittest.IsolatedAsyncioTestCase):
     async def test_http_dispatch_round_trip_keeps_runtime_out_of_durable_invocation(
         self,
     ) -> None:
+        """Verify HTTP dispatch round trip keeps runtime out of durable invocation.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         seen_credentials = []
         closed = []
 
         class Gateway:
+            """Provide the gateway fixture local to this failure or cancellation scenario."""
+
             async def close(self):
+                """Simulate cancellation-resistant cleanup and expose its task lifetime through test events and a weak reference.
+
+                Returns:
+                    None: No return value.
+                """
                 closed.append(True)
 
         def gateway_factory(context):
+            """Record the supplied private credential and return the controlled gateway fixture.
+
+            Args:
+                context: Workflow access/configuration or private provider job context,
+                    according to the declared type.
+
+            Returns:
+                object: The delegated operation's result or controlled fixture value
+                    described above.
+            """
             seen_credentials.append(context.credential)
             return Gateway()
 
         class Workflow:
+            """Provide the workflow fixture local to this failure or cancellation scenario."""
+
             async def run(self, _context):
+                """Execute the scenario workflow fixture to expose the result or failure checked by its enclosing test.
+
+                Args:
+                    _context: Unused workflow access/configuration or private provider
+                        job context, according to the declared type; retained to match
+                        the interface.
+
+                Returns:
+                    WorkflowResult: Named inline outputs and/or references to completed
+                        artifact files.
+                """
                 return WorkflowResult({"score": InlineOutput(1)})
 
         with TemporaryDirectory() as directory:
@@ -189,6 +304,16 @@ class InputAccessContextTests(unittest.IsolatedAsyncioTestCase):
 
             @api.post("/workflows/probe/", response_model=WorkflowResult)
             async def run(body: WorkflowRunRequest) -> WorkflowResult:
+                """Execute the scenario workflow fixture to expose the result or failure checked by its enclosing test.
+
+                Args:
+                    body: Internal invocation envelope including private processing
+                        attempt context.
+
+                Returns:
+                    WorkflowResult: Named inline outputs and/or references to completed
+                        artifact files.
+                """
                 seen_requests.append(body)
                 return await run_workflow_http(
                     application, body, body.execution_context
@@ -227,8 +352,29 @@ class InputAccessContextTests(unittest.IsolatedAsyncioTestCase):
     async def test_direct_workflow_http_request_without_runtime_remains_valid(
         self,
     ) -> None:
+        """Verify direct workflow HTTP request without runtime remains valid.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
+
         class Workflow:
+            """Provide the workflow fixture local to this failure or cancellation scenario."""
+
             async def run(self, context):
+                """Execute the scenario workflow fixture to expose the result or failure checked by its enclosing test.
+
+                Args:
+                    context: Workflow access/configuration or private provider job
+                        context, according to the declared type.
+
+                Returns:
+                    WorkflowResult: Named inline outputs and/or references to completed
+                        artifact files.
+                """
                 return WorkflowResult(
                     {"path": InlineOutput(str(context.output_path("result.bin")))}
                 )
@@ -244,6 +390,16 @@ class InputAccessContextTests(unittest.IsolatedAsyncioTestCase):
 
             @api.post("/", response_model=WorkflowResult)
             async def run(body: WorkflowRunRequest) -> WorkflowResult:
+                """Execute the scenario workflow fixture to expose the result or failure checked by its enclosing test.
+
+                Args:
+                    body: Internal invocation envelope including private processing
+                        attempt context.
+
+                Returns:
+                    WorkflowResult: Named inline outputs and/or references to completed
+                        artifact files.
+                """
                 return await run_workflow_http(
                     application, body, body.execution_context
                 )

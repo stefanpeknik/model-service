@@ -1,3 +1,10 @@
+"""Wire production services for the standalone scheduler HTTP process.
+
+PostgreSQL stores durable executions; a shared HTTP client reaches Ray Serve. Standalone
+is always registered and EMPAIA is optional. App lifespan initializes storage and owns
+worker/client shutdown.
+"""
+
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -29,6 +36,23 @@ if TYPE_CHECKING:
 
 
 def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
+    """Construct production adapters and HTTP services from supplied settings or the environment. Connections and worker tasks begin in the app lifespan.
+
+    Args:
+        settings: Explicit runtime settings; production defaults come from environment
+            variables when omitted.
+
+    Returns:
+        FastAPI: Application with registered routes and the supplied resource lifespan.
+
+    Raises:
+        ValueError: Settings, encryption key, retry bounds, or catalog defaults are
+            invalid.
+        ValidationError: Workflow definitions or configured inference origins fail their
+            typed schemas.
+        ImportError: The configured EMPAIA factory module cannot be imported.
+        TypeError: The configured EMPAIA factory attribute is absent or not callable.
+    """
     config = settings or SchedulerSettings.from_environment()
     catalog = WorkflowCatalog.default()
     cipher = ProtectedContextCipher.from_base64(config.provider_context_key)
@@ -72,6 +96,22 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        """Initialize the execution schema, run the scheduler during application lifetime, and close the shared HTTP client even if startup fails.
+
+        Args:
+            _app: Unused protocol argument; retained to match the interface.
+
+        Yields:
+            None: Control while application or scheduler resources remain active.
+
+        Raises:
+            ExecutionRepositoryUnavailableError: Schema initialization cannot access
+                durable storage.
+            ExceptionGroup: Application or worker lifetime fails inside the scheduler
+                task group.
+            asyncio.CancelledError: Application lifetime is cancelled; workers are
+                joined and the shared HTTP client is closed.
+        """
         try:
             await repository.initialize()
             async with scheduler.running():

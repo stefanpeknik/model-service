@@ -1,3 +1,5 @@
+"""Check processor orchestration, model metadata, and cleanup using recording image-library doubles."""
+
 from __future__ import annotations
 
 import asyncio
@@ -21,65 +23,202 @@ from workflows.heatmap.ray_predictor import RayHeatmapPredictor
 
 
 class FakeSlide:
+    """Provide fixed slide geometry and resolution for processor orchestration tests."""
+
     level_dimensions = ((4, 4),)
 
     def __init__(self, _path: str) -> None:
-        pass
+        """Accept a slide path without opening a native image resource.
+
+        Args:
+            _path: Unused file, storage locator, or http endpoint selected by this
+                operation; retained to match the interface.
+        """
 
     def __enter__(self) -> Self:
+        """Return the fake slide for the processor resource context.
+
+        Returns:
+            Self: The same validated definition instance.
+        """
         return self
 
     def __exit__(self, *_args: object) -> None:
-        pass
+        """Exit without cleanup because no native slide was opened.
+
+        Args:
+            *_args: Positional arguments forwarded to the delegated operation or
+                accepted by the fixture interface.
+
+        Returns:
+            None: No return value.
+        """
 
     def closest_level(self, _mpp: float) -> int:
+        """Always select the fixture pyramid level zero.
+
+        Args:
+            _mpp: Unused protocol argument; retained to match the interface.
+
+        Returns:
+            int: Validated numeric setting or deterministic prediction described above.
+        """
         return 0
 
     def slide_resolution(self, _level: int) -> tuple[float, float]:
+        """Return the fixture resolution of 0.5 micrometers per pixel on both axes.
+
+        Args:
+            _level: Unused selected pyramid level index; retained to match the
+                interface.
+
+        Returns:
+            tuple[float, float]: Selected records, identifiers, or fixture values in the
+                ordering described above.
+        """
         return 0.5, 0.5
 
 
 class FakeVipsImage:
+    """Stand in for libvips images so tests can observe encoding or publication without native image I/O."""
+
     def __init__(self, recorded: dict[str, Any]) -> None:
+        """Retain the shared recording dictionary for processor image encoding assertions.
+
+        Args:
+            recorded: Shared dictionary of fixture calls and encoding options for
+                assertions.
+        """
         self.recorded = recorded
 
     def __mul__(self, _value: int) -> FakeVipsImage:
+        """Return the same fake image instead of scaling native pixels.
+
+        Args:
+            _value: Unused value being validated, serialized, converted, or checked by
+                this helper; retained to match the interface.
+
+        Returns:
+            FakeVipsImage: The fixture image or same chainable fake image instance.
+        """
         return self
 
     def resize(self, _scale: float, *, vscale: float) -> FakeVipsImage:
+        """Return the same fake image instead of executing native interpolation.
+
+        Args:
+            _scale: Unused protocol argument; retained to match the interface.
+            vscale: Vertical image resize factor.
+
+        Returns:
+            FakeVipsImage: The fixture image or same chainable fake image instance.
+        """
         return self
 
     def crop(self, _x: int, _y: int, _width: int, _height: int) -> FakeVipsImage:
+        """Return the same fake image instead of executing native cropping.
+
+        Args:
+            _x: Unused horizontal tile origin in selected slide-level pixels; retained
+                to match the interface.
+            _y: Unused vertical tile origin in selected slide-level pixels; retained to
+                match the interface.
+            _width: Unused image or crop width in pixels; retained to match the
+                interface.
+            _height: Unused image or crop height in pixels; retained to match the
+                interface.
+
+        Returns:
+            FakeVipsImage: The fixture image or same chainable fake image instance.
+        """
         return self
 
     def cast(self, _format: object) -> FakeVipsImage:
+        """Accept the requested conversion without native pixel processing.
+
+        Args:
+            _format: Unused protocol argument; retained to match the interface.
+
+        Returns:
+            FakeVipsImage: The fixture image or same chainable fake image instance.
+        """
         return self
 
     def tiffsave(self, path: str, **options: object) -> None:
+        """Record TIFF encoding options and create a placeholder output file.
+
+        Args:
+            path: File, storage locator, or HTTP endpoint selected by this operation.
+            **options: Keyword arguments forwarded to the delegated operation or
+                accepted by the fixture interface.
+
+        Returns:
+            None: No return value.
+        """
         self.recorded["tiff_options"] = options
         Path(path).write_bytes(b"tiff")
 
 
 class FakeMaskBuilder:
+    """Record accumulator configuration, batches, and cleanup while returning a fixed score grid."""
+
     def __init__(self, recorded: dict[str, Any], **options: object) -> None:
+        """Record accumulator options and derive its fixture span from the supplied source extents.
+
+        Args:
+            recorded: Shared dictionary of fixture calls and encoding options for
+                assertions.
+            **options: Keyword arguments forwarded to the delegated operation or
+                accepted by the fixture interface.
+        """
         self.recorded = recorded
         recorded["mask_options"] = options
         self.span = np.asarray(options["source_extents"])
 
     def update_batch(self, *, batch: np.ndarray, coords: np.ndarray) -> None:
+        """Record the score batch and row/column coordinates passed to accumulation.
+
+        Args:
+            batch: Predicted score tiles in batch/channel/height/width order.
+            coords: Tile placement coordinates in row/column order.
+
+        Returns:
+            None: No return value.
+        """
         self.recorded["batch"] = batch
         self.recorded["coords"] = coords
 
     def finalize(self) -> dict[str, np.ndarray]:
+        """Return a fixed one-channel 4-by-4 float32 score grid.
+
+        Returns:
+            dict[str, np.ndarray]: Decoded, serialized, or recorded fields described
+                above.
+        """
         return {"mask": np.zeros((1, 4, 4), dtype=np.float32)}
 
     def cleanup(self) -> None:
+        """Run any configured cleanup assertion and record that accumulator cleanup occurred.
+
+        Returns:
+            None: No return value.
+        """
         if "check_cleanup" in self.recorded:
             self.recorded["check_cleanup"]()
         self.recorded["cleaned"] = True
 
 
 def module(name: str, **members: object) -> ModuleType:
+    """Create an importable fake module exposing the supplied image-library members.
+
+    Args:
+        name: Input/output name or configuration field selected by this operation.
+        **members: Keyword arguments forwarded to the delegated operation or accepted by
+            the fixture interface.
+
+    Returns:
+        ModuleType: Fake importable module exposing the supplied fixture members.
+    """
     result = ModuleType(name)
     for key, value in members.items():
         setattr(result, key, value)
@@ -87,7 +226,17 @@ def module(name: str, **members: object) -> ModuleType:
 
 
 class ProstateHeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
+    """Exercise processor orchestration, model metadata, and cleanup using recording image-library doubles."""
+
     async def test_small_valid_stride_still_processes_and_writes_tiff(self) -> None:
+        """Verify small valid stride still processes and writes TIFF.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         recorded: dict[str, Any] = {}
         model = SimpleNamespace(
             configuration=AsyncMock(return_value=ModelTileConfiguration(4, 1, 1, 0.5)),
@@ -95,6 +244,16 @@ class ProstateHeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
         )
 
         def grid_tiles(**options: object) -> list[tuple[int, int]]:
+            """Record requested tiling geometry and return one deterministic tile coordinate.
+
+            Args:
+                **options: Keyword arguments forwarded to the delegated operation or
+                    accepted by the fixture interface.
+
+            Returns:
+                list[tuple[int, int]]: Selected records, identifiers, or fixture values
+                    in the ordering described above.
+            """
             recorded["grid_options"] = options
             return [(0, 0)]
 
@@ -154,6 +313,20 @@ class ProstateHeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
             calls = 0
 
             async def failing_prediction(_tile: object) -> object:
+                """Fail one prediction after both start while the other blocks, exposing sibling-task cancellation.
+
+                Args:
+                    _tile: Unused one channel-first model input tile; retained to match
+                        the interface.
+
+                Returns:
+                    object: The delegated operation's result or controlled fixture value
+                        described above.
+
+                Raises:
+                    RuntimeError: The required lifecycle state or operation result is
+                        inconsistent.
+                """
                 nonlocal calls
                 calls += 1
                 if calls == 1:
@@ -182,6 +355,20 @@ class ProstateHeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
             calls = 0
 
             async def simultaneous_failures(_tile: object) -> object:
+                """Synchronize two prediction tasks so both fail in the same processor wait cycle.
+
+                Args:
+                    _tile: Unused one channel-first model input tile; retained to match
+                        the interface.
+
+                Returns:
+                    object: The delegated operation's result or controlled fixture value
+                        described above.
+
+                Raises:
+                    RuntimeError: The required lifecycle state or operation result is
+                        inconsistent.
+                """
                 nonlocal calls
                 calls += 1
                 if calls == 2:
@@ -212,6 +399,14 @@ class ProstateHeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(recorded["cleaned"])
 
     async def test_ray_adapter_preserves_model_id_and_tile(self) -> None:
+        """Verify Ray adapter preserves model id and tile.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         model = SimpleNamespace(
             get_config=SimpleNamespace(
                 remote=AsyncMock(
@@ -241,6 +436,14 @@ class ProstateHeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(model.predict.remote.call_args.args[0], tile)
 
     def test_model_metadata_rejects_invalid_dimensions_and_resolution(self) -> None:
+        """Verify model metadata rejects invalid dimensions and resolution.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         valid = {"tile_size": 4, "output_tile_size": 1, "n_channels": 1, "mpp": 0.5}
         for name, value in (
             ("tile_size", True),

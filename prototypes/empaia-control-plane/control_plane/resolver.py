@@ -1,3 +1,10 @@
+"""Resolve admitted jobs into local storage locators and immutable worker specifications.
+
+Historical SQLite control-plane prototype. The current production scheduler lives in
+execution_scheduler/ and uses PostgreSQL; these lifecycle rules are not its
+specification.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -32,15 +39,57 @@ logger = logging.getLogger(__name__)
 
 
 class ResolverAppService(Protocol):
-    def get_configuration(self, job_id: str) -> JobConfiguration: ...
+    """Define configuration, direct-access, and failure-report calls needed by prototype resolution."""
 
-    def get_direct_access(self, job_id: str, input_name: str) -> DirectAccess: ...
+    def get_configuration(self, job_id: str) -> JobConfiguration:
+        """Fetch the external job configuration for allowed model-parameter selection.
 
-    def report_failure(self, job_id: str, user_message: str) -> None: ...
+        Args:
+            job_id: External EMPAIA job identifier.
+
+        Returns:
+            JobConfiguration: Validated global and customer provider configuration
+                sections.
+        """
+        ...
+
+    def get_direct_access(self, job_id: str, input_name: str) -> DirectAccess:
+        """Resolve one job input to provider WSI storage metadata.
+
+        Args:
+            job_id: External EMPAIA job identifier.
+            input_name: Named external job input to resolve.
+
+        Returns:
+            DirectAccess: Validated provider shared path and direct-access support
+                metadata.
+        """
+        ...
+
+    def report_failure(self, job_id: str, user_message: str) -> None:
+        """Report a safe unsupported-job reason to AppService before terminal settlement.
+
+        Args:
+            job_id: External EMPAIA job identifier.
+            user_message: Safe external job failure message, bounded by the provider
+                contract.
+
+        Returns:
+            None: No return value.
+        """
+        ...
 
 
 @dataclass(frozen=True, slots=True)
 class ResolutionResult:
+    """Count candidates made ready, deferred, or failed during one resolver pass.
+
+    Attributes:
+        ready: Count of candidates successfully resolved.
+        deferred: Count of candidates awaiting another resolution pass.
+        failed: Count of candidates settled as failures.
+    """
+
     ready: int = 0
     deferred: int = 0
     failed: int = 0
@@ -56,6 +105,18 @@ class EmpaiaExecutionResolver:
         storage: StorageLocatorResolver,
         retry_seconds: float,
     ) -> None:
+        """Require a positive retry delay and retain the store, synchronous AppService boundary, and storage resolver.
+
+        Args:
+            store: Historical prototype transactional SQLite execution store.
+            app_service: Synchronous provider boundary used by prototype resolution.
+            storage: Prototype resolver authorizing provider locators against configured
+                mounts.
+            retry_seconds: Delay before retrying transient provider resolution.
+
+        Raises:
+            ValueError: A value fails the validation described above.
+        """
         if retry_seconds <= 0:
             raise ValueError("resolution retry delay must be positive")
         self._store = store
@@ -64,6 +125,15 @@ class EmpaiaExecutionResolver:
         self._retry_seconds = retry_seconds
 
     def run_once(self, limit: int = 25) -> ResolutionResult:
+        """Resolve a bounded set of due candidates and count outcomes without dispatching worker computation.
+
+        Args:
+            limit: Maximum number of eligible records to inspect or return.
+
+        Returns:
+            ResolutionResult: Counts of ready, deferred, and failed resolution
+                candidates.
+        """
         result = ResolutionResult()
         for candidate in self._store.list_resolution_candidates(limit):
             outcome = self._resolve_candidate(candidate)
@@ -75,6 +145,14 @@ class EmpaiaExecutionResolver:
         return result
 
     def _resolve_candidate(self, candidate: Execution) -> str:
+        """Resolve configuration, plugin support, and authorized storage, then pin a ready specification or classify retry/terminal failure.
+
+        Args:
+            candidate: Due prototype execution selected for provider resolution.
+
+        Returns:
+            str: The identifier, path, or normalized text described above.
+        """
         try:
             execution = self._store.begin_resolution(candidate.id)
         except InvalidTransitionError:
@@ -146,6 +224,22 @@ class EmpaiaExecutionResolver:
     def _select_parameters(
         execution: Execution, configuration: JobConfiguration
     ) -> dict[str, JsonValue]:
+        """Select exactly admitted parameter names, rejecting missing values and ambiguous global/customer definitions.
+
+        Args:
+            execution: Current execution snapshot or public view to inspect or
+                transition.
+            configuration: Resolved workflow values or provider global/customer sections
+                to validate.
+
+        Returns:
+            dict[str, JsonValue]: Decoded, serialized, or recorded fields described
+                above.
+
+        Raises:
+            AppServiceApplicationError: The prototype provider rejects the external
+                job's data or configuration.
+        """
         ambiguous = (
             set(execution.model_parameter_names)
             & set(configuration.global_values)
@@ -164,6 +258,15 @@ class EmpaiaExecutionResolver:
         return {name: combined[name] for name in execution.model_parameter_names}
 
     def _settle_application_failure(self, execution: Execution) -> str:
+        """Report a pending unsupported-job failure externally, retrying temporary reporting errors before durable failure settlement.
+
+        Args:
+            execution: Current execution snapshot or public view to inspect or
+                transition.
+
+        Returns:
+            str: The identifier, path, or normalized text described above.
+        """
         try:
             self._app_service.report_failure(
                 execution.empaia_job_id,
@@ -183,11 +286,33 @@ class EmpaiaExecutionResolver:
         return "failed"
 
     def _defer(self, execution: Execution) -> None:
+        """Schedule a future resolution pass while tolerating a concurrent lifecycle change.
+
+        Args:
+            execution: Current execution snapshot or public view to inspect or
+                transition.
+
+        Returns:
+            None: No return value.
+        """
         retry_at = datetime.now(UTC) + timedelta(seconds=self._retry_seconds)
         with suppress(InvalidTransitionError):
             self._store.defer_resolution(execution.id, retry_at)
 
     async def run(self, stop: asyncio.Event, interval_seconds: float) -> None:
+        """Run synchronous resolution in a thread, logging failed passes and polling until shutdown.
+
+        Args:
+            stop: Event signalled when the owning worker/resolver lifetime should end.
+            interval_seconds: Positive polling interval between resolver or reconciler
+                passes.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            ValueError: A value fails the validation described above.
+        """
         if interval_seconds <= 0:
             raise ValueError("resolution interval must be positive")
         while not stop.is_set():

@@ -1,3 +1,9 @@
+"""Own durable admission, public status projection, cancellation, and worker lifetime.
+
+This layer selects provider adapters and coordinates repository calls.
+ExecutionTransitions decides state changes; ExecutionWorker performs leased work.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -34,6 +40,8 @@ if TYPE_CHECKING:
 
 
 class ExecutionScheduler:
+    """Coordinate public operations and one background worker over injected repository and dispatch interfaces."""
+
     def __init__(
         self,
         *,
@@ -47,6 +55,29 @@ class ExecutionScheduler:
         lease_duration: timedelta = timedelta(seconds=60),
         poll_interval: float = 0.5,
     ) -> None:
+        """Validate timing settings and wire a worker with a private local cancellation registry. No tasks start here.
+
+        Args:
+            repository: Atomic execution storage boundary; the adapter controls
+                durability.
+            dispatch: Workflow transport used to invoke the selected Ray Serve
+                application.
+            providers: Provider name to integration adapter mapping enabled in this
+                scheduler.
+            known_workflows: Declared workflow IDs accepted by scheduler admission.
+            default_timeout: End-to-end budget when the schedule request omits a
+                timeout.
+            maximum_timeout: Upper bound on a requested end-to-end execution budget.
+            clock: Aware timestamp source for admission or deterministic tests; defaults
+                to UTC wall time.
+            lease_duration: How long a claimed attempt retains ownership without
+                renewal.
+            poll_interval: Positive interval between maintenance passes and empty/failed
+                claim polls.
+
+        Raises:
+            ValueError: lease_duration or poll_interval is nonpositive.
+        """
         if lease_duration <= timedelta(0):
             raise ValueError("lease_duration must be positive")
         if poll_interval <= 0:
@@ -71,6 +102,22 @@ class ExecutionScheduler:
 
     @asynccontextmanager
     async def running(self) -> AsyncIterator[None]:
+        """Start and join worker tasks for this context's lifetime.
+
+        Concurrent entry is rejected. Exiting stops local tasks without cancelling
+        durable executions, which another worker can recover after lease expiry.
+        Injected resources remain caller-owned.
+
+        Yields:
+            None: Control while application or scheduler resources remain active.
+
+        Raises:
+            RuntimeError: This scheduler lifetime is already active.
+            asyncio.CancelledError: The owning task is cancelled; worker tasks are
+                joined before propagation.
+            ExceptionGroup: The context body or a background task fails inside the task
+                group.
+        """
         if self._running:
             raise RuntimeError("execution scheduler is already running")
         self._running = True
@@ -89,6 +136,15 @@ class ExecutionScheduler:
             self._running = False
 
     async def check_ready(self) -> None:
+        """Translate repository readiness failures into a public scheduling availability error.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            SchedulingUnavailableError: Admission or durable storage is temporarily
+                unavailable.
+        """
         try:
             await self._repository.check_ready()
         except ExecutionRepositoryUnavailableError as error:
@@ -97,6 +153,30 @@ class ExecutionScheduler:
             ) from error
 
     async def schedule(self, request: ScheduleRequest) -> ScheduleResult:
+        """Identify and replay a submission, prepare new inputs, then admit the complete execution.
+
+        Replay lookup precedes provider preparation. The timeout begins before
+        preparation and may be capped by the provider; atomic admission resolves races
+        after the early lookup.
+
+        Args:
+            request: Provider submission with workflow ID, caller body, replay key, and
+                optional execution budget.
+
+        Returns:
+            ScheduleResult: Public view of the new or replayed execution; created is
+                True only after inserting a new record.
+
+        Raises:
+            InvalidScheduleRequestError: Provider payload, configuration, paths, or
+                effective deadline are invalid.
+            ScheduleConflictError: A provider submission key already exists with
+                different request contents.
+            SchedulingUnavailableError: Admission or durable storage is temporarily
+                unavailable.
+            UnknownWorkflowError: The workflow is not declared in the configured
+                catalog.
+        """
         if request.workflow_id not in self._known_workflows:
             raise UnknownWorkflowError(request.workflow_id)
         try:
@@ -142,6 +222,20 @@ class ExecutionScheduler:
         )
 
     async def get(self, execution_id: str) -> ExecutionView:
+        """Read a durable record and project only its caller-visible status and terminal outcome.
+
+        Args:
+            execution_id: Durable execution identifier, not an external provider job ID.
+
+        Returns:
+            ExecutionView: Current public status, hiding stored results until succeeded
+                and errors until failed.
+
+        Raises:
+            SchedulingUnavailableError: Admission or durable storage is temporarily
+                unavailable.
+            UnknownExecutionError: The execution ID is absent from storage.
+        """
         try:
             execution = await self._repository.get(execution_id)
         except ExecutionRepositoryUnavailableError as error:
@@ -151,6 +245,20 @@ class ExecutionScheduler:
         return self._view(execution)
 
     async def cancel(self, execution_id: str) -> ExecutionView:
+        """Record cancellation and fence the current claim before requesting cancellation of any local task.
+
+        Args:
+            execution_id: Durable execution identifier, not an external provider job ID.
+
+        Returns:
+            ExecutionView: Cancelled execution view, or the unchanged view if an
+                existing terminal outcome already won.
+
+        Raises:
+            SchedulingUnavailableError: Admission or durable storage is temporarily
+                unavailable.
+            UnknownExecutionError: The execution ID is absent from storage.
+        """
         try:
             execution = await self._repository.request_cancel(execution_id)
         except ExecutionRepositoryUnavailableError as error:
@@ -161,6 +269,19 @@ class ExecutionScheduler:
         return self._view(execution)
 
     def _requested_timeout(self, request: ScheduleRequest) -> timedelta:
+        """Use the default timeout or clamp a positive requested timeout to the configured maximum.
+
+        Args:
+            request: Provider submission with workflow ID, caller body, replay key, and
+                optional execution budget.
+
+        Returns:
+            timedelta: Default or clamped positive end-to-end execution duration.
+
+        Raises:
+            InvalidScheduleRequestError: Provider payload, configuration, paths, or
+                effective deadline are invalid.
+        """
         if request.requested_timeout_seconds is None:
             return self._default_timeout
         if request.requested_timeout_seconds <= 0:
@@ -172,6 +293,16 @@ class ExecutionScheduler:
 
     @staticmethod
     def _view(execution: ExecutionRecord) -> ExecutionView:
+        """Hide internal fields and unfinished results when converting a record to the public execution view.
+
+        Args:
+            execution: Current immutable execution record; transitions return a
+                replacement without mutating it.
+
+        Returns:
+            ExecutionView: Public status and applicable terminal outcome, excluding
+                leases, counters, and private provider context.
+        """
         return ExecutionView(
             id=execution.id,
             workflow_id=execution.workflow_id,

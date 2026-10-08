@@ -1,3 +1,5 @@
+"""Check SDK binary classifier requests through the public API to the deterministic validation Ray model."""
+
 from __future__ import annotations
 
 import os
@@ -15,7 +17,17 @@ os.environ.setdefault("RAY_ENABLE_UV_RUN_RUNTIME_ENV", "0")
     "set RUN_RAY_SERVE_INTEGRATION=1 to run local Ray Serve validation",
 )
 class ValidationRawInferenceTests(unittest.IsolatedAsyncioTestCase):
+    """Exercise SDK binary classifier requests through the public API to the deterministic validation Ray model."""
+
     async def test_sdk_classifies_through_public_scheduler_and_ray_serve(self) -> None:
+        """Verify SDK classifies through public scheduler and Ray serve.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         import httpx
         import numpy as np
         import ray

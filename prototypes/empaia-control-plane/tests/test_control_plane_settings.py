@@ -1,3 +1,9 @@
+"""Check historical prototype credential-file and app mapping configuration.
+
+These cases describe the archived SQLite prototype rather than the current production
+scheduler.
+"""
+
 from __future__ import annotations
 
 import json
@@ -11,7 +17,17 @@ from control_plane.settings import Settings
 
 
 class SettingsTestCase(unittest.TestCase):
+    """Exercise historical prototype credential-file and app mapping configuration."""
+
     def test_settings_load_token_file_and_app_mapping(self) -> None:
+        """Verify settings load token file and app mapping.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with tempfile.TemporaryDirectory() as temp_dir:
             token_path = Path(temp_dir) / "jes-token"
             token_path.write_text("secret-token\n", encoding="utf-8")
@@ -60,6 +76,14 @@ class SettingsTestCase(unittest.TestCase):
         self.assertEqual("slides", settings.storage_mappings[0].storage_id)
 
     def test_duplicate_app_mapping_is_rejected(self) -> None:
+        """Verify duplicate app mapping is rejected.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with tempfile.TemporaryDirectory() as temp_dir:
             token_path = Path(temp_dir) / "jes-token"
             token_path.write_text("secret-token", encoding="utf-8")

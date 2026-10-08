@@ -1,3 +1,10 @@
+"""Check recovery after live validation scheduler, Ray, and Serve controller interruption.
+
+Opt-in scenarios execute oc commands that restart or delete validation resources and
+create live executions. They require their configured validation profile and are not run
+by offline unit discovery.
+"""
+
 from __future__ import annotations
 
 import base64
@@ -29,18 +36,32 @@ SCHEDULER_DEPLOYMENT = "model-service-validation-execution-scheduler"
 
 @dataclass(frozen=True, slots=True)
 class ServeControllerProcess:
+    """Identify a live validation Serve controller by Ray actor ID and operating-system PID."""
+
     actor_id: str
     pid: int
 
 
 @dataclass(slots=True)
 class PortForward:
+    """Own an oc port-forward subprocess and wait for its local port before live requests."""
+
     resource: str
     local_port: int
     remote_port: int
     process: subprocess.Popen[str] | None = None
 
     def __enter__(self) -> PortForward:
+        """Start the configured oc port forward and wait up to 30 seconds for its local port, cleaning up if it fails.
+
+        Returns:
+            PortForward: The context with its local port-forward process ready for
+                requests.
+
+        Raises:
+            RuntimeError: The required lifecycle state or operation result is
+                inconsistent.
+        """
         self.process = subprocess.Popen(
             [
                 "oc",
@@ -75,6 +96,16 @@ class PortForward:
         _exception: BaseException | None,
         _traceback: TracebackType | None,
     ) -> None:
+        """Terminate the owned port-forward process, kill it if necessary, and close its stderr pipe.
+
+        Args:
+            _exception_type: Unused protocol argument; retained to match the interface.
+            _exception: Unused protocol argument; retained to match the interface.
+            _traceback: Unused protocol argument; retained to match the interface.
+
+        Returns:
+            None: No return value.
+        """
         if self.process is None:
             return
         self.process.terminate()
@@ -88,11 +119,21 @@ class PortForward:
 
 
 class DeployedSchedulerRecoveryTests(unittest.TestCase):
+    """Exercise live recovery after validation scheduler, Ray, or Serve controller interruption."""
+
     @unittest.skipUnless(
         os.environ.get("VALIDATION_KUBERNETES_FAULTS") == "1",
         "VALIDATION_KUBERNETES_FAULTS=1 is required",
     )
     def test_finalization_ack_loss_does_not_replay_publication(self) -> None:
+        """Verify finalization ack loss does not replay publication.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         job_id = f"{ValidationScenario.FINALIZATION_ACK_LOST}-{uuid4().hex}"
         with (
             PortForward("service/model-service-validation-appservice", 18084, 8000),
@@ -167,6 +208,14 @@ class DeployedSchedulerRecoveryTests(unittest.TestCase):
     def test_replacement_scheduler_resumes_provider_finish_without_reprocessing(
         self,
     ) -> None:
+        """Verify replacement scheduler resumes provider finish without reprocessing.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         job_id = f"{ValidationScenario.FINISH_RESTART}-{uuid4().hex}"
         with (
             PortForward("service/model-service-validation-appservice", 18084, 8000),
@@ -227,6 +276,14 @@ class DeployedSchedulerRecoveryTests(unittest.TestCase):
         "VALIDATION_KUBERNETES_FAULTS=1 is required",
     )
     def test_replacement_scheduler_recovers_an_inflight_execution(self) -> None:
+        """Verify replacement scheduler recovers an inflight execution.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         job_id = f"{ValidationScenario.SCHEDULER_RESTART}-{uuid4().hex}"
         with (
             PortForward("service/model-service-validation-appservice", 18084, 8000),
@@ -281,6 +338,14 @@ class DeployedSchedulerRecoveryTests(unittest.TestCase):
         "VALIDATION_KUBERNETES_FAULTS=1 is required",
     )
     def test_processing_recovers_after_ray_head_loss(self) -> None:
+        """Verify processing recovers after Ray head loss.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         job_id = f"{ValidationScenario.RAY_RESTART}-{uuid4().hex}"
         with (
             PortForward("service/model-service-validation-appservice", 18084, 8000),
@@ -349,6 +414,14 @@ class DeployedSchedulerRecoveryTests(unittest.TestCase):
         "VALIDATION_KUBERNETES_FAULTS=1 is required",
     )
     def test_processing_recovers_after_ray_cluster_loss(self) -> None:
+        """Verify processing recovers after Ray cluster loss.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         job_id = f"{ValidationScenario.RAY_RESTART}-{uuid4().hex}"
         with (
             PortForward("service/model-service-validation-appservice", 18084, 8000),
@@ -436,6 +509,14 @@ class DeployedSchedulerRecoveryTests(unittest.TestCase):
         "VALIDATION_KUBERNETES_FAULTS=1 is required",
     )
     def test_processing_survives_serve_controller_loss(self) -> None:
+        """Verify processing survives serve controller loss.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         job_id = f"{ValidationScenario.RAY_RESTART}-{uuid4().hex}"
         with (
             PortForward("service/model-service-validation-appservice", 18084, 8000),
@@ -463,6 +544,14 @@ class DeployedSchedulerRecoveryTests(unittest.TestCase):
         "VALIDATION_KUBERNETES_FAULTS=1 is required",
     )
     def test_scaled_zero_accepts_work_after_serve_controller_restart(self) -> None:
+        """Verify scaled zero accepts work after serve controller restart.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with (
             PortForward("service/model-service-validation-appservice", 18084, 8000),
             httpx.Client(base_url="http://127.0.0.1:18084", timeout=30) as appservice,
@@ -490,6 +579,21 @@ def _schedule(
     job_id: str,
     requested_timeout_seconds: int | None = None,
 ) -> str:
+    """Submit a live mock EMPAIA job, require new admission, and return its durable execution ID.
+
+    Args:
+        client: HTTP or SDK client used for requests; resource ownership is described
+            above.
+        job_id: External EMPAIA job identifier.
+        requested_timeout_seconds: Optional positive end-to-end budget supplied by the
+            caller.
+
+    Returns:
+        str: Durable execution ID returned by newly accepted live provider admission.
+
+    Raises:
+        AssertionError: An expected invariant or fixture interaction does not hold.
+    """
     payload: dict[str, object] = {
         "installation_id": "validation",
         "api_url": (
@@ -513,6 +617,20 @@ def _schedule(
 def _wait_for_job_field(
     client: httpx.Client, job_id: str, field: str
 ) -> dict[str, object]:
+    """Poll mock AppService state for an expected field, failing on unexpected responses or timeout.
+
+    Args:
+        client: HTTP or SDK client used for requests; resource ownership is described
+            above.
+        job_id: External EMPAIA job identifier.
+        field: Observable mock job field to wait for.
+
+    Returns:
+        dict[str, object]: Decoded, serialized, or recorded fields described above.
+
+    Raises:
+        AssertionError: An expected invariant or fixture interaction does not hold.
+    """
     deadline = time.monotonic() + 180
     while time.monotonic() < deadline:
         response = client.get(f"/validation/jobs/{job_id}")
@@ -525,6 +643,15 @@ def _wait_for_job_field(
 
 
 def _validation_ray_head() -> tuple[str, str]:
+    """Resolve the validation Ray head and verify RayService/RayCluster ownership before fault injection.
+
+    Returns:
+        tuple[str, str]: Selected records, identifiers, or fixture values in the
+            ordering described above.
+
+    Raises:
+        AssertionError: An expected invariant or fixture interaction does not hold.
+    """
     service = json.loads(
         subprocess.check_output(
             ["oc", "-n", NAMESPACE, "get", "rayservice", RAYSERVICE, "-o", "json"],
@@ -577,6 +704,20 @@ def _validation_ray_head() -> tuple[str, str]:
 
 
 def _alive_serve_controller(head_pod: str) -> ServeControllerProcess | None:
+    """Find the sole live validation Serve controller actor and return its ID/PID, or None when absent.
+
+    Args:
+        head_pod: Verified validation Ray head pod used for inspection or fault
+            injection.
+
+    Returns:
+        ServeControllerProcess | None: Current live validation controller identity and
+            process ID. None indicates an absent, unsupported, or unmatched value as
+            described above.
+
+    Raises:
+        AssertionError: An expected invariant or fixture interaction does not hold.
+    """
     output = subprocess.check_output(
         [
             "oc",
@@ -618,6 +759,18 @@ def _alive_serve_controller(head_pod: str) -> ServeControllerProcess | None:
 
 
 def _restart_serve_controller(head_pod: str) -> None:
+    """Kill the validation Serve controller with restart enabled and wait for the same actor in a new process.
+
+    Args:
+        head_pod: Verified validation Ray head pod used for inspection or fault
+            injection.
+
+    Returns:
+        None: No return value.
+
+    Raises:
+        AssertionError: An expected invariant or fixture interaction does not hold.
+    """
     original = _alive_serve_controller(head_pod)
     if original is None:
         raise AssertionError("Serve controller is not alive")
@@ -657,6 +810,15 @@ def _restart_serve_controller(head_pod: str) -> None:
 
 
 def _serve_replica_states(head_pod: str) -> dict[str, object]:
+    """Read live Serve status from the validation head and extract dummy workflow replica state counts.
+
+    Args:
+        head_pod: Verified validation Ray head pod used for inspection or fault
+            injection.
+
+    Returns:
+        dict[str, object]: Decoded, serialized, or recorded fields described above.
+    """
     output = subprocess.check_output(
         [
             "oc",
@@ -681,6 +843,14 @@ def _serve_replica_states(head_pod: str) -> dict[str, object]:
 
 
 def _delete_validation_scheduler_pod() -> None:
+    """Require exactly one expected validation scheduler pod before deleting it for the recovery scenario.
+
+    Returns:
+        None: No return value.
+
+    Raises:
+        AssertionError: An expected invariant or fixture interaction does not hold.
+    """
     selector = (
         "app.kubernetes.io/name=model-service-execution-scheduler,"
         "app.kubernetes.io/instance=model-service-validation"
@@ -705,6 +875,20 @@ def _wait_for_terminal(
     execution_id: str,
     timeout_seconds: int = 180,
 ) -> dict[str, object]:
+    """Poll the public execution until success, failure, or cancellation, failing when its timeout expires.
+
+    Args:
+        client: HTTP or SDK client used for requests; resource ownership is described
+            above.
+        execution_id: Durable execution identifier, not an external provider job ID.
+        timeout_seconds: Maximum wait for cleanup, polling, or a classified operation.
+
+    Returns:
+        dict[str, object]: Decoded, serialized, or recorded fields described above.
+
+    Raises:
+        AssertionError: An expected invariant or fixture interaction does not hold.
+    """
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         response = client.get(f"/v1/executions/{execution_id}")
@@ -718,7 +902,22 @@ def _wait_for_terminal(
 
 
 def _credential() -> str:
+    """Build an unsigned synthetic JWT-shaped credential with an expiry claim for validation fixtures.
+
+    Returns:
+        str: Synthetic unsigned JWT-shaped test credential with an expiration claim.
+    """
+
     def encode(value: dict[str, object]) -> str:
+        """Encode a synthetic credential section as unpadded URL-safe base64 JSON.
+
+        Args:
+            value: Value being validated, serialized, converted, or checked by this
+                helper.
+
+        Returns:
+            str: Unpadded URL-safe base64 JSON section for a synthetic credential.
+        """
         return (
             base64.urlsafe_b64encode(json.dumps(value).encode()).rstrip(b"=").decode()
         )

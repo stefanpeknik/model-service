@@ -1,3 +1,5 @@
+"""Check repository claim ordering, workflow capacity, and fencing shared by both adapters."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -23,12 +25,37 @@ if TYPE_CHECKING:
 
 
 class ExecutionRepositoryContract:
+    """Exercise repository claim ordering, workflow capacity, and fencing shared by both adapters."""
+
     repository: ExecutionRepository
 
     async def _advance_time(self, duration: timedelta) -> None:
+        """Advance the repository test clock or wait for database time according to the concrete adapter.
+
+        Args:
+            duration: Amount of time to advance or wait in a deterministic lifecycle
+                scenario.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            NotImplementedError: The concrete repository contract fixture has not
+                supplied its clock hook.
+        """
         raise NotImplementedError
 
     async def _admit_execution(self, key: str, workflow_id: str = "heatmap") -> str:
+        """Admit a minimal execution for a selected workflow and replay key and return its ID.
+
+        Args:
+            key: Caller replay key identifying this fixture submission.
+            workflow_id: Declared workflow identifier used for catalog lookup and
+                dispatch routing.
+
+        Returns:
+            str: Durable ID of the minimal admitted repository fixture.
+        """
         deadline = datetime.now(UTC) + timedelta(minutes=5)
         admitted = await self.repository.admit(
             Admission(
@@ -49,6 +76,14 @@ class ExecutionRepositoryContract:
         return admitted.execution.id
 
     async def test_due_provider_finish_precedes_older_processing(self) -> None:
+        """Verify due provider finish precedes older processing.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         older_id = await self._admit_execution("older", "older-workflow")
         older_claim = await self.repository.claim_due("worker", timedelta(seconds=30))
         assert older_claim is not None
@@ -71,6 +106,14 @@ class ExecutionRepositoryContract:
         assert selected.kind is WorkKind.PROVIDER_FINISH
 
     async def test_processing_within_workflow_orders_by_due_time(self) -> None:
+        """Verify processing within workflow orders by due time.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         older_id = await self._admit_execution("older")
         older_claim = await self.repository.claim_due("worker", timedelta(seconds=30))
         assert older_claim is not None
@@ -89,6 +132,14 @@ class ExecutionRepositoryContract:
         assert selected.execution_id == newer_id, selected
 
     async def test_provider_finish_orders_by_due_time_before_creation(self) -> None:
+        """Verify provider finish orders by due time before creation.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         older_id = await self._admit_execution("older", "older-workflow")
         older = await self.repository.claim_due("worker", timedelta(seconds=30))
         assert older is not None
@@ -111,6 +162,14 @@ class ExecutionRepositoryContract:
         assert selected.kind is WorkKind.PROVIDER_FINISH
 
     async def test_retry_not_yet_due_does_not_block_new_processing(self) -> None:
+        """Verify retry not yet due does not block new processing.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         older_id = await self._admit_execution("older")
         claim = await self.repository.claim_due("worker", timedelta(seconds=30))
         assert claim is not None
@@ -126,6 +185,14 @@ class ExecutionRepositoryContract:
         assert selected.execution_id == newer_id, selected
 
     async def test_processing_workflows_order_by_oldest_eligible_creation(self) -> None:
+        """Verify processing workflows order by oldest eligible creation.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         older_id = await self._admit_execution("older", "older-workflow")
         older_claim = await self.repository.claim_due("worker", timedelta(seconds=30))
         assert older_claim is not None
@@ -144,6 +211,14 @@ class ExecutionRepositoryContract:
         assert selected.execution_id == older_id, selected
 
     async def test_workflow_at_capacity_does_not_block_another_workflow(self) -> None:
+        """Verify workflow at capacity does not block another workflow.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         await self._admit_execution("active")
         active = await self.repository.claim_due("worker", timedelta(seconds=30))
         assert active is not None
@@ -158,6 +233,14 @@ class ExecutionRepositoryContract:
         assert selected.execution_id == available_id, selected
 
     async def test_terminal_report_precedes_older_processing(self) -> None:
+        """Verify terminal report precedes older processing.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         await self._admit_execution("older")
         await self._advance_time(timedelta(milliseconds=10))
         cancelled_id = await self._admit_execution("cancelled")
@@ -170,6 +253,14 @@ class ExecutionRepositoryContract:
         assert selected.kind is WorkKind.PROVIDER_CANCELLATION_REPORT
 
     async def test_cancellation_fences_late_processing_result(self) -> None:
+        """Verify cancellation fences late processing result.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         execution_id = await self._admit_execution("cancelled")
         claim = await self.repository.claim_due("worker", timedelta(seconds=30))
         assert claim is not None

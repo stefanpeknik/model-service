@@ -1,3 +1,9 @@
+"""Check historical prototype SQLite admission, attempt ownership, timeout, and cancellation rules.
+
+These cases describe the archived SQLite prototype rather than the current production
+scheduler.
+"""
+
 from __future__ import annotations
 
 import tempfile
@@ -23,18 +29,42 @@ from control_plane.store import SQLiteExecutionStore
 
 
 class Clock:
+    """Provide a manually advanced UTC clock for deterministic prototype lifecycle tests."""
+
     def __init__(self) -> None:
+        """Start the prototype test clock at its fixed UTC baseline."""
         self.current = datetime(2026, 9, 6, tzinfo=UTC)
 
     def __call__(self) -> datetime:
+        """Return the current simulated UTC timestamp.
+
+        Returns:
+            datetime: Timezone-aware timestamp used for deadlines or durable lifecycle
+                decisions.
+        """
         return self.current
 
     def advance(self, seconds: int) -> None:
+        """Advance the prototype test clock by the supplied number of seconds.
+
+        Args:
+            seconds: Number of seconds to advance the prototype test clock.
+
+        Returns:
+            None: No return value.
+        """
         self.current += timedelta(seconds=seconds)
 
 
 class ControlPlaneTestCase(unittest.TestCase):
+    """Exercise historical prototype SQLite admission, attempt ownership, timeout, and cancellation rules."""
+
     def setUp(self) -> None:
+        """Create isolated fixtures and clients for historical prototype SQLite admission, attempt ownership, timeout, and cancellation rules.
+
+        Returns:
+            None: No return value.
+        """
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
         self.database_path = Path(self.temp_dir.name) / "jobs.db"
@@ -74,12 +104,25 @@ class ControlPlaneTestCase(unittest.TestCase):
         )
 
     def ready_execution(self) -> str:
+        """Admit, resolve, and mark the prototype fixture ready, returning its durable ID.
+
+        Returns:
+            str: Durable ID of the admitted and resolved prototype fixture.
+        """
         execution = self.service.admit(self.request).execution
         self.store.begin_resolution(execution.id)
         self.store.mark_ready(execution.id, self.spec)
         return execution.id
 
     def test_admission_is_durable_and_idempotent(self) -> None:
+        """Verify admission is durable and idempotent.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         first = self.service.admit(self.request)
         duplicate = self.service.admit(self.request)
         reopened = SQLiteExecutionStore(self.database_path).get(first.execution.id)
@@ -91,6 +134,14 @@ class ControlPlaneTestCase(unittest.TestCase):
         self.assertEqual(3, reopened.max_attempts)
 
     def test_conflicting_submission_identity_or_key_is_rejected(self) -> None:
+        """Verify conflicting submission identity or key is rejected.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         self.service.admit(self.request)
         different_job_same_key = AdmissionRequest(
             installation_alias="poc",
@@ -113,6 +164,14 @@ class ControlPlaneTestCase(unittest.TestCase):
             self.service.admit(same_job_different_key)
 
     def test_unknown_mapping_is_rejected_without_creating_a_job(self) -> None:
+        """Verify unknown mapping is rejected without creating a job.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         request = AdmissionRequest(
             installation_alias="poc",
             empaia_job_id="unknown-job",
@@ -125,6 +184,14 @@ class ControlPlaneTestCase(unittest.TestCase):
             self.service.admit(request)
 
     def test_claim_is_retry_idempotent_and_owned_by_one_attempt(self) -> None:
+        """Verify claim is retry idempotent and owned by one attempt.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         execution_id = self.ready_execution()
         attempt_id = str(uuid4())
         claimed = self.store.claim(execution_id, attempt_id)
@@ -139,6 +206,14 @@ class ControlPlaneTestCase(unittest.TestCase):
     def test_running_cancellation_is_fenced_without_waiting_for_heartbeat_loss(
         self,
     ) -> None:
+        """Verify running cancellation is fenced without waiting for heartbeat loss.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         execution_id = self.ready_execution()
         attempt_id = str(uuid4())
         self.store.claim(execution_id, attempt_id)
@@ -153,6 +228,14 @@ class ControlPlaneTestCase(unittest.TestCase):
         self.assertIsNone(cancelled.current_attempt_id)
 
     def test_timeout_policy_distinguishes_capacity_from_model_runtime(self) -> None:
+        """Verify timeout policy distinguishes capacity from model runtime.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         capacity_execution_id = self.ready_execution()
         self.clock.advance(60)
         self.assertEqual([], self.store.expire_timeouts(None))
@@ -178,6 +261,14 @@ class ControlPlaneTestCase(unittest.TestCase):
         self.assertEqual(TimeoutKind.MODEL_RUNTIME, runtime_expired.timeout_kind)
 
     def test_worker_retry_does_not_reset_original_runtime_deadline(self) -> None:
+        """Verify worker retry does not reset original runtime deadline.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         short_mapping = AppMapping(
             app_id="prostate-app",
             app_version="1",
@@ -218,6 +309,14 @@ class ControlPlaneTestCase(unittest.TestCase):
         self.assertEqual(first.first_claimed_at, second.first_claimed_at)
 
     def test_spec_cannot_override_profile_or_persist_credentials(self) -> None:
+        """Verify spec cannot override profile or persist credentials.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         execution = self.service.admit(self.request).execution
         self.store.begin_resolution(execution.id)
         conflicting = ExecutionSpec(

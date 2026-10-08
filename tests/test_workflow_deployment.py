@@ -1,3 +1,5 @@
+"""Check catalog and Helm deployment configuration agreement."""
+
 import json
 import shutil
 import subprocess
@@ -10,10 +12,20 @@ from workflow_execution.catalog import WorkflowCatalog
 
 
 class WorkflowDeploymentTests(unittest.TestCase):
+    """Exercise catalog and Helm deployment configuration agreement."""
+
     @unittest.skipUnless(
         shutil.which("helm"), "Helm is needed to verify rendered deployments"
     )
     def test_full_wsi_preset_joins_native_workflow_and_real_classifier(self) -> None:
+        """Verify full WSI preset joins native workflow and real classifier.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         root = Path(__file__).resolve().parents[1]
         rendered = subprocess.run(
             [
@@ -127,6 +139,14 @@ class WorkflowDeploymentTests(unittest.TestCase):
             )
 
     def test_repo_catalog_matches_enabled_helm_applications(self) -> None:
+        """Verify repo catalog matches enabled helm applications.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         root = Path(__file__).resolve().parents[1]
         chart = root / "helm" / "rayservice"
         values = yaml.safe_load((chart / "values.yaml").read_text(encoding="utf-8"))

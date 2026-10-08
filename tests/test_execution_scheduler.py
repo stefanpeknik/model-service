@@ -1,3 +1,5 @@
+"""Check admission, leases, recovery, retries, cancellation, and provider finish."""
+
 from __future__ import annotations
 
 import asyncio
@@ -63,9 +65,21 @@ if TYPE_CHECKING:
 
 
 class StandaloneProvider:
+    """Prepare minimal scheduler invocations without shared-file checks so tests can isolate orchestration."""
+
     name = "standalone"
 
     def identify(self, request: ScheduleRequest) -> SubmissionIdentity:
+        """Use the test replay key with a fixed fingerprint to isolate scheduler replay behavior.
+
+        Args:
+            request: Provider submission with workflow ID, caller body, replay key, and
+                optional execution budget.
+
+        Returns:
+            SubmissionIdentity: Provider-scoped replay key and canonical request
+                fingerprint.
+        """
         assert request.idempotency_key is not None
         return SubmissionIdentity(
             provider=self.name,
@@ -78,6 +92,18 @@ class StandaloneProvider:
         request: ScheduleRequest,
         deadline_at: datetime,
     ) -> PreparedWorkflow:
+        """Create an empty shared-storage invocation with the scheduler-supplied deadline.
+
+        Args:
+            request: Provider submission with workflow ID, caller body, replay key, and
+                optional execution budget.
+            deadline_at: Absolute aware deadline for the entire execution, including
+                preparation.
+
+        Returns:
+            PreparedWorkflow: Validated invocation, private provider state, and
+                applicable deadline limits.
+        """
         return PreparedWorkflow(
             invocation=WorkflowInvocation(
                 inputs={},
@@ -98,16 +124,40 @@ class StandaloneProvider:
         *,
         before_mutation: BeforeMutation,
     ) -> None:
+        """Complete without external writes or mutation guarding for standalone orchestration tests.
+
+        Args:
+            _protected_context: Unused private provider state that persistence encrypts
+                and internal dispatch carries separately; retained to match the
+                interface.
+            _outcome: Unused stored success, safe failure, or cancellation to report
+                through the provider; retained to match the interface.
+            before_mutation: Async guard awaited before the first external write to
+                persist and validate its durable claim.
+
+        Returns:
+            None: No return value.
+        """
         del before_mutation
 
 
 class RecordingProvider(StandaloneProvider):
+    """Record provider outcomes and inject finish failures independently of workflow computation."""
+
     def __init__(
         self,
         *,
         protected_context: dict[str, JsonValue] | None = None,
         finish_failures: list[ProviderFinishFailureError] | None = None,
     ) -> None:
+        """Set protected context, queued finish failures, and an empty recorded-outcome list.
+
+        Args:
+            protected_context: Private provider state that persistence encrypts and
+                internal dispatch carries separately.
+            finish_failures: Optional queued failures injected into successive provider
+                finish calls.
+        """
         self.protected_context = protected_context or {}
         self.finish_failures = finish_failures or []
         self.outcomes: list[ProviderFinishOutcome] = []
@@ -117,6 +167,18 @@ class RecordingProvider(StandaloneProvider):
         request: ScheduleRequest,
         deadline_at: datetime,
     ) -> PreparedWorkflow:
+        """Attach configured protected context to the minimal prepared invocation.
+
+        Args:
+            request: Provider submission with workflow ID, caller body, replay key, and
+                optional execution budget.
+            deadline_at: Absolute aware deadline for the entire execution, including
+                preparation.
+
+        Returns:
+            PreparedWorkflow: Validated invocation, private provider state, and
+                applicable deadline limits.
+        """
         prepared = await super().prepare(request, deadline_at)
         return PreparedWorkflow(
             invocation=prepared.invocation,
@@ -130,6 +192,20 @@ class RecordingProvider(StandaloneProvider):
         *,
         before_mutation: BeforeMutation,
     ) -> None:
+        """Record the outcome and raise the next injected finish failure if configured.
+
+        Args:
+            _protected_context: Unused private provider state that persistence encrypts
+                and internal dispatch carries separately; retained to match the
+                interface.
+            outcome: Stored success, safe failure, or cancellation to report through the
+                provider.
+            before_mutation: Async guard awaited before the first external write to
+                persist and validate its durable claim.
+
+        Returns:
+            None: No return value.
+        """
         del before_mutation
         self.outcomes.append(outcome)
         if self.finish_failures:
@@ -137,34 +213,99 @@ class RecordingProvider(StandaloneProvider):
 
 
 class MutableClock:
+    """Provide a manually advanced timestamp for scheduler lease, retry, and deadline tests."""
+
     def __init__(self, now: datetime) -> None:
+        """Set the initial aware timestamp supplied by the test.
+
+        Args:
+            now: Aware current time supplied by the repository or validation clock.
+        """
         self.now = now
 
     def __call__(self) -> datetime:
+        """Return the current test timestamp without advancing it.
+
+        Returns:
+            datetime: Timezone-aware timestamp used for deadlines or durable lifecycle
+                decisions.
+        """
         return self.now
 
     def advance(self, duration: timedelta) -> None:
+        """Advance simulated time by the supplied duration without sleeping.
+
+        Args:
+            duration: Amount of time to advance or wait in a deterministic lifecycle
+                scenario.
+
+        Returns:
+            None: No return value.
+        """
         self.now += duration
 
 
 class UnavailableExecutionRepository(InMemoryExecutionRepository):
+    """Inject replay-lookup storage unavailability into scheduler admission."""
+
     async def find_submission(
         self,
         _identity: SubmissionIdentity,
     ) -> None:
+        """Raise storage unavailability during the early replay lookup.
+
+        Args:
+            _identity: Unused provider-scoped replay key and request fingerprint;
+                retained to match the interface.
+
+        Returns:
+            None: Matching internal record, or None if the provider/key pair has never
+                been admitted.
+
+        Raises:
+            ExecutionRepositoryUnavailableError: Database access or the storage
+                transaction fails.
+        """
         raise ExecutionRepositoryUnavailableError("database unavailable")
 
 
 class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
+    """Exercise admission, leases, recovery, retries, cancellation, and provider finish."""
+
     async def test_claim_lease_loss_returns_before_another_worker_recovers_it(
         self,
     ) -> None:
+        """Verify claim lease loss returns before another worker recovers it.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
 
         async def dispatch(
             _invocation: WorkflowInvocation,
             _execution_context: WorkflowExecutionContext,
         ) -> WorkflowResult:
+            """Simulate the scenario computation, using events or injected failures to control completion and ownership races.
+
+            Args:
+                _invocation: Unused named inputs, resolved configuration, public access
+                    state, and absolute workflow deadline; retained to match the
+                    interface.
+                _execution_context: Unused private attempt identity and provider context
+                    kept separate from the invocation; retained to match the interface.
+
+            Returns:
+                WorkflowResult: Named inline outputs and/or references to completed
+                    artifact files.
+
+            Raises:
+                AssertionError: An expected invariant or fixture interaction does not
+                    hold.
+            """
             clock.advance(timedelta(seconds=2))
             await asyncio.Event().wait()
             raise AssertionError("unreachable")
@@ -186,6 +327,14 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(durable.result)
 
     async def test_worker_shutdown_cancels_active_dispatch_and_propagates(self) -> None:
+        """Verify worker shutdown cancels active dispatch and propagates.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         started = asyncio.Event()
         stopped = asyncio.Event()
 
@@ -193,6 +342,23 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             _invocation: WorkflowInvocation,
             _execution_context: WorkflowExecutionContext,
         ) -> WorkflowResult:
+            """Simulate the scenario computation, using events or injected failures to control completion and ownership races.
+
+            Args:
+                _invocation: Unused named inputs, resolved configuration, public access
+                    state, and absolute workflow deadline; retained to match the
+                    interface.
+                _execution_context: Unused private attempt identity and provider context
+                    kept separate from the invocation; retained to match the interface.
+
+            Returns:
+                WorkflowResult: Named inline outputs and/or references to completed
+                    artifact files.
+
+            Raises:
+                AssertionError: An expected invariant or fixture interaction does not
+                    hold.
+            """
             started.set()
             try:
                 await asyncio.Event().wait()
@@ -215,18 +381,47 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(stopped.is_set())
 
     async def test_renewal_error_stops_provider_finish(self) -> None:
+        """Verify renewal error stops provider finish.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         stopped = asyncio.Event()
 
         class FailingRenewalRepository(InMemoryExecutionRepository):
+            """Provide the failing renewal repository fixture local to this failure or cancellation scenario."""
+
             async def renew(
                 self,
                 execution_id: str,
                 fencing_token: str,
                 lease_duration: timedelta,
             ) -> RenewDirective:
+                """Inject a lease-renewal failure or stall to verify work stops when ownership cannot be maintained.
+
+                Args:
+                    execution_id: Durable execution identifier, not an external provider
+                        job ID.
+                    fencing_token: Current claim token; stale tokens cannot mutate
+                        execution state.
+                    lease_duration: How long a claimed attempt retains ownership without
+                        renewal.
+
+                Returns:
+                    RenewDirective: Instruction to continue or stop the current attempt.
+
+                Raises:
+                    ExecutionRepositoryUnavailableError: Database access or the storage
+                        transaction fails.
+                """
                 raise ExecutionRepositoryUnavailableError("renewal unavailable")
 
         class BlockingProvider(StandaloneProvider):
+            """Provide the blocking provider fixture local to this failure or cancellation scenario."""
+
             async def finish(
                 self,
                 _protected_context: dict[str, JsonValue],
@@ -234,6 +429,20 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
                 *,
                 before_mutation: BeforeMutation,
             ) -> None:
+                """Block fake provider completion until cancellation exposes lost lease ownership.
+
+                Args:
+                    _protected_context: Unused private provider state that persistence
+                        encrypts and internal dispatch carries separately; retained to
+                        match the interface.
+                    _outcome: Unused stored success, safe failure, or cancellation to
+                        report through the provider; retained to match the interface.
+                    before_mutation: Async guard awaited before the first external write
+                        to persist and validate its durable claim.
+
+                Returns:
+                    None: No return value.
+                """
                 try:
                     await asyncio.Event().wait()
                 finally:
@@ -266,15 +475,42 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
     async def test_stalled_renewal_stops_dispatch_before_abandoning_heartbeats(
         self,
     ) -> None:
+        """Verify stalled renewal stops dispatch before abandoning heartbeats.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         stopped = asyncio.Event()
 
         class StalledRenewalRepository(InMemoryExecutionRepository):
+            """Provide the stalled renewal repository fixture local to this failure or cancellation scenario."""
+
             async def renew(
                 self,
                 execution_id: str,
                 fencing_token: str,
                 lease_duration: timedelta,
             ) -> RenewDirective:
+                """Inject a lease-renewal failure or stall to verify work stops when ownership cannot be maintained.
+
+                Args:
+                    execution_id: Durable execution identifier, not an external provider
+                        job ID.
+                    fencing_token: Current claim token; stale tokens cannot mutate
+                        execution state.
+                    lease_duration: How long a claimed attempt retains ownership without
+                        renewal.
+
+                Returns:
+                    RenewDirective: Instruction to continue or stop the current attempt.
+
+                Raises:
+                    AssertionError: An expected invariant or fixture interaction does
+                        not hold.
+                """
                 await asyncio.Event().wait()
                 raise AssertionError("unreachable")
 
@@ -282,6 +518,23 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             _invocation: WorkflowInvocation,
             _execution_context: WorkflowExecutionContext,
         ) -> WorkflowResult:
+            """Simulate the scenario computation, using events or injected failures to control completion and ownership races.
+
+            Args:
+                _invocation: Unused named inputs, resolved configuration, public access
+                    state, and absolute workflow deadline; retained to match the
+                    interface.
+                _execution_context: Unused private attempt identity and provider context
+                    kept separate from the invocation; retained to match the interface.
+
+            Returns:
+                WorkflowResult: Named inline outputs and/or references to completed
+                    artifact files.
+
+            Raises:
+                AssertionError: An expected invariant or fixture interaction does not
+                    hold.
+            """
             try:
                 await asyncio.Event().wait()
             finally:
@@ -298,6 +551,11 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         task = asyncio.create_task(worker.run_once())
 
         async def cleanup() -> None:
+            """Cancel and join the test-owned background task so no worker is left running.
+
+            Returns:
+                None: No return value.
+            """
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
 
@@ -307,6 +565,14 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             await task
 
     async def test_worker_loop_survives_claim_lease_loss(self) -> None:
+        """Verify worker loop survives claim lease loss.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
         stopped = asyncio.Event()
         calls = 0
@@ -315,6 +581,19 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             _invocation: WorkflowInvocation,
             _execution_context: WorkflowExecutionContext,
         ) -> WorkflowResult:
+            """Simulate the scenario computation, using events or injected failures to control completion and ownership races.
+
+            Args:
+                _invocation: Unused named inputs, resolved configuration, public access
+                    state, and absolute workflow deadline; retained to match the
+                    interface.
+                _execution_context: Unused private attempt identity and provider context
+                    kept separate from the invocation; retained to match the interface.
+
+            Returns:
+                WorkflowResult: Named inline outputs and/or references to completed
+                    artifact files.
+            """
             nonlocal calls
             calls += 1
             if calls == 1:
@@ -347,11 +626,21 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls, 2)
 
     async def test_renewal_error_stops_dispatch_and_discards_late_result(self) -> None:
+        """Verify renewal error stops dispatch and discards late result.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
         stopped = asyncio.Event()
         calls = 0
 
         class FailingRenewalRepository(InMemoryExecutionRepository):
+            """Provide the failing renewal repository fixture local to this failure or cancellation scenario."""
+
             failed = False
 
             async def renew(
@@ -360,6 +649,23 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
                 fencing_token: str,
                 lease_duration: timedelta,
             ) -> RenewDirective:
+                """Inject a lease-renewal failure or stall to verify work stops when ownership cannot be maintained.
+
+                Args:
+                    execution_id: Durable execution identifier, not an external provider
+                        job ID.
+                    fencing_token: Current claim token; stale tokens cannot mutate
+                        execution state.
+                    lease_duration: How long a claimed attempt retains ownership without
+                        renewal.
+
+                Returns:
+                    RenewDirective: Instruction to continue or stop the current attempt.
+
+                Raises:
+                    ExecutionRepositoryUnavailableError: Database access or the storage
+                        transaction fails.
+                """
                 if not self.failed:
                     self.failed = True
                     clock.advance(timedelta(seconds=2))
@@ -370,6 +676,19 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             _invocation: WorkflowInvocation,
             _execution_context: WorkflowExecutionContext,
         ) -> WorkflowResult:
+            """Simulate the scenario computation, using events or injected failures to control completion and ownership races.
+
+            Args:
+                _invocation: Unused named inputs, resolved configuration, public access
+                    state, and absolute workflow deadline; retained to match the
+                    interface.
+                _execution_context: Unused private attempt identity and provider context
+                    kept separate from the invocation; retained to match the interface.
+
+            Returns:
+                WorkflowResult: Named inline outputs and/or references to completed
+                    artifact files.
+            """
             nonlocal calls
             calls += 1
             if calls == 1:
@@ -408,6 +727,14 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
     async def test_busy_worker_expires_queued_deadlines_without_dispatching_more(
         self,
     ) -> None:
+        """Verify busy worker expires queued deadlines without dispatching more.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
         started = asyncio.Event()
         calls = 0
@@ -416,6 +743,23 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             _invocation: WorkflowInvocation,
             _execution_context: WorkflowExecutionContext,
         ) -> WorkflowResult:
+            """Simulate the scenario computation, using events or injected failures to control completion and ownership races.
+
+            Args:
+                _invocation: Unused named inputs, resolved configuration, public access
+                    state, and absolute workflow deadline; retained to match the
+                    interface.
+                _execution_context: Unused private attempt identity and provider context
+                    kept separate from the invocation; retained to match the interface.
+
+            Returns:
+                WorkflowResult: Named inline outputs and/or references to completed
+                    artifact files.
+
+            Raises:
+                AssertionError: An expected invariant or fixture interaction does not
+                    hold.
+            """
             nonlocal calls
             calls += 1
             started.set()
@@ -451,6 +795,14 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(worker_task.done())
 
     async def test_expired_lease_rejects_settlement_before_recovery(self) -> None:
+        """Verify expired lease rejects settlement before recovery.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
         repository = InMemoryExecutionRepository(clock=clock)
         scheduler, _worker = self._scheduler_and_worker(
@@ -473,10 +825,24 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone((await repository.get(admitted.execution.id)).result)
 
     def _start_worker(self, worker: ExecutionWorker) -> asyncio.Task[None]:
+        """Start the worker polling loop and register async cleanup that cancels and joins it.
+
+        Args:
+            worker: Manually driven execution worker used by the fixture.
+
+        Returns:
+            asyncio.Task[None]: Started worker task, with fixture cleanup registered to
+                cancel and join it.
+        """
         stop = asyncio.Event()
         task = asyncio.create_task(worker.run(stop, poll_interval=0.005))
 
         async def cleanup() -> None:
+            """Cancel and join the test-owned background task so no worker is left running.
+
+            Returns:
+                None: No return value.
+            """
             stop.set()
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
@@ -487,11 +853,30 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
     async def _wait_for_status(
         self, scheduler: ExecutionScheduler, execution_id: str, status: ExecutionStatus
     ) -> None:
+        """Poll the in-memory scheduler until the expected status appears within a one-second test timeout.
+
+        Args:
+            scheduler: Durable scheduler boundary or its live HTTP client, according to
+                the declared type.
+            execution_id: Durable execution identifier, not an external provider job ID.
+            status: Expected caller-visible execution status.
+
+        Returns:
+            None: No return value.
+        """
         async with asyncio.timeout(1):
             while (await scheduler.get(execution_id)).status != status:
                 await asyncio.sleep(0.005)
 
     async def test_deadline_failure_is_reported_until_provider_deadline(self) -> None:
+        """Verify deadline failure is reported until provider deadline.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
         repository = InMemoryExecutionRepository(clock=clock)
         execution_deadline = clock() + timedelta(minutes=5)
@@ -535,6 +920,14 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(failed.work_kind)
 
     async def test_repository_failure_is_translated_by_the_scheduler(self) -> None:
+        """Verify repository failure is translated by the scheduler.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         provider = StandaloneProvider()
         scheduler = ExecutionScheduler(
             repository=UnavailableExecutionRepository(),
@@ -551,6 +944,14 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
     async def test_provider_finish_retry_uses_stored_result_without_redispatch(
         self,
     ) -> None:
+        """Verify provider finish retry uses stored result without redispatch.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         now = datetime(2026, 9, 17, 8, tzinfo=UTC)
         result = WorkflowResult(outputs={})
         dispatches = 0
@@ -559,6 +960,19 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             _invocation: WorkflowInvocation,
             _execution_context: WorkflowExecutionContext,
         ) -> WorkflowResult:
+            """Simulate the scenario computation, using events or injected failures to control completion and ownership races.
+
+            Args:
+                _invocation: Unused named inputs, resolved configuration, public access
+                    state, and absolute workflow deadline; retained to match the
+                    interface.
+                _execution_context: Unused private attempt identity and provider context
+                    kept separate from the invocation; retained to match the interface.
+
+            Returns:
+                WorkflowResult: Named inline outputs and/or references to completed
+                    artifact files.
+            """
             nonlocal dispatches
             dispatches += 1
             return result
@@ -602,6 +1016,14 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
     async def test_failure_and_cancellation_reports_do_not_reopen_terminal_state(
         self,
     ) -> None:
+        """Verify failure and cancellation reports do not reopen terminal state.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         provider = RecordingProvider()
         repository = InMemoryExecutionRepository()
 
@@ -609,6 +1031,23 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             _invocation: WorkflowInvocation,
             _execution_context: WorkflowExecutionContext,
         ) -> WorkflowResult:
+            """Inject the configured remote failure for safe classification or terminal reporting checks.
+
+            Args:
+                _invocation: Unused named inputs, resolved configuration, public access
+                    state, and absolute workflow deadline; retained to match the
+                    interface.
+                _execution_context: Unused private attempt identity and provider context
+                    kept separate from the invocation; retained to match the interface.
+
+            Returns:
+                WorkflowResult: Named inline outputs and/or references to completed
+                    artifact files.
+
+            Raises:
+                RemoteWorkflowFailureError: The remote workflow returns a safe
+                    structured failure.
+            """
             raise RemoteWorkflowFailureError(
                 code="invalid_slide",
                 safe_message="slide cannot be processed",
@@ -639,6 +1078,14 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(provider.outcomes[-1], ProviderCancellation)
 
     async def test_terminal_reporting_is_bounded_without_delaying_failure(self) -> None:
+        """Verify terminal reporting is bounded without delaying failure.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         failures = [
             ProviderFinishFailureError(
                 code="provider_unavailable",
@@ -656,6 +1103,23 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             _invocation: WorkflowInvocation,
             _execution_context: WorkflowExecutionContext,
         ) -> WorkflowResult:
+            """Inject the configured remote failure for safe classification or terminal reporting checks.
+
+            Args:
+                _invocation: Unused named inputs, resolved configuration, public access
+                    state, and absolute workflow deadline; retained to match the
+                    interface.
+                _execution_context: Unused private attempt identity and provider context
+                    kept separate from the invocation; retained to match the interface.
+
+            Returns:
+                WorkflowResult: Named inline outputs and/or references to completed
+                    artifact files.
+
+            Raises:
+                RemoteWorkflowFailureError: The remote workflow returns a safe
+                    structured failure.
+            """
             raise RemoteWorkflowFailureError(
                 code="invalid_slide",
                 safe_message="slide cannot be processed",
@@ -683,6 +1147,14 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
     async def test_unknown_provider_finish_outcome_never_retries_publication(
         self,
     ) -> None:
+        """Verify unknown provider finish outcome never retries publication.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         provider = RecordingProvider(
             finish_failures=[
                 ProviderFinishFailureError(
@@ -721,6 +1193,14 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
     async def test_protected_context_stays_separate_from_durable_invocation(
         self,
     ) -> None:
+        """Verify protected context stays separate from durable invocation.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         provider = RecordingProvider(protected_context={"credential": "secret"})
         repository = InMemoryExecutionRepository()
         seen_contexts: list[WorkflowExecutionContext] = []
@@ -728,6 +1208,18 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         def dispatch(
             invocation: WorkflowInvocation, execution_context: WorkflowExecutionContext
         ) -> WorkflowResult:
+            """Simulate the scenario computation, using events or injected failures to control completion and ownership races.
+
+            Args:
+                invocation: Named inputs, resolved configuration, public access state,
+                    and absolute workflow deadline.
+                execution_context: Private attempt identity and provider context kept
+                    separate from the invocation.
+
+            Returns:
+                WorkflowResult: Named inline outputs and/or references to completed
+                    artifact files.
+            """
             self.assertNotIn("credential", invocation.input_access.state)
             self.assertNotIn("processing_attempt_id", invocation.input_access.state)
             seen_contexts.append(execution_context)
@@ -750,6 +1242,14 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("processing_attempt_id", durable.invocation.input_access.state)
 
     async def test_scheduled_result_is_visible_after_provider_finish(self) -> None:
+        """Verify scheduled result is visible after provider finish.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         now = datetime(2026, 9, 17, 8, tzinfo=UTC)
         result = WorkflowResult(
             outputs={
@@ -805,6 +1305,14 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(completed.result, result)
 
     async def test_replacement_worker_recovers_abandoned_processing(self) -> None:
+        """Verify replacement worker recovers abandoned processing.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
         provider = StandaloneProvider()
         repository = InMemoryExecutionRepository(
@@ -826,6 +1334,23 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             _invocation: WorkflowInvocation,
             _execution_context: WorkflowExecutionContext,
         ) -> WorkflowResult:
+            """Signal that dispatch started and block until its owning worker is interrupted.
+
+            Args:
+                _invocation: Unused named inputs, resolved configuration, public access
+                    state, and absolute workflow deadline; retained to match the
+                    interface.
+                _execution_context: Unused private attempt identity and provider context
+                    kept separate from the invocation; retained to match the interface.
+
+            Returns:
+                WorkflowResult: Named inline outputs and/or references to completed
+                    artifact files.
+
+            Raises:
+                AssertionError: An expected invariant or fixture interaction does not
+                    hold.
+            """
             abandoned_started.set()
             await asyncio.Event().wait()
             raise AssertionError("unreachable")
@@ -873,6 +1398,14 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
     async def test_confirmed_rejection_waits_without_consuming_an_attempt(
         self,
     ) -> None:
+        """Verify confirmed rejection waits without consuming an attempt.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
         result = WorkflowResult(outputs={})
         outcomes: list[WorkflowResult | Exception] = [
@@ -884,6 +1417,19 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             _invocation: WorkflowInvocation,
             _execution_context: WorkflowExecutionContext,
         ) -> WorkflowResult:
+            """Simulate the scenario computation, using events or injected failures to control completion and ownership races.
+
+            Args:
+                _invocation: Unused named inputs, resolved configuration, public access
+                    state, and absolute workflow deadline; retained to match the
+                    interface.
+                _execution_context: Unused private attempt identity and provider context
+                    kept separate from the invocation; retained to match the interface.
+
+            Returns:
+                WorkflowResult: Named inline outputs and/or references to completed
+                    artifact files.
+            """
             outcome = outcomes.pop(0)
             if isinstance(outcome, Exception):
                 raise outcome
@@ -940,12 +1486,37 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
     async def test_unknown_dispatch_outcome_consumes_attempts_and_exhausts_policy(
         self,
     ) -> None:
+        """Verify unknown dispatch outcome consumes attempts and exhausts policy.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
 
         def dispatch(
             _invocation: WorkflowInvocation,
             _execution_context: WorkflowExecutionContext,
         ) -> WorkflowResult:
+            """Simulate the scenario computation, using events or injected failures to control completion and ownership races.
+
+            Args:
+                _invocation: Unused named inputs, resolved configuration, public access
+                    state, and absolute workflow deadline; retained to match the
+                    interface.
+                _execution_context: Unused private attempt identity and provider context
+                    kept separate from the invocation; retained to match the interface.
+
+            Returns:
+                WorkflowResult: Named inline outputs and/or references to completed
+                    artifact files.
+
+            Raises:
+                UnknownDispatchOutcomeError: Transport or response decoding cannot
+                    establish the remote outcome.
+            """
             raise UnknownDispatchOutcomeError
 
         repository = InMemoryExecutionRepository(
@@ -995,6 +1566,14 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(failed.error.code, "workflow_outcome_unknown")
 
     async def test_cancel_fences_then_stops_locally_owned_dispatch(self) -> None:
+        """Verify cancel fences then stops locally owned dispatch.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
         started = asyncio.Event()
         stopped = asyncio.Event()
@@ -1003,6 +1582,23 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             _invocation: WorkflowInvocation,
             _execution_context: WorkflowExecutionContext,
         ) -> WorkflowResult:
+            """Simulate the scenario computation, using events or injected failures to control completion and ownership races.
+
+            Args:
+                _invocation: Unused named inputs, resolved configuration, public access
+                    state, and absolute workflow deadline; retained to match the
+                    interface.
+                _execution_context: Unused private attempt identity and provider context
+                    kept separate from the invocation; retained to match the interface.
+
+            Returns:
+                WorkflowResult: Named inline outputs and/or references to completed
+                    artifact files.
+
+            Raises:
+                AssertionError: An expected invariant or fixture interaction does not
+                    hold.
+            """
             started.set()
             try:
                 await asyncio.Event().wait()
@@ -1046,6 +1642,14 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
     async def test_live_worker_renews_lease_before_another_worker_can_claim(
         self,
     ) -> None:
+        """Verify live worker renews lease before another worker can claim.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         started = asyncio.Event()
         release = asyncio.Event()
         result = WorkflowResult(outputs={})
@@ -1054,6 +1658,19 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             _invocation: WorkflowInvocation,
             _execution_context: WorkflowExecutionContext,
         ) -> WorkflowResult:
+            """Simulate the scenario computation, using events or injected failures to control completion and ownership races.
+
+            Args:
+                _invocation: Unused named inputs, resolved configuration, public access
+                    state, and absolute workflow deadline; retained to match the
+                    interface.
+                _execution_context: Unused private attempt identity and provider context
+                    kept separate from the invocation; retained to match the interface.
+
+            Returns:
+                WorkflowResult: Named inline outputs and/or references to completed
+                    artifact files.
+            """
             started.set()
             await release.wait()
             return result
@@ -1113,6 +1730,14 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
     async def test_standalone_replay_skips_preparation_and_conflict_is_rejected(
         self,
     ) -> None:
+        """Verify standalone replay skips preparation and conflict is rejected.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "slide.svs").touch()
@@ -1157,6 +1782,14 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
                 )
 
     async def test_invalid_standalone_path_creates_no_execution(self) -> None:
+        """Verify invalid standalone path creates no execution.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "roi.tiff").touch()
@@ -1182,6 +1815,14 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(admitted.created)
 
     async def test_invalid_standalone_configuration_creates_no_execution(self) -> None:
+        """Verify invalid standalone configuration creates no execution.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "slide.svs").touch()
@@ -1216,6 +1857,15 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
 
     @staticmethod
     def _request(key: str = "request-1") -> ScheduleRequest:
+        """Build a provider request for the selected fixture identity and deadline settings.
+
+        Args:
+            key: Caller replay key identifying this fixture submission.
+
+        Returns:
+            ScheduleRequest: Provider-specific admission payload, replay identity, and
+                optional timeout.
+        """
         return ScheduleRequest(
             workflow_id="prostate-heatmap",
             provider="standalone",
@@ -1232,6 +1882,24 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         clock: Callable[[], datetime] | None = None,
         lease_duration: timedelta = timedelta(minutes=1),
     ) -> tuple[ExecutionScheduler, ExecutionWorker]:
+        """Construct scheduler and manually driven worker fixtures over the supplied adapters, policies, and clock.
+
+        Args:
+            repository: Atomic execution storage boundary; the adapter controls
+                durability.
+            provider: Provider fixture supplying identity, preparation, and terminal
+                outcomes.
+            dispatch: Workflow invocation boundary, or a selectable fixture handler in
+                lifetime tests.
+            clock: Aware timestamp source for admission or deterministic tests; defaults
+                to UTC wall time.
+            lease_duration: How long a claimed attempt retains ownership without
+                renewal.
+
+        Returns:
+            tuple[ExecutionScheduler, ExecutionWorker]: Selected records, identifiers,
+                or fixture values in the ordering described above.
+        """
         scheduler = ExecutionScheduler(
             repository=repository,
             dispatch=InMemoryWorkflowDispatch({}),
@@ -1253,6 +1921,15 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
 
     @staticmethod
     def _standalone_request(root: Path) -> ScheduleRequest:
+        """Build a complete shared-storage prostate schedule request rooted at the fixture directory.
+
+        Args:
+            root: Existing local directory containing permitted input/output storage.
+
+        Returns:
+            ScheduleRequest: Provider-specific admission payload, replay identity, and
+                optional timeout.
+        """
         return ScheduleRequest(
             workflow_id="prostate-heatmap",
             provider="standalone",

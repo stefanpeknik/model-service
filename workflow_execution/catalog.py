@@ -1,3 +1,9 @@
+"""Load workflow definitions and resolve validated configuration independently of deployment.
+
+YAML declares named inputs and outputs; registrations attach validators and defaults.
+Resolved configuration is copied so executions do not share mutable caller state.
+"""
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -29,11 +35,26 @@ type MediaType = Annotated[str, Field(strict=True)] | None
 
 @validated_dataclass(frozen=True, slots=True, config=ConfigDict(extra="ignore"))
 class WorkflowInputDefinition:
+    """Declare accepted input kinds and an optional media type for one named input.
+
+    Attributes:
+        kinds: Distinct input representations accepted by the declaration.
+        media_type: Optional declared artifact content type, such as image/tiff.
+    """
+
     kinds: Annotated[tuple[WorkflowInputKind, ...], Field(min_length=1)]
     media_type: MediaType = None
 
     @model_validator(mode="after")
     def unique_kinds(self) -> Self:
+        """Reject repeated accepted kinds in a workflow input definition.
+
+        Returns:
+            Self: The same validated definition instance.
+
+        Raises:
+            ValueError: kinds contains duplicate input representations.
+        """
         if len(set(self.kinds)) != len(self.kinds):
             raise ValueError("input kinds must be unique")
         return self
@@ -41,12 +62,28 @@ class WorkflowInputDefinition:
 
 @validated_dataclass(frozen=True, slots=True, config=ConfigDict(extra="ignore"))
 class WorkflowValueDefinition:
+    """Declare one output's kind and optional artifact media type.
+
+    Attributes:
+        kind: Tagged input/output representation or access-adapter selector.
+        media_type: Optional declared artifact content type, such as image/tiff.
+    """
+
     kind: WorkflowOutputKind
     media_type: MediaType = None
 
 
 @validated_dataclass(frozen=True, slots=True)
 class WorkflowDefinition:
+    """Describe a workflow's identifier, named inputs/outputs, and retained descriptive YAML metadata.
+
+    Attributes:
+        identifier: Unique workflow routing identifier.
+        inputs: Input names mapped to their accepted representation definitions.
+        outputs: Output names mapped to their required representation definitions.
+        metadata: Descriptive YAML fields outside the validated workflow contract.
+    """
+
     identifier: Identifier
     inputs: dict[Identifier, WorkflowInputDefinition]
     outputs: dict[Identifier, WorkflowValueDefinition]
@@ -54,6 +91,14 @@ class WorkflowDefinition:
 
     @model_validator(mode="after")
     def distinct_names(self) -> Self:
+        """Reject a name used for both an input and an output.
+
+        Returns:
+            Self: The same validated definition instance.
+
+        Raises:
+            ValueError: An input name is also declared as an output name.
+        """
         if self.inputs.keys() & self.outputs.keys():
             raise ValueError("input and output names must not overlap")
         return self
@@ -61,21 +106,41 @@ class WorkflowDefinition:
 
 @dataclass(frozen=True, slots=True)
 class WorkflowConfiguration:
+    """Pair a workflow's configuration validator with optional default values.
+
+    Attributes:
+        validator: Callable validating resolved workflow configuration.
+        defaults: Optional default JSON values copied before caller overrides.
+    """
+
     validator: ConfigurationValidator
     defaults: Mapping[str, JsonValue] | None = None
 
 
 class UnknownWorkflow(KeyError):  # noqa: N818 - Contract name from the design.
-    pass
+    """Signal lookup of a workflow identifier absent from the catalog."""
 
 
 class WorkflowCatalog:
+    """Index definitions and their configuration registrations for admission and execution validation."""
+
     def __init__(
         self,
         definitions: tuple[WorkflowDefinition, ...],
         *,
         configurations: Mapping[str, WorkflowConfiguration],
     ) -> None:
+        """Require unique identifiers and one configuration registration per definition; copy and validate defaults.
+
+        Args:
+            definitions: Declared workflow contracts to index by unique identifier.
+            configurations: One validator/default registration per declared workflow ID.
+
+        Raises:
+            ValueError: Workflow identifiers repeat, configuration registrations do not
+                match the declared workflows, or defaults fail their validator.
+            TypeError: A configuration validator rejects the type of a default value.
+        """
         by_id = {definition.identifier: definition for definition in definitions}
         if len(by_id) != len(definitions):
             raise ValueError("workflow identifiers must be unique")
@@ -101,6 +166,11 @@ class WorkflowCatalog:
 
     @classmethod
     def default(cls) -> WorkflowCatalog:
+        """Load the built-in definitions and validators from workflows.registry.
+
+        Returns:
+            WorkflowCatalog: Indexed workflow contracts and configuration registrations.
+        """
         from workflows.registry import default_catalog
 
         return default_catalog()
@@ -112,6 +182,24 @@ class WorkflowCatalog:
         *,
         configurations: Mapping[str, WorkflowConfiguration],
     ) -> WorkflowCatalog:
+        """Read sorted YAML definitions from a directory, requiring at least one, and attach configuration registrations.
+
+        Args:
+            directory: Directory containing definitions or generated validation
+                fixtures.
+            configurations: One validator/default registration per declared workflow ID.
+
+        Returns:
+            WorkflowCatalog: Indexed workflow contracts and configuration registrations.
+
+        Raises:
+            ValueError: No YAML definitions exist, a file cannot be read/parsed,
+                identifiers repeat, registrations do not match, or defaults are invalid.
+            ValidationError: A parsed YAML definition violates the typed workflow
+                schema.
+            TypeError: A registered configuration validator rejects a default value
+                type.
+        """
         definitions = tuple(
             _load_definition(path) for path in sorted(directory.glob("*.yaml"))
         )
@@ -123,6 +211,19 @@ class WorkflowCatalog:
         )
 
     def get(self, workflow_id: str) -> WorkflowDefinition:
+        """Return a declared workflow or raise UnknownWorkflow for an absent identifier.
+
+        Args:
+            workflow_id: Declared workflow identifier used for catalog lookup and
+                dispatch routing.
+
+        Returns:
+            WorkflowDefinition: Validated named input/output contract for the selected
+                workflow.
+
+        Raises:
+            UnknownWorkflow: The workflow identifier is absent from the catalog.
+        """
         try:
             return self._definitions[workflow_id]
         except KeyError as error:
@@ -130,11 +231,33 @@ class WorkflowCatalog:
 
     @property
     def identifiers(self) -> frozenset[str]:
+        """Return an immutable set of declared workflow IDs for scheduler routing and health checks.
+
+        Returns:
+            frozenset[str]: All declared workflow identifiers as an immutable routing
+                set.
+        """
         return frozenset(self._definitions)
 
     def validate_configuration(
         self, workflow_id: str, configuration: Mapping[str, JsonValue]
     ) -> None:
+        """Run the registered validator for a known workflow without changing its configuration.
+
+        Args:
+            workflow_id: Declared workflow identifier used for catalog lookup and
+                dispatch routing.
+            configuration: Resolved workflow values or provider global/customer sections
+                to validate.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            UnknownWorkflow: workflow_id is absent from the catalog.
+            ValueError: The registered validator rejects a configuration value or field.
+            TypeError: The registered validator rejects a configuration value type.
+        """
         self.get(workflow_id)
         self._configurations[workflow_id].validator(configuration)
 
@@ -143,6 +266,24 @@ class WorkflowCatalog:
         workflow_id: str,
         configuration: Mapping[str, JsonValue],
     ) -> dict[str, JsonValue]:
+        """Copy defaults, shallowly override them with copied caller values, and validate the resulting configuration.
+
+        Args:
+            workflow_id: Declared workflow identifier used for catalog lookup and
+                dispatch routing.
+            configuration: Resolved workflow values or provider global/customer sections
+                to validate.
+
+        Returns:
+            dict[str, JsonValue]: A separate validated copy of defaults shallowly
+                overridden by caller values.
+
+        Raises:
+            UnknownWorkflow: workflow_id is absent from the catalog.
+            ValueError: The merged configuration fails its registered validator.
+            TypeError: The merged configuration contains a value type rejected by its
+                validator.
+        """
         self.get(workflow_id)
         resolved = deepcopy(dict(self._configurations[workflow_id].defaults or {}))
         resolved.update(deepcopy(dict(configuration)))
@@ -151,6 +292,18 @@ class WorkflowCatalog:
 
 
 def validate_empty_configuration(configuration: Mapping[str, JsonValue]) -> None:
+    """Reject any configuration values for workflows that declare no configurable behavior.
+
+    Args:
+        configuration: Resolved workflow values or provider global/customer sections to
+            validate.
+
+    Returns:
+        None: No return value.
+
+    Raises:
+        ValueError: configuration contains any fields.
+    """
     if configuration:
         raise ValueError("workflow configuration must be empty")
 
@@ -159,6 +312,20 @@ _DEFINITION = TypeAdapter(WorkflowDefinition)
 
 
 def _load_definition(path: Path) -> WorkflowDefinition:
+    """Read and validate YAML, separating contract fields from descriptive metadata; translate file/YAML errors into ValueError.
+
+    Args:
+        path: UTF-8 YAML file declaring one workflow contract and descriptive metadata.
+
+    Returns:
+        WorkflowDefinition: Validated workflow contract with non-contract YAML fields
+            retained as metadata.
+
+    Raises:
+        ValueError: path cannot be read or parsed as YAML.
+        ValidationError: The parsed document violates the typed workflow definition
+            schema.
+    """
     try:
         value = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as error:

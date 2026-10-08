@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Model-service · codebase map and glossary</title><link rel="stylesheet" href="../assets/course.css"></head>
+<body><main>
+<header><div class="eyebrow">Model-service · reference 01</div><h1>The work, its state, and its owners</h1><p>Use this map while reading source. Canonical vocabulary comes from <a href="../CONTEXT.md">CONTEXT.md</a>; current ownership comes from the <a href="../execution_scheduler/README.md">scheduler</a> and <a href="../workflow_execution/README.md">workflow</a> package maps.</p><nav aria-label="Reference navigation"><a href="#glossary">Terms</a><a href="#routes">Request paths</a><a href="#owners">Owners</a><a href="../lessons/0001-schedule-admission.html">Lesson 01</a></nav></header>
+
+<section id="glossary"><h2>Terms that change how you read the code</h2>
+<table><thead><tr><th>Term</th><th>Meaning here</th><th>Code consequence</th></tr></thead><tbody>
+<tr><td>WSI</td><td>Whole-slide image. Large slide imagery with multiple resolutions in supported formats.</td><td>Read regions and select resolution levels. <a href="https://openslide.org/">OpenSlide</a>.</td></tr>
+<tr><td>ROI</td><td>Region of interest. The named input used to select the area to process.</td><td>The standalone heatmap uses a mask; EMPAIA materializes rectangle inputs. <a href="../misc/fetch_tissue_tile.py">Tile selection</a>; <a href="../integrations/empaia/image_io.py">EMPAIA mask handling</a>.</td></tr>
+<tr><td>Tile</td><td>A rectangular image patch used for model inference.</td><td>The full-WSI classifier preset accepts 512-by-512 image tiles. <a href="../helm/rayservice/applications/full-wsi-prostate-classifier.yaml">Preset</a>.</td></tr>
+<tr><td>MPP</td><td>Micrometres per pixel, a physical image resolution.</td><td>The processor gets target MPP from the model and selects the closest slide level. Actual level resolution supplies TIFF metadata. <a href="https://openslide.org/docs/properties/">Metadata definition</a>; <a href="../workflow_execution/heatmap.py">Processor</a>.</td></tr>
+<tr><td>Model inference</td><td>One deployed-model call with model-ready input.</td><td>Classifier prediction returns model output scores. Label interpretation needs model-owner evidence. <a href="../models/binary_classifier.py">Classifier</a>.</td></tr>
+<tr><td>Workflow invocation</td><td>Concrete named inputs, resolved configuration, input-access context, and deadline.</td><td>The same computation contract can enter through synchronous or scheduled routes. <a href="../workflow_execution/contracts.py">Contracts</a>.</td></tr>
+<tr><td>Scheduled execution</td><td>The durable lifecycle around an invocation, its attempts, and provider finish.</td><td>Repository state survives a scheduler process. <a href="../execution_scheduler/domain.py">ExecutionRecord</a>.</td></tr>
+<tr><td>Processing attempt</td><td>One try to compute a workflow result.</td><td>A retry creates another attempt; scheduled shared-storage outputs have attempt-isolated paths. <a href="../workflow_execution/shared_storage.py">Storage</a>.</td></tr>
+<tr><td>Submission identity</td><td>Provider-scoped key plus request fingerprint.</td><td>The key locates an execution; the fingerprint distinguishes equivalent replay from conflict. <a href="../execution_scheduler/standalone.py">Standalone identity</a>.</td></tr>
+<tr><td>Shared artifact</td><td>A typed reference to a completed file.</td><td>The heatmap result contains a path and media type. Artifact bytes stay on storage. <a href="../workflow_execution/contracts.py">Output types</a>.</td></tr>
+<tr><td>Provider finish</td><td>Provider-specific work delivering success or reporting failure or cancellation.</td><td>Processing success stores a result while public status stays running. Success finish makes it succeeded. <a href="../execution_scheduler/transitions.py">Transitions</a>.</td></tr>
+</tbody></table></section>
+
+<section id="routes"><h2>Three request paths</h2>
+<p><a href="test-request-flow.html">The real test-flow reference</a> expands the immediate and scheduled paths into container topology and sequence diagrams, including HTTP, Ray, SQL, local calls, mounted files, and validation limits.</p>
+<p>These are source-level paths. Runtime configuration chooses their concrete origins and adapters. <a href="../execution_scheduler/runtime.py">Production wiring</a>.</p>
+<pre><code>Low-level inference
+  HTTP proxy → Ray model route → model output
+
+Synchronous workflow
+  HTTP API → SynchronousWorkflowService → HTTPWorkflowDispatch
+  → Ray workflow ingress → WorkflowApplication → workflow → result
+
+Scheduled workflow
+  HTTP API → ExecutionScheduler.schedule → provider preparation
+  → repository admission → worker claim → HTTPWorkflowDispatch
+  → Ray workflow ingress → WorkflowApplication → workflow
+  → durable processing settlement → provider finish → public success</code></pre>
+<p>The prostate workflow calls <code>SlideHeatmapProcessor</code>, which selects masked tiles and uses <code>RayHeatmapPredictor</code> to call the classifier through a Ray deployment handle. Scheduler-to-workflow dispatch uses HTTP; workflow-to-model prediction uses the handle. <a href="../workflow_execution/prostate_heatmap_serve.py">Composition</a>; <a href="../workflow_execution/ray_heatmap.py">Predictor</a>.</p>
+</section>
+
+<section id="owners"><h2>Find the owner of a behavior</h2>
+<table><thead><tr><th>Question</th><th>Start here</th></tr></thead><tbody>
+<tr><td>Which public route and HTTP status?</td><td><a href="../execution_scheduler/api.py">api.py</a>; <a href="../execution_scheduler/inference.py">inference.py</a></td></tr>
+<tr><td>How is a request admitted or replayed?</td><td><a href="../execution_scheduler/scheduler.py">scheduler.py</a>; <a href="../execution_scheduler/standalone.py">standalone.py</a></td></tr>
+<tr><td>Which state change is permitted?</td><td><a href="../execution_scheduler/transitions.py">transitions.py</a></td></tr>
+<tr><td>Where are transactions and concurrent claims?</td><td><a href="../execution_scheduler/postgres.py">postgres.py</a>; <a href="../execution_scheduler/postgres_schema.py">postgres_schema.py</a></td></tr>
+<tr><td>Who runs, renews, or cancels an attempt?</td><td><a href="../execution_scheduler/worker.py">worker.py</a>; <a href="../execution_scheduler/active_work.py">active_work.py</a></td></tr>
+<tr><td>Who validates computation inputs and outputs?</td><td><a href="../workflow_execution/application.py">application.py</a>; <a href="../workflow_execution/catalog.py">catalog.py</a>; <a href="../workflow_execution/registry.py">registry.py</a></td></tr>
+<tr><td>Who resolves inputs and artifact paths?</td><td><a href="../workflow_execution/shared_storage.py">shared_storage.py</a>; <a href="../integrations/empaia/input_access.py">EMPAIA input access</a></td></tr>
+<tr><td>Who creates pixels and the completed TIFF?</td><td><a href="../workflow_execution/heatmap.py">heatmap.py</a>; <a href="../workflow_execution/prostate_heatmap.py">prostate_heatmap.py</a></td></tr>
+<tr><td>Who supplies or consumes provider data?</td><td><a href="../execution_scheduler/providers.py">Provider contract</a>; <a href="../integrations/empaia/provider.py">EMPAIA provider</a></td></tr>
+<tr><td>Who selects the model and deployment settings?</td><td><a href="../workflow_execution/prostate_heatmap_serve.py">Workflow composition</a>; <a href="../helm/rayservice/applications/full-wsi-prostate-classifier.yaml">classifier deployment</a>; <a href="../providers/model_provider.py">model loading</a></td></tr>
+</tbody></table>
+<p>For every behavior, read its tests next. Use <a href="../COVERAGE.md">the full coverage map</a> for models, configuration, tooling, validation, and historical code that do not fit this quick reference.</p>
+</section>
+<footer><p><a href="../lessons/0001-schedule-admission.html">Return to lesson 01</a> · <a href="../RESOURCES.md">Trusted resources</a> · <a href="../docs/README.md">Requirements and evidence routing</a></p></footer>
+</main></body></html>

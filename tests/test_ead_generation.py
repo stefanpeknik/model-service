@@ -1,3 +1,5 @@
+"""Check generated EMPAIA metadata and input-reference validation."""
+
 from __future__ import annotations
 
 import unittest
@@ -7,11 +9,26 @@ from scripts.generate_ead import ROOT, generate_ead, generate_file, load_yaml
 
 
 class EadGenerationTests(unittest.TestCase):
+    """Exercise generated EMPAIA metadata and input-reference validation."""
+
     def setUp(self) -> None:
+        """Create isolated fixtures and clients for generated EMPAIA metadata and input-reference validation.
+
+        Returns:
+            None: No return value.
+        """
         self.definition_path = ROOT / "workflow-definitions" / "prostate-heatmap.yaml"
         self.definition = load_yaml(self.definition_path)
 
     def test_prostate_ead_is_generated_from_workflow_contract(self) -> None:
+        """Verify prostate ead is generated from workflow contract.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         ead = generate_ead(self.definition)
 
         self.assertEqual(ead["namespace"], "org.empaia.rationai.prostate_cls.v3.0")
@@ -29,6 +46,14 @@ class EadGenerationTests(unittest.TestCase):
         )
 
     def test_references_must_target_inputs(self) -> None:
+        """Verify references must target inputs.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         definition = deepcopy(self.definition)
         definition["outputs"]["heatmap"]["empaia"]["reference"] = "missing"
 

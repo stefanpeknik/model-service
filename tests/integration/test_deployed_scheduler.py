@@ -1,3 +1,9 @@
+"""Check live durable API behavior and dummy-profile workflow execution.
+
+These tests contact configured live services and may create executions and artifacts.
+They are not part of offline unit validation.
+"""
+
 from __future__ import annotations
 
 import os
@@ -10,7 +16,17 @@ import httpx
 
 
 class DeployedSchedulerTests(unittest.TestCase):
+    """Exercise live durable API behavior and dummy-profile workflow execution."""
+
     def test_deadline_fails_execution_without_ray_capacity(self) -> None:
+        """Verify deadline fails execution without Ray capacity.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         origin = os.environ.get("VALIDATION_ORIGIN")
         if origin is None or os.environ.get("VALIDATION_NO_WORKER") != "1":
             self.skipTest("validation scheduler must run with no Ray workers")
@@ -45,6 +61,14 @@ class DeployedSchedulerTests(unittest.TestCase):
             self.assertIsNone(status.json()["result"])
 
     def test_cancellation_remains_terminal_without_ray_capacity(self) -> None:
+        """Verify cancellation remains terminal without Ray capacity.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         origin = os.environ.get("VALIDATION_ORIGIN")
         if origin is None or os.environ.get("VALIDATION_NO_WORKER") != "1":
             self.skipTest("validation scheduler must run with no Ray workers")
@@ -75,6 +99,14 @@ class DeployedSchedulerTests(unittest.TestCase):
             self.assertEqual(repeated.json()["status"], "cancelled")
 
     def test_invalid_public_requests_return_safe_errors(self) -> None:
+        """Verify invalid public requests return safe errors.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         origin = os.environ.get("VALIDATION_ORIGIN")
         if origin is None:
             self.skipTest("VALIDATION_ORIGIN is not configured")
@@ -120,6 +152,14 @@ class DeployedSchedulerTests(unittest.TestCase):
             )
 
     def test_replay_returns_the_same_execution_and_conflict_is_rejected(self) -> None:
+        """Verify replay returns the same execution and conflict is rejected.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         origin = os.environ.get("VALIDATION_ORIGIN")
         if origin is None:
             self.skipTest("VALIDATION_ORIGIN is not configured")
@@ -155,6 +195,14 @@ class DeployedSchedulerTests(unittest.TestCase):
             self.assertEqual(conflict.status_code, 409, conflict.text)
 
     def test_standalone_schedule_completes_with_the_synchronous_result(self) -> None:
+        """Verify standalone schedule completes with the synchronous result.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         origin = os.environ.get("VALIDATION_ORIGIN")
         if origin is None:
             self.skipTest("VALIDATION_ORIGIN is not configured")
@@ -197,6 +245,14 @@ class DeployedSchedulerTests(unittest.TestCase):
 
     @staticmethod
     def _invocation(output_path: str) -> dict[str, object]:
+        """Build a typed workflow invocation with the fixture access context and a bounded future deadline.
+
+        Args:
+            output_path: Destination artifact path or configured relative output path.
+
+        Returns:
+            dict[str, object]: Decoded, serialized, or recorded fields described above.
+        """
         return {
             "inputs": {
                 "slide": {"kind": "shared_path", "path": "input/slide.dat"},

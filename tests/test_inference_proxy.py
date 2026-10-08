@@ -1,3 +1,5 @@
+"""Check binary model request forwarding and permitted response headers."""
+
 from __future__ import annotations
 
 import unittest
@@ -8,10 +10,30 @@ from model_service.inference import HttpInferenceProxy, InferenceRequest
 
 
 class HttpInferenceProxyTests(unittest.IsolatedAsyncioTestCase):
+    """Exercise binary model request forwarding and permitted response headers."""
+
     async def test_forwards_legacy_request_and_binary_response(self) -> None:
+        """Verify forwards legacy request and binary response.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         captured: list[httpx.Request] = []
 
         def handler(request: httpx.Request) -> httpx.Response:
+            """Assert the forwarded binary request and return an upstream response with inference metadata.
+
+            Args:
+                request: Request to validate, admit, dispatch, forward, or process, as
+                    specified by its declared type.
+
+            Returns:
+                httpx.Response: HTTP response returned by the transport or controlled
+                    scenario handler.
+            """
             captured.append(request)
             return httpx.Response(
                 200,

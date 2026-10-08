@@ -1,3 +1,5 @@
+"""Check workflow HTTP result parsing and rejection/failure/unknown-outcome classification."""
+
 from __future__ import annotations
 
 import unittest
@@ -26,6 +28,8 @@ if TYPE_CHECKING:
 
 
 class FakeResponse:
+    """Provide a configurable workflow HTTP response without a network connection."""
+
     def __init__(
         self,
         status_code: int,
@@ -33,16 +37,37 @@ class FakeResponse:
         *,
         headers: dict[str, str] | None = None,
     ) -> None:
+        """Configure response status, decoded body, and optional headers for dispatch classification.
+
+        Args:
+            status_code: HTTP status to return or classify.
+            body: Typed or JSON request payload accepted by this boundary.
+            headers: HTTP metadata to filter, send, or include in an error response.
+        """
         self.status_code = status_code
         self._body = body
         self.headers = headers or {}
 
     def json(self) -> object:
+        """Return the predetermined decoded response body.
+
+        Returns:
+            object: The delegated operation's result or controlled fixture value
+                described above.
+        """
         return self._body
 
 
 class FakeHttpClient:
+    """Record workflow POST arguments and return a predetermined fake response."""
+
     def __init__(self, response: FakeResponse) -> None:
+        """Retain the response to return and initialize an empty request log.
+
+        Args:
+            response: Upstream HTTP response or mutable FastAPI response used to select
+                the public status.
+        """
         self.response = response
         self.requests: list[dict[str, object]] = []
 
@@ -54,6 +79,18 @@ class FakeHttpClient:
         headers: Mapping[str, str],
         timeout: float,
     ) -> HTTPResponse:
+        """Record URL, body, headers, and timeout and return the configured response.
+
+        Args:
+            url: Complete upstream HTTP request URL.
+            json: JSON-compatible workflow request passed to the HTTP client.
+            headers: HTTP metadata to filter, send, or include in an error response.
+            timeout: Request or scenario time budget in seconds.
+
+        Returns:
+            HTTPResponse: HTTP response used to classify workflow dispatch acceptance
+                and outcome.
+        """
         self.requests.append(
             {"url": url, "json": json, "headers": headers, "timeout": timeout}
         )
@@ -61,7 +98,17 @@ class FakeHttpClient:
 
 
 class HttpWorkflowDispatchTests(unittest.IsolatedAsyncioTestCase):
+    """Exercise workflow HTTP result parsing and rejection/failure/unknown-outcome classification."""
+
     async def test_ray_backpressure_uses_configured_429_signal(self) -> None:
+        """Verify Ray backpressure uses configured 429 signal.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         client = FakeHttpClient(
             FakeResponse(429, "queue full", headers={"retry-after": "7"})
         )
@@ -77,6 +124,14 @@ class HttpWorkflowDispatchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(raised.exception.retry_after, timedelta(seconds=7))
 
     async def test_generic_503_is_an_unknown_outcome(self) -> None:
+        """Verify generic 503 is an unknown outcome.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         dispatch = HTTPWorkflowDispatch(
             FakeHttpClient(FakeResponse(503, "proxy unavailable")),
             origin="http://ray-serve:8000",
@@ -90,6 +145,14 @@ class HttpWorkflowDispatchTests(unittest.IsolatedAsyncioTestCase):
             )
 
     async def test_classified_workflow_failure_keeps_safe_error(self) -> None:
+        """Verify classified workflow failure keeps safe error.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         dispatch = HTTPWorkflowDispatch(
             FakeHttpClient(
                 FakeResponse(
@@ -117,6 +180,14 @@ class HttpWorkflowDispatchTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(raised.exception.retryable)
 
     async def test_success_parses_normalized_result(self) -> None:
+        """Verify success parses normalized result.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         client = FakeHttpClient(
             FakeResponse(
                 200,
@@ -146,6 +217,12 @@ class HttpWorkflowDispatchTests(unittest.IsolatedAsyncioTestCase):
 
     @staticmethod
     def _invocation() -> WorkflowInvocation:
+        """Build a typed workflow invocation with the fixture access context and a bounded future deadline.
+
+        Returns:
+            WorkflowInvocation: Typed inputs, resolved configuration, access settings,
+                and absolute deadline.
+        """
         return WorkflowInvocation(
             inputs={},
             resolved_configuration={},

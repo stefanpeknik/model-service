@@ -1,3 +1,9 @@
+"""Check live native standalone scheduling, replay/conflict handling, immediate execution, and output contracts.
+
+These tests contact configured live services and may create executions and artifacts.
+They are not part of offline unit validation.
+"""
+
 from __future__ import annotations
 
 import hashlib
@@ -28,6 +34,8 @@ _MASK = "wsi/962ea217-0fd7-4ddd-a1a0-165c89056cef/tissue-mask-open-slide.tiff"
 
 @dataclass(frozen=True, slots=True)
 class NativeWorkflowSettings:
+    """Validate live test origins, shared input paths, and optional local artifact access."""
+
     origin: str
     storage_root: str
     slide_path: str
@@ -37,6 +45,15 @@ class NativeWorkflowSettings:
 
     @classmethod
     def from_environment(cls) -> NativeWorkflowSettings:
+        """Validate a public origin, shared paths, and optional artifact root from live test settings.
+
+        Returns:
+            NativeWorkflowSettings: Validated live HTTP/storage inputs and optional
+                artifact access settings.
+
+        Raises:
+            ValueError: A value fails the validation described above.
+        """
         origin = os.environ.get("VALIDATION_ORIGIN", "").strip()
         url = urlsplit(origin)
         if (
@@ -78,6 +95,14 @@ class NativeWorkflowSettings:
         )
 
     def invocation(self, output_path: str) -> dict[str, object]:
+        """Build a JSON shared-storage invocation using the configured real slide/mask and requested output path.
+
+        Args:
+            output_path: Destination artifact path or configured relative output path.
+
+        Returns:
+            dict[str, object]: Decoded, serialized, or recorded fields described above.
+        """
         return {
             "inputs": {
                 "slide": {"kind": "shared_path", "path": self.slide_path},
@@ -96,6 +121,15 @@ class NativeWorkflowSettings:
         }
 
     def sdk_request(self, output_path: str) -> WorkflowRequest:
+        """Build the equivalent typed SDK request using the same inputs and resolved heatmap configuration.
+
+        Args:
+            output_path: Destination artifact path or configured relative output path.
+
+        Returns:
+            WorkflowRequest: Typed SDK request using the selected shared-storage fixture
+                inputs.
+        """
         from rationai.types.workflows import (
             InputAccess,
             SharedPathInput,
@@ -120,6 +154,16 @@ class NativeWorkflowSettings:
 
 
 def _evidence(case: str, **values: object) -> None:
+    """Print a structured live-test evidence record with a stable prefix for later validation reports.
+
+    Args:
+        case: Stable live-validation case name included in evidence output.
+        **values: Keyword arguments forwarded to the delegated operation or accepted by
+            the fixture interface.
+
+    Returns:
+        None: No return value.
+    """
     print(
         "NATIVE_WORKFLOW_EVIDENCE "
         + json.dumps({"case": case, **values}, sort_keys=True)
@@ -131,12 +175,27 @@ def _evidence(case: str, **values: object) -> None:
     "RUN_DEPLOYED_NATIVE_WORKFLOWS=1 is required for real WSI validation",
 )
 class DeployedNativeWorkflowTests(unittest.TestCase):
+    """Exercise live native standalone scheduling, replay/conflict handling, immediate execution, and output contracts."""
+
     def setUp(self) -> None:
+        """Create isolated fixtures and clients for live native standalone scheduling, replay/conflict handling, immediate execution, and output contracts.
+
+        Returns:
+            None: No return value.
+        """
         self.settings = NativeWorkflowSettings.from_environment()
         self.http = httpx.Client(base_url=self.settings.origin, timeout=30)
         self.addCleanup(self.http.close)
 
     def test_unknown_workflow_and_execution_return_safe_errors(self) -> None:
+        """Verify unknown workflow and execution return safe errors.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         response = self.http.post(
             "/v1/workflows/validation-unknown-workflow/schedule",
             json={
@@ -162,6 +221,14 @@ class DeployedNativeWorkflowTests(unittest.TestCase):
     def test_schedule_replay_conflict_and_immediate_run_share_output_contract(
         self,
     ) -> None:
+        """Verify schedule replay conflict and immediate run share output contract.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         from rationai import Client
         from rationai.errors import SchedulingUnavailableError
         from rationai.types.workflows import ExecutionStatus, SharedArtifact
@@ -286,6 +353,14 @@ class DeployedNativeWorkflowTests(unittest.TestCase):
         "root must pause processing claims while keeping HTTP and maintenance alive",
     )
     def test_queued_cancellation_and_replay_remain_terminal(self) -> None:
+        """Verify queued cancellation and replay remain terminal.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         from rationai import Client
         from rationai.types.workflows import ExecutionStatus
 
@@ -317,6 +392,14 @@ class DeployedNativeWorkflowTests(unittest.TestCase):
         "root must pause processing claims while keeping HTTP and maintenance alive",
     )
     def test_queued_deadline_expires_without_processing_and_stays_failed(self) -> None:
+        """Verify queued deadline expires without processing and stays failed.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         key, body, execution_id = self._schedule_queued("deadline", timeout=5)
         deadline = time.monotonic() + 45
         while time.monotonic() < deadline:
@@ -350,6 +433,16 @@ class DeployedNativeWorkflowTests(unittest.TestCase):
     def _schedule_queued(
         self, purpose: str, *, timeout: int
     ) -> tuple[str, dict[str, object], str]:
+        """Submit standalone work expected to stay queued, register cleanup cancellation, and assert its public admission shape.
+
+        Args:
+            purpose: Case label included in the unique live queued-execution identity.
+            timeout: Request or scenario time budget in seconds.
+
+        Returns:
+            tuple[str, dict[str, object], str]: Selected records, identifiers, or
+                fixture values in the ordering described above.
+        """
         key = f"native-queued-{purpose}-{uuid4().hex}"
         body = {
             "provider": "standalone",
@@ -374,6 +467,16 @@ class DeployedNativeWorkflowTests(unittest.TestCase):
     def _assert_public_execution(
         self, execution: dict[str, object], execution_id: str
     ) -> None:
+        """Require only public fields and hide results/errors until their matching terminal outcome.
+
+        Args:
+            execution: Current execution snapshot or public view to inspect or
+                transition.
+            execution_id: Durable execution identifier, not an external provider job ID.
+
+        Returns:
+            None: No return value.
+        """
         self.assertEqual(
             set(execution), {"id", "workflow_id", "status", "result", "error"}
         )
@@ -386,6 +489,14 @@ class DeployedNativeWorkflowTests(unittest.TestCase):
             self.assertIsNone(execution["error"])
 
     def _cancel_unfinished(self, execution_id: str) -> None:
+        """Cancel leftover live executions during cleanup, recording transport unavailability without masking the test outcome.
+
+        Args:
+            execution_id: Durable execution identifier, not an external provider job ID.
+
+        Returns:
+            None: No return value.
+        """
         try:
             response = self.http.get(f"/v1/executions/{execution_id}")
             if (
@@ -408,6 +519,15 @@ class DeployedNativeWorkflowTests(unittest.TestCase):
     def _compare_artifact_content(
         self, scheduled_path: str, immediate_path: str
     ) -> dict[str, object]:
+        """If local shared-file access is configured, verify contained nonempty files and compare scheduled/immediate SHA-256 hashes.
+
+        Args:
+            scheduled_path: Artifact reference returned by durable scheduled execution.
+            immediate_path: Artifact reference returned by immediate execution.
+
+        Returns:
+            dict[str, object]: Decoded, serialized, or recorded fields described above.
+        """
         if self.settings.artifact_root is None:
             return {"verified": False, "reason": "requires separate shared-file access"}
         paths = []

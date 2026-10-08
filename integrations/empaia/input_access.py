@@ -1,3 +1,9 @@
+"""Materialize provider inputs in an isolated workflow workspace for one processing attempt.
+
+The public job identity must match protected dispatch context. The workflow receives
+local paths while the gateway owns provider communication.
+"""
+
 from __future__ import annotations
 
 import hashlib
@@ -26,17 +32,39 @@ if TYPE_CHECKING:
 
 
 class EmpaiaInputAccess:
+    """Expose materialized job inputs and completed artifacts within one attempt's workspace."""
+
     def __init__(
         self,
         root: Path,
         gateway: EmpaiaGateway,
         paths: dict[str, Path],
     ) -> None:
+        """Retain the workspace, materialized input mapping, and gateway to close after workflow execution.
+
+        Args:
+            root: Existing local directory containing permitted input/output storage.
+            gateway: Job-scoped provider boundary used for publication or cleanup.
+            paths: Input names mapped to completed local materialization files.
+        """
         self._gateway = gateway
         self._paths = paths
         self._root = root
 
     def input_path(self, name: str) -> Path:
+        """Return an existing materialized file for a declared input or raise an invocation error.
+
+        Args:
+            name: Declared workflow input name to resolve.
+
+        Returns:
+            Path: Existing local file for the named input; invalid or unavailable inputs
+                raise an invocation error.
+
+        Raises:
+            InvalidWorkflowInvocation: Inputs, resolved configuration, access context,
+                or deadline violate the workflow contract.
+        """
         try:
             path = self._paths[name]
         except KeyError as error:
@@ -46,6 +74,19 @@ class EmpaiaInputAccess:
         return path
 
     def output_path(self, relative_path: str) -> Path:
+        """Resolve an output under the workspace and reject targets that escape its root.
+
+        Args:
+            relative_path: Output path relative to the permitted root.
+
+        Returns:
+            Path: Permitted output destination; allocating the path does not itself
+                create or complete the file.
+
+        Raises:
+            InvalidWorkflowInvocation: Inputs, resolved configuration, access context,
+                or deadline violate the workflow contract.
+        """
         path = self._root / "outputs" / relative_path
         try:
             path.resolve().relative_to(self._root.resolve())
@@ -56,6 +97,16 @@ class EmpaiaInputAccess:
         return path
 
     def is_visible_artifact(self, path: Path) -> bool:
+        """Require an existing file contained within the resolved attempt workspace.
+
+        Args:
+            path: Completed artifact path to check within this invocation's storage
+                boundary.
+
+        Returns:
+            bool: True only for a completed regular file visible within this
+                invocation's storage root.
+        """
         try:
             path.resolve(strict=True).relative_to(self._root.resolve(strict=True))
         except (OSError, ValueError):
@@ -63,15 +114,30 @@ class EmpaiaInputAccess:
         return path.is_file()
 
     async def aclose(self) -> None:
+        """Close the invocation's gateway; workspace files are retained rather than deleted here.
+
+        Returns:
+            None: No return value.
+        """
         await self._gateway.close()
 
 
 class EmpaiaInputAccessAdapter:
+    """Create per-attempt local access by resolving inputs through an EMPAIA gateway."""
+
     def __init__(
         self,
         gateway_factory: EmpaiaGatewayFactory,
         workspace_root: Path,
     ) -> None:
+        """Retain the gateway factory and parent directory for isolated processing workspaces.
+
+        Args:
+            gateway_factory: Callable constructing a job gateway from protected
+                connection context.
+            workspace_root: Parent directory for hashed, isolated provider attempt
+                workspaces.
+        """
         self._gateway_factory = gateway_factory
         self._workspace_root = workspace_root
 
@@ -80,6 +146,26 @@ class EmpaiaInputAccessAdapter:
         invocation: WorkflowInvocation,
         execution_context: WorkflowExecutionContext,
     ) -> EmpaiaInputAccess:
+        """Validate matching job contexts and an attempt ID, hash the workspace identity, and materialize every provider input. Close acquired resources if creation fails.
+
+        Args:
+            invocation: Named inputs, resolved configuration, public access state, and
+                absolute workflow deadline.
+            execution_context: Private attempt identity and provider context kept
+                separate from the invocation.
+
+        Returns:
+            EmpaiaInputAccess: Materialized input mapping and isolated output workspace
+                for one attempt.
+
+        Raises:
+            EmpaiaGatewayError: AppService transport, authentication, response data, or
+                image conversion fails.
+            InvalidWorkflowInvocation: Inputs, resolved configuration, access context,
+                or deadline violate the workflow contract.
+            asyncio.CancelledError: The owning task, caller, deadline, or lease monitor
+                cancels the operation.
+        """
         try:
             state = EmpaiaInputState.model_validate(invocation.input_access.state)
             context = EmpaiaJobContext.model_validate(
@@ -122,7 +208,7 @@ class EmpaiaInputAccessAdapter:
         except BaseException:
             try:
                 await close_resource(gateway.close)
-            except Exception as error:  # noqa: BLE001 - Preserve acquisition failure after cleanup failure.
+            except Exception as error:
                 logger.warning("EMPAIA input cleanup failed: %s", type(error).__name__)
             raise
         return EmpaiaInputAccess(root, gateway, paths)

@@ -1,3 +1,10 @@
+"""Build a whole-slide heatmap from tissue-selected model tiles.
+
+OpenSlide reads run in a thread pool; predictions run asynchronously through
+HeatmapPredictor. A memory-mapped MaskBuilder combines overlapping scores before libvips
+writes the pyramidal TIFF.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -15,6 +22,17 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class HeatmapBuildRequest:
+    """Specify slide/mask files, destination TIFF, stride fraction, and output TIFF tile geometry.
+
+    Attributes:
+        slide_path: Whole-slide image file read by OpenSlide.
+        tissue_mask_path: Region mask file used to select slide tile windows.
+        output_path: Local destination where the processor writes the completed TIFF.
+        stride_fraction: Tile step expressed as a fraction of model input tile extent.
+        output_tile_height: TIFF storage tile height in pixels.
+        output_tile_width: TIFF storage tile width in pixels.
+    """
+
     slide_path: Path
     tissue_mask_path: Path
     output_path: Path
@@ -25,6 +43,15 @@ class HeatmapBuildRequest:
 
 @dataclass(frozen=True, slots=True)
 class ModelTileConfiguration:
+    """Describe model input/output tile extents, score channels, and target micrometers per pixel.
+
+    Attributes:
+        tile_size: Square model input extent in pixels.
+        output_tile_size: Square model output score-grid extent for one input tile.
+        n_channels: Number of output score channels.
+        mpp: Target model input resolution in micrometers per pixel.
+    """
+
     tile_size: Annotated[int, Field(strict=True, gt=0)]
     output_tile_size: Annotated[int, Field(strict=True, gt=0)]
     n_channels: Annotated[int, Field(strict=True, gt=0)]
@@ -32,6 +59,20 @@ class ModelTileConfiguration:
 
     @classmethod
     def from_values(cls, values: Mapping[str, object]) -> ModelTileConfiguration:
+        """Validate positive integer geometry and a positive finite target resolution from model configuration.
+
+        Args:
+            values: Classifier metadata containing tile_size, output_tile_size,
+                n_channels, and positive finite mpp.
+
+        Returns:
+            ModelTileConfiguration: Validated model tile geometry, output channels, and
+                target resolution.
+
+        Raises:
+            ValidationError: Decoded fields or model configuration do not satisfy the
+                typed schema.
+        """
         return _MODEL_TILE_CONFIGURATION.validate_python(values)
 
 
@@ -39,12 +80,33 @@ _MODEL_TILE_CONFIGURATION = TypeAdapter(ModelTileConfiguration)
 
 
 class HeatmapPredictor(Protocol):
-    async def configuration(self) -> ModelTileConfiguration: ...
+    """Define the model metadata and asynchronous tile prediction boundary used by slide processing."""
 
-    async def predict(self, tile: object) -> object: ...
+    async def configuration(self) -> ModelTileConfiguration:
+        """Return the model's tile geometry, output channels, and target resolution.
+
+        Returns:
+            ModelTileConfiguration: Validated model tile geometry, output channels, and
+                target resolution.
+        """
+        ...
+
+    async def predict(self, tile: object) -> object:
+        """Return scores for one channel-first image tile in the model's configured output shape.
+
+        Args:
+            tile: One channel-first model input tile.
+
+        Returns:
+            object: Scores convertible to an array with n_channels * output_tile_size **
+                2 elements.
+        """
+        ...
 
 
 class SlideHeatmapProcessor:
+    """Read tissue tiles with bounded concurrency, predict scores, and reconstruct a spatial heatmap."""
+
     def __init__(
         self,
         predictor: HeatmapPredictor,
@@ -52,6 +114,19 @@ class SlideHeatmapProcessor:
         num_threads: int,
         max_concurrent_tasks: int,
     ) -> None:
+        """Require positive read-thread and in-flight tile limits and retain the predictor.
+
+        Args:
+            predictor: Model configuration and tile-prediction boundary used by heatmap
+                processing.
+            num_threads: Number of thread-pool workers for synchronous slide and mask
+                reads.
+            max_concurrent_tasks: Maximum number of tile read/prediction tasks in
+                flight.
+
+        Raises:
+            ValueError: num_threads or max_concurrent_tasks is nonpositive.
+        """
         if num_threads <= 0 or max_concurrent_tasks <= 0:
             raise ValueError("heatmap thread and concurrency limits must be positive")
         self._predictor = predictor
@@ -59,6 +134,28 @@ class SlideHeatmapProcessor:
         self._max_concurrent_tasks = max_concurrent_tasks
 
     async def build(self, request: HeatmapBuildRequest) -> None:
+        """Select the nearest slide level, predict tissue-containing tiles, combine overlap, and save an 8-bit pyramidal TIFF.
+
+        Resize to the padded tile grid before cropping to the selected slide extent so
+        edge geometry stays aligned. On failure or cancellation, join tile tasks and
+        clean the memory-mapped accumulator.
+
+        Args:
+            request: Slide/mask files, destination, stride fraction, and TIFF tile
+                geometry.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            OSError: Slide, mask, or output filesystem access fails.
+            ValueError: Prediction scores cannot be reshaped into the configured
+                channel/grid dimensions, or tile geometry is invalid.
+            asyncio.CancelledError: The caller cancels processing; tile tasks are joined
+                and the accumulator is cleaned.
+            Exception: The injected predictor or native image library fails; its
+                original exception propagates.
+        """
         import numpy as np
         import pyvips
         from ratiopath.masks.mask_builders import MaskBuilder
@@ -100,6 +197,15 @@ class SlideHeatmapProcessor:
             try:
 
                 async def process_tile(x: int, y: int) -> None:
+                    """Read a tissue-selected tile in the executor, skip empty regions, predict its scores, and accumulate them at row/column coordinates.
+
+                    Args:
+                        x: Horizontal tile origin in selected slide-level pixels.
+                        y: Vertical tile origin in selected slide-level pixels.
+
+                    Returns:
+                        None: No return value.
+                    """
                     tile = await loop.run_in_executor(
                         executor,
                         fetch_tissue_tile,

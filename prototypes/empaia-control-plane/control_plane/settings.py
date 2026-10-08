@@ -1,3 +1,10 @@
+"""Parse deployment-owned mappings, credential-file paths, and timing for the prototype.
+
+Historical SQLite control-plane prototype. The current production scheduler lives in
+execution_scheduler/ and uses PostgreSQL; these lifecycle rules are not its
+specification.
+"""
+
 from __future__ import annotations
 
 import json
@@ -13,6 +20,30 @@ from control_plane.storage import StorageMapping
 
 @dataclass(frozen=True, slots=True)
 class Settings:
+    """Hold SQLite, installation, credential, storage, app mapping, and reconciliation configuration.
+
+    Attributes:
+        database_path: Historical prototype SQLite file location.
+        installation_alias: Deployment-approved prototype installation identity.
+        jes_bearer_token_file: Prototype JES authentication credential file.
+        app_mappings: Enabled prototype app/version contracts.
+        app_service_url: Prototype AppService HTTP base origin.
+        app_service_token_file: Separate prototype AppService credential file.
+        storage_mappings: Configured prototype provider-prefix to worker-mount
+            translations.
+        allow_broad_app_service_credential: Explicit prototype opt-in to its broad
+            AppService credential boundary.
+        allow_insecure_app_service_http: Explicit prototype opt-in to plaintext provider
+            transport.
+        resolution_retry_seconds: Delay after temporary prototype resolution failures.
+        max_initial_capacity_wait_seconds: Optional prototype budget before the first
+            compute claim.
+        reconcile_interval_seconds: Seconds between prototype reconciliation/resolution
+            passes.
+        worker_stale_after_seconds: Heartbeat age permitting prototype attempt recovery.
+        retry_backoff_seconds: Delay before recovered prototype work is dispatchable.
+    """
+
     database_path: Path
     installation_alias: str
     jes_bearer_token_file: Path
@@ -30,6 +61,11 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> Settings:
+        """Parse required prototype environment variables and optional timing/credential-boundary opt-ins.
+
+        Returns:
+            Settings: Parsed historical prototype deployment configuration.
+        """
         mappings = _parse_app_mappings(_required_env("EMPAIA_APP_MAPPINGS_JSON"))
         return cls(
             database_path=Path(
@@ -70,6 +106,17 @@ class Settings:
 
 
 def _required_env(name: str) -> str:
+    """Require a nonempty stripped environment value.
+
+    Args:
+        name: Input/output name or configuration field selected by this operation.
+
+    Returns:
+        str: Nonempty stripped required prototype environment setting.
+
+    Raises:
+        ValueError: A value fails the validation described above.
+    """
     value = os.environ.get(name, "").strip()
     if not value:
         raise ValueError(f"{name} must be configured")
@@ -77,6 +124,17 @@ def _required_env(name: str) -> str:
 
 
 def _token_file(variable_name: str) -> Path:
+    """Return a configured credential path only after confirming it contains a nonempty token.
+
+    Args:
+        variable_name: Environment variable containing a prototype credential-file path.
+
+    Returns:
+        Path: Configured credential file path after checking the file contains a token.
+
+    Raises:
+        ValueError: A value fails the validation described above.
+    """
     path = Path(_required_env(variable_name))
     token = path.read_text(encoding="utf-8").strip()
     if not token:
@@ -85,6 +143,18 @@ def _token_file(variable_name: str) -> Path:
 
 
 def _boolean(name: str, default: bool) -> bool:
+    """Parse true/false or 1/0 case-insensitively, using the default when unset or blank.
+
+    Args:
+        name: Input/output name or configuration field selected by this operation.
+        default: Fallback value used when the setting or optional field is absent.
+
+    Returns:
+        bool: True when the described check succeeds; otherwise False.
+
+    Raises:
+        ValueError: A value fails the validation described above.
+    """
     raw = os.environ.get(name)
     if raw is None or not raw.strip():
         return default
@@ -97,6 +167,19 @@ def _boolean(name: str, default: bool) -> bool:
 
 
 def _optional_positive_int(name: str) -> int | None:
+    """Parse a positive integer policy or return None when no limit is configured.
+
+    Args:
+        name: Input/output name or configuration field selected by this operation.
+
+    Returns:
+        int | None: Validated numeric setting or deterministic prediction described
+            above. None indicates an absent, unsupported, or unmatched value as
+            described above.
+
+    Raises:
+        ValueError: The configured value is not an integer greater than zero.
+    """
     raw = os.environ.get(name)
     if raw is None or not raw.strip():
         return None
@@ -110,6 +193,18 @@ def _optional_positive_int(name: str) -> int | None:
 
 
 def _positive_float(name: str, default: float) -> float:
+    """Parse a finite positive duration using the shared nonnegative parser.
+
+    Args:
+        name: Input/output name or configuration field selected by this operation.
+        default: Fallback value used when the setting or optional field is absent.
+
+    Returns:
+        float: Validated numeric setting or deterministic prediction described above.
+
+    Raises:
+        ValueError: A value fails the validation described above.
+    """
     value = _nonnegative_float(name, default)
     if value == 0:
         raise ValueError(f"{name} must be positive")
@@ -117,6 +212,18 @@ def _positive_float(name: str, default: float) -> float:
 
 
 def _nonnegative_float(name: str, default: float) -> float:
+    """Parse a finite nonnegative duration or its default.
+
+    Args:
+        name: Input/output name or configuration field selected by this operation.
+        default: Fallback value used when the setting or optional field is absent.
+
+    Returns:
+        float: Validated numeric setting or deterministic prediction described above.
+
+    Raises:
+        ValueError: The configured value is not numeric, is non-finite, or is negative.
+    """
     raw = os.environ.get(name)
     if raw is None or not raw.strip():
         return default
@@ -130,6 +237,18 @@ def _nonnegative_float(name: str, default: float) -> float:
 
 
 def _parse_app_mappings(raw: str) -> tuple[AppMapping, ...]:
+    """Validate a nonempty JSON list of unique app/version contracts and construct pinned app mappings.
+
+    Args:
+        raw: JSON text or environment value to parse.
+
+    Returns:
+        tuple[AppMapping, ...]: Validated unique app/version mappings in configuration
+            order.
+
+    Raises:
+        ValueError: A value fails the validation described above.
+    """
     parsed: Any = json.loads(raw)
     if not isinstance(parsed, list) or not parsed:
         raise ValueError("EMPAIA_APP_MAPPINGS_JSON must be a non-empty JSON list")
@@ -208,6 +327,19 @@ def _parse_app_mappings(raw: str) -> tuple[AppMapping, ...]:
 
 
 def _optional_identifier(item: dict[str, Any], name: str, default: str) -> str:
+    """Read a nonempty optional mapping string or its default and strip surrounding whitespace.
+
+    Args:
+        item: Decoded mapping whose optional configuration fields are being read.
+        name: Input/output name or configuration field selected by this operation.
+        default: Fallback value used when the setting or optional field is absent.
+
+    Returns:
+        str: Normalized nonempty field value, or the supplied default.
+
+    Raises:
+        ValueError: A value fails the validation described above.
+    """
     value = item.get(name, default)
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{name} must be a non-empty string")
@@ -215,6 +347,18 @@ def _optional_identifier(item: dict[str, Any], name: str, default: str) -> str:
 
 
 def _identifier_list(item: dict[str, Any], name: str) -> tuple[str, ...]:
+    """Validate and normalize a list of unique nonempty identifier strings.
+
+    Args:
+        item: Decoded mapping whose optional configuration fields are being read.
+        name: Input/output name or configuration field selected by this operation.
+
+    Returns:
+        tuple[str, ...]: Normalized unique identifiers in their configured order.
+
+    Raises:
+        ValueError: A value fails the validation described above.
+    """
     value = item.get(name, [])
     if not isinstance(value, list) or any(
         not isinstance(entry, str) or not entry.strip() for entry in value
@@ -227,6 +371,18 @@ def _identifier_list(item: dict[str, Any], name: str) -> tuple[str, ...]:
 
 
 def _parse_storage_mappings(raw: str) -> tuple[StorageMapping, ...]:
+    """Require exact storage mapping fields and construct validated mount translations from JSON.
+
+    Args:
+        raw: JSON text or environment value to parse.
+
+    Returns:
+        tuple[StorageMapping, ...]: Validated provider-prefix and worker-mount
+            translations.
+
+    Raises:
+        ValueError: A value fails the validation described above.
+    """
     parsed: Any = json.loads(raw)
     if not isinstance(parsed, list) or not parsed:
         raise ValueError("EMPAIA_STORAGE_MAPPINGS_JSON must be a non-empty JSON list")

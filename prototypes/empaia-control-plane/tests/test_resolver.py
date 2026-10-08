@@ -1,3 +1,9 @@
+"""Check historical prototype resolution into an authorized credential-free worker specification.
+
+These cases describe the archived SQLite prototype rather than the current production
+scheduler.
+"""
+
 from __future__ import annotations
 
 import tempfile
@@ -18,15 +24,46 @@ from control_plane.store import SQLiteExecutionStore
 
 
 class StubAppService:
+    """Return fixed configuration and direct-access metadata for prototype resolver tests."""
+
     def __init__(self, storage_path: str, plugin_id: str = "openslide:11880") -> None:
+        """Configure provider storage/plugin metadata and initialize recorded failure messages.
+
+        Args:
+            storage_path: Provider storage locator to authorize or expose in fixture
+                metadata.
+            plugin_id: WSI reader plugin identity exposed by prototype fixture metadata.
+        """
         self.storage_path = storage_path
         self.plugin_id = plugin_id
         self.reported_failures: list[str] = []
 
     def get_configuration(self, _job_id: str) -> JobConfiguration:
+        """Return the required threshold plus an unrelated value for allow-list selection tests.
+
+        Args:
+            _job_id: Unused external empaia job identifier; retained to match the
+                interface.
+
+        Returns:
+            JobConfiguration: Validated global and customer provider configuration
+                sections.
+        """
         return JobConfiguration({"threshold": 0.5, "ignored": True}, {})
 
     def get_direct_access(self, _job_id: str, _input_name: str) -> DirectAccess:
+        """Return fixed slide identity and configured shared storage/plugin information.
+
+        Args:
+            _job_id: Unused external empaia job identifier; retained to match the
+                interface.
+            _input_name: Unused named external job input to resolve; retained to match
+                the interface.
+
+        Returns:
+            DirectAccess: Validated provider shared path and direct-access support
+                metadata.
+        """
         return DirectAccess(
             slide_id="wsi-123",
             required_plugin_id=self.plugin_id,
@@ -35,11 +72,32 @@ class StubAppService:
         )
 
     def report_failure(self, _job_id: str, user_message: str) -> None:
+        """Record the safe message sent by prototype resolution.
+
+        Args:
+            _job_id: Unused external empaia job identifier; retained to match the
+                interface.
+            user_message: Safe external job failure message, bounded by the provider
+                contract.
+
+        Returns:
+            None: No return value.
+        """
         self.reported_failures.append(user_message)
 
 
 class ResolverTestCase(unittest.TestCase):
+    """Exercise historical prototype resolution into an authorized credential-free worker specification."""
+
     def test_resolution_builds_allowlisted_credential_free_spec(self) -> None:
+        """Verify resolution builds allowlisted credential free spec.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             slide = root / "job_slides" / "slide.tiff"

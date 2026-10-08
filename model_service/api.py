@@ -1,3 +1,9 @@
+"""Expose scheduling, polling, cancellation, immediate workflows, and raw inference through FastAPI.
+
+Routes translate application errors into safe HTTP responses. Durable readiness checks
+storage; workflow deployment health checks Ray independently.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -43,6 +49,8 @@ if TYPE_CHECKING:
 
 
 class ApiErrorCode(StrEnum):
+    """Name safe public API failures for admission, execution lookup, and immediate dispatch."""
+
     INVALID_SCHEDULE_REQUEST = "invalid_schedule_request"
     INVALID_WORKFLOW_INVOCATION = "invalid_workflow_invocation"
     UNKNOWN_WORKFLOW = "unknown_workflow"
@@ -55,6 +63,16 @@ class ApiErrorCode(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ScheduleBody:
+    """Accept a provider-specific schedule payload, optional timeout, and caller replay key.
+
+    Attributes:
+        provider: Integration name selecting identity, preparation, and terminal
+            reporting behavior.
+        body: Provider-specific JSON payload submitted for preparation.
+        requested_timeout_seconds: Optional positive caller execution budget in seconds.
+        idempotency_key: Caller replay key; required for standalone admission.
+    """
+
     provider: str
     body: dict[str, JsonValue]
     requested_timeout_seconds: int | None = None
@@ -63,6 +81,18 @@ class ScheduleBody:
 
 @dataclass(frozen=True, slots=True)
 class EmpaiaScheduleBody:
+    """Accept an external EMPAIA job and credential for provider-specific admission.
+
+    Attributes:
+        installation_id: Installation namespace used to scope EMPAIA job replay
+            identity.
+        api_url: External AppService origin.
+        job_id: External EMPAIA job identifier.
+        credential: Private bearer credential received for provider preparation and
+            protected persistence.
+        requested_timeout_seconds: Optional caller execution budget in seconds.
+    """
+
     installation_id: str
     api_url: str
     job_id: str
@@ -72,6 +102,14 @@ class EmpaiaScheduleBody:
 
 @dataclass(frozen=True, slots=True)
 class SchedulerErrorDetail:
+    """Describe a public API failure with its safe message and retry permission.
+
+    Attributes:
+        code: Stable safe failure identifier.
+        message: Safe user-facing failure explanation.
+        retryable: Whether this classified failure permits another attempt.
+    """
+
     code: ApiErrorCode
     message: str
     retryable: bool
@@ -79,29 +117,121 @@ class SchedulerErrorDetail:
 
 @dataclass(frozen=True, slots=True)
 class SchedulerErrorResponse:
+    """Wrap scheduler API error details in the standard HTTP response envelope.
+
+    Attributes:
+        detail: Structured safe HTTP error information.
+    """
+
     detail: SchedulerErrorDetail
 
 
 class ExecutionSchedulerInterface(Protocol):
-    async def check_ready(self) -> None: ...
+    """Define the durable operations required by HTTP routes without coupling them to persistence."""
 
-    async def schedule(self, request: ScheduleRequest) -> ScheduleResult: ...
+    async def check_ready(self) -> None:
+        """Check durable storage availability independently of Ray workflow deployment.
 
-    async def get(self, execution_id: str) -> ExecutionView: ...
+        Returns:
+            None: No return value.
 
-    async def cancel(self, execution_id: str) -> ExecutionView: ...
+        Raises:
+            SchedulingUnavailableError: Admission or durable storage is temporarily
+                unavailable.
+        """
+        ...
+
+    async def schedule(self, request: ScheduleRequest) -> ScheduleResult:
+        """Admit or replay a request and return whether a new execution was created.
+
+        Args:
+            request: Provider submission with workflow ID, caller body, replay key, and
+                optional execution budget.
+
+        Returns:
+            ScheduleResult: Public execution view and insertion-versus-replay flag.
+
+        Raises:
+            InvalidScheduleRequestError: Provider payload, configuration, paths, or
+                effective deadline are invalid.
+            ScheduleConflictError: A provider submission key already exists with
+                different request contents.
+            SchedulingUnavailableError: Admission or durable storage is temporarily
+                unavailable.
+            UnknownWorkflowError: The workflow is not declared in the configured
+                catalog.
+        """
+        ...
+
+    async def get(self, execution_id: str) -> ExecutionView:
+        """Return the caller-visible execution view for an existing ID.
+
+        Args:
+            execution_id: Durable execution identifier, not an external provider job ID.
+
+        Returns:
+            ExecutionView: Caller-visible execution status and its permitted terminal
+                result or error.
+
+        Raises:
+            SchedulingUnavailableError: Admission or durable storage is temporarily
+                unavailable.
+            UnknownExecutionError: The execution ID is absent from storage.
+        """
+        ...
+
+    async def cancel(self, execution_id: str) -> ExecutionView:
+        """Record cancellation and return the updated caller-visible execution view.
+
+        Args:
+            execution_id: Durable execution identifier, not an external provider job ID.
+
+        Returns:
+            ExecutionView: Caller-visible execution status and its permitted terminal
+                result or error.
+
+        Raises:
+            SchedulingUnavailableError: Admission or durable storage is temporarily
+                unavailable.
+            UnknownExecutionError: The execution ID is absent from storage.
+        """
+        ...
 
 
 class SynchronousWorkflowInterface(Protocol):
+    """Define immediate execution that returns a result without durable admission."""
+
     async def run(
         self,
         workflow_id: str,
         invocation: WorkflowInvocation,
-    ) -> WorkflowResult: ...
+    ) -> WorkflowResult:
+        """Validate and dispatch an immediate invocation for the selected workflow.
+
+        Args:
+            workflow_id: Declared workflow identifier used for catalog lookup and
+                dispatch routing.
+            invocation: Named inputs, resolved configuration, public access state, and
+                absolute workflow deadline.
+
+        Returns:
+            WorkflowResult: Named inline outputs and/or references to completed artifact
+                files.
+        """
+        ...
 
 
 class DeploymentHealth(Protocol):
-    async def check(self) -> WorkflowDeploymentStatus: ...
+    """Define the separate check for Ray workflow route availability."""
+
+    async def check(self) -> WorkflowDeploymentStatus:
+        """Report compute reachability and any declared workflows missing from Ray Serve.
+
+        Returns:
+            WorkflowDeploymentStatus: Ray route availability and any missing workflow
+                IDs.
+        """
+        ...
 
 
 def create_execution_app(
@@ -112,12 +242,43 @@ def create_execution_app(
     lifespan: Lifespan[FastAPI] | None = None,
     deployment_health: DeploymentHealth | None = None,
 ) -> FastAPI:
+    """Build HTTP routes over injected services and an optional caller-owned lifespan. No resources or worker tasks start here.
+
+    Args:
+        scheduler: Durable scheduler boundary or its live HTTP client, according to the
+            declared type.
+        workflow_runner: Optional immediate execution service that returns results
+            without durable admission.
+        inference_proxy: Optional raw binary model forwarding service.
+        lifespan: Optional FastAPI resource-lifetime context owned by the caller.
+        deployment_health: Optional Ray workflow-route checker, independent of durable
+            readiness.
+
+    Returns:
+        FastAPI: Application with registered routes and the supplied resource lifespan.
+    """
     app = FastAPI(title="model-service execution scheduler", lifespan=lifespan)
 
     async def submit(
         request: ScheduleRequest,
         response: Response,
     ) -> ScheduleResult:
+        """Translate admission errors and set 202 for a new execution or 200 for an identical replay.
+
+        Args:
+            request: Provider submission with workflow ID, caller body, replay key, and
+                optional execution budget.
+            response: Upstream HTTP response or mutable FastAPI response used to select
+                the public status.
+
+        Returns:
+            ScheduleResult: Public execution view and insertion-versus-replay flag.
+
+        Raises:
+            HTTPException: Admission reports an unknown workflow, conflicting replay,
+                invalid request, or unavailable scheduling; the route returns 404, 409,
+                422, or 503 respectively.
+        """
         try:
             result = await scheduler.schedule(request)
         except UnknownWorkflowError as error:
@@ -153,6 +314,17 @@ def create_execution_app(
         request: Request,
         _error: RequestValidationError,
     ) -> JSONResponse:
+        """Return safe validation messages without reflecting request bodies or credentials.
+
+        Args:
+            request: Incoming public request whose path selects the safe invocation or
+                admission error code.
+            _error: Unused safe domain error or injected integration exception to
+                classify; retained to match the interface.
+
+        Returns:
+            JSONResponse: Safe JSON validation or availability response.
+        """
         is_workflow_run = request.url.path.endswith("/run")
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -188,6 +360,26 @@ def create_execution_app(
         workflow_id: str,
         invocation: WorkflowInvocation,
     ) -> WorkflowResult:
+        """Dispatch immediate work while the client remains connected and translate classified failures into HTTP responses.
+
+        Args:
+            request: Incoming HTTP request monitored for caller disconnection.
+            workflow_id: Declared workflow identifier used for catalog lookup and
+                dispatch routing.
+            invocation: Named inputs, resolved configuration, public access state, and
+                absolute workflow deadline.
+
+        Returns:
+            WorkflowResult: Named inline outputs and/or references to completed artifact
+                files.
+
+        Raises:
+            HTTPException: The runner is unavailable, the workflow/invocation is
+                invalid, dispatch is rejected, or the remote outcome fails/is unknown.
+                Status and retry metadata preserve that classification.
+            asyncio.CancelledError: The HTTP caller disconnects or the owning request
+                task is cancelled.
+        """
         if workflow_runner is None:
             raise _http_error(
                 503,
@@ -255,6 +447,23 @@ def create_execution_app(
         body: ScheduleBody,
         response: Response,
     ) -> ScheduleResult:
+        """Translate the generic schedule body into a provider request and submit it for durable admission.
+
+        Args:
+            workflow_id: Declared workflow identifier used for catalog lookup and
+                dispatch routing.
+            body: Provider name/body, replay key, and optional caller timeout from
+                public HTTP.
+            response: Upstream HTTP response or mutable FastAPI response used to select
+                the public status.
+
+        Returns:
+            ScheduleResult: Public execution view and insertion-versus-replay flag.
+
+        Raises:
+            HTTPException: Admission fails; submit translates the domain failure into
+                its public HTTP status.
+        """
         return await submit(
             ScheduleRequest(
                 workflow_id=workflow_id,
@@ -283,6 +492,23 @@ def create_execution_app(
         body: EmpaiaScheduleBody,
         response: Response,
     ) -> ScheduleResult:
+        """Translate EMPAIA job fields into an EMPAIA provider request for durable admission.
+
+        Args:
+            workflow_id: Declared workflow identifier used for catalog lookup and
+                dispatch routing.
+            body: Installation, external job origin/ID, private credential, and optional
+                timeout.
+            response: Upstream HTTP response or mutable FastAPI response used to select
+                the public status.
+
+        Returns:
+            ScheduleResult: Public execution view and insertion-versus-replay flag.
+
+        Raises:
+            HTTPException: EMPAIA admission fails; submit translates the domain failure
+                into its public HTTP status.
+        """
         return await submit(
             ScheduleRequest(
                 workflow_id=workflow_id,
@@ -307,6 +533,19 @@ def create_execution_app(
         },
     )
     async def get_execution(execution_id: str) -> ExecutionView:
+        """Read a public execution view, mapping absent IDs to 404 and storage outages to 503.
+
+        Args:
+            execution_id: Durable execution identifier, not an external provider job ID.
+
+        Returns:
+            ExecutionView: Caller-visible execution status and its permitted terminal
+                result or error.
+
+        Raises:
+            HTTPException: Durable storage is unavailable or the execution is absent,
+                producing HTTP 503 or 404.
+        """
         try:
             return await scheduler.get(execution_id)
         except SchedulingUnavailableError as error:
@@ -329,6 +568,19 @@ def create_execution_app(
         },
     )
     async def cancel_execution(execution_id: str) -> ExecutionView:
+        """Cancel a durable execution, mapping absent IDs and storage outages to safe HTTP errors.
+
+        Args:
+            execution_id: Durable execution identifier, not an external provider job ID.
+
+        Returns:
+            ExecutionView: Caller-visible execution status and its permitted terminal
+                result or error.
+
+        Raises:
+            HTTPException: Durable storage is unavailable or the execution is absent,
+                producing HTTP 503 or 404.
+        """
         try:
             return await scheduler.cancel(execution_id)
         except SchedulingUnavailableError as error:
@@ -344,10 +596,24 @@ def create_execution_app(
 
     @app.get("/healthz")
     async def health() -> dict[str, str]:
+        """Report that this HTTP process is responsive without checking external services.
+
+        Returns:
+            dict[str, str]: Liveness response with status set to ok.
+        """
         return {"status": "ok"}
 
     @app.get("/readyz")
     async def readiness() -> dict[str, object]:
+        """Check repository availability so durable API readiness does not depend on Ray.
+
+        Returns:
+            dict[str, object]: Readiness response with status set to ok after durable
+                storage responds.
+
+        Raises:
+            HTTPException: Durable storage is unavailable, producing HTTP 503.
+        """
         try:
             await scheduler.check_ready()
         except SchedulingUnavailableError as error:
@@ -361,6 +627,16 @@ def create_execution_app(
 
     @app.get("/healthz/workflows")
     async def workflow_health(response: Response) -> WorkflowDeploymentStatus:
+        """Report workflow deployment state separately, using 503 for configured compute that is not ready.
+
+        Args:
+            response: Upstream HTTP response or mutable FastAPI response used to select
+                the public status.
+
+        Returns:
+            WorkflowDeploymentStatus: Ray route availability and any missing workflow
+                IDs.
+        """
         if deployment_health is None:
             return WorkflowDeploymentStatus(WorkflowDeploymentState.NOT_CONFIGURED)
         health = await deployment_health.check()
@@ -377,6 +653,19 @@ async def _run_while_connected[T](
     request: Request,
     operation: Awaitable[T],
 ) -> T:
+    """Race an immediate operation against client disconnect, cancelling and joining both tasks on exit.
+
+    Args:
+        request: Incoming HTTP request monitored while workflow dispatch runs.
+        operation: Immediate async work raced against the caller's disconnect.
+
+    Returns:
+        T: Completed immediate operation result while the caller remains connected.
+
+    Raises:
+        asyncio.CancelledError: The owning task, caller, deadline, or lease monitor
+            cancels the operation.
+    """
     operation_task = asyncio.ensure_future(operation)
     disconnect_task = asyncio.create_task(_wait_for_disconnect(request))
     try:
@@ -395,6 +684,14 @@ async def _run_while_connected[T](
 
 
 async def _wait_for_disconnect(request: Request) -> None:
+    """Consume ASGI receive messages until the client disconnects.
+
+    Args:
+        request: Incoming HTTP request whose ASGI events reveal disconnection.
+
+    Returns:
+        None: No return value.
+    """
     while True:
         message = await request.receive()
         if message["type"] == "http.disconnect":
@@ -409,6 +706,19 @@ def _http_error(
     retryable: bool = False,
     headers: dict[str, str] | None = None,
 ) -> HTTPException:
+    """Construct the shared safe error envelope with an HTTP status, retry flag, and optional response headers.
+
+    Args:
+        status_code: HTTP status to return or classify.
+        code: Stable failure identifier, or HTTP status when classifying an upstream
+            response.
+        message: Safe user-facing failure or cancellation text.
+        retryable: Whether another attempt is permitted for this classified failure.
+        headers: HTTP metadata to filter, send, or include in an error response.
+
+    Returns:
+        HTTPException: Structured safe HTTP error ready to raise at the route boundary.
+    """
     return HTTPException(
         status_code=status_code,
         detail={"code": code, "message": message, "retryable": retryable},

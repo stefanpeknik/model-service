@@ -1,3 +1,9 @@
+"""Check live SDK scheduling, polling, immediate execution, and cancellation on the historical dummy profile.
+
+These tests contact configured live services and may create executions and artifacts.
+They are not part of offline unit validation.
+"""
+
 from __future__ import annotations
 
 import os
@@ -7,7 +13,17 @@ from uuid import uuid4
 
 
 class DeployedSDKTests(unittest.TestCase):
+    """Exercise live SDK scheduling, polling, immediate execution, and cancellation on the historical dummy profile."""
+
     def test_workflow_schedule_poll_and_run_share_one_origin(self) -> None:
+        """Verify workflow schedule poll and run share one origin.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         origin = os.environ.get("VALIDATION_ORIGIN")
         if origin is None:
             self.skipTest("VALIDATION_ORIGIN is not configured")
@@ -69,6 +85,14 @@ class DeployedSDKTests(unittest.TestCase):
             self.assertEqual(execution.result, synchronous)
 
     def test_cancelled_execution_has_no_result(self) -> None:
+        """Verify cancelled execution has no result.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         origin = os.environ.get("VALIDATION_ORIGIN")
         if origin is None:
             self.skipTest("VALIDATION_ORIGIN is not configured")

@@ -1,3 +1,5 @@
+"""Check production dependency wiring, startup/shutdown, and per-model transport origins."""
+
 from __future__ import annotations
 
 import asyncio
@@ -13,8 +15,15 @@ from model_service.settings import SchedulerSettings
 
 
 class ExecutionRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    """Exercise production dependency wiring, startup/shutdown, and per-model transport origins."""
+
     @staticmethod
     def settings() -> SchedulerSettings:
+        """Construct production settings with an unused database origin and a synthetic encryption key for wiring tests.
+
+        Returns:
+            SchedulerSettings: Parsed and validated scheduler process configuration.
+        """
         return SchedulerSettings.from_environment(
             {
                 "DATABASE_URL": "postgresql://unused",
@@ -26,6 +35,14 @@ class ExecutionRuntimeTests(unittest.IsolatedAsyncioTestCase):
     async def test_runtime_initializes_repository_and_closes_client_after_scheduler(
         self,
     ):
+        """Verify runtime initializes repository and closes client after scheduler.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         repository = InMemoryExecutionRepository()
         initialized = AsyncMock()
         maintained = asyncio.Event()
@@ -49,6 +66,14 @@ class ExecutionRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(asyncio.all_tasks(), tasks_before)
 
     async def test_runtime_closes_client_when_repository_initialization_fails(self):
+        """Verify runtime closes client when repository initialization fails.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         repository = InMemoryExecutionRepository()
         initialized = AsyncMock(side_effect=RuntimeError("database unavailable"))
         client = AsyncClient(transport=MockTransport(lambda _request: Response(503)))
@@ -69,9 +94,27 @@ class ExecutionRuntimeTests(unittest.IsolatedAsyncioTestCase):
     async def test_public_inference_uses_separate_origin_without_changing_workflow_health(
         self,
     ) -> None:
+        """Verify public inference uses separate origin without changing workflow health.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         forwarded: list[Request] = []
 
         def serve_handler(request: Request) -> Response:
+            """Return configured route/model responses while recording which upstream origin receives each request.
+
+            Args:
+                request: Request to validate, admit, dispatch, forward, or process, as
+                    specified by its declared type.
+
+            Returns:
+                Response: HTTP response returned by the transport or controlled scenario
+                    handler.
+            """
             forwarded.append(request)
             if request.url == "http://workflow-serve/-/routes":
                 return Response(
@@ -115,9 +158,27 @@ class ExecutionRuntimeTests(unittest.IsolatedAsyncioTestCase):
     async def test_named_model_shares_workflow_cluster_without_redirecting_other_models(
         self,
     ) -> None:
+        """Verify named model shares workflow cluster without redirecting other models.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         forwarded: list[Request] = []
 
         def serve_handler(request: Request) -> Response:
+            """Return configured route/model responses while recording which upstream origin receives each request.
+
+            Args:
+                request: Request to validate, admit, dispatch, forward, or process, as
+                    specified by its declared type.
+
+            Returns:
+                Response: HTTP response returned by the transport or controlled scenario
+                    handler.
+            """
             forwarded.append(request)
             if request.url.host == "workflow-serve":
                 return Response(200, json=0.25)
@@ -165,6 +226,14 @@ class ExecutionRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(forwarded[1].url, "http://model-serve/prostate-classifier-10")
 
     def test_model_origin_configuration_rejects_invalid_prefixes_and_urls(self) -> None:
+        """Verify model origin configuration rejects invalid prefixes and urls.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         for origins in (
             '{"prostate-classifier-1":"file:///tmp/model"}',
             '{"prostate-classifier-1":12}',

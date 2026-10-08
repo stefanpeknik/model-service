@@ -1,3 +1,5 @@
+"""Check tagged workflow input/output values preserved across JSON conversion."""
+
 import unittest
 from datetime import UTC, datetime
 
@@ -11,7 +13,17 @@ from workflow_execution.serialization import (
 
 
 class WorkflowSerializationTests(unittest.TestCase):
+    """Exercise tagged workflow input/output values preserved across JSON conversion."""
+
     def test_shared_kind_enums_preserve_invocation_wire_strings(self) -> None:
+        """Verify shared kind enums preserve invocation wire strings.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         body = {
             "inputs": {
                 "inline": {"kind": "inline", "value": 7},
@@ -29,6 +41,14 @@ class WorkflowSerializationTests(unittest.TestCase):
         self.assertEqual(invocation_to_dict(invocation), body)
 
     def test_shared_kind_enums_preserve_result_wire_strings(self) -> None:
+        """Verify shared kind enums preserve result wire strings.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         body = {
             "outputs": {
                 "score": {"kind": "inline", "value": 0.75},

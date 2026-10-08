@@ -1,3 +1,5 @@
+"""Check AppService HTTP shapes, input materialization, and uncertain publication outcomes."""
+
 from __future__ import annotations
 
 import json
@@ -19,7 +21,10 @@ from workflow_execution.contracts import InlineOutput, SharedArtifact
 
 
 class RecordingArtifactPublisher:
+    """Record shared artifacts passed from the HTTP gateway without performing image conversion."""
+
     def __init__(self) -> None:
+        """Start an empty list of named artifact publication requests."""
         self.calls: list[tuple[str, SharedArtifact]] = []
 
     async def publish(
@@ -28,12 +33,25 @@ class RecordingArtifactPublisher:
         name: str,
         artifact: SharedArtifact,
     ) -> None:
+        """Record the output name and artifact without writing to an external service.
+
+        Args:
+            gateway: Job-scoped provider boundary used for publication or cleanup.
+            name: Input/output name or configuration field selected by this operation.
+            artifact: Completed shared output reference to publish.
+
+        Returns:
+            None: No return value.
+        """
         del gateway
         self.calls.append((name, artifact))
 
 
 class RecordingRectangleWriter:
+    """Record rectangle-mask requests and create placeholder destination files."""
+
     def __init__(self) -> None:
+        """Start an empty list of mask destinations and geometry requests."""
         self.calls: list[tuple[Path, SlideMetadata, Rectangle]] = []
 
     def write(
@@ -42,17 +60,46 @@ class RecordingRectangleWriter:
         slide: SlideMetadata,
         rectangle: Rectangle,
     ) -> None:
+        """Record requested slide/rectangle geometry and create a placeholder mask file.
+
+        Args:
+            destination: Local path where input materialization or mask writing must
+                produce a file.
+            slide: Validated slide dimensions, pyramid levels, and nanometer pixel
+                sizes.
+            rectangle: Slide-space region origin and dimensions to rasterize.
+
+        Returns:
+            None: No return value.
+        """
         self.calls.append((destination, slide, rectangle))
         destination.touch()
 
 
 class FakeVipsImage:
+    """Stand in for libvips images so tests can observe encoding or publication without native image I/O."""
+
     format = "uchar"
     width = 600
     height = 300
     bands = 1
 
     def crop(self, _x: int, _y: int, _width: int, _height: int) -> FakeVipsImage:
+        """Return the same fake image instead of executing native cropping.
+
+        Args:
+            _x: Unused horizontal tile origin in selected slide-level pixels; retained
+                to match the interface.
+            _y: Unused vertical tile origin in selected slide-level pixels; retained to
+                match the interface.
+            _width: Unused image or crop width in pixels; retained to match the
+                interface.
+            _height: Unused image or crop height in pixels; retained to match the
+                interface.
+
+        Returns:
+            FakeVipsImage: The fixture image or same chainable fake image instance.
+        """
         return self
 
     def embed(
@@ -64,30 +111,90 @@ class FakeVipsImage:
         *,
         extend: str,
     ) -> FakeVipsImage:
+        """Require black padding and return the fake image for edge-tile publication.
+
+        Args:
+            _x: Unused horizontal tile origin in selected slide-level pixels; retained
+                to match the interface.
+            _y: Unused vertical tile origin in selected slide-level pixels; retained to
+                match the interface.
+            _width: Unused image or crop width in pixels; retained to match the
+                interface.
+            _height: Unused image or crop height in pixels; retained to match the
+                interface.
+            extend: libvips border fill mode; publication edge tiles use black padding.
+
+        Returns:
+            FakeVipsImage: The fixture image or same chainable fake image instance.
+        """
         assert extend == "black"
         return self
 
     def cast(self, image_format: str) -> FakeVipsImage:
+        """Accept the requested conversion without native pixel processing.
+
+        Args:
+            image_format: Requested libvips pixel element format.
+
+        Returns:
+            FakeVipsImage: The fixture image or same chainable fake image instance.
+        """
         assert image_format == "float"
         return self
 
     def __truediv__(self, value: float) -> FakeVipsImage:
+        """Require normalization by 255 and return the same fake image.
+
+        Args:
+            value: Value being validated, serialized, converted, or checked by this
+                helper.
+
+        Returns:
+            FakeVipsImage: The fixture image or same chainable fake image instance.
+        """
         assert value == 255.0
         return self
 
     def write_to_memory(self) -> memoryview:
+        """Return deterministic placeholder bytes for the fake float32 tile upload.
+
+        Returns:
+            memoryview: Deterministic fake float32 tile payload.
+        """
         return memoryview(b"float32 tile")
 
 
 class FakeVipsImageType:
+    """Provide the fake libvips file-open operation used by publication tests."""
+
     @staticmethod
     def new_from_file(_path: str, *, access: str) -> FakeVipsImage:
+        """Require sequential file access and return the fake image fixture.
+
+        Args:
+            _path: Unused file, storage locator, or http endpoint selected by this
+                operation; retained to match the interface.
+            access: Invocation-scoped file access used to verify artifact visibility.
+
+        Returns:
+            FakeVipsImage: The fixture image or same chainable fake image instance.
+        """
         assert access == "sequential"
         return FakeVipsImage()
 
 
 class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
+    """Exercise AppService HTTP shapes, input materialization, and uncertain publication outcomes."""
+
     async def test_invalid_rectangle_geometry_is_a_safe_integration_error(self) -> None:
+        """Verify invalid rectangle geometry is a safe integration error.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         for coordinate in [float("nan"), float("inf"), True, "10"]:
             with self.subTest(coordinate=coordinate), TemporaryDirectory() as directory:
                 writer = RecordingRectangleWriter()
@@ -95,6 +202,17 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
                 def handle(
                     request: httpx.Request, coordinate=coordinate
                 ) -> httpx.Response:
+                    """Return scenario-specific mock HTTP responses and record or assert requests for this gateway test.
+
+                    Args:
+                        request: Request to validate, admit, dispatch, forward, or
+                            process, as specified by its declared type.
+                        coordinate: Invalid rectangle coordinate under test.
+
+                    Returns:
+                        httpx.Response: HTTP response returned by the transport or
+                            controlled scenario handler.
+                    """
                     if request.url.path.endswith("/direct-access"):
                         return httpx.Response(404)
                     if request.url.path.endswith("/inputs/slide"):
@@ -139,6 +257,14 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
                     await gateway.close()
 
     async def test_configuration_rejects_nested_nonfinite_values(self) -> None:
+        """Verify configuration rejects nested nonfinite values.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         gateway = HttpEmpaiaGateway(
             "https://empaia.example",
             "job-1",
@@ -160,12 +286,35 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             await gateway.close()
 
     async def test_mutation_guard_runs_before_authenticated_request(self) -> None:
+        """Verify mutation guard runs before authenticated request.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         events = []
 
         async def guard():
+            """Record that mutation guarding ran before the fake authenticated HTTP request.
+
+            Returns:
+                None: No return value.
+            """
             events.append("guard")
 
         def handle(request: httpx.Request) -> httpx.Response:
+            """Return scenario-specific mock HTTP responses and record or assert requests for this gateway test.
+
+            Args:
+                request: Request to validate, admit, dispatch, forward, or process, as
+                    specified by its declared type.
+
+            Returns:
+                httpx.Response: HTTP response returned by the transport or controlled
+                    scenario handler.
+            """
             self.assertEqual(request.headers["Authorization"], "Bearer credential")
             events.append("request")
             return httpx.Response(503)
@@ -190,11 +339,33 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             await gateway.close()
 
     async def test_configuration_is_flattened_and_direct_input_is_linked(self) -> None:
+        """Verify configuration is flattened and direct input is linked.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with TemporaryDirectory() as directory:
             source = Path(directory) / "slide.tiff"
             source.write_bytes(b"slide")
 
             def handle(request: httpx.Request) -> httpx.Response:
+                """Return scenario-specific mock HTTP responses and record or assert requests for this gateway test.
+
+                Args:
+                    request: Request to validate, admit, dispatch, forward, or process,
+                        as specified by its declared type.
+
+                Returns:
+                    httpx.Response: HTTP response returned by the transport or
+                        controlled scenario handler.
+
+                Raises:
+                    AssertionError: An expected invariant or fixture interaction does
+                        not hold.
+                """
                 if request.url.path.endswith("/configuration"):
                     return httpx.Response(
                         200,
@@ -232,9 +403,27 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             await gateway.close()
 
     async def test_inline_outputs_and_lifecycle_use_appservice_contract(self) -> None:
+        """Verify inline outputs and lifecycle use AppService contract.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         requests: list[tuple[str, str, object | None]] = []
 
         def handle(request: httpx.Request) -> httpx.Response:
+            """Return scenario-specific mock HTTP responses and record or assert requests for this gateway test.
+
+            Args:
+                request: Request to validate, admit, dispatch, forward, or process, as
+                    specified by its declared type.
+
+            Returns:
+                httpx.Response: HTTP response returned by the transport or controlled
+                    scenario handler.
+            """
             body = json.loads(request.content) if request.content else None
             requests.append((request.method, request.url.path, body))
             return httpx.Response(200, json={})
@@ -280,9 +469,31 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
     async def test_rectangle_input_is_materialized_when_direct_access_is_absent(
         self,
     ) -> None:
+        """Verify rectangle input is materialized when direct access is absent.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         writer = RecordingRectangleWriter()
 
         def handle(request: httpx.Request) -> httpx.Response:
+            """Return scenario-specific mock HTTP responses and record or assert requests for this gateway test.
+
+            Args:
+                request: Request to validate, admit, dispatch, forward, or process, as
+                    specified by its declared type.
+
+            Returns:
+                httpx.Response: HTTP response returned by the transport or controlled
+                    scenario handler.
+
+            Raises:
+                AssertionError: An expected invariant or fixture interaction does not
+                    hold.
+            """
             if request.url.path.endswith("/direct-access"):
                 return httpx.Response(404)
             if request.url.path.endswith("/inputs/slide"):
@@ -328,6 +539,14 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             await gateway.close()
 
     async def test_shared_artifact_uses_packaged_publisher(self) -> None:
+        """Verify shared artifact uses packaged publisher.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         publisher = RecordingArtifactPublisher()
         gateway = HttpEmpaiaGateway(
             "https://empaia.example",
@@ -349,9 +568,31 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
         await gateway.close()
 
     async def test_default_tiff_publisher_registers_and_uploads_pixelmap(self) -> None:
+        """Verify default TIFF publisher registers and uploads pixelmap.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         uploaded_tiles: list[str] = []
 
         def handle(request: httpx.Request) -> httpx.Response:
+            """Return scenario-specific mock HTTP responses and record or assert requests for this gateway test.
+
+            Args:
+                request: Request to validate, admit, dispatch, forward, or process, as
+                    specified by its declared type.
+
+            Returns:
+                httpx.Response: HTTP response returned by the transport or controlled
+                    scenario handler.
+
+            Raises:
+                AssertionError: An expected invariant or fixture interaction does not
+                    hold.
+            """
             if request.url.path.endswith("/inputs/slide"):
                 return httpx.Response(
                     200,
@@ -405,7 +646,27 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             await gateway.close()
 
     async def test_mutating_transport_failure_is_safe_and_outcome_unknown(self) -> None:
+        """Verify mutating transport failure is safe and outcome unknown.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
+
         def fail(_request: httpx.Request) -> httpx.Response:
+            """Inject the configured remote failure for safe classification or terminal reporting checks.
+
+            Args:
+                _request: Unused request to validate, admit, dispatch, forward, or
+                    process, as specified by its declared type; retained to match the
+                    interface.
+
+            Returns:
+                httpx.Response: HTTP response returned by the transport or controlled
+                    scenario handler.
+            """
             raise httpx.ConnectError("private transport detail")
 
         gateway = HttpEmpaiaGateway(
@@ -427,6 +688,14 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
         await gateway.close()
 
     async def test_configuration_rejects_ambiguous_sections(self) -> None:
+        """Verify configuration rejects ambiguous sections.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         gateway = HttpEmpaiaGateway(
             "https://empaia.example",
             "job-1",

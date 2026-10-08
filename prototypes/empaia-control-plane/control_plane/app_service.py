@@ -1,3 +1,10 @@
+"""Call AppService synchronously with file-backed credentials and classified response failures.
+
+Historical SQLite control-plane prototype. The current production scheduler lives in
+execution_scheduler/ and uses PostgreSQL; these lifecycle rules are not its
+specification.
+"""
+
 from __future__ import annotations
 
 import json
@@ -39,17 +46,43 @@ class AppServiceInfrastructureError(AppServiceError):
 
 
 class TokenProvider(Protocol):
-    def get_token(self) -> str: ...
+    """Supply an AppService credential without coupling HTTP calls to its storage location."""
+
+    def get_token(self) -> str:
+        """Return the current credential or raise a classified credential-access error.
+
+        Returns:
+            str: Current nonempty AppService credential after checking configured
+                credential separation.
+        """
+        ...
 
 
 @dataclass(frozen=True, slots=True)
 class FileTokenProvider:
-    """Reads a mounted credential just before each outbound operation."""
+    """Reads a mounted credential just before each outbound operation.
+
+    Attributes:
+        path: Shared file reference; results carry its path rather than bytes.
+        forbidden_paths: Credential files that must differ from the AppService token.
+    """
 
     path: Path
     forbidden_paths: tuple[Path, ...] = ()
 
     def get_token(self) -> str:
+        """Read the credential on every use and verify it differs from configured forbidden trust-domain credentials.
+
+        Returns:
+            str: Current nonempty AppService credential after checking configured
+                credential separation.
+
+        Raises:
+            AppServiceInfrastructureError: The prototype integration settings or
+                response contract are invalid.
+            AppServiceTransientError: The prototype provider or credential source is
+                temporarily unavailable.
+        """
         try:
             token = self.path.read_text(encoding="utf-8").strip()
         except OSError as error:
@@ -74,12 +107,29 @@ class FileTokenProvider:
 
 @dataclass(frozen=True, slots=True)
 class JobConfiguration:
+    """Keep provider global and customer configuration sections separate for parameter selection.
+
+    Attributes:
+        global_values: Provider global configuration section.
+        customer_values: Provider customer configuration section.
+    """
+
     global_values: dict[str, JsonValue]
     customer_values: dict[str, JsonValue]
 
 
 @dataclass(frozen=True, slots=True)
 class DirectAccess:
+    """Carry slide identity, required WSI plugin, provider storage path, and direct-access support.
+
+    Attributes:
+        slide_id: External whole-slide input identifier.
+        storage_path: Provider shared file path or authorized storage locator.
+        supported: Whether this provider input supports direct shared access.
+        required_plugin_id: WSI representation plugin required to read the provider
+            input.
+    """
+
     slide_id: str
     required_plugin_id: str
     storage_path: str
@@ -87,6 +137,8 @@ class DirectAccess:
 
 
 class _RejectRedirects(HTTPRedirectHandler):
+    """Disable redirects so authenticated requests do not silently cross AppService origins."""
+
     def redirect_request(
         self,
         req: Request,
@@ -96,6 +148,22 @@ class _RejectRedirects(HTTPRedirectHandler):
         headers: Any,
         newurl: str,
     ) -> Request | None:
+        """Return no follow-up request for an HTTP redirect.
+
+        Args:
+            req: Original urllib request supplied to the redirect hook.
+            fp: Original redirect response stream supplied by urllib.
+            code: Stable failure identifier, or HTTP status when classifying an upstream
+                response.
+            msg: Redirect status text supplied by urllib.
+            headers: HTTP metadata to filter, send, or include in an error response.
+            newurl: Redirect target that this prototype deliberately refuses to follow.
+
+        Returns:
+            Request | None: A redirected request; this rejection hook returns no follow-
+                up request. None indicates an absent, unsupported, or unmatched value as
+                described above.
+        """
         return None
 
 
@@ -111,6 +179,22 @@ class AppServiceClient:
         allow_insecure_http: bool = False,
         opener: OpenerDirector | None = None,
     ) -> None:
+        """Validate an HTTP(S) origin and positive timeout, requiring explicit prototype opt-in for plaintext transport.
+
+        Args:
+            base_url: AppService base origin and optional path prefix.
+            token_provider: Credential source consulted for each prototype AppService
+                request.
+            timeout_seconds: Maximum wait for cleanup, polling, or a classified
+                operation.
+            allow_insecure_http: Whether this historical prototype may send credentials
+                over plaintext HTTP.
+            opener: Optional urllib opener used to inject transport behavior in
+                prototype tests.
+
+        Raises:
+            ValueError: A value fails the validation described above.
+        """
         if timeout_seconds <= 0:
             raise ValueError("AppService timeout must be positive")
         parsed = urlsplit(base_url)
@@ -136,12 +220,35 @@ class AppServiceClient:
         self._opener = opener or build_opener(_RejectRedirects())
 
     def get_configuration(self, job_id: str) -> JobConfiguration:
+        """GET the job configuration and require valid flat global/customer sections.
+
+        Args:
+            job_id: External EMPAIA job identifier.
+
+        Returns:
+            JobConfiguration: Validated global and customer provider configuration
+                sections.
+        """
         value = self._request_json("GET", f"/v3/{quote(job_id, safe='')}/configuration")
         global_values = _flat_configuration_section(value, "global")
         customer_values = _flat_configuration_section(value, "customer")
         return JobConfiguration(global_values, customer_values)
 
     def get_direct_access(self, job_id: str, input_name: str) -> DirectAccess:
+        """GET and validate shared WSI access metadata for a named job input.
+
+        Args:
+            job_id: External EMPAIA job identifier.
+            input_name: Named external job input to resolve.
+
+        Returns:
+            DirectAccess: Validated provider shared path and direct-access support
+                metadata.
+
+        Raises:
+            AppServiceInfrastructureError: The prototype integration settings or
+                response contract are invalid.
+        """
         value = self._request_json(
             "GET",
             "/v3/rationai/"
@@ -164,6 +271,19 @@ class AppServiceClient:
         )
 
     def report_failure(self, job_id: str, user_message: str) -> None:
+        """PUT a nonempty safe failure message of at most 255 characters to the external job.
+
+        Args:
+            job_id: External EMPAIA job identifier.
+            user_message: Safe external job failure message, bounded by the provider
+                contract.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            ValueError: A value fails the validation described above.
+        """
         if not user_message or len(user_message) > 255:
             raise ValueError(
                 "AppService failure message must contain at most 255 chars"
@@ -177,6 +297,22 @@ class AppServiceClient:
     def _request_json(
         self, method: str, path: str, body: dict[str, JsonValue] | None = None
     ) -> dict[str, Any]:
+        """Send authenticated JSON with a bounded response size, reject redirects, and classify transport, status, and decoding failures.
+
+        Args:
+            method: HTTP method used by the request or test client.
+            path: File, storage locator, or HTTP endpoint selected by this operation.
+            body: Typed or JSON request payload accepted by this boundary.
+
+        Returns:
+            dict[str, Any]: Decoded, serialized, or recorded fields described above.
+
+        Raises:
+            AppServiceInfrastructureError: The prototype integration settings or
+                response contract are invalid.
+            AppServiceTransientError: The prototype provider or credential source is
+                temporarily unavailable.
+        """
         token = self._tokens.get_token()
         payload = (
             json.dumps(body, allow_nan=False, separators=(",", ":")).encode()
@@ -222,6 +358,22 @@ class AppServiceClient:
 
     @staticmethod
     def _raise_http_error(status_code: int) -> None:
+        """Map rejected jobs, temporary statuses, and integration failures to separate prototype error categories.
+
+        Args:
+            status_code: HTTP status to return or classify.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AppServiceApplicationError: The prototype provider rejects the external
+                job's data or configuration.
+            AppServiceInfrastructureError: The prototype integration settings or
+                response contract are invalid.
+            AppServiceTransientError: The prototype provider or credential source is
+                temporarily unavailable.
+        """
         if status_code in _APPLICATION_ERROR_STATUSES:
             raise AppServiceApplicationError(
                 f"AppService rejected the EMPAIA job (HTTP {status_code})"
@@ -238,6 +390,22 @@ class AppServiceClient:
 def _flat_configuration_section(
     value: dict[str, Any], name: str
 ) -> dict[str, JsonValue]:
+    """Require named primitive-valued configuration entries and reject non-finite numeric values.
+
+    Args:
+        value: Value being validated, serialized, converted, or checked by this helper.
+        name: Input/output name or configuration field selected by this operation.
+
+    Returns:
+        dict[str, JsonValue]: Named primitive provider values, with non-finite numbers
+            rejected.
+
+    Raises:
+        AppServiceApplicationError: The prototype provider rejects the external job's
+            data or configuration.
+        AppServiceInfrastructureError: The prototype integration settings or response
+            contract are invalid.
+    """
     section = value.get(name)
     if not isinstance(section, dict):
         raise AppServiceInfrastructureError(
@@ -262,6 +430,19 @@ def _flat_configuration_section(
 
 
 def _required_string(value: dict[str, Any], name: str) -> str:
+    """Extract a nonempty stripped response field or raise an integration error.
+
+    Args:
+        value: Value being validated, serialized, converted, or checked by this helper.
+        name: Input/output name or configuration field selected by this operation.
+
+    Returns:
+        str: Nonempty stripped provider response field.
+
+    Raises:
+        AppServiceInfrastructureError: The prototype integration settings or response
+            contract are invalid.
+    """
     item = value.get(name)
     if not isinstance(item, str) or not item.strip():
         raise AppServiceInfrastructureError(f"AppService response has no valid {name}")

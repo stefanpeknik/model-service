@@ -1,3 +1,5 @@
+"""Validate and dispatch immediate workflows without creating durable execution records."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -18,11 +20,20 @@ if TYPE_CHECKING:
 
 
 class SynchronousWorkflowService:
+    """Provide immediate workflow execution over a catalog and transport-independent dispatch adapter."""
+
     def __init__(
         self,
         catalog: WorkflowCatalog,
         dispatch: WorkflowDispatch,
     ) -> None:
+        """Retain caller-owned catalog and dispatch dependencies without starting work.
+
+        Args:
+            catalog: Workflow definitions and their configuration validators/defaults.
+            dispatch: Workflow transport used to invoke the selected Ray Serve
+                application.
+        """
         self._catalog = catalog
         self._dispatch = dispatch
 
@@ -31,6 +42,30 @@ class SynchronousWorkflowService:
         workflow_id: str,
         invocation: WorkflowInvocation,
     ) -> WorkflowResult:
+        """Require a known workflow, valid inputs/deadline, and fully resolved configuration before dispatching with empty private context.
+
+        Args:
+            workflow_id: Declared workflow identifier used for catalog lookup and
+                dispatch routing.
+            invocation: Named inputs, resolved configuration, public access state, and
+                absolute workflow deadline.
+
+        Returns:
+            WorkflowResult: Named inline outputs and/or references to completed artifact
+                files.
+
+        Raises:
+            ConfirmedDispatchRejectionError: The remote deployment confirms rejection
+                before accepting work.
+            InvalidWorkflowInvocation: Inputs, resolved configuration, access context,
+                or deadline violate the workflow contract.
+            RemoteWorkflowFailureError: The remote workflow returns a safe structured
+                failure.
+            UnknownDispatchOutcomeError: Transport or response decoding cannot establish
+                the remote outcome.
+            UnknownWorkflowError: The workflow is not declared in the configured
+                catalog.
+        """
         try:
             definition = self._catalog.get(workflow_id)
         except UnknownWorkflow as error:

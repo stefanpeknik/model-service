@@ -1,3 +1,5 @@
+"""Check public execution routes, immediate dispatch, safe errors, and separate storage/compute readiness."""
+
 from __future__ import annotations
 
 import asyncio
@@ -50,13 +52,30 @@ if TYPE_CHECKING:
 
 
 class RecordingScheduler:
+    """Record admitted HTTP requests and return a fixed queued public execution view."""
+
     def __init__(self) -> None:
+        """Start an empty collection of schedule requests received through the public API."""
         self.requests: list[ScheduleRequest] = []
 
     async def check_ready(self) -> None:
+        """Report readiness without contacting storage.
+
+        Returns:
+            None: No return value.
+        """
         return None
 
     async def schedule(self, request: ScheduleRequest) -> ScheduleResult:
+        """Record the request and return a fixed newly created queued execution.
+
+        Args:
+            request: Provider submission with workflow ID, caller body, replay key, and
+                optional execution budget.
+
+        Returns:
+            ScheduleResult: Public execution view and insertion-versus-replay flag.
+        """
         self.requests.append(request)
         return ScheduleResult(
             execution=ExecutionView(
@@ -68,14 +87,45 @@ class RecordingScheduler:
         )
 
     async def get(self, execution_id: str) -> ExecutionView:
+        """Fail if this admission-only fixture unexpectedly receives a status read.
+
+        Args:
+            execution_id: Durable execution identifier, not an external provider job ID.
+
+        Returns:
+            ExecutionView: Caller-visible execution status and its permitted terminal
+                result or error.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         raise AssertionError(execution_id)
 
     async def cancel(self, execution_id: str) -> ExecutionView:
+        """Fail if this admission-only fixture unexpectedly receives cancellation.
+
+        Args:
+            execution_id: Durable execution identifier, not an external provider job ID.
+
+        Returns:
+            ExecutionView: Caller-visible execution status and its permitted terminal
+                result or error.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         raise AssertionError(execution_id)
 
 
 class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
+    """Exercise public execution routes, immediate dispatch, safe errors, and separate storage/compute readiness."""
+
     async def asyncSetUp(self) -> None:
+        """Create isolated fixtures and clients for public execution routes, immediate dispatch, safe errors, and separate storage/compute readiness.
+
+        Returns:
+            None: No return value.
+        """
         now = datetime(2026, 9, 17, 8, tzinfo=UTC)
         provider = StandaloneProvider()
         self.scheduler = ExecutionScheduler(
@@ -93,11 +143,24 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def asyncTearDown(self) -> None:
+        """Release test-owned clients and isolated storage after the case completes.
+
+        Returns:
+            None: No return value.
+        """
         await self.client.aclose()
 
     async def test_schedule_replay_poll_and_cancel_use_public_execution_shape(
         self,
     ) -> None:
+        """Verify schedule replay poll and cancel use public execution shape.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         request = {
             "provider": "standalone",
             "body": {},
@@ -138,6 +201,14 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(repeated.json(), cancelled.json())
 
     async def test_empaia_ingress_owns_a_typed_request_shape(self) -> None:
+        """Verify EMPAIA ingress owns a typed request shape.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         scheduler = RecordingScheduler()
         async with AsyncClient(
             transport=ASGITransport(app=create_execution_app(scheduler)),
@@ -181,6 +252,14 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_scheduled_workflow_completes_through_public_api(self) -> None:
+        """Verify scheduled workflow completes through public API.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         now = datetime(2026, 9, 17, 8, tzinfo=UTC)
         provider = StandaloneProvider()
         repository = InMemoryExecutionRepository(clock=lambda: now)
@@ -196,6 +275,19 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         )
 
         async def dispatch(_invocation, _execution_context):
+            """Simulate the scenario computation, using events or injected failures to control completion and ownership races.
+
+            Args:
+                _invocation: Unused named inputs, resolved configuration, public access
+                    state, and absolute workflow deadline; retained to match the
+                    interface.
+                _execution_context: Unused private attempt identity and provider context
+                    kept separate from the invocation; retained to match the interface.
+
+            Returns:
+                object: The delegated operation's result or controlled fixture value
+                    described above.
+            """
             started.set()
             await release.wait()
             return result
@@ -252,6 +344,14 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
     async def test_synchronous_workflow_runs_through_the_same_public_origin(
         self,
     ) -> None:
+        """Verify synchronous workflow runs through the same public origin.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         result = WorkflowResult(outputs={"score": InlineOutput(value=0.9)})
         runner = SynchronousWorkflowService(
             WorkflowCatalog.default(),
@@ -288,9 +388,27 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
     async def test_legacy_model_and_slide_calls_use_public_origin(
         self,
     ) -> None:
+        """Verify legacy model and slide calls use public origin.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         forwarded: list[Request] = []
 
         def ray_handler(request: Request) -> Response:
+            """Simulate Ray inference responses and redirects while recording forwarded requests.
+
+            Args:
+                request: Request to validate, admit, dispatch, forward, or process, as
+                    specified by its declared type.
+
+            Returns:
+                Response: HTTP response returned by the transport or controlled scenario
+                    handler.
+            """
             forwarded.append(request)
             if request.url.path == "/heatmap-builder":
                 return Response(200, text="/mnt/output/heatmap.tiff")
@@ -371,9 +489,27 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_model_inference_resolves_upstream_route_redirect(self) -> None:
+        """Verify model inference resolves upstream route redirect.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         forwarded: list[Request] = []
 
         def ray_handler(request: Request) -> Response:
+            """Simulate Ray inference responses and redirects while recording forwarded requests.
+
+            Args:
+                request: Request to validate, admit, dispatch, forward, or process, as
+                    specified by its declared type.
+
+            Returns:
+                Response: HTTP response returned by the transport or controlled scenario
+                    handler.
+            """
             forwarded.append(request)
             if request.url.path == "/prostate-classifier-1":
                 return Response(
@@ -407,9 +543,35 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(forwarded[1].content, b"compressed-image")
 
     async def test_synchronous_workflow_validates_before_dispatch(self) -> None:
+        """Verify synchronous workflow validates before dispatch.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
+
         async def reject_dispatch(
             _invocation: object, _execution_context: object
         ) -> WorkflowResult:
+            """Fail if an invalid invocation reaches computation instead of being rejected before dispatch.
+
+            Args:
+                _invocation: Unused named inputs, resolved configuration, public access
+                    state, and absolute workflow deadline; retained to match the
+                    interface.
+                _execution_context: Unused private attempt identity and provider context
+                    kept separate from the invocation; retained to match the interface.
+
+            Returns:
+                WorkflowResult: Named inline outputs and/or references to completed
+                    artifact files.
+
+            Raises:
+                AssertionError: An expected invariant or fixture interaction does not
+                    hold.
+            """
             raise AssertionError("invalid invocation was dispatched")
 
         runner = SynchronousWorkflowService(
@@ -439,6 +601,14 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_synchronous_workflow_requires_explicit_input_kind(self) -> None:
+        """Verify synchronous workflow requires explicit input kind.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         runner = SynchronousWorkflowService(
             WorkflowCatalog.default(),
             InMemoryWorkflowDispatch(
@@ -470,9 +640,35 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_synchronous_workflow_rejects_nonfinite_context_values(self) -> None:
+        """Verify synchronous workflow rejects nonfinite context values.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
+
         async def reject_dispatch(
             _invocation: object, _execution_context: object
         ) -> WorkflowResult:
+            """Fail if an invalid invocation reaches computation instead of being rejected before dispatch.
+
+            Args:
+                _invocation: Unused named inputs, resolved configuration, public access
+                    state, and absolute workflow deadline; retained to match the
+                    interface.
+                _execution_context: Unused private attempt identity and provider context
+                    kept separate from the invocation; retained to match the interface.
+
+            Returns:
+                WorkflowResult: Named inline outputs and/or references to completed
+                    artifact files.
+
+            Raises:
+                AssertionError: An expected invariant or fixture interaction does not
+                    hold.
+            """
             raise AssertionError("invalid invocation was dispatched")
 
         runner = SynchronousWorkflowService(
@@ -499,9 +695,35 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
                     self.assertFalse(response.json()["detail"]["retryable"])
 
     async def test_synchronous_backpressure_preserves_retry_after(self) -> None:
+        """Verify synchronous backpressure preserves retry after.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
+
         async def reject_for_capacity(
             _invocation: object, _execution_context: object
         ) -> WorkflowResult:
+            """Inject confirmed preacceptance rejection with a seven-second retry hint.
+
+            Args:
+                _invocation: Unused named inputs, resolved configuration, public access
+                    state, and absolute workflow deadline; retained to match the
+                    interface.
+                _execution_context: Unused private attempt identity and provider context
+                    kept separate from the invocation; retained to match the interface.
+
+            Returns:
+                WorkflowResult: Named inline outputs and/or references to completed
+                    artifact files.
+
+            Raises:
+                ConfirmedDispatchRejectionError: The remote deployment confirms
+                    rejection before accepting work.
+            """
             raise ConfirmedDispatchRejectionError(timedelta(seconds=7))
 
         runner = SynchronousWorkflowService(
@@ -531,12 +753,37 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(response.json()["detail"]["retryable"])
 
     async def test_synchronous_caller_cancellation_cancels_dispatch(self) -> None:
+        """Verify synchronous caller cancellation cancels dispatch.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         started = asyncio.Event()
         cancelled = asyncio.Event()
 
         async def wait_for_cancellation(
             _invocation: object, _execution_context: object
         ) -> WorkflowResult:
+            """Block after dispatch starts and signal when cancellation unwinds the operation.
+
+            Args:
+                _invocation: Unused named inputs, resolved configuration, public access
+                    state, and absolute workflow deadline; retained to match the
+                    interface.
+                _execution_context: Unused private attempt identity and provider context
+                    kept separate from the invocation; retained to match the interface.
+
+            Returns:
+                WorkflowResult: Named inline outputs and/or references to completed
+                    artifact files.
+
+            Raises:
+                AssertionError: An expected invariant or fixture interaction does not
+                    hold.
+            """
             started.set()
             try:
                 await asyncio.Event().wait()
@@ -570,12 +817,37 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.wait_for(cancelled.wait(), timeout=1)
 
     async def test_synchronous_asgi_disconnect_cancels_dispatch(self) -> None:
+        """Verify synchronous ASGI disconnect cancels dispatch.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         started = asyncio.Event()
         cancelled = asyncio.Event()
 
         async def wait_for_disconnect(
             _invocation: object, _execution_context: object
         ) -> WorkflowResult:
+            """Block after dispatch starts and signal when client disconnect unwinds the operation.
+
+            Args:
+                _invocation: Unused named inputs, resolved configuration, public access
+                    state, and absolute workflow deadline; retained to match the
+                    interface.
+                _execution_context: Unused private attempt identity and provider context
+                    kept separate from the invocation; retained to match the interface.
+
+            Returns:
+                WorkflowResult: Named inline outputs and/or references to completed
+                    artifact files.
+
+            Raises:
+                AssertionError: An expected invariant or fixture interaction does not
+                    hold.
+            """
             started.set()
             try:
                 await asyncio.Event().wait()
@@ -592,6 +864,11 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         request_sent = False
 
         async def receive() -> Message:
+            """Deliver the ASGI body once and signal disconnect after dispatch has started.
+
+            Returns:
+                Message: ASGI body or disconnect event for the request simulation.
+            """
             nonlocal request_sent
             if not request_sent:
                 request_sent = True
@@ -600,7 +877,15 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
             return {"type": "http.disconnect"}
 
         async def send(_message: Message) -> None:
-            pass
+            """Discard ASGI response messages in the client-disconnect simulation.
+
+            Args:
+                _message: Unused safe user-facing failure or cancellation text; retained
+                    to match the interface.
+
+            Returns:
+                None: No return value.
+            """
 
         scope: Scope = {
             "type": "http",
@@ -627,6 +912,14 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.wait_for(cancelled.wait(), timeout=1)
 
     async def test_unknown_workflow_and_execution_have_distinct_errors(self) -> None:
+        """Verify unknown workflow and execution have distinct errors.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         unknown_workflow = await self.client.post(
             "/v1/workflows/missing/schedule",
             json={
@@ -647,6 +940,14 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
     async def test_missing_application_is_reported_separately_from_readiness(
         self,
     ) -> None:
+        """Verify missing application is reported separately from readiness.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         async with (
             AsyncClient(
                 transport=MockTransport(lambda _request: Response(200, json={}))
@@ -679,7 +980,26 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_ray_outage_keeps_durable_api_ready_and_usable(self) -> None:
+        """Verify Ray outage keeps durable API ready and usable.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
+
         def unavailable(request: Request) -> Response:
+            """Inject a Ray connection failure while durable API operations use independent storage.
+
+            Args:
+                request: Request to validate, admit, dispatch, forward, or process, as
+                    specified by its declared type.
+
+            Returns:
+                Response: HTTP response returned by the transport or controlled scenario
+                    handler.
+            """
             raise ConnectError("Ray is unavailable", request=request)
 
         async with AsyncClient(transport=MockTransport(unavailable)) as ray_client:
@@ -717,8 +1037,28 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cancelled.json()["status"], "cancelled")
 
     async def test_database_outage_fails_durable_readiness(self) -> None:
+        """Verify database outage fails durable readiness.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
+
         class UnavailableRepository(InMemoryExecutionRepository):
+            """Provide the unavailable repository fixture local to this failure or cancellation scenario."""
+
             async def check_ready(self) -> None:
+                """Inject repository/scheduler unavailability during the readiness probe.
+
+                Returns:
+                    None: No return value.
+
+                Raises:
+                    ExecutionRepositoryUnavailableError: Database access or the storage
+                        transaction fails.
+                """
                 raise ExecutionRepositoryUnavailableError("database unavailable")
 
         provider = StandaloneProvider()
@@ -744,11 +1084,50 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
     async def test_database_outage_makes_polling_and_cancellation_retryable(
         self,
     ) -> None:
+        """Verify database outage makes polling and cancellation retryable.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
+
         class UnavailableRepository(InMemoryExecutionRepository):
+            """Provide the unavailable repository fixture local to this failure or cancellation scenario."""
+
             async def get(self, execution_id: str) -> ExecutionRecord:
+                """Inject a storage failure or unexpected-operation assertion during status access.
+
+                Args:
+                    execution_id: Durable execution identifier, not an external provider
+                        job ID.
+
+                Returns:
+                    ExecutionRecord: Internal durable execution snapshot, including work
+                        and ownership fields.
+
+                Raises:
+                    ExecutionRepositoryUnavailableError: Database access or the storage
+                        transaction fails.
+                """
                 raise ExecutionRepositoryUnavailableError(execution_id)
 
             async def request_cancel(self, execution_id: str) -> ExecutionRecord:
+                """Inject storage unavailability while cancellation attempts to change durable state.
+
+                Args:
+                    execution_id: Durable execution identifier, not an external provider
+                        job ID.
+
+                Returns:
+                    ExecutionRecord: Internal durable execution snapshot, including work
+                        and ownership fields.
+
+                Raises:
+                    ExecutionRepositoryUnavailableError: Database access or the storage
+                        transaction fails.
+                """
                 raise ExecutionRepositoryUnavailableError(execution_id)
 
         provider = StandaloneProvider()
@@ -779,19 +1158,82 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(response.json()["detail"]["retryable"])
 
     async def test_temporary_scheduling_unavailability_is_retryable(self) -> None:
+        """Verify temporary scheduling unavailability is retryable.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
+
         class UnavailableScheduler:
+            """Provide the unavailable scheduler fixture local to this failure or cancellation scenario."""
+
             async def check_ready(self) -> None:
+                """Inject repository/scheduler unavailability during the readiness probe.
+
+                Returns:
+                    None: No return value.
+
+                Raises:
+                    SchedulingUnavailableError: Admission or durable storage is
+                        temporarily unavailable.
+                """
                 raise SchedulingUnavailableError("repository unavailable")
 
             async def schedule(self, _request: ScheduleRequest) -> ScheduleResult:
+                """Submit minimal standalone fixture work under the selected replay key.
+
+                Args:
+                    _request: Unused request to validate, admit, dispatch, forward, or
+                        process, as specified by its declared type; retained to match
+                        the interface.
+
+                Returns:
+                    ScheduleResult: Public execution view and insertion-versus-replay
+                        flag.
+
+                Raises:
+                    SchedulingUnavailableError: Admission or durable storage is
+                        temporarily unavailable.
+                """
                 raise SchedulingUnavailableError(
                     "execution scheduling is temporarily unavailable"
                 )
 
             async def get(self, _execution_id: str) -> ExecutionView:
+                """Inject a storage failure or unexpected-operation assertion during status access.
+
+                Args:
+                    _execution_id: Unused durable execution identifier, not an external
+                        provider job id; retained to match the interface.
+
+                Returns:
+                    ExecutionView: Caller-visible execution status and its permitted
+                        terminal result or error.
+
+                Raises:
+                    AssertionError: An expected invariant or fixture interaction does
+                        not hold.
+                """
                 raise AssertionError
 
             async def cancel(self, _execution_id: str) -> ExecutionView:
+                """Reject an unexpected cancellation call in the scenario fixture.
+
+                Args:
+                    _execution_id: Unused durable execution identifier, not an external
+                        provider job id; retained to match the interface.
+
+                Returns:
+                    ExecutionView: Caller-visible execution status and its permitted
+                        terminal result or error.
+
+                Raises:
+                    AssertionError: An expected invariant or fixture interaction does
+                        not hold.
+                """
                 raise AssertionError
 
         async with AsyncClient(
@@ -815,6 +1257,11 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
 
     @staticmethod
     def _workflow_invocation() -> dict[str, object]:
+        """Build the public prostate invocation with explicit input tags, resolved configuration, and an ISO deadline.
+
+        Returns:
+            dict[str, object]: Decoded, serialized, or recorded fields described above.
+        """
         return {
             "inputs": {
                 "slide": {"kind": "shared_path", "path": "slide.svs"},

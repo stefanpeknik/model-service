@@ -1,3 +1,9 @@
+"""Check live native slide processing and pixelmap publication against synthetic image fixtures.
+
+These tests contact configured live services and may create executions and artifacts.
+They are not part of offline unit validation.
+"""
+
 from __future__ import annotations
 
 import base64
@@ -14,7 +20,17 @@ from validation.empaia_app_service import JobView, ValidationScenario
 
 
 class DeployedNativeProcessorTests(unittest.TestCase):
+    """Exercise live native slide processing and pixelmap publication against synthetic image fixtures."""
+
     def test_native_heatmap_is_published_through_empaia(self) -> None:
+        """Verify native heatmap is published through EMPAIA.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         job = self._published_job(ValidationScenario.NATIVE_PROCESSOR)
         sample = job.tile_sample
         self.assertIsNotNone(sample)
@@ -23,6 +39,14 @@ class DeployedNativeProcessorTests(unittest.TestCase):
         self.assertLess(sample, 0.9)
 
     def test_native_rectangle_mask_limits_the_published_heatmap(self) -> None:
+        """Verify native rectangle mask limits the published heatmap.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         job = self._published_job(ValidationScenario.NATIVE_RECTANGLE)
         self.assertEqual(job.rectangle_reads, 1)
         sample = job.tile_sample
@@ -35,6 +59,15 @@ class DeployedNativeProcessorTests(unittest.TestCase):
         self.assertLess(background, 0.1)
 
     def _published_job(self, scenario: ValidationScenario) -> JobView:
+        """Submit a synthetic-image EMPAIA job to the native validation profile and return its observed published job state.
+
+        Args:
+            scenario: Validation job prefix selecting deterministic mock behavior.
+
+        Returns:
+            JobView: Observable mock call counters, tile samples, and terminal job
+                state.
+        """
         if os.environ.get("VALIDATION_NATIVE_PROCESSOR") != "1":
             self.skipTest("native processor validation profile is not active")
         scheduler_origin = os.environ["VALIDATION_ORIGIN"]
@@ -42,6 +75,15 @@ class DeployedNativeProcessorTests(unittest.TestCase):
         job_id = f"{scenario.value}-{uuid4().hex}"
 
         def encode(value: dict[str, object]) -> str:
+            """Encode a synthetic credential section as unpadded URL-safe base64 JSON.
+
+            Args:
+                value: Value being validated, serialized, converted, or checked by this
+                    helper.
+
+            Returns:
+                str: Unpadded URL-safe base64 JSON section for a synthetic credential.
+            """
             return (
                 base64.urlsafe_b64encode(json.dumps(value).encode())
                 .rstrip(b"=")

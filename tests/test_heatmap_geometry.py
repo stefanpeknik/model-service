@@ -1,3 +1,5 @@
+"""Check tile placement, overlap means, padding, and empty-region behavior using native image libraries."""
+
 from __future__ import annotations
 
 import hashlib
@@ -16,17 +18,40 @@ from workflows.heatmap.processor import (
 
 
 class LandmarkPredictor:
+    """Return constant or tile-origin-derived scores to expose spatial reconstruction errors."""
+
     def __init__(
         self, output_tile_size: int = 1, constant: float | None = None
     ) -> None:
+        """Configure output grid size, an optional constant score, and the prediction call counter.
+
+        Args:
+            output_tile_size: Model output score-grid extent for each input tile.
+            constant: Optional fixed score; otherwise landmark pixels determine fixture
+                predictions.
+        """
         self.output_tile_size = output_tile_size
         self.constant = constant
         self.calls = 0
 
     async def configuration(self) -> ModelTileConfiguration:
+        """Declare 32-pixel inputs, the selected output size, one channel, and 0.5 micrometer resolution.
+
+        Returns:
+            ModelTileConfiguration: Validated model tile geometry, output channels, and
+                target resolution.
+        """
         return ModelTileConfiguration(32, self.output_tile_size, 1, 0.5)
 
     async def predict(self, tile: object) -> np.ndarray:
+        """Count predictions and return a constant grid from either the supplied score or the tile origin pixel.
+
+        Args:
+            tile: One channel-first model input tile.
+
+        Returns:
+            np.ndarray: Generated or decoded native test pixels.
+        """
         self.calls += 1
         score = self.constant
         if score is None:
@@ -39,8 +64,19 @@ class LandmarkPredictor:
     "native heatmap regression profile is not enabled",
 )
 class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
+    """Exercise tile placement, overlap means, padding, and empty-region behavior using native image libraries."""
+
     @staticmethod
     def _write_slide(path: Path, pixels: np.ndarray) -> None:
+        """Save native TIFF pixels with OpenSlide-compatible metadata and known physical resolution.
+
+        Args:
+            path: File, storage locator, or HTTP endpoint selected by this operation.
+            pixels: Synthetic native slide pixels used to test spatial reconstruction.
+
+        Returns:
+            None: No return value.
+        """
         import pyvips
 
         height, width = pixels.shape[:2]
@@ -70,6 +106,20 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
         predictor: LandmarkPredictor | None = None,
         empty_mask: bool = False,
     ) -> np.ndarray:
+        """Generate landmark slide/mask fixtures, run the native processor, and return decoded pixels after verifying output geometry/resolution.
+
+        Args:
+            root: Existing local directory containing permitted input/output storage.
+            width: Image or crop width in pixels.
+            height: Image or crop height in pixels.
+            stride_fraction: Input tile step as a fraction of tile extent.
+            predictor: Model configuration and tile-prediction boundary used by heatmap
+                processing.
+            empty_mask: Whether the geometry fixture excludes every slide tile.
+
+        Returns:
+            np.ndarray: Generated or decoded native test pixels.
+        """
         import pyvips
 
         directory = root / f"{width}-{height}"
@@ -105,6 +155,14 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_padding_is_cropped_without_compressing_tile_placement(self) -> None:
+        """Verify padding is cropped without compressing tile placement.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         for width, height, stride, output_tile_size in (
             (112, 80, 0.5, 1),
             (128, 96, 1.0, 1),
@@ -135,6 +193,14 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
     async def test_aligned_output_preserves_original_pixels_and_overlap_means(
         self,
     ) -> None:
+        """Verify aligned output preserves original pixels and overlap means.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         with TemporaryDirectory() as directory:
             pixels = await self._build(Path(directory), 112, 80)
 
@@ -151,6 +217,14 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
     async def test_constant_scores_remain_constant_through_overlap_and_padding(
         self,
     ) -> None:
+        """Verify constant scores remain constant through overlap and padding.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         predictor = LandmarkPredictor(constant=0.75)
         with TemporaryDirectory() as directory:
             pixels = await self._build(Path(directory), 107, 75, predictor=predictor)
@@ -161,6 +235,14 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
     async def test_empty_mask_skips_predictions_and_writes_zero_background(
         self,
     ) -> None:
+        """Verify empty mask skips predictions and writes zero background.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         predictor = LandmarkPredictor()
         with TemporaryDirectory() as directory:
             pixels = await self._build(

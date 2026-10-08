@@ -24,7 +24,14 @@ _MODEL_ROUTES = frozenset(
     "set RUN_DEPLOYED_LEGACY_INFERENCE=1 to call deployed legacy models",
 )
 class DeployedLegacyInferenceTests(unittest.TestCase):
+    """Exercise live classifier, segmentation, and embedding consistency across raw HTTP and SDK calls."""
+
     def setUp(self) -> None:
+        """Create isolated fixtures and clients for live classifier, segmentation, and embedding consistency across raw HTTP and SDK calls.
+
+        Returns:
+            None: No return value.
+        """
         self.origin = os.environ.get("VALIDATION_ORIGIN")
         if not self.origin:
             self.fail("VALIDATION_ORIGIN must point at the public scheduler")
@@ -41,17 +48,42 @@ class DeployedLegacyInferenceTests(unittest.TestCase):
             )
 
     def _select(self, route: str) -> None:
+        """Skip a legacy route not included in the explicitly selected live model profile.
+
+        Args:
+            route: Exact model route selected for legacy validation.
+
+        Returns:
+            None: No return value.
+        """
         if route not in self.routes:
             self.skipTest(f"{route} is not selected in LEGACY_MODEL_ROUTES")
 
     @staticmethod
     def _tile(size: int):
+        """Create a deterministic uint8 coordinate-pattern image for SDK/raw inference comparisons.
+
+        Args:
+            size: Square synthetic inference image extent in pixels.
+
+        Returns:
+            object: The delegated operation's result or controlled fixture value
+                described above.
+        """
         import numpy as np
 
         y, x = np.indices((size, size), dtype=np.uint16)
         return np.stack((x % 256, y % 256, (x + y) % 256), axis=-1).astype(np.uint8)
 
     def test_classifier_reference_and_sdk_image_consistency(self) -> None:
+        """Verify classifier reference and SDK image consistency.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         self._select("prostate-classifier-1")
         import lz4.frame
         import numpy as np
@@ -76,6 +108,12 @@ class DeployedLegacyInferenceTests(unittest.TestCase):
             )
 
         async def classify():
+            """Issue the asynchronous SDK classifier request for comparison with synchronous and raw HTTP results.
+
+            Returns:
+                object: The delegated operation's result or controlled fixture value
+                    described above.
+            """
             async with AsyncClient(base_url=self.origin, timeout=900) as client:
                 return await client.models.classify_image("prostate-classifier-1", tile)
 
@@ -87,6 +125,14 @@ class DeployedLegacyInferenceTests(unittest.TestCase):
             self.assertAlmostEqual(result, array_score, delta=0.001)
 
     def test_segmentation_tensor_and_sdk_image_consistency(self) -> None:
+        """Verify segmentation tensor and SDK image consistency.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         self._select("episeg-1")
         import numpy as np
         from PIL import Image
@@ -99,6 +145,12 @@ class DeployedLegacyInferenceTests(unittest.TestCase):
             repeated_result = client.models.segment_image("episeg-1", tile)
 
         async def segment():
+            """Issue the asynchronous SDK segmentation request for comparison with synchronous and raw HTTP results.
+
+            Returns:
+                object: The delegated operation's result or controlled fixture value
+                    described above.
+            """
             async with AsyncClient(base_url=self.origin, timeout=900) as client:
                 return await client.models.segment_image("episeg-1", tile)
 
@@ -115,6 +167,17 @@ class DeployedLegacyInferenceTests(unittest.TestCase):
             np.testing.assert_allclose(result, array_result, rtol=0.001, atol=0.001)
 
     def _embedding_results(self, route: str, **headers: str):
+        """Collect sync/async SDK, PIL, binary HTTP, and precision variants from the selected live embedding model.
+
+        Args:
+            route: Exact model route selected for legacy validation.
+            **headers: Keyword arguments forwarded to the delegated operation or
+                accepted by the fixture interface.
+
+        Returns:
+            object: The delegated operation's result or controlled fixture value
+                described above.
+        """
         import lz4.frame
         import numpy as np
         from PIL import Image
@@ -152,6 +215,12 @@ class DeployedLegacyInferenceTests(unittest.TestCase):
             )
 
         async def embed():
+            """Issue the asynchronous SDK embedding request with the selected pooling options.
+
+            Returns:
+                object: The delegated operation's result or controlled fixture value
+                    described above.
+            """
             async with AsyncClient(base_url=self.origin, timeout=900) as client:
                 return await client.models.embed_image(route, tile, **headers)
 
@@ -176,12 +245,28 @@ class DeployedLegacyInferenceTests(unittest.TestCase):
         return full_precision
 
     def test_gigapath_embedding_precision_and_sdk_image_consistency(self) -> None:
+        """Verify gigapath embedding precision and SDK image consistency.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         self._select("prov-gigapath")
         self._embedding_results("prov-gigapath")
 
     def test_virchow_embedding_pooling_precision_and_sdk_image_consistency(
         self,
     ) -> None:
+        """Verify virchow embedding pooling precision and SDK image consistency.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         self._select("virchow2")
         import numpy as np
 

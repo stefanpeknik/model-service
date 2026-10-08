@@ -1,3 +1,9 @@
+"""Initialize execution tables and supported additive upgrades under a PostgreSQL advisory lock.
+
+This preserves the two pre-ORM upgrades; it does not maintain an Alembic revision
+history or rewrite stored executions.
+"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -16,6 +22,16 @@ if TYPE_CHECKING:
 
 
 async def initialize_execution_schema(session: AsyncSession, *, schema: str) -> None:
+    """Serialize initialization by schema name, create the schema if absent, and initialize tables in the caller's transaction.
+
+    Args:
+        session: Operation-scoped SQLAlchemy session inside the caller's transaction.
+        schema: Validated PostgreSQL schema name, or a separate isolated schema for the
+            test.
+
+    Returns:
+        None: No return value.
+    """
     await session.execute(
         select(
             func.pg_advisory_xact_lock(
@@ -29,6 +45,16 @@ async def initialize_execution_schema(session: AsyncSession, *, schema: str) -> 
 
 
 def _initialize_tables(connection: Connection, schema: str) -> None:
+    """Add missing reporting-deadline and mutation-marker columns, then create missing tables and indexes without rewriting rows.
+
+    Args:
+        connection: Database connection owned by the enclosing operation or transaction.
+        schema: Validated PostgreSQL schema name, or a separate isolated schema for the
+            test.
+
+    Returns:
+        None: No return value.
+    """
     inspector = inspect(connection)
     if inspector.has_table(ExecutionRow.__tablename__, schema=schema):
         columns = {

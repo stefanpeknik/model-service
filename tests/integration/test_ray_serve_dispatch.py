@@ -1,3 +1,9 @@
+"""Check assembled PostgreSQL/API dispatch and backpressure/cancellation using a local Ray Serve probe.
+
+Opt-in integration checks start a local Ray cluster and can also require PostgreSQL.
+Filesystem markers distinguish acceptance from cancellation.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -24,9 +30,19 @@ os.environ.setdefault("RAY_ENABLE_UV_RUN_RUNTIME_ENV", "0")
     "set RUN_RAY_SERVE_INTEGRATION=1 to run local Ray Serve validation",
 )
 class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
+    """Exercise assembled PostgreSQL/API dispatch and backpressure/cancellation using a local Ray Serve probe."""
+
     async def test_public_api_postgres_worker_and_ray_serve_are_assembled(
         self,
     ) -> None:
+        """Verify public API PostgreSQL worker and Ray serve are assembled.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         dsn = os.environ.get("TEST_POSTGRES_DSN")
         if dsn is None:
             self.skipTest("TEST_POSTGRES_DSN is not configured")
@@ -180,6 +196,14 @@ class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 )
 
     async def test_scale_from_zero_backpressure_and_client_cancellation(self) -> None:
+        """Verify scale from zero backpressure and client cancellation.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            AssertionError: An expected invariant or fixture interaction does not hold.
+        """
         import httpx
         import ray
         from ray import serve
@@ -258,6 +282,16 @@ class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
     @staticmethod
     def _invocation(delay_seconds: int) -> WorkflowInvocation:
+        """Build a typed workflow invocation with the fixture access context and a bounded future deadline.
+
+        Args:
+            delay_seconds: Artificial computation delay used to observe acceptance and
+                cancellation.
+
+        Returns:
+            WorkflowInvocation: Typed inputs, resolved configuration, access settings,
+                and absolute deadline.
+        """
         from workflow_execution.contracts import (
             InputAccessContext,
             WorkflowInvocation,
@@ -272,6 +306,15 @@ class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
     @staticmethod
     def _standalone_invocation(directory: str) -> dict[str, object]:
+        """Build a minimal shared-storage JSON body for scheduling the delayed Ray probe.
+
+        Args:
+            directory: Directory containing definitions or generated validation
+                fixtures.
+
+        Returns:
+            dict[str, object]: Decoded, serialized, or recorded fields described above.
+        """
         return {
             "inputs": {},
             "resolved_configuration": {"delay_seconds": 0},
@@ -283,6 +326,14 @@ class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
     @staticmethod
     async def _wait_for(path: Path) -> None:
+        """Wait at most 30 seconds for a Ray probe marker to appear.
+
+        Args:
+            path: File, storage locator, or HTTP endpoint selected by this operation.
+
+        Returns:
+            None: No return value.
+        """
         async with asyncio.timeout(30):
             while not path.exists():
                 await asyncio.sleep(0.05)
