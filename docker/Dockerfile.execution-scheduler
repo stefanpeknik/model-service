@@ -32,6 +32,10 @@ COPY workflow_execution workflow_execution
 COPY workflows workflows
 COPY workflow-definitions workflow-definitions
 
+RUN groupadd --gid 10001 scheduler \
+    && useradd --uid 10001 --gid scheduler --no-create-home \
+        --home-dir /nonexistent --shell /usr/sbin/nologin scheduler
+
 USER 10001:10001
 EXPOSE 8080
 
