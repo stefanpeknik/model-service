@@ -6,6 +6,9 @@ applications:
   - episeg-1
   - heatmap-builder
   - prostate-heatmap
+  - episeg-segmentation
+  - gigapath-embeddings
+  - virchow2-embeddings
   - prostate-classifier-1
   - prov-gigapath
   - virchow2
@@ -32,6 +35,7 @@ executionScheduler:
     existingClaim: ""
     mountPath: /mnt/data
   rayServeOrigin: ""
+  workflowIds: null
   inferenceModelOrigins: {}
   leaseSeconds: 60
   workerPollSeconds: 0.5

@@ -55,6 +55,10 @@ spec:
                   key: {{ .Values.executionScheduler.encryption.keyKey }}
             - name: RAY_SERVE_ORIGIN
               value: {{ default (printf "http://%s-serve-svc.%s.svc.cluster.local:8000" .Release.Name (.Release.Namespace | default "rationai-jobs-ns")) .Values.executionScheduler.rayServeOrigin | quote }}
+            {{- if ne .Values.executionScheduler.workflowIds nil }}
+            - name: WORKFLOW_IDS
+              value: {{ .Values.executionScheduler.workflowIds | toJson | quote }}
+            {{- end }}
             {{- if .Values.executionScheduler.inferenceServeOrigin }}
             - name: INFERENCE_SERVE_ORIGIN
               value: {{ .Values.executionScheduler.inferenceServeOrigin | quote }}

@@ -54,7 +54,7 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
         TypeError: The configured EMPAIA factory attribute is absent or not callable.
     """
     config = settings or SchedulerSettings.from_environment()
-    catalog = WorkflowCatalog.default()
+    catalog = WorkflowCatalog.default(config.workflow_ids)
     cipher = ProtectedContextCipher.from_base64(config.provider_context_key)
     processing_policy = RetryPolicy(
         max_attempts=config.processing_attempts,

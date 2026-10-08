@@ -165,7 +165,7 @@ class WorkflowCatalog:
                 self.validate_configuration(workflow_id, configuration.defaults)
 
     @classmethod
-    def default(cls) -> WorkflowCatalog:
+    def default(cls, identifiers: frozenset[str] | None = None) -> WorkflowCatalog:
         """Load the built-in definitions and validators from workflows.registry.
 
         Returns:
@@ -173,7 +173,19 @@ class WorkflowCatalog:
         """
         from workflows.registry import default_catalog
 
-        return default_catalog()
+        catalog = default_catalog()
+        return catalog if identifiers is None else catalog.select(identifiers)
+
+    def select(self, identifiers: frozenset[str]) -> WorkflowCatalog:
+        if not identifiers:
+            raise ValueError("at least one workflow must be enabled")
+        return WorkflowCatalog(
+            tuple(self.get(identifier) for identifier in sorted(identifiers)),
+            configurations={
+                identifier: self._configurations[identifier]
+                for identifier in identifiers
+            },
+        )
 
     @classmethod
     def from_directory(

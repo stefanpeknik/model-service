@@ -1,6 +1,10 @@
 # Workflow definitions
 
-The prostate heatmap definition is the runtime input/output contract.
+The YAML definitions are runtime input/output contracts. Besides prostate heatmap,
+they declare EPISeg segmentation and GigaPath/Virchow2 embedding workflows.
+The [additional-workflow guide](../docs/guides/additional-workflows.md) describes
+their output formats and deployment requirements. These new definitions accept
+shared-storage inputs only; EMPAIA metadata and publication are deferred.
 
 - `../helm/rayservice/applications/prostate-classifier-1.yaml` owns the model
   artifact, tile size, training MPP, Ray resources, batching, and autoscaling.

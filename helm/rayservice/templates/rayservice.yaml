@@ -61,5 +61,5 @@ spec:
   serveConfigV2: |
     applications:
 {{- range $appName := .Values.applications }}
-{{ printf "applications/%s.yaml" $appName | $.Files.Get | indent 4 }}
+{{ tpl (printf "applications/%s.yaml" $appName | $.Files.Get) $ | indent 4 }}
 {{- end }}

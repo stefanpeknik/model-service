@@ -31,7 +31,11 @@ RUN cd /tmp && \
     ninja -C builddir install
 
 
+FROM ghcr.io/astral-sh/uv:0.8.15 AS uv
+
 FROM rayproject/ray:2.58.0-py312-gpu
+
+COPY --from=uv /uv /usr/local/bin/uv
 
 COPY --from=builder /usr/local/ /usr/local/
 
@@ -53,7 +57,15 @@ RUN sudo sh -c 'echo "/usr/local/lib" > /etc/ld.so.conf.d/custom-libs.conf' && \
     sudo sh -c 'echo "/home/ray/anaconda3/lib/python3.12/site-packages/nvidia/cudnn/lib" > /etc/ld.so.conf.d/nvidia-libs.conf' && \
     sudo ldconfig
 
-RUN pip install --no-cache-dir \
+RUN uv pip install --python /home/ray/anaconda3/bin/python --no-cache \
     onnxruntime-gpu tensorrt lz4 ratiopath "mlflow<3.0" torch torchvision \
     "timm>=1.0.0" \
-    "huggingface-hub>=0.23.0"
+    "huggingface-hub>=0.23.0" "h5py>=3.11,<4" \
+    "httpx>=0.27.0" "pydantic>=2.10.0" "pyyaml>=6.0.2"
+
+WORKDIR /app
+ENV PYTHONPATH=/app
+COPY integrations integrations
+COPY workflow_execution workflow_execution
+COPY workflows workflows
+COPY workflow-definitions workflow-definitions

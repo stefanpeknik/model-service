@@ -29,8 +29,34 @@ class ExecutionRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 "DATABASE_URL": "postgresql://unused",
                 "PROVIDER_CONTEXT_KEY": base64.urlsafe_b64encode(b"x" * 32).decode(),
                 "RAY_SERVE_ORIGIN": "http://workflow-serve",
+                "WORKFLOW_IDS": '["prostate-heatmap"]',
             }
         )
+
+    async def test_runtime_only_admits_workflows_enabled_in_this_deployment(self):
+        environment = {
+            "DATABASE_URL": "postgresql://unused",
+            "PROVIDER_CONTEXT_KEY": base64.urlsafe_b64encode(b"x" * 32).decode(),
+            "RAY_SERVE_ORIGIN": "http://workflow-serve",
+            "WORKFLOW_IDS": '["prostate-heatmap"]',
+        }
+        app = create_app(SchedulerSettings.from_environment(environment))
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://scheduler"
+        ) as client:
+            response = await client.post(
+                "/v1/workflows/gigapath-embeddings/run",
+                json={
+                    "inputs": {},
+                    "resolved_configuration": {},
+                    "input_access": {
+                        "kind": "shared_storage",
+                        "state": {"root": "/tmp"},
+                    },
+                    "deadline_at": "2099-01-01T00:00:00Z",
+                },
+            )
+        self.assertEqual(response.status_code, 404, response.text)
 
     async def test_runtime_initializes_repository_and_closes_client_after_scheduler(
         self,
@@ -130,6 +156,7 @@ class ExecutionRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 "PROVIDER_CONTEXT_KEY": base64.urlsafe_b64encode(b"x" * 32).decode(),
                 "RAY_SERVE_ORIGIN": "http://workflow-serve",
                 "INFERENCE_SERVE_ORIGIN": "http://model-serve",
+                "WORKFLOW_IDS": '["prostate-heatmap"]',
             }
         )
         async with AsyncClient(transport=MockTransport(serve_handler)) as serve_client:

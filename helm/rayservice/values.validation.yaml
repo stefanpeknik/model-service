@@ -20,6 +20,7 @@ rayImage:
   pullPolicy: Always
 
 executionScheduler:
+  workflowIds: [prostate-heatmap]
   enabled: true
   replicas: 1
   image:

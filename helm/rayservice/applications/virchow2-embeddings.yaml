@@ -1,0 +1,22 @@
+- name: virchow2-embeddings
+  import_path: workflows.serve:app
+  route_prefix: /workflows/virchow2-embeddings
+  deployments:
+    - name: WorkflowApplicationDeployment
+      max_ongoing_requests: 1
+      max_queued_requests: 4
+      backpressure_config:
+        status_code: 429
+        retry_after_s: 5
+      autoscaling_config:
+        min_replicas: 0
+        max_replicas: 2
+        target_ongoing_requests: 1
+      ray_actor_options:
+        num_cpus: 2
+        memory: 4294967296
+      user_config:
+        workflow_id: virchow2-embeddings
+        num_threads: 2
+        max_concurrent_tasks: 4
+        model_origin: http://{{ .Release.Name }}-serve-svc.{{ .Release.Namespace | default "rationai-jobs-ns" }}.svc.cluster.local:8000

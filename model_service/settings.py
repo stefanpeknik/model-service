@@ -78,6 +78,9 @@ class SchedulerSettings(BaseSettings):
         validation_alias="PROVIDER_CONTEXT_KEY", repr=False
     )
     ray_serve_origin: _RequiredString = Field(validation_alias="RAY_SERVE_ORIGIN")
+    workflow_ids: frozenset[_RequiredString] | None = Field(
+        default=None, min_length=1, validation_alias="WORKFLOW_IDS"
+    )
     inference_serve_origin: str | None = Field(
         default=None, validation_alias="INFERENCE_SERVE_ORIGIN"
     )

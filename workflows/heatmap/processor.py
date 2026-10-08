@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated, Protocol
 
 from pydantic import Field, TypeAdapter
@@ -18,6 +19,11 @@ from pydantic import Field, TypeAdapter
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
+
+
+class ScoreEncoding(StrEnum):
+    UINT8 = "uint8"
+    FLOAT32 = "float32"
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +45,7 @@ class HeatmapBuildRequest:
     stride_fraction: float
     output_tile_height: int
     output_tile_width: int
+    encoding: ScoreEncoding = ScoreEncoding.UINT8
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,7 +141,7 @@ class SlideHeatmapProcessor:
         self._max_concurrent_tasks = max_concurrent_tasks
 
     async def build(self, request: HeatmapBuildRequest) -> None:
-        """Select the nearest slide level, predict tissue-containing tiles, combine overlap, and save an 8-bit pyramidal TIFF.
+        """Select the nearest slide level, combine scores, and save a pyramidal TIFF.
 
         Resize to the padded tile grid before cropping to the selected slide extent so
         edge geometry stays aligned. On failure or cancellation, join tile tasks and
@@ -254,7 +261,10 @@ class SlideHeatmapProcessor:
                 vips_image = vips_image.resize(
                     float(scale_x), vscale=float(scale_y)
                 ).crop(0, 0, extent_x, extent_y)
-                vips_image = (vips_image * 255).cast(pyvips.BandFormat.UCHAR)
+                if request.encoding == ScoreEncoding.UINT8:
+                    vips_image = (vips_image * 255).cast(pyvips.BandFormat.UCHAR)
+                else:
+                    vips_image = vips_image.cast(pyvips.BandFormat.FLOAT)
                 vips_image.tiffsave(
                     str(request.output_path),
                     bigtiff=True,

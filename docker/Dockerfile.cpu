@@ -31,7 +31,11 @@ RUN cd /tmp && \
     ninja -C builddir install
 
 
+FROM ghcr.io/astral-sh/uv:0.8.15 AS uv
+
 FROM rayproject/ray:2.58.0-py312
+
+COPY --from=uv /uv /usr/local/bin/uv
 
 COPY --from=builder /usr/local/ /usr/local/
 
@@ -51,5 +55,13 @@ RUN sudo apt-get update && sudo apt-get -y upgrade && \
 # Cleanup
 RUN sudo apt-get remove -y --purge systemd systemd-sysv && sudo apt-get autoremove --purge -y && sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/* 
 
-RUN pip install --no-cache-dir \
-    onnxruntime lz4 ratiopath pyvips "mlflow<3.0"
+RUN uv pip install --python /home/ray/anaconda3/bin/python --no-cache \
+    onnxruntime lz4 ratiopath pyvips "mlflow<3.0" "h5py>=3.11,<4" \
+    "httpx>=0.27.0" "pydantic>=2.10.0" "pyyaml>=6.0.2"
+
+WORKDIR /app
+ENV PYTHONPATH=/app
+COPY integrations integrations
+COPY workflow_execution workflow_execution
+COPY workflows workflows
+COPY workflow-definitions workflow-definitions

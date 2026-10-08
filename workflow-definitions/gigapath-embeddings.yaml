@@ -1,0 +1,12 @@
+identifier: gigapath-embeddings
+inputs:
+  slide:
+    kinds: [shared_path]
+    media_type: application/vnd.openmicroscopy
+  region_of_interest:
+    kinds: [shared_path]
+    media_type: image/tiff
+outputs:
+  embeddings:
+    kind: shared_artifact
+    media_type: application/x-hdf5
