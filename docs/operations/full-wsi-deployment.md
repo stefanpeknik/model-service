@@ -8,16 +8,19 @@ durable test record is the postmortem linked below.
 
 The October 2 image and deployment records below describe the original warm
 checkpoint. The [October 6 validation record](final-standalone-validation-2026-10-06.md)
-tracks the later deployment and fault tests. PostgreSQL persistence ownership
-and migration safeguards are documented below.
+tracks the later deployment and fault tests. The
+[October 8 redeployment record](redeployment-2026-10-08.md) identifies the current
+images and validates the subsequent source moves, ORM adapter, Yoyo baseline,
+and standalone API. PostgreSQL persistence ownership and migration safeguards
+are documented below.
 
 The October 7 source reorganization changes the ASGI entry point to
 `model_service.main:app` and the heatmap Serve import to
 `workflows.heatmap.prostate_serve:app`. The Dockerfiles and application YAMLs
-use those paths now. The preset's pinned October 6 images still contain the old
-layout: rebuild the scheduler, head, and GPU images under new tags and update
-the preset together before deploying this source. No rebuild, deployment, or
-test run accompanies the reorganization.
+use those paths now. The preset pins the October 8 rebuilt images, which contain
+the reorganized source. Deployment used verified adoption of the retained
+database rather than resetting storage. See the October 8 record before reusing
+the historical image tags or initialization instructions below.
 
 ## Phase completion, 2026-10-04
 

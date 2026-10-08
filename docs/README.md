@@ -40,6 +40,7 @@ substitute a September proposal or old EMPAIA note.
 | Understand what the real WSI test proved | [2026-10-04 postmortem](operations/full-wsi-validation-postmortem-2026-10-04.md) |
 | Validate the later local persistence and geometry fixes | [2026-10-05 regression report](reviews/checkpoint-fixes-2026-10-05.md) |
 | Follow the final standalone rebuild and validation | [2026-10-06 validation record](operations/final-standalone-validation-2026-10-06.md), including the validated workflow checkpoint and remaining legacy-model limits |
+| Identify the latest deployed images, Yoyo baseline adoption, and live checks | [2026-10-08 redeployment record](operations/redeployment-2026-10-08.md), covering the reorganized source, ORM persistence, shared SDK, and standalone validation |
 | Change public SDK methods or types | [SDK workflows](../../rationai-sdk-python/docs/reference/resources/workflows.md), [executions](../../rationai-sdk-python/docs/reference/resources/executions.md), and [types](../../rationai-sdk-python/docs/reference/types/workflows.md) |
 | Understand an earlier architecture choice | The historical references below, only as needed |
 | Add or tune a low-level model deployment | [Model deployment guide](guides/deployment-guide.md) and [inference architecture](architecture/overview.md), not the workflow checkpoint runbook |
@@ -50,22 +51,23 @@ are not instructions for the native full-WSI deployment.
 
 The October 7 source reorganization moves public application code to
 `model_service/`, persistence implementations to `execution_scheduler/persistence/`,
-and heatmap code to `workflows/heatmap/`. Imports and deployment entry points have
-been updated locally; tests and image rebuilds are deferred. Dated validation
-reports describe their original revisions, not a validation of these moves.
+and heatmap code to `workflows/heatmap/`. The October 8 rebuild and live checks
+now validate these paths. Older reports still describe their original revisions.
 
 The subsequent [October 7 ORM refactor](reviews/postgres-orm-2026-10-07.md)
 replaces handwritten persistence SQL with typed SQLAlchemy ORM models. Local
 PostgreSQL and application regression tests now cover the reorganized source
-and ORM adapter. Neither change has been rebuilt into images or deployed.
+and ORM adapter. The October 8 deployment additionally exercises the adapter
+with retained records and new public API executions.
 
 The [October 8 library adoption review](reviews/library-adoption-2026-10-08.md)
 records local Pydantic Settings, shared error-schema, PyJWT parsing, and offline
 EAD schema-validation changes, the replacement of Alembic operations with Yoyo
 migrations, their regression checks, and subsequent EMPAIA client consolidation.
 Existing pre-Yoyo databases need a deliberate reset or verified adoption before
-the new scheduler can start. It does not change ticket acceptance or
-validate a new deployment.
+the new scheduler can start. Verified adoption preserved all 178 existing records
+in the October 8 deployment. Library adoption does not change EMPAIA ticket
+acceptance; real EMPAIA interoperability remains unvalidated.
 
 ## Validation boundaries
 

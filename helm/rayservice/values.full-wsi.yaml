@@ -7,13 +7,13 @@ applications:
 
 rayImage:
   repository: cerit.io/stefanpeknik/model-service-ray-validation
-  tag: standalone-final-20261006-1
+  tag: checkpoint-20261008-bc6a23b
   pullPolicy: IfNotPresent
 
 fullWsi:
   gpuImage:
     repository: cerit.io/stefanpeknik/model-service-workflow-gpu
-    tag: standalone-final-20261006-1
+    tag: checkpoint-20261008-bc6a23b
     pullPolicy: IfNotPresent
   inputClaim: model-service-validation-shared
   tensorRtCacheClaim: peknik-persist-model-service-trt-cache
@@ -31,7 +31,7 @@ executionScheduler:
   replicas: 1
   image:
     repository: cerit.io/stefanpeknik/model-service-scheduler
-    tag: standalone-final-20261006-1
+    tag: checkpoint-20261008-a91b519
     pullPolicy: IfNotPresent
   database:
     existingSecret: model-service-validation-db
