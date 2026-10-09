@@ -1,7 +1,6 @@
 # Simplified standalone workflow requests
 
-Status: implemented and reviewed; final post-review local validation in progress.
-No deployment.
+Status: implemented, reviewed, and locally validated. No deployment.
 
 ## Agreed behavior
 
@@ -76,3 +75,21 @@ registered required settings without defaults. Both now return retryable 503
 `workflow_settings_unavailable`; invalid caller destinations remain permanent
 validation errors. Resolution is a private runtime helper, separate from access
 acquisition and execution. All other agreed behavior was reported as aligned.
+
+## Final validation
+
+After the review fixes, an isolated Git archive of `d1bef95` passed all **238**
+root tests in 20.039 seconds, with native processing and disposable PostgreSQL.
+The ten-file model-service type check and changed-file Ruff checks also passed.
+Both reviewers inspected the corrections and found no further issues. Those
+follow-up reviews inspected source; they did not rerun the suite.
+
+Standards had one documentation finding, fixed. Spec had one P2 failure-classification
+finding, reproduced and fixed. Nothing was deployed or pushed, and `models/` is
+unchanged. The temporary test database was removed after validation. No source,
+settings, or queue contents in the live deployment were changed.
+
+Touched repositories are model-service and rationai-sdk-python. The local
+additional-workflows scratchpad records the agreed settings policy. Other dirty
+demo, documentation, and Helm changes remain unstaged; the notebook and HTML still
+need caller migration. The unrelated dirty full-WSI preset/test mismatch remains.

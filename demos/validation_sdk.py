@@ -21,7 +21,7 @@ from rationai.types.workflows import (
 
 
 def workflow_request() -> WorkflowRequest:
-    """Create a shared-storage dummy request with a unique TIFF destination and fully resolved configuration.
+    """Create a shared-storage dummy request with a unique TIFF destination and server-owned processing settings.
 
     Returns:
         WorkflowRequest: Typed SDK request using the selected shared-storage fixture
