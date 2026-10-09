@@ -1,6 +1,6 @@
 """Define the internal workflow HTTP request and safe error response contract.
 
-The request combines the public invocation with separate protected execution context; it
+The request combines the internal invocation with separate protected execution context; it
 is sent only across the internal dispatch boundary.
 """
 
@@ -62,6 +62,7 @@ class WorkflowRunRequest(WorkflowInvocation):
             resolved_configuration=invocation.resolved_configuration,
             input_access=invocation.input_access,
             deadline_at=invocation.deadline_at,
+            output_path=invocation.output_path,
             execution_context=execution_context,
         )
 

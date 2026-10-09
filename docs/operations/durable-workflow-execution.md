@@ -26,11 +26,20 @@ payloads to Ray Serve, so clients do not need an internal Ray Serve address.
 Scheduled shared-storage artifacts are written under
 `.workflow-attempts/<attempt-hash>/` beneath the invocation's storage root.
 Read the artifact path from the completed execution result, rather than
-constructing it from `resolved_configuration.output_path`. Different attempts
+constructing it from the requested `output_path`. Different attempts
 cannot overwrite each other's outputs. Synchronous workflow invocations and
 the legacy slide route keep their existing requested destinations. Artifacts
 are retained after execution; retention and garbage collection need an
 operational policy before sustained use.
+
+Standalone workflow calls accept named inputs, input access, and an optional
+`output_path`. They do not accept `resolved_configuration` or processing overrides.
+The worker selects its current workflow defaults when each attempt starts; queueing
+does not freeze settings, and retries can use newer settings. Immediate calls also
+include `deadline_at`; scheduling owns that deadline through its timeout option.
+Provider-prepared EMPAIA settings and existing stored snapshots are unchanged.
+See [the current request example](../guides/additional-workflows.md) before updating
+callers. Rebuild both public and Ray workflow images and update the SDK together.
 
 ## Initial operating values
 

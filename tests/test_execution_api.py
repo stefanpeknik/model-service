@@ -6,8 +6,11 @@ import asyncio
 import json
 import unittest
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
+from fastapi import FastAPI
 from httpx import (
     ASGITransport,
     AsyncClient,
@@ -30,12 +33,14 @@ from execution_scheduler.repository import (
     ExecutionRepositoryUnavailableError,
 )
 from execution_scheduler.scheduler import ExecutionScheduler
+from integrations.standalone import StandaloneProviderAdapter
 from model_service.api import create_execution_app
 from model_service.health import WorkflowDeploymentHealth
 from model_service.inference import HttpInferenceProxy
 from model_service.synchronous import SynchronousWorkflowService
 from tests.test_execution_scheduler import StandaloneProvider
-from workflow_execution.catalog import WorkflowCatalog
+from workflow_execution.application import WorkflowApplication, WorkflowContext
+from workflow_execution.catalog import WorkflowCatalog, WorkflowConfiguration
 from workflow_execution.contracts import (
     InlineOutput,
     SharedArtifact,
@@ -43,8 +48,11 @@ from workflow_execution.contracts import (
 )
 from workflow_execution.dispatch import (
     ConfirmedDispatchRejectionError,
+    HTTPWorkflowDispatch,
     InMemoryWorkflowDispatch,
 )
+from workflow_execution.http import WorkflowRunRequest, run_workflow_http
+from workflows.heatmap.prostate import validate_configuration
 
 
 if TYPE_CHECKING:
@@ -542,6 +550,224 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(forwarded[1].url, "http://ray-serve/prostate-classifier-1/")
         self.assertEqual(forwarded[1].content, b"compressed-image")
 
+    async def test_immediate_workflow_defers_settings_without_caller_configuration(
+        self,
+    ) -> None:
+        """Dispatch inputs and a destination without capturing processing settings.
+
+        Returns:
+            None: The HTTP result and external dispatch payload are verified.
+        """
+        forwarded: list[dict[str, object]] = []
+
+        def ray_handler(request: Request) -> Response:
+            """Record the external Ray invocation and return a completed artifact.
+
+            Args:
+                request: Internal dispatch request sent to the simulated Ray origin.
+
+            Returns:
+                Response: Successful workflow artifact response.
+            """
+            forwarded.append(json.loads(request.content))
+            return Response(
+                200,
+                json={
+                    "outputs": {
+                        "heatmap": {
+                            "kind": "shared_artifact",
+                            "path": "/shared/outputs/requested.tiff",
+                            "media_type": "image/tiff",
+                        }
+                    }
+                },
+            )
+
+        body = self._workflow_invocation()
+        body["output_path"] = "outputs/requested.tiff"
+        async with AsyncClient(transport=MockTransport(ray_handler)) as ray_client:
+            runner = SynchronousWorkflowService(
+                WorkflowCatalog.default(),
+                HTTPWorkflowDispatch(ray_client, origin="http://ray-serve"),
+            )
+            async with AsyncClient(
+                transport=ASGITransport(
+                    app=create_execution_app(self.scheduler, workflow_runner=runner)
+                ),
+                base_url="http://model-service",
+            ) as client:
+                response = await client.post(
+                    "/v1/workflows/prostate-heatmap/run", json=body
+                )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertIsNone(forwarded[0]["resolved_configuration"])
+        self.assertEqual(forwarded[0]["output_path"], "outputs/requested.tiff")
+
+    async def test_queued_workflow_uses_worker_defaults_when_processing_starts(
+        self,
+    ) -> None:
+        """Replay queued work and execute it using the worker's current defaults.
+
+        Returns:
+            None: HTTP replay, polling, and output verify execution-time defaults.
+        """
+        forwarded: list[dict[str, object]] = []
+
+        class WriteSettingsWorkflow:
+            """Expose execution-time settings in a test artifact through the runtime."""
+
+            async def run(self, context: WorkflowContext) -> WorkflowResult:
+                """Write the selected settings beneath the invocation output root.
+
+                Args:
+                    context: Input access and settings resolved by the real runtime.
+
+                Returns:
+                    WorkflowResult: Completed fixture artifact containing its settings.
+                """
+                path = context.output_path(str(context.configuration["output_path"]))
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(context.configuration), encoding="utf-8")
+                return WorkflowResult(
+                    outputs={"heatmap": SharedArtifact(str(path), "image/tiff")}
+                )
+
+        application: WorkflowApplication | None = None
+        ray = FastAPI()
+
+        @ray.post("/workflows/prostate-heatmap/", response_model=WorkflowResult)
+        async def ray_handler(request: WorkflowRunRequest) -> WorkflowResult:
+            """Run the real application behind a simulated external Ray ingress.
+
+            Args:
+                request: Internal dispatch envelope with deferred processing settings.
+
+            Returns:
+                WorkflowResult: Fixture artifact from the worker's current settings.
+            """
+            assert application is not None
+            forwarded.append({"resolved_configuration": request.resolved_configuration})
+            return await run_workflow_http(
+                application, request, request.execution_context
+            )
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "slide.svs").touch()
+            (root / "roi.tiff").touch()
+            catalog = WorkflowCatalog.default()
+            repository = InMemoryExecutionRepository()
+            body = self._workflow_invocation()
+            body.pop("output_path")
+            body.pop("deadline_at")
+            body["input_access"] = {
+                "kind": "shared_storage",
+                "state": {"root": directory},
+            }
+            submission = {
+                "provider": "standalone",
+                "body": body,
+                "idempotency_key": "snapshot-1",
+            }
+            async with AsyncClient(transport=ASGITransport(app=ray)) as ray_client:
+                dispatch = HTTPWorkflowDispatch(ray_client, origin="http://ray-serve")
+
+                def scheduler_for(
+                    configured_catalog: WorkflowCatalog,
+                ) -> ExecutionScheduler:
+                    """Recreate the scheduler while retaining durable execution storage.
+
+                    Args:
+                        configured_catalog: Server defaults active for new admissions.
+
+                    Returns:
+                        ExecutionScheduler: Scheduler using the retained repository.
+                    """
+                    return ExecutionScheduler(
+                        repository=repository,
+                        dispatch=dispatch,
+                        providers={
+                            "standalone": StandaloneProviderAdapter(configured_catalog)
+                        },
+                        known_workflows=configured_catalog.identifiers,
+                        default_timeout=timedelta(minutes=1),
+                        maximum_timeout=timedelta(hours=1),
+                        poll_interval=0.01,
+                    )
+
+                first_scheduler = scheduler_for(catalog)
+                async with AsyncClient(
+                    transport=ASGITransport(app=create_execution_app(first_scheduler)),
+                    base_url="http://model-service",
+                ) as client:
+                    for field, value in (
+                        ("resolved_configuration", {}),
+                        ("configuration", {"stride_fraction": 0.25}),
+                        ("stride_fraction", 0.25),
+                        ("output_tile_width", 128),
+                    ):
+                        with self.subTest(field=field):
+                            rejected = await client.post(
+                                "/v1/workflows/prostate-heatmap/schedule",
+                                json={**submission, "body": {**body, field: value}},
+                            )
+                            self.assertEqual(rejected.status_code, 422, rejected.text)
+                    admitted = await client.post(
+                        "/v1/workflows/prostate-heatmap/schedule", json=submission
+                    )
+                self.assertEqual(admitted.status_code, 202, admitted.text)
+                execution_id = admitted.json()["execution"]["id"]
+                changed_catalog = WorkflowCatalog(
+                    (catalog.get("prostate-heatmap"),),
+                    configurations={
+                        "prostate-heatmap": WorkflowConfiguration(
+                            validator=validate_configuration,
+                            defaults={
+                                "output_path": "new-default.tiff",
+                                "stride_fraction": 0.25,
+                                "output_tile_height": 128,
+                                "output_tile_width": 128,
+                            },
+                        )
+                    },
+                )
+                restarted = scheduler_for(changed_catalog)
+                application = WorkflowApplication(
+                    changed_catalog.get("prostate-heatmap"),
+                    WriteSettingsWorkflow(),
+                    catalog=changed_catalog,
+                )
+                async with AsyncClient(
+                    transport=ASGITransport(app=create_execution_app(restarted)),
+                    base_url="http://model-service",
+                ) as client:
+                    replay = await client.post(
+                        "/v1/workflows/prostate-heatmap/schedule", json=submission
+                    )
+                    self.assertFalse(replay.json()["created"])
+                    self.assertEqual(replay.json()["execution"]["id"], execution_id)
+                    async with restarted.running():
+                        async with asyncio.timeout(2):
+                            while True:
+                                state = await client.get(
+                                    f"/v1/executions/{execution_id}"
+                                )
+                                if state.json()["status"] == "succeeded":
+                                    break
+                                await asyncio.sleep(0.01)
+                artifact = Path(state.json()["result"]["outputs"]["heatmap"]["path"])
+                self.assertEqual(artifact.name, "new-default.tiff")
+                self.assertEqual(
+                    json.loads(artifact.read_text(encoding="utf-8")),
+                    {
+                        "output_path": "new-default.tiff",
+                        "stride_fraction": 0.25,
+                        "output_tile_height": 128,
+                        "output_tile_width": 128,
+                    },
+                )
+        self.assertIsNone(forwarded[0]["resolved_configuration"])
+
     async def test_synchronous_workflow_validates_before_dispatch(self) -> None:
         """Verify synchronous workflow validates before dispatch.
 
@@ -578,8 +804,6 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
             WorkflowCatalog.default(),
             InMemoryWorkflowDispatch({"prostate-heatmap": reject_dispatch}),
         )
-        body = self._workflow_invocation()
-        body["resolved_configuration"] = {}
         async with AsyncClient(
             transport=ASGITransport(
                 app=create_execution_app(
@@ -589,16 +813,21 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
             ),
             base_url="http://model-service",
         ) as client:
-            response = await client.post(
-                "/v1/workflows/prostate-heatmap/run",
-                json=body,
-            )
-
-        self.assertEqual(response.status_code, 422)
-        self.assertEqual(
-            response.json()["detail"]["code"],
-            "invalid_workflow_invocation",
-        )
+            for field, value in (
+                ("resolved_configuration", {}),
+                ("configuration", {"stride_fraction": 0.25}),
+                ("stride_fraction", 0.25),
+                ("output_tile_width", 128),
+            ):
+                with self.subTest(field=field):
+                    response = await client.post(
+                        "/v1/workflows/prostate-heatmap/run",
+                        json={**self._workflow_invocation(), field: value},
+                    )
+                    self.assertEqual(response.status_code, 422)
+                    self.assertEqual(
+                        response.json()["detail"]["code"], "invalid_workflow_invocation"
+                    )
 
     async def test_synchronous_workflow_requires_explicit_input_kind(self) -> None:
         """Verify synchronous workflow requires explicit input kind.
@@ -1257,7 +1486,7 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
 
     @staticmethod
     def _workflow_invocation() -> dict[str, object]:
-        """Build the public prostate invocation with explicit input tags, resolved configuration, and an ISO deadline.
+        """Build a public prostate request with tagged inputs, destination, and deadline.
 
         Returns:
             dict[str, object]: Decoded, serialized, or recorded fields described above.
@@ -1270,12 +1499,7 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
                     "path": "roi.tiff",
                 },
             },
-            "resolved_configuration": {
-                "output_path": "outputs/heatmap.tiff",
-                "stride_fraction": 0.5,
-                "output_tile_height": 256,
-                "output_tile_width": 256,
-            },
+            "output_path": "outputs/heatmap.tiff",
             "input_access": {
                 "kind": "shared_storage",
                 "state": {"root": "/shared"},

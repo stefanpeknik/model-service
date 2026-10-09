@@ -44,12 +44,7 @@ class DeployedSDKTests(unittest.TestCase):
                 "slide": SharedPathInput("input/slide.dat"),
                 "region_of_interest": SharedPathInput("input/roi.dat"),
             },
-            resolved_configuration={
-                "output_path": f"output/{uuid4().hex}.tiff",
-                "stride_fraction": 0.5,
-                "output_tile_height": 256,
-                "output_tile_width": 256,
-            },
+            output_path=f"output/{uuid4().hex}.tiff",
             input_access=InputAccess(
                 kind="shared_storage", state={"root": "/mnt/validation"}
             ),
@@ -113,12 +108,7 @@ class DeployedSDKTests(unittest.TestCase):
                 "slide": SharedPathInput("input/slide.dat"),
                 "region_of_interest": SharedPathInput("input/roi.dat"),
             },
-            resolved_configuration={
-                "output_path": f"cancellation/{uuid4().hex}.tiff",
-                "stride_fraction": 0.5,
-                "output_tile_height": 256,
-                "output_tile_width": 256,
-            },
+            output_path=f"cancellation/{uuid4().hex}.tiff",
             input_access=InputAccess(
                 kind="shared_storage", state={"root": "/mnt/validation"}
             ),

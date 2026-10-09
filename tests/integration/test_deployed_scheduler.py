@@ -261,12 +261,7 @@ class DeployedSchedulerTests(unittest.TestCase):
                     "path": "input/roi.dat",
                 },
             },
-            "resolved_configuration": {
-                "output_path": output_path,
-                "stride_fraction": 0.5,
-                "output_tile_height": 256,
-                "output_tile_width": 256,
-            },
+            "output_path": output_path,
             "input_access": {
                 "kind": "shared_storage",
                 "state": {"root": "/mnt/validation"},

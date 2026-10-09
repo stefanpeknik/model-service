@@ -49,7 +49,6 @@ class ExecutionRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 "/v1/workflows/gigapath-embeddings/run",
                 json={
                     "inputs": {},
-                    "resolved_configuration": {},
                     "input_access": {
                         "kind": "shared_storage",
                         "state": {"root": "/tmp"},

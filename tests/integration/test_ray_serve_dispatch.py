@@ -317,7 +317,6 @@ class RayServeDispatchIntegrationTests(unittest.IsolatedAsyncioTestCase):
         """
         return {
             "inputs": {},
-            "resolved_configuration": {"delay_seconds": 0},
             "input_access": {
                 "kind": "shared_storage",
                 "state": {"root": directory},

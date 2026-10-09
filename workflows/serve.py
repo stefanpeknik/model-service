@@ -84,9 +84,11 @@ class WorkflowApplicationDeployment:
         settings = WorkflowWorkerSettings.model_validate(
             config.model_dump(exclude={"workflow_id"})
         )
+        catalog = WorkflowCatalog.default()
         self._application = WorkflowApplication(
-            WorkflowCatalog.default().get(config.workflow_id),
+            catalog.get(config.workflow_id),
             build_workflow(config.workflow_id, settings),
+            catalog=catalog,
         )
 
     @fastapi.post("/", response_model=WorkflowResult)

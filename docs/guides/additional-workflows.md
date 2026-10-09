@@ -78,26 +78,27 @@ Example immediate GigaPath invocation:
     "slide": {"kind": "shared_path", "path": "inputs/slide.tiff"},
     "region_of_interest": {"kind": "shared_path", "path": "inputs/mask.tiff"}
   },
-  "resolved_configuration": {
-    "output_path": "outputs/gigapath.h5",
-    "stride_fraction": 1.0
-  },
+  "output_path": "outputs/gigapath.h5",
   "input_access": {"kind": "shared_storage", "state": {"root": "/mnt/data"}},
   "deadline_at": "2099-01-01T00:00:00Z"
 }
 ```
 
 Replace the example deadline with a real bounded deadline. For scheduling, put
-this invocation in `body`, add `provider: "standalone"` and a unique
-`idempotency_key`. The scheduler sets its own effective deadline. The public SDK
-expects complete `resolved_configuration` too; it does not fetch or fill defaults.
-Python callers inside model-service can use `WorkflowCatalog.resolve_configuration`.
+the inputs, access, and optional output path in `body`, omit `deadline_at`, and add
+`provider: "standalone"` and a unique `idempotency_key`. The scheduler sets its own
+effective deadline. The HTTP and SDK requests do not accept processing configuration.
+The workflow worker applies its current server-owned defaults when an attempt
+starts, so queued work and retries can use newer settings after reconfiguration.
 
 EPISeg configuration defaults are `output_path: "segmentation.tiff"`,
 `stride_fraction: 0.5`, and TIFF tile height/width of 256. Both embedding workflows
 default to `output_path: "embeddings.h5"` and `stride_fraction: 1.0`.
-Use distinct output paths for separate immediate runs. Every configuration field
-must be present in `resolved_configuration`, as for prostate heatmap.
+These processing settings are server-owned. Omit `output_path` to use the default,
+or use distinct destinations for separate immediate runs to avoid overwriting an
+earlier result. Scheduled outputs remain isolated per attempt. Update callers and
+the SDK together with model-service; the old `resolved_configuration` field is
+rejected. EMPAIA's existing provider-prepared configuration remains unchanged.
 
 ## Deployment and validation limits
 

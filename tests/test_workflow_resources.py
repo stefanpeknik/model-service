@@ -39,7 +39,6 @@ from workflow_execution.contracts import (
     WorkflowResult,
 )
 from workflow_execution.dispatch import InMemoryWorkflowDispatch
-from workflow_execution.serialization import invocation_to_dict
 
 
 class WorkflowResourceTests(unittest.IsolatedAsyncioTestCase):
@@ -621,7 +620,7 @@ class WorkflowResourceTests(unittest.IsolatedAsyncioTestCase):
                     )
                 },
             )
-            application = WorkflowApplication(definition, Workflow())
+            application = WorkflowApplication(definition, Workflow(), catalog=catalog)
 
             async def dispatch(invocation, execution_context):
                 """Simulate the scenario computation, using events or injected failures to control completion and ownership races.
@@ -658,13 +657,6 @@ class WorkflowResourceTests(unittest.IsolatedAsyncioTestCase):
                 owner="test-worker",
                 lease_duration=timedelta(seconds=30),
             )
-            invocation = replace(
-                self.invocation(),
-                input_access=InputAccessContext(
-                    kind="shared_storage",
-                    state={"root": directory},
-                ),
-            )
             scheduled = []
             for key in ("first", "second"):
                 scheduled.append(
@@ -672,7 +664,13 @@ class WorkflowResourceTests(unittest.IsolatedAsyncioTestCase):
                         ScheduleRequest(
                             workflow_id="artifact",
                             provider="standalone",
-                            body=invocation_to_dict(invocation),
+                            body={
+                                "inputs": {},
+                                "input_access": {
+                                    "kind": "shared_storage",
+                                    "state": {"root": directory},
+                                },
+                            },
                             idempotency_key=key,
                         )
                     )

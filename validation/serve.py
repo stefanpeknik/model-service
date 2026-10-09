@@ -60,7 +60,8 @@ class ValidationProstateHeatmapApplication:
 
     def __init__(self) -> None:
         """Wire the dummy workflow wrapper and optionally register EMPAIA workspace access from environment settings."""
-        definition = WorkflowCatalog.default().get("prostate-heatmap")
+        catalog = WorkflowCatalog.default()
+        definition = catalog.get("prostate-heatmap")
         access_adapters = None
         gateway_factory_path = os.environ.get("EMPAIA_GATEWAY_FACTORY")
         if gateway_factory_path:
@@ -76,6 +77,7 @@ class ValidationProstateHeatmapApplication:
         self._application = WorkflowApplication(
             definition,
             ProstateHeatmapWorkflow(ValidationHeatmapProcessor()),
+            catalog=catalog,
             access_adapters=access_adapters,
         )
 

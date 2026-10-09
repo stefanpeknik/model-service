@@ -46,7 +46,7 @@ class ExecutionRepositoryContract:
         raise NotImplementedError
 
     async def _admit_execution(self, key: str, workflow_id: str = "heatmap") -> str:
-        """Admit a minimal execution for a selected workflow and replay key and return its ID.
+        """Admit deferred standalone work with a destination and return its durable ID.
 
         Args:
             key: Caller replay key identifying this fixture submission.
@@ -63,11 +63,12 @@ class ExecutionRepositoryContract:
                 workflow_id=workflow_id,
                 invocation=WorkflowInvocation(
                     inputs={},
-                    resolved_configuration={},
+                    resolved_configuration=None,
                     input_access=InputAccessContext(
                         kind="shared_storage", state={"root": "/shared"}
                     ),
                     deadline_at=deadline,
+                    output_path="outputs/requested.tiff",
                 ),
                 protected_context={},
                 deadline_at=deadline,

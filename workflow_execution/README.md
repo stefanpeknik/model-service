@@ -10,6 +10,11 @@ logic.
   failure values, with their structural validation rules.
 - `serialization.py` converts those values for HTTP transport and JSONB
   persistence using Pydantic's contract schemas.
+- `submission.py` defines public standalone requests with inputs, access, optional
+  destination, and an immediate-only deadline. It does not accept processing
+  settings. Internal standalone invocations carry `resolved_configuration: null`;
+  the workflow application uses its active catalog when each attempt starts.
+  Provider-prepared and previously stored resolved configurations remain supported.
 - `catalog.py` validates workflow declarations and requires configuration
   validation for every registered workflow.
 - `../workflows/registry.py` composes the built-in declarations, configuration rules, and
@@ -18,7 +23,9 @@ logic.
   its validator and optional defaults. Configuration-free workflows register
   `validate_empty_configuration`.
 - `application.py` validates an invocation, creates input access, enforces its
-  deadline, runs the workflow, and validates the result.
+  deadline, resolves deferred settings from the worker's catalog, runs the workflow,
+  and validates the result. Settings are local to that attempt, not persisted back
+  to the standalone queue record.
 - `../integrations/shared_storage.py` implements standalone shared-storage input and output
   access and owns its strict `SharedStorageState` schema.
 - `../integrations/empaia/input_access.py` materializes EMPAIA inputs without

@@ -22,7 +22,8 @@ processing remains in `../workflow_execution/` and `../workflows/`.
 - `inference.py` forwards existing model and slide requests without creating
   an execution record.
 - `synchronous.py` validates and dispatches an immediate workflow invocation
-  without admitting durable work.
+  without admitting durable work. Public requests contain no processing settings;
+  the workflow worker chooses those when computation starts.
 - `health.py` reports downstream workflow reachability separately from durable
   API readiness.
 

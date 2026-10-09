@@ -98,6 +98,7 @@ class AdditionalWorkflowTests(unittest.IsolatedAsyncioTestCase):
                 WorkflowWorkerSettings(**worker_options),
                 model_transport=model_transport,
             ),
+            catalog=self.catalog,
         )
         ray = FastAPI()
 
@@ -141,31 +142,38 @@ class AdditionalWorkflowTests(unittest.IsolatedAsyncioTestCase):
         return client
 
     def invocation(
-        self, workflow_id: str, **configuration: object
+        self,
+        workflow_id: str,
+        *,
+        output_path: str | None = None,
+        scheduled: bool = False,
     ) -> dict[str, object]:
-        """Resolve complete settings and package shared inputs for public execution.
+        """Package shared inputs without exposing processing configuration.
 
         Args:
-            workflow_id: Built-in definition supplying complete settings defaults.
-            **configuration: Caller overrides applied before catalog validation.
+            workflow_id: Known built-in workflow being exercised by this fixture.
+            output_path: Optional relative output destination.
+            scheduled: Omit the deadline when admission owns the execution budget.
 
         Returns:
             dict[str, object]: JSON-compatible public workflow invocation.
         """
-        return {
+        self.catalog.get(workflow_id)
+        body: dict[str, object] = {
             "inputs": {
                 "slide": {"kind": "shared_path", "path": "slide.tiff"},
                 "region_of_interest": {"kind": "shared_path", "path": "mask.tiff"},
             },
-            "resolved_configuration": self.catalog.resolve_configuration(
-                workflow_id, configuration
-            ),
             "input_access": {
                 "kind": "shared_storage",
                 "state": {"root": str(self.root)},
             },
-            "deadline_at": (datetime.now(UTC) + timedelta(minutes=1)).isoformat(),
         }
+        if output_path is not None:
+            body["output_path"] = output_path
+        if not scheduled:
+            body["deadline_at"] = (datetime.now(UTC) + timedelta(minutes=1)).isoformat()
+        return body
 
     async def test_episeg_publishes_float_scores_without_heatmap_quantization(
         self,
@@ -346,7 +354,7 @@ class AdditionalWorkflowTests(unittest.IsolatedAsyncioTestCase):
                     submission = {
                         "provider": "standalone",
                         "idempotency_key": workflow_id,
-                        "body": self.invocation(workflow_id),
+                        "body": self.invocation(workflow_id, scheduled=True),
                     }
                     response = await client.post(
                         f"/v1/workflows/{workflow_id}/schedule", json=submission
@@ -501,7 +509,7 @@ class AdditionalWorkflowTests(unittest.IsolatedAsyncioTestCase):
             json={
                 "provider": "standalone",
                 "idempotency_key": "cancel",
-                "body": self.invocation("gigapath-embeddings"),
+                "body": self.invocation("gigapath-embeddings", scheduled=True),
             },
         )
         self.assertEqual(response.status_code, 202, response.text)

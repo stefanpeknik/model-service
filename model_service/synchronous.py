@@ -8,14 +8,14 @@ from execution_scheduler.contracts import UnknownWorkflowError
 from workflow_execution.application import validate_workflow_invocation
 from workflow_execution.catalog import UnknownWorkflow
 from workflow_execution.contracts import (
-    InvalidWorkflowInvocation,
     WorkflowExecutionContext,
 )
+from workflow_execution.submission import ImmediateWorkflowRequest, prepare_invocation
 
 
 if TYPE_CHECKING:
     from workflow_execution.catalog import WorkflowCatalog
-    from workflow_execution.contracts import WorkflowInvocation, WorkflowResult
+    from workflow_execution.contracts import WorkflowResult
     from workflow_execution.dispatch import WorkflowDispatch
 
 
@@ -40,15 +40,14 @@ class SynchronousWorkflowService:
     async def run(
         self,
         workflow_id: str,
-        invocation: WorkflowInvocation,
+        request: ImmediateWorkflowRequest,
     ) -> WorkflowResult:
-        """Require a known workflow, valid inputs/deadline, and fully resolved configuration before dispatching with empty private context.
+        """Validate a public request and defer processing settings to the workflow worker.
 
         Args:
             workflow_id: Declared workflow identifier used for catalog lookup and
                 dispatch routing.
-            invocation: Named inputs, resolved configuration, public access state, and
-                absolute workflow deadline.
+            request: Named inputs, public data access, optional destination, and deadline.
 
         Returns:
             WorkflowResult: Named inline outputs and/or references to completed artifact
@@ -70,16 +69,8 @@ class SynchronousWorkflowService:
             definition = self._catalog.get(workflow_id)
         except UnknownWorkflow as error:
             raise UnknownWorkflowError(workflow_id) from error
+        invocation = prepare_invocation(request, deadline_at=request.deadline_at)
         validate_workflow_invocation(definition, invocation)
-        try:
-            self._catalog.validate_configuration(
-                workflow_id,
-                invocation.resolved_configuration,
-            )
-        except InvalidWorkflowInvocation:
-            raise
-        except (TypeError, ValueError) as error:
-            raise InvalidWorkflowInvocation(str(error)) from error
         return await self._dispatch.run(
             workflow_id,
             WorkflowExecutionContext(),

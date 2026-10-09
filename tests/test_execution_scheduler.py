@@ -1765,12 +1765,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(replay.execution.id, first.execution.id)
 
             conflicting_body = dict(request.body)
-            conflicting_body["resolved_configuration"] = {
-                "output_path": "outputs/other.tiff",
-                "stride_fraction": 0.5,
-                "output_tile_height": 256,
-                "output_tile_width": 256,
-            }
+            conflicting_body["output_path"] = "outputs/other.tiff"
             with self.assertRaises(ScheduleConflictError):
                 await scheduler.schedule(
                     ScheduleRequest(
@@ -1941,12 +1936,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
                         "path": "roi.tiff",
                     },
                 },
-                "resolved_configuration": {
-                    "output_path": "outputs/heatmap.tiff",
-                    "stride_fraction": 0.5,
-                    "output_tile_height": 256,
-                    "output_tile_width": 256,
-                },
+                "output_path": "outputs/heatmap.tiff",
                 "input_access": {
                     "kind": "shared_storage",
                     "state": {"root": str(root)},

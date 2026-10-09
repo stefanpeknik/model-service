@@ -19,7 +19,7 @@ from execution_scheduler.domain import PreparedWorkflow, SubmissionIdentity
 from integrations.shared_storage import SharedStorageAccessAdapter
 from workflow_execution.application import validate_workflow_invocation
 from workflow_execution.contracts import SharedPathInput, WorkflowExecutionContext
-from workflow_execution.serialization import invocation_from_dict
+from workflow_execution.submission import WorkflowRequest, prepare_invocation
 
 
 if TYPE_CHECKING:
@@ -86,7 +86,7 @@ class StandaloneProviderAdapter:
         request: ScheduleRequest,
         deadline_at: datetime,
     ) -> PreparedWorkflow:
-        """Build a typed invocation with the scheduler deadline and validate configuration, input kinds, and shared input file availability.
+        """Validate shared inputs and leave processing settings to the workflow worker.
 
         Args:
             request: Provider submission with workflow ID, caller body, replay key, and
@@ -103,14 +103,11 @@ class StandaloneProviderAdapter:
                 effective deadline are invalid.
         """
         try:
-            invocation = invocation_from_dict(
-                {**request.body, "deadline_at": deadline_at.isoformat()}
+            invocation = prepare_invocation(
+                WorkflowRequest.model_validate(request.body),
+                deadline_at=deadline_at,
             )
             definition = self._catalog.get(request.workflow_id)
-            self._catalog.validate_configuration(
-                request.workflow_id,
-                invocation.resolved_configuration,
-            )
             validate_workflow_invocation(
                 definition,
                 invocation,

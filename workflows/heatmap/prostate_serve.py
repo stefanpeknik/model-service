@@ -122,6 +122,7 @@ class ProstateHeatmapApplication:
         self._application = WorkflowApplication(
             definition,
             ProstateHeatmapWorkflow(processor),
+            catalog=catalog,
             access_adapters=access_adapters,
         )
 

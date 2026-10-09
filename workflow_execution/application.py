@@ -10,7 +10,7 @@ import asyncio
 import inspect
 import logging
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Mapping
 
-    from workflow_execution.catalog import WorkflowDefinition
+    from workflow_execution.catalog import WorkflowCatalog, WorkflowDefinition
 
 
 class Workflow(Protocol):
@@ -189,6 +189,7 @@ class WorkflowApplication:
         definition: WorkflowDefinition,
         workflow: Workflow,
         *,
+        catalog: WorkflowCatalog | None = None,
         access_adapters: Mapping[str, WorkflowInputAccessAdapter] | None = None,
         cleanup_timeout_seconds: float = 10,
     ) -> None:
@@ -199,6 +200,9 @@ class WorkflowApplication:
                 translate.
             workflow: Provider-neutral computation implementation wrapped by
                 WorkflowApplication.
+            catalog: Active server settings, required for standalone invocations that
+                defer configuration until processing. Already-resolved provider
+                invocations do not require a catalog.
             access_adapters: Additional access-kind adapters; shared storage is
                 registered by default.
             cleanup_timeout_seconds: Maximum wait for closing invocation-owned
@@ -212,6 +216,7 @@ class WorkflowApplication:
         self._definition = definition
         self._cleanup_timeout_seconds = cleanup_timeout_seconds
         self._workflow = workflow
+        self._catalog = catalog
         self._access_adapters: dict[str, WorkflowInputAccessAdapter] = {
             "shared_storage": SharedStorageAccessAdapter(),
         }
@@ -223,7 +228,7 @@ class WorkflowApplication:
         invocation: WorkflowInvocation,
         execution_context: WorkflowExecutionContext | None = None,
     ) -> WorkflowResult:
-        """Validate the invocation, create access, execute under its deadline, validate outputs, and close access.
+        """Validate, resolve deferred settings, acquire access, and execute under the deadline.
 
         Unexpected errors become retryable safe failures. Cleanup runs even on
         cancellation; cleanup errors preserve an existing primary failure but fail an
@@ -259,12 +264,32 @@ class WorkflowApplication:
             timeout = asyncio.timeout(max(0, timeout_seconds))
             try:
                 async with timeout:
+                    configuration = invocation.resolved_configuration
+                    if configuration is None:
+                        if self._catalog is None:
+                            raise InvalidWorkflowInvocation(
+                                "workflow settings are not configured"
+                            )
+                        overrides: dict[str, JsonValue] = {}
+                        if invocation.output_path is not None:
+                            overrides["output_path"] = invocation.output_path
+                        try:
+                            configuration = self._catalog.resolve_configuration(
+                                self._definition.identifier, overrides
+                            )
+                        except (TypeError, ValueError) as error:
+                            raise InvalidWorkflowInvocation(
+                                "workflow settings or output destination are invalid"
+                            ) from error
+                        invocation = replace(
+                            invocation, resolved_configuration=configuration
+                        )
                     access = await self._create_access(
                         invocation, execution_context or WorkflowExecutionContext()
                     )
                     context = WorkflowContext(
                         inputs=access,
-                        configuration=invocation.resolved_configuration,
+                        configuration=configuration,
                         deadline_at=invocation.deadline_at,
                     )
                     result = await self._workflow.run(context)

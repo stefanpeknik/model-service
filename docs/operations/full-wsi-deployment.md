@@ -372,12 +372,7 @@ match the real workflow.
         "path": "wsi/962ea217-0fd7-4ddd-a1a0-165c89056cef/tissue-mask-open-slide.tiff"
       }
     },
-    "resolved_configuration": {
-      "output_path": "outputs/full-wsi-prostate-heatmap.tiff",
-      "stride_fraction": 0.5,
-      "output_tile_height": 256,
-      "output_tile_width": 256
-    },
+    "output_path": "outputs/full-wsi-prostate-heatmap.tiff",
     "input_access": {
       "kind": "shared_storage",
       "state": {"root": "/mnt/validation"}

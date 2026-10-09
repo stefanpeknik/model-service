@@ -38,7 +38,8 @@ class WorkflowSerializationTests(unittest.TestCase):
         self.assertIs(invocation.inputs["inline"].kind, WorkflowInputKind.INLINE)
         self.assertIs(invocation.inputs["slide"].kind, WorkflowInputKind.SHARED_PATH)
         self.assertIs(invocation.inputs["provider"].kind, WorkflowInputKind.PROVIDER)
-        self.assertEqual(invocation_to_dict(invocation), body)
+        self.assertIsNone(invocation.output_path)
+        self.assertEqual(invocation_to_dict(invocation), {**body, "output_path": None})
 
     def test_shared_kind_enums_preserve_result_wire_strings(self) -> None:
         """Verify shared kind enums preserve result wire strings.

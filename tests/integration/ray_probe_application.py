@@ -47,7 +47,8 @@ class ProbeWorkflow:
             "x-processing-attempt-id", f"synchronous-{uuid4()}"
         )
         body = await request.json()
-        delay = body["resolved_configuration"]["delay_seconds"]
+        configuration = body["resolved_configuration"]
+        delay = 0 if configuration is None else configuration["delay_seconds"]
         (self._marker_root / f"{attempt}.started").touch()
         try:
             await asyncio.sleep(delay)

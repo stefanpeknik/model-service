@@ -108,12 +108,7 @@ class NativeWorkflowSettings:
                 "slide": {"kind": "shared_path", "path": self.slide_path},
                 "region_of_interest": {"kind": "shared_path", "path": self.mask_path},
             },
-            "resolved_configuration": {
-                "output_path": output_path,
-                "stride_fraction": 0.5,
-                "output_tile_height": 256,
-                "output_tile_width": 256,
-            },
+            "output_path": output_path,
             "input_access": {
                 "kind": "shared_storage",
                 "state": {"root": self.storage_root},
@@ -121,7 +116,7 @@ class NativeWorkflowSettings:
         }
 
     def sdk_request(self, output_path: str) -> WorkflowRequest:
-        """Build the equivalent typed SDK request using the same inputs and resolved heatmap configuration.
+        """Build the equivalent SDK request using the same inputs and destination.
 
         Args:
             output_path: Destination artifact path or configured relative output path.
@@ -141,12 +136,7 @@ class NativeWorkflowSettings:
                 "slide": SharedPathInput(self.slide_path),
                 "region_of_interest": SharedPathInput(self.mask_path),
             },
-            resolved_configuration={
-                "output_path": output_path,
-                "stride_fraction": 0.5,
-                "output_tile_height": 256,
-                "output_tile_width": 256,
-            },
+            output_path=output_path,
             input_access=InputAccess(
                 kind="shared_storage", state={"root": self.storage_root}
             ),

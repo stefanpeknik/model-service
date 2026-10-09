@@ -166,26 +166,31 @@ class WorkflowExecutionContext:
     protected_context: _JsonObject = field(default_factory=dict, repr=False)
 
 
+type WorkflowDeadline = Annotated[
+    datetime,
+    BeforeValidator(_iso_datetime),
+    PlainSerializer(datetime.isoformat, return_type=str),
+]
+
+
 @dataclass(frozen=True, slots=True)
 class WorkflowInvocation:
     """Describe named inputs, resolved configuration, input access, and an absolute execution deadline.
 
     Attributes:
         inputs: Input names mapped to the invocation's typed input values.
-        resolved_configuration: Complete configuration snapshot validated before
-            execution.
+        resolved_configuration: Complete provider-prepared settings, or None for
+            standalone work that uses server defaults when processing starts.
         input_access: Public access adapter selection and non-secret state.
         deadline_at: Absolute aware deadline, including input acquisition and execution.
+        output_path: Optional standalone destination override, not processing settings.
     """
 
     inputs: Annotated[dict[str, WorkflowInput], Field(strict=True)]
-    resolved_configuration: _JsonObject
+    resolved_configuration: _JsonObject | None
     input_access: InputAccessContext
-    deadline_at: Annotated[
-        datetime,
-        BeforeValidator(_iso_datetime),
-        PlainSerializer(datetime.isoformat, return_type=str),
-    ]
+    deadline_at: WorkflowDeadline
+    output_path: _NonEmptyString | None = None
 
 
 @dataclass(frozen=True, slots=True)

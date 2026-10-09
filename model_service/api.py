@@ -31,7 +31,6 @@ from model_service.inference import create_inference_router
 from workflow_execution.contracts import (
     InvalidWorkflowInvocation,
     JsonValue,
-    WorkflowInvocation,
     WorkflowResult,
 )
 from workflow_execution.dispatch import (
@@ -40,6 +39,9 @@ from workflow_execution.dispatch import (
     UnknownDispatchOutcomeError,
 )
 from workflow_execution.http import WorkflowErrorResponse
+from workflow_execution.submission import (
+    ImmediateWorkflowRequest,  # noqa: TC001 - FastAPI validates request fields at runtime.
+)
 
 
 if TYPE_CHECKING:
@@ -204,15 +206,14 @@ class SynchronousWorkflowInterface(Protocol):
     async def run(
         self,
         workflow_id: str,
-        invocation: WorkflowInvocation,
+        request: ImmediateWorkflowRequest,
     ) -> WorkflowResult:
         """Validate and dispatch an immediate invocation for the selected workflow.
 
         Args:
             workflow_id: Declared workflow identifier used for catalog lookup and
                 dispatch routing.
-            invocation: Named inputs, resolved configuration, public access state, and
-                absolute workflow deadline.
+            request: Named inputs, public access, optional destination, and deadline.
 
         Returns:
             WorkflowResult: Named inline outputs and/or references to completed artifact
@@ -358,7 +359,7 @@ def create_execution_app(
     async def run_workflow(
         request: Request,
         workflow_id: str,
-        invocation: WorkflowInvocation,
+        submission: ImmediateWorkflowRequest,
     ) -> WorkflowResult:
         """Dispatch immediate work while the client remains connected and translate classified failures into HTTP responses.
 
@@ -366,8 +367,7 @@ def create_execution_app(
             request: Incoming HTTP request monitored for caller disconnection.
             workflow_id: Declared workflow identifier used for catalog lookup and
                 dispatch routing.
-            invocation: Named inputs, resolved configuration, public access state, and
-                absolute workflow deadline.
+            submission: Named inputs, public access, optional destination, and deadline.
 
         Returns:
             WorkflowResult: Named inline outputs and/or references to completed artifact
@@ -390,7 +390,7 @@ def create_execution_app(
         try:
             return await _run_while_connected(
                 request,
-                workflow_runner.run(workflow_id, invocation),
+                workflow_runner.run(workflow_id, submission),
             )
         except UnknownWorkflowError as error:
             raise _http_error(
