@@ -1,3 +1,5 @@
+"""Read bounded tile batches and append deterministic feature rows to HDF5."""
+
 from __future__ import annotations
 
 import asyncio
@@ -28,10 +30,29 @@ async def build_embeddings(
     stride_fraction: float,
     settings: WorkflowWorkerSettings,
 ) -> None:
+    """Write selected tile features incrementally, joining all tasks before closing readers.
+
+    Args:
+        slide_path: OpenSlide-readable whole-slide input.
+        mask_path: Nonzero TIFF mask pixels selecting intersecting tiles.
+        output_path: Temporary artifact path owned by the surrounding workflow.
+        predictor: Invocation-owned raw-model HTTP adapter.
+        model: Input tile geometry and expected summary order.
+        stride_fraction: Grid step as a fraction of model tile size.
+        settings: Deployment-only thread and outstanding-tile limits.
+
+    Returns:
+        None: A closed HDF5 file containing features, coordinates, and sampling metadata.
+
+    Raises:
+        WorkflowFailure: Raw prediction fails or feature dimensions vary between tiles.
+        OSError: Input access or output writing fails.
+        asyncio.CancelledError: Cancellation propagates after joining tile tasks.
+    """
     import h5py
     from ratiopath.openslide import OpenSlide
 
-    from workflows.heatmap.tile_reader import fetch_tissue_tile
+    from workflows.heatmap.tile_reader import fetch_tissue_tile, select_mask_level
 
     stride = max(1, round(model.tile_size * stride_fraction))
     loop = asyncio.get_running_loop()
@@ -44,7 +65,7 @@ async def build_embeddings(
     ):
         width, height = slide.dimensions
         mpp_x, mpp_y = slide.slide_resolution(0)
-        mask_level = mask.closest_level((mpp_x, mpp_y))
+        mask_level = select_mask_level(mask, (mpp_x, mpp_y))
         mask_width, mask_height = mask.level_dimensions[mask_level]
         output.attrs.update(
             {
@@ -67,6 +88,18 @@ async def build_embeddings(
         features = None
 
         async def infer(x: int, y: int) -> tuple[int, int, NDArray[np.float32] | None]:
+            """Read one level-zero tile and skip inference when its mask is empty.
+
+            Args:
+                x: Horizontal tile origin in original slide pixels.
+                y: Vertical tile origin in original slide pixels.
+
+            Returns:
+                tuple: Original x/y coordinates and features, or None for an empty mask.
+
+            Raises:
+                WorkflowFailure: Raw inference fails or returns invalid features.
+            """
             tile = await loop.run_in_executor(
                 executor,
                 fetch_tissue_tile,
@@ -83,6 +116,14 @@ async def build_embeddings(
             return x, y, None if tile is None else await predictor.predict(tile)
 
         async def append_oldest() -> None:
+            """Join the oldest task and append its selected tile in stable grid order.
+
+            Returns:
+                None: A nonempty result is appended to coordinates and feature datasets.
+
+            Raises:
+                WorkflowFailure: Prediction fails or feature dimensions change.
+            """
             nonlocal features
             # Keep the task registered until it is joined, including on cancellation.
             x, y, result = await tasks[0]

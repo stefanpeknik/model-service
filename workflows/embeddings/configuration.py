@@ -1,10 +1,12 @@
+"""Validate shared per-execution settings for both embedding workflows."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field
 
-from workflow_execution.contracts import InvalidWorkflowInvocation
+from workflows.configuration import validate_resolved_configuration
 
 
 if TYPE_CHECKING:
@@ -12,6 +14,13 @@ if TYPE_CHECKING:
 
 
 class EmbeddingConfiguration(BaseModel):
+    """Specify an artifact destination and tile overlap without selecting a model.
+
+    Attributes:
+        output_path: Artifact path relative to the invocation's permitted output root.
+        stride_fraction: Tile step divided by input tile size, greater than zero to one.
+    """
+
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
 
     output_path: str = Field(default="embeddings.h5", min_length=1)
@@ -19,10 +28,17 @@ class EmbeddingConfiguration(BaseModel):
 
 
 def validate_configuration(value: Mapping[str, object]) -> EmbeddingConfiguration:
-    try:
-        config = EmbeddingConfiguration.model_validate(value)
-        if config.model_fields_set != EmbeddingConfiguration.model_fields.keys():
-            raise ValueError("incomplete configuration")
-        return config
-    except (ValueError, ValidationError) as error:
-        raise InvalidWorkflowInvocation("invalid embedding configuration") from error
+    """Require every resolved embedding setting and reject extra or invalid values.
+
+    Args:
+        value: Complete configuration after catalog defaults and caller overrides.
+
+    Returns:
+        EmbeddingConfiguration: Frozen, validated execution settings.
+
+    Raises:
+        InvalidWorkflowInvocation: Configuration is incomplete or invalid.
+    """
+    return validate_resolved_configuration(
+        EmbeddingConfiguration, value, workflow_name="embedding"
+    )

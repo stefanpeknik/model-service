@@ -10,13 +10,14 @@ import os
 from typing import TYPE_CHECKING, Protocol
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import Field
 
 from workflow_execution.contracts import (
-    InvalidWorkflowInvocation,
     SharedArtifact,
     WorkflowResult,
 )
+from workflows.configuration import validate_resolved_configuration
+from workflows.heatmap.configuration import ScoreMapConfiguration
 from workflows.heatmap.processor import HeatmapBuildRequest
 
 
@@ -110,7 +111,7 @@ class ProstateHeatmapWorkflow:
         )
 
 
-class ProstateConfiguration(BaseModel):
+class ProstateConfiguration(ScoreMapConfiguration):
     """Validate the relative output path, tile stride fraction, and positive TIFF tile dimensions.
 
     Attributes:
@@ -121,20 +122,7 @@ class ProstateConfiguration(BaseModel):
         output_tile_width: TIFF storage tile width in pixels.
     """
 
-    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
     output_path: str = Field(default="heatmap.tiff", min_length=1)
-    stride_fraction: float = Field(default=0.5, gt=0, le=1, allow_inf_nan=False)
-    output_tile_height: int = Field(default=256, gt=0)
-    output_tile_width: int = Field(default=256, gt=0)
-
-    def as_values(self) -> dict[str, JsonValue]:
-        """Return JSON-compatible configuration values for defaults and invocation preparation.
-
-        Returns:
-            dict[str, JsonValue]: Complete output path, stride fraction, and TIFF tile
-                settings.
-        """
-        return self.model_dump()
 
 
 def default_configuration() -> dict[str, JsonValue]:
@@ -161,14 +149,6 @@ def validate_configuration(value: Mapping[str, object]) -> ProstateConfiguration
         InvalidWorkflowInvocation: Inputs, resolved configuration, access context, or
             deadline violate the workflow contract.
     """
-    try:
-        configuration = ProstateConfiguration.model_validate(value)
-    except ValidationError as error:
-        raise InvalidWorkflowInvocation(
-            "resolved configuration does not match prostate heatmap workflow"
-        ) from error
-    if configuration.model_fields_set != ProstateConfiguration.model_fields.keys():
-        raise InvalidWorkflowInvocation(
-            "resolved configuration does not match prostate heatmap workflow"
-        )
-    return configuration
+    return validate_resolved_configuration(
+        ProstateConfiguration, value, workflow_name="prostate heatmap"
+    )

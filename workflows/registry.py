@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
 
 def default_catalog() -> WorkflowCatalog:
-    """Load repository YAML definitions and register the prostate heatmap validator with its complete defaults.
+    """Load built-in YAML contracts with their complete configuration registrations.
 
     Returns:
         WorkflowCatalog: Indexed workflow contracts and configuration registrations.
@@ -64,6 +64,19 @@ def build_workflow(
     *,
     model_transport: httpx.AsyncBaseTransport | None = None,
 ) -> Workflow:
+    """Construct a new standalone workflow with deployment-only model wiring.
+
+    Args:
+        workflow_id: Identifier of the segmentation or embedding workflow to construct.
+        settings: Worker limits and internal raw-model HTTP origin.
+        model_transport: Optional external model transport for offline validation.
+
+    Returns:
+        Workflow: Computation implementation wrapped by the generic workflow runtime.
+
+    Raises:
+        KeyError: The requested identifier has no construction registration.
+    """
     from workflows.heatmap.processor import SlideHeatmapProcessor
     from workflows.heatmap.ray_predictor import RayHeatmapPredictor
     from workflows.segmentation.episeg import EPISegWorkflow

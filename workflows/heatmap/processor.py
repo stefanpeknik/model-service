@@ -22,6 +22,8 @@ if TYPE_CHECKING:
 
 
 class ScoreEncoding(StrEnum):
+    """Choose legacy 8-bit heatmap encoding or unquantized float32 model scores."""
+
     UINT8 = "uint8"
     FLOAT32 = "float32"
 
@@ -37,6 +39,7 @@ class HeatmapBuildRequest:
         stride_fraction: Tile step expressed as a fraction of model input tile extent.
         output_tile_height: TIFF storage tile height in pixels.
         output_tile_width: TIFF storage tile width in pixels.
+        encoding: Output pixel representation; UINT8 preserves the existing heatmap contract.
     """
 
     slide_path: Path
@@ -169,7 +172,7 @@ class SlideHeatmapProcessor:
         from ratiopath.openslide import OpenSlide
         from ratiopath.tiling import grid_tiles
 
-        from workflows.heatmap.tile_reader import fetch_tissue_tile
+        from workflows.heatmap.tile_reader import fetch_tissue_tile, select_mask_level
 
         model_config = await self._predictor.configuration()
         tile_size = model_config.tile_size
@@ -187,7 +190,7 @@ class SlideHeatmapProcessor:
             level = slide.closest_level(target_mpp)
             mpp_x, mpp_y = slide.slide_resolution(level)
             extent_x, extent_y = slide.level_dimensions[level]
-            tissue_level = tissue_slide.closest_level(target_mpp)
+            tissue_level = select_mask_level(tissue_slide, target_mpp)
             tissue_extent_x, tissue_extent_y = tissue_slide.level_dimensions[
                 tissue_level
             ]
@@ -241,7 +244,7 @@ class SlideHeatmapProcessor:
                     )
 
                 for x, y in grid_tiles(
-                    slide_extent=(extent_x, extent_y),
+                    slide_extent=(max(extent_x, tile_size), max(extent_y, tile_size)),
                     tile_extent=(tile_size, tile_size),
                     stride=(stride, stride),
                 ):

@@ -279,6 +279,7 @@ class ProstateHeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
             "workflows.heatmap.tile_reader": module(
                 "workflows.heatmap.tile_reader",
                 fetch_tissue_tile=lambda *_args: np.zeros((4, 4, 3)),
+                select_mask_level=lambda slide, mpp: slide.closest_level(mpp),
             ),
         }
         with TemporaryDirectory() as directory, patch.dict(sys.modules, fake_modules):

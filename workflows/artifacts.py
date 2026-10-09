@@ -1,3 +1,5 @@
+"""Publish closed output files without exposing partial artifacts."""
+
 from __future__ import annotations
 
 import os
@@ -15,6 +17,20 @@ if TYPE_CHECKING:
 
 @contextmanager
 def atomic_artifact(destination: Path, *, inputs: tuple[Path, ...]) -> Iterator[Path]:
+    """Yield a sibling temporary path and replace the destination only on success.
+
+    Args:
+        destination: Final output path resolved by invocation-scoped storage access.
+        inputs: Resolved input paths which publication must not replace.
+
+    Yields:
+        Path: Unique temporary path; the caller must close its writer before exit.
+
+    Raises:
+        InvalidWorkflowInvocation: The destination aliases an input path.
+        RuntimeError: Successful computation did not produce a regular file.
+        OSError: Creating directories, publishing, or removing the temporary file fails.
+    """
     if any(destination.resolve() == source.resolve() for source in inputs):
         raise InvalidWorkflowInvocation("output must not replace a workflow input")
     destination.parent.mkdir(parents=True, exist_ok=True)

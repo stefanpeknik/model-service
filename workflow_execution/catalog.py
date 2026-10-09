@@ -168,8 +168,15 @@ class WorkflowCatalog:
     def default(cls, identifiers: frozenset[str] | None = None) -> WorkflowCatalog:
         """Load the built-in definitions and validators from workflows.registry.
 
+        Args:
+            identifiers: Optional nonempty built-in selection; None loads all workflows.
+
         Returns:
             WorkflowCatalog: Indexed workflow contracts and configuration registrations.
+
+        Raises:
+            ValueError: The requested selection is empty.
+            UnknownWorkflow: A requested identifier has no built-in declaration.
         """
         from workflows.registry import default_catalog
 
@@ -177,6 +184,18 @@ class WorkflowCatalog:
         return catalog if identifiers is None else catalog.select(identifiers)
 
     def select(self, identifiers: frozenset[str]) -> WorkflowCatalog:
+        """Restrict declarations and configuration registrations to deployed workflows.
+
+        Args:
+            identifiers: Nonempty set of known workflow IDs enabled in this deployment.
+
+        Returns:
+            WorkflowCatalog: Independent catalog containing only selected workflows.
+
+        Raises:
+            ValueError: Selection is empty.
+            UnknownWorkflow: A selected identifier is not a built-in declaration.
+        """
         if not identifiers:
             raise ValueError("at least one workflow must be enabled")
         return WorkflowCatalog(

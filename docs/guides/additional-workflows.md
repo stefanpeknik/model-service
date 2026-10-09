@@ -7,11 +7,15 @@ scheduling checkpoint. EMPAIA integration and live GPU validation remain separat
 ## Inputs and outputs
 
 Each workflow accepts a `slide` and a `region_of_interest`, both shared-storage
-relative paths. The region is a TIFF mask covering the slide's coordinate extent;
+relative paths. The slide must be OpenSlide-readable and have physical-resolution
+metadata. The region is a tiled TIFF mask covering the slide's coordinate extent;
 its dimensions and pyramid levels may differ from the slide. Nonzero mask pixels
 select tiles. A selected tile may include pixels outside the mask. Edge tiles are
 padded by the existing slide reader. These workflows do not accept tile arrays,
 URLs, polygon JSON, or EMPAIA job credentials.
+
+The mask need not contain physical-resolution tags. When they are absent, its
+finest level is used and dimensions determine the mapping to slide coordinates.
 
 | Workflow | Existing raw model | Output |
 | --- | --- | --- |
@@ -85,8 +89,9 @@ Example immediate GigaPath invocation:
 
 Replace the example deadline with a real bounded deadline. For scheduling, put
 this invocation in `body`, add `provider: "standalone"` and a unique
-`idempotency_key`. The scheduler sets its own effective deadline. Prefer the SDK's
-configuration resolution rather than duplicating defaults in callers.
+`idempotency_key`. The scheduler sets its own effective deadline. The public SDK
+expects complete `resolved_configuration` too; it does not fetch or fill defaults.
+Python callers inside model-service can use `WorkflowCatalog.resolve_configuration`.
 
 EPISeg configuration defaults are `output_path: "segmentation.tiff"`,
 `stride_fraction: 0.5`, and TIFF tile height/width of 256. Both embedding workflows
@@ -122,3 +127,7 @@ It covers immediate and scheduled results, replay, mask selection, empty masks,
 small-slide padding, malformed model outputs, model outages, cancellation,
 attempt-isolated outputs, and atomic failure cleanup. This evidence does not
 establish model accuracy or real GPU compatibility.
+
+The [review and validation record](../reviews/additional-workflows-2026-10-09.md)
+records the final 235-test result, review corrections, and the matching SDK revision
+required by the local environment.

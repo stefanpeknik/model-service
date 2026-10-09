@@ -48,6 +48,7 @@ class SchedulerSettings(BaseSettings):
         database_url: PostgreSQL connection URL or libpq DSN.
         provider_context_key: URL-safe base64 AES-256 key for protected context.
         ray_serve_origin: Internal workflow dispatch and route-health HTTP origin.
+        workflow_ids: Optional nonempty deployment selection; None enables all built-ins.
         inference_serve_origin: Optional raw inference default origin; otherwise use the
             workflow origin.
         inference_model_origins: Exact model-prefix overrides for raw inference routing.

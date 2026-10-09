@@ -18,6 +18,9 @@ EAD exporter consume the same contracts.
   Ray ingress. `settings.py` defines deployment-only worker settings.
 - `artifacts.py` publishes new workflow outputs atomically and prevents replacing
   their input files.
+- `configuration.py` enforces complete resolved settings for all concrete schemas.
+  `heatmap/configuration.py` shares spatial-map stride and TIFF settings without
+  coupling EPISeg configuration to the prostate workflow.
 - `heatmap/prostate.py` owns the prostate workflow, its configuration schema,
   defaults, atomic output completion, and normalized artifact result.
 - `heatmap/processor.py` owns slide tiling, bounded prediction concurrency,

@@ -34,6 +34,7 @@ class ExecutionRuntimeTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_runtime_only_admits_workflows_enabled_in_this_deployment(self):
+        """Reject an undeployed built-in workflow at admission rather than dispatch."""
         environment = {
             "DATABASE_URL": "postgresql://unused",
             "PROVIDER_CONTEXT_KEY": base64.urlsafe_b64encode(b"x" * 32).decode(),

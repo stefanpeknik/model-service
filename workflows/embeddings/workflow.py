@@ -1,3 +1,5 @@
+"""Own one embedding invocation's HTTP client and atomic output publication."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -18,6 +20,8 @@ if TYPE_CHECKING:
 
 
 class EmbeddingWorkflow:
+    """Convert provider-neutral slide/mask paths into a completed feature artifact."""
+
     def __init__(
         self,
         model: EmbeddingModel,
@@ -25,11 +29,32 @@ class EmbeddingWorkflow:
         *,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
+        """Retain deployment wiring without opening files or making model requests.
+
+        Args:
+            model: Raw-model binding and expected summary order.
+            settings: Thread/concurrency limits and internal Ray Serve origin.
+            transport: Optional external HTTP transport, used by offline validation.
+        """
         self._model = model
         self._settings = settings
         self._transport = transport
 
     async def run(self, context: WorkflowContext) -> WorkflowResult:
+        """Compute an HDF5 artifact with invocation-owned resources and atomic completion.
+
+        Args:
+            context: Validated input access, resolved settings, and absolute deadline.
+
+        Returns:
+            WorkflowResult: The completed embeddings artifact with HDF5 media type.
+
+        Raises:
+            InvalidWorkflowInvocation: Settings, paths, or output/input aliasing are invalid.
+            WorkflowFailure: Raw inference fails or returns invalid features.
+            OSError: Input/output access or artifact publication fails.
+            asyncio.CancelledError: Cancellation removes the temporary output and joins work.
+        """
         config = validate_configuration(context.configuration)
         slide = context.input_path("slide")
         mask = context.input_path("region_of_interest")

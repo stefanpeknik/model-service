@@ -48,6 +48,7 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
     Raises:
         ValueError: Settings, encryption key, retry bounds, or catalog defaults are
             invalid.
+        UnknownWorkflow: A configured workflow identifier has no built-in declaration.
         ValidationError: Workflow definitions or configured inference origins fail their
             typed schemas.
         ImportError: The configured EMPAIA factory module cannot be imported.
