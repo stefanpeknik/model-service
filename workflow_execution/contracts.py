@@ -73,10 +73,11 @@ def _iso_datetime(value: object) -> datetime:
 
 
 class WorkflowFailureCode(StrEnum):
-    """Name failures raised by the workflow application for deadlines and unexpected execution errors."""
+    """Name runtime failures for deadlines, unavailable settings, and unexpected errors."""
 
     DEADLINE_EXCEEDED = "workflow_deadline_exceeded"
     INTERNAL_ERROR = "workflow_internal_error"
+    SETTINGS_UNAVAILABLE = "workflow_settings_unavailable"
 
 
 class WorkflowInputKind(StrEnum):

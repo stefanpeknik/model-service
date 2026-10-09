@@ -1,6 +1,7 @@
 # Simplified standalone workflow requests
 
-Status: implemented; final local validation and review in progress. No deployment.
+Status: implemented and reviewed; final post-review local validation in progress.
+No deployment.
 
 ## Agreed behavior
 
@@ -45,4 +46,33 @@ Tests use the agreed public scheduler HTTP and SDK workflow methods, with fake
 external Ray/model behavior and real generated TIFF/HDF5 files. Coverage includes
 omitted settings, optional destinations, rejection of processing overrides,
 admission/replay, and a settings change between queueing and processing.
-Final results and two-axis review will be recorded here before closure.
+The initial full working-tree run exposed one old-format resource fixture, now
+migrated, and one unrelated failure: the uncommitted full-WSI worker preset sets
+`minReplicas: 0`, while its deployment test still requires one. Those deployment
+edits were preserved. A clean Git archive of implementation commit `5f0eed1`,
+under `.cache/`, passed all 237 root tests with native image processing and isolated
+localhost PostgreSQL 16. Tests imported source from the archive, not this dirty
+checkout. No deployed test profile ran.
+
+The SDK suite ran 14 tests: 13 passed and its unconfigured live integration test
+was skipped. Ruff passed; focused strict mypy passed on ten model-service source
+files and two SDK source files. UV used `.cache/uv` and the existing virtualenv.
+The previously documented EMPAIA SDK 0.1.2 wheel remains installed; no `uv sync`
+was run against the older sibling EMPAIA checkout.
+
+## Standards
+
+One low-severity documentation finding covered stale immediate-service and runtime
+contracts. Updated descriptions distinguish public requests, deferred settings,
+worker faults, and remote dispatch errors. No other documented-standard violations
+were reported. The request conversion module and optional worker catalog were
+considered appropriate; no design heuristic requires another change.
+
+## Spec
+
+One P2 finding concerned classifying missing worker settings as permanent caller
+errors. It was reproduced through public HTTP for both a missing catalog and
+registered required settings without defaults. Both now return retryable 503
+`workflow_settings_unavailable`; invalid caller destinations remain permanent
+validation errors. Resolution is a private runtime helper, separate from access
+acquisition and execution. All other agreed behavior was reported as aligned.

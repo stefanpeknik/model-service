@@ -768,6 +768,88 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
                 )
         self.assertIsNone(forwarded[0]["resolved_configuration"])
 
+    async def test_missing_worker_settings_are_retryable_server_failures(self) -> None:
+        """Treat missing worker configuration as a server fault, not caller input.
+
+        Returns:
+            None: Public HTTP reports retryable 503 for missing catalogs or defaults.
+        """
+
+        class UnexpectedWorkflow:
+            """Reject computation before the worker has resolved its own settings."""
+
+            async def run(self, context: WorkflowContext) -> WorkflowResult:
+                """Fail if unresolved worker settings reach computation.
+
+                Args:
+                    context: Invocation access and selected worker configuration.
+
+                Raises:
+                    AssertionError: Missing settings incorrectly reach computation.
+                """
+                raise AssertionError(context)
+
+        catalog = WorkflowCatalog.default()
+        required_settings = WorkflowCatalog(
+            (catalog.get("prostate-heatmap"),),
+            configurations={
+                "prostate-heatmap": WorkflowConfiguration(
+                    validator=validate_configuration
+                )
+            },
+        )
+        for worker_catalog in (None, required_settings):
+            with self.subTest(catalog=worker_catalog):
+                application = WorkflowApplication(
+                    catalog.get("prostate-heatmap"),
+                    UnexpectedWorkflow(),
+                    catalog=worker_catalog,
+                )
+                ray = FastAPI()
+
+                @ray.post("/workflows/prostate-heatmap/", response_model=WorkflowResult)
+                async def run(body: WorkflowRunRequest) -> WorkflowResult:
+                    """Execute the real runtime behind the simulated Ray ingress.
+
+                    Args:
+                        body: Deferred internal invocation and attempt context.
+
+                    Returns:
+                        WorkflowResult: Never returned for missing worker settings.
+
+                    Raises:
+                        HTTPException: Safe runtime failure from worker configuration.
+                    """
+                    return await run_workflow_http(
+                        application,
+                        body,
+                        body.execution_context,  # noqa: B023 - Each client scope completes before the next iteration.
+                    )
+
+                async with AsyncClient(transport=ASGITransport(app=ray)) as ray_client:
+                    runner = SynchronousWorkflowService(
+                        catalog,
+                        HTTPWorkflowDispatch(ray_client, origin="http://ray-serve"),
+                    )
+                    async with AsyncClient(
+                        transport=ASGITransport(
+                            app=create_execution_app(
+                                self.scheduler, workflow_runner=runner
+                            )
+                        ),
+                        base_url="http://model-service",
+                    ) as client:
+                        body = self._workflow_invocation()
+                        body.pop("output_path")
+                        response = await client.post(
+                            "/v1/workflows/prostate-heatmap/run", json=body
+                        )
+                self.assertEqual(response.status_code, 503, response.text)
+                self.assertEqual(
+                    response.json()["detail"]["code"], "workflow_settings_unavailable"
+                )
+                self.assertTrue(response.json()["detail"]["retryable"])
+
     async def test_synchronous_workflow_validates_before_dispatch(self) -> None:
         """Verify synchronous workflow validates before dispatch.
 

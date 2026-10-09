@@ -235,8 +235,9 @@ class WorkflowApplication:
         otherwise successful run.
 
         Args:
-            invocation: Named inputs, resolved configuration, public access state, and
-                absolute workflow deadline.
+            invocation: Named inputs, public access, and deadline. A None configuration
+                uses this worker's current defaults with an optional destination
+                override; provider-prepared settings are already complete.
             execution_context: Private attempt identity and provider context kept
                 separate from the invocation.
 
@@ -245,12 +246,13 @@ class WorkflowApplication:
                 files.
 
         Raises:
-            InvalidWorkflowInvocation: Inputs, resolved configuration, access context,
+            InvalidWorkflowInvocation: Inputs, destination override, access context,
                 or deadline violate the workflow contract.
             WorkflowContractViolation: The computation returned invalid or incomplete
                 declared outputs.
-            WorkflowFailure: Execution or resource cleanup fails with a safe classified
-                workflow error.
+            WorkflowFailure: Server defaults or their catalog are unavailable,
+                execution fails, or resource cleanup fails. Missing server settings
+                are retryable deployment faults, not caller errors.
             asyncio.CancelledError: The owning task, caller, deadline, or lease monitor
                 cancels the operation.
         """
@@ -264,23 +266,8 @@ class WorkflowApplication:
             timeout = asyncio.timeout(max(0, timeout_seconds))
             try:
                 async with timeout:
-                    configuration = invocation.resolved_configuration
-                    if configuration is None:
-                        if self._catalog is None:
-                            raise InvalidWorkflowInvocation(
-                                "workflow settings are not configured"
-                            )
-                        overrides: dict[str, JsonValue] = {}
-                        if invocation.output_path is not None:
-                            overrides["output_path"] = invocation.output_path
-                        try:
-                            configuration = self._catalog.resolve_configuration(
-                                self._definition.identifier, overrides
-                            )
-                        except (TypeError, ValueError) as error:
-                            raise InvalidWorkflowInvocation(
-                                "workflow settings or output destination are invalid"
-                            ) from error
+                    configuration = self._resolve_configuration(invocation)
+                    if invocation.resolved_configuration is None:
                         invocation = replace(
                             invocation, resolved_configuration=configuration
                         )
@@ -339,6 +326,54 @@ class WorkflowApplication:
                         "workflow resource cleanup failed: %s", type(error).__name__
                     )
         return result
+
+    def _resolve_configuration(
+        self, invocation: WorkflowInvocation
+    ) -> dict[str, JsonValue]:
+        """Keep provider settings or select active defaults, then apply a destination.
+
+        Args:
+            invocation: Internal invocation with complete provider settings or None
+                for standalone processing, plus an optional output destination.
+
+        Returns:
+            dict[str, JsonValue]: Complete settings used only by this attempt.
+
+        Raises:
+            WorkflowFailure: The worker catalog or required defaults are unavailable;
+                this is a retryable server configuration fault.
+            InvalidWorkflowInvocation: The caller's destination is not accepted by
+                the selected workflow configuration.
+        """
+        if invocation.resolved_configuration is not None:
+            return invocation.resolved_configuration
+        if self._catalog is None:
+            raise WorkflowFailure(
+                code=WorkflowFailureCode.SETTINGS_UNAVAILABLE,
+                safe_message="workflow settings are unavailable",
+                retryable=True,
+            )
+        try:
+            configuration = self._catalog.resolve_configuration(
+                self._definition.identifier, {}
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise WorkflowFailure(
+                code=WorkflowFailureCode.SETTINGS_UNAVAILABLE,
+                safe_message="workflow settings are unavailable",
+                retryable=True,
+            ) from error
+        if invocation.output_path is not None:
+            configuration["output_path"] = invocation.output_path
+            try:
+                self._catalog.validate_configuration(
+                    self._definition.identifier, configuration
+                )
+            except (TypeError, ValueError) as error:
+                raise InvalidWorkflowInvocation(
+                    "workflow output destination is invalid"
+                ) from error
+        return configuration
 
     async def _create_access(
         self,

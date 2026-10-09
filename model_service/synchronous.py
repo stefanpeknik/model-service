@@ -56,8 +56,9 @@ class SynchronousWorkflowService:
         Raises:
             ConfirmedDispatchRejectionError: The remote deployment confirms rejection
                 before accepting work.
-            InvalidWorkflowInvocation: Inputs, resolved configuration, access context,
-                or deadline violate the workflow contract.
+            InvalidWorkflowInvocation: Named inputs or the deadline violate the
+                workflow contract before dispatch. Worker validation failures arrive
+                through RemoteWorkflowFailureError instead.
             RemoteWorkflowFailureError: The remote workflow returns a safe structured
                 failure.
             UnknownDispatchOutcomeError: Transport or response decoding cannot establish
