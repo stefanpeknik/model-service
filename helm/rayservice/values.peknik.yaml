@@ -53,7 +53,7 @@ rayImage:
   # Thin code layer over the October GPU image (same Harbor repository, so
   # its large base layers are not uploaded again).
   repository: cerit.io/stefanpeknik/model-service-workflow-gpu
-  tag: core-eb93a32
+  tag: core-b9f7997
   pullPolicy: IfNotPresent
 
 storage:
