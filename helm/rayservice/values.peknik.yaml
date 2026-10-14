@@ -3,6 +3,7 @@
 models:
   - peknik/prostate-classifier-1
   - peknik/constant-classifier
+  - peknik/virchow2
 
 builders:
   heatmap:

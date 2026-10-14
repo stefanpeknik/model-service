@@ -45,17 +45,32 @@ template:
               secretKeyRef:
                 name: huggingface-secret
                 key: token
+          # Builders may also be placed here, so storage matches the CPU group.
+          - name: TMPDIR
+            value: /mnt/scratch
+          - name: VIPS_DISC_THRESHOLD
+            value: "268435456"
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
             drop: ["ALL"]
           runAsUser: 1000
         volumeMounts:
+          - name: shared
+            mountPath: /mnt/shared
+          - name: scratch
+            mountPath: /mnt/scratch
           - name: trt-cache
             mountPath: /mnt/cache
           - name: hf-cache
             mountPath: /mnt/huggingface_cache
     volumes:
+      - name: shared
+        persistentVolumeClaim:
+          claimName: {{ .Release.Name }}-full-wsi-outputs
+      - name: scratch
+        persistentVolumeClaim:
+          claimName: {{ .Release.Name }}-full-wsi-scratch
       - name: trt-cache
         persistentVolumeClaim:
           claimName: peknik-persist-model-service-trt-cache
