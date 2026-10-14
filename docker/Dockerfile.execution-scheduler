@@ -13,6 +13,7 @@ RUN uv pip install --system --no-cache \
     "cryptography>=45.0.0" \
     "fastapi>=0.115.0" \
     "httpx>=0.27.0" \
+    "lz4>=4.4.5" \
     "psycopg[binary]>=3.2.0" \
     "pydantic-settings>=2.10.0,<3" \
     "pyjwt>=2.15.1,<3" \

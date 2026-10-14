@@ -10,7 +10,7 @@ ARG EXTRA_PACKAGES=""
 ARG PYTHON=python
 USER root
 RUN if [ -n "$EXTRA_PACKAGES" ]; then \
-        uv pip install --python "$PYTHON" --no-cache $EXTRA_PACKAGES; \
+        uv pip install --system --python "$PYTHON" --no-cache $EXTRA_PACKAGES; \
     fi
 RUN rm -rf /app/models /app/providers /app/builders /app/integrations \
     /app/validation /app/model_service /app/execution_scheduler \
