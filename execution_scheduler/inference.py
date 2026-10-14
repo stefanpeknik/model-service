@@ -98,7 +98,7 @@ def settlement(response: ModelResponse) -> Settlement:
                 headers={
                     name: value
                     for name, value in response.headers.items()
-                    if name.startswith("x-")
+                    if name.startswith("x-") and name != "x-request-id"
                 },
                 size=len(response.content),
             ),

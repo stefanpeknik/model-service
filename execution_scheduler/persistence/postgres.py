@@ -1,8 +1,8 @@
 """Persist executions in PostgreSQL through operation-scoped SQLAlchemy transactions.
 
 Row locks protect record changes; per-model advisory locks serialize capacity checks.
-Each operation opens its own connection using NullPool, and database time governs
-leases.
+Each operation runs in its own transaction on a pooled connection, and database time
+governs leases.
 """
 
 from __future__ import annotations
@@ -19,7 +19,6 @@ from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import NullPool
 
 from execution_scheduler.contracts import (
     ExecutionError,
@@ -71,8 +70,9 @@ class PostgresExecutionRepository:
         inference_retention: timedelta = timedelta(hours=24),
         processing_policy: RetryPolicy | None = None,
         finish_policy: RetryPolicy | None = None,
+        pool_size: int = 10,
     ) -> None:
-        """Validate schema and capacity, configure an unpooled async engine, and retain context encryption and retry policies. No database connection opens here."""
+        """Validate schema and capacity, configure a pooled async engine, and retain context encryption and retry policies. No database connection opens here."""
         if not schema or not schema.replace("_", "a").isalnum():
             raise ValueError("PostgreSQL schema must be an identifier")
         if per_model_limit <= 0 or per_model_inference_limit <= 0:
@@ -86,14 +86,19 @@ class PostgresExecutionRepository:
             """Open a psycopg connection from either a libpq DSN or PostgreSQL URL for one engine checkout."""
             return await AsyncConnection.connect(dsn)
 
-        engine = create_async_engine(
+        # A new connection per transaction (fork plus SCRAM authentication) made
+        # PostgreSQL the bottleneck when many tiles are scheduled.
+        self._engine = create_async_engine(
             "postgresql+psycopg://",
             async_creator=connect,
-            poolclass=NullPool,
+            pool_size=pool_size,
+            max_overflow=pool_size,
+            pool_pre_ping=True,
+            pool_recycle=300,
             hide_parameters=True,
             execution_options={"schema_translate_map": {DEFAULT_SCHEMA: schema}},
         )
-        self._sessions = async_sessionmaker(engine, expire_on_commit=False)
+        self._sessions = async_sessionmaker(self._engine, expire_on_commit=False)
         self._limits = {
             Operation.BUILDER: per_model_limit,
             Operation.INFERENCE: per_model_inference_limit,
@@ -113,6 +118,9 @@ class PostgresExecutionRepository:
                 maximum_backoff=timedelta(minutes=1),
             ),
         )
+
+    async def aclose(self) -> None:
+        await self._engine.dispose()
 
     async def initialize(self) -> None:
         """Apply pending Yoyo migrations under a schema-specific initialization lock."""

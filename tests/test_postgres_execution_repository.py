@@ -79,6 +79,7 @@ class PostgresExecutionRepositoryTests(
             self.skipTest("TEST_POSTGRES_DSN is not configured")
         self.dsn = dsn
         self.schema = f"test_execution_{uuid4().hex}"
+        self._repositories: list[PostgresExecutionRepository] = []
         key = base64.urlsafe_b64encode(bytes(range(32))).decode()
         self.cipher = ProtectedContextCipher.from_base64(key)
         self.processing_policy = RetryPolicy(
@@ -92,6 +93,8 @@ class PostgresExecutionRepositoryTests(
     async def asyncTearDown(self) -> None:
         if not hasattr(self, "dsn"):
             return
+        for repository in self._repositories:
+            await repository.aclose()
         async with await AsyncConnection.connect(self.dsn) as connection:
             await connection.execute(
                 sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(self.schema))
@@ -340,6 +343,7 @@ class PostgresExecutionRepositoryTests(
             cipher=self.cipher,
             schema=self.schema,
         )
+        self._repositories.append(repository)
 
         await repository.initialize()
         admitted = await repository.admit(self._admission("libpq"))
@@ -898,7 +902,7 @@ class PostgresExecutionRepositoryTests(
     def _repository(
         self, *, schema: str | None = None, per_model_limit: int = 1
     ) -> PostgresExecutionRepository:
-        return PostgresExecutionRepository(
+        repository = PostgresExecutionRepository(
             self.dsn,
             cipher=self.cipher,
             schema=schema or self.schema,
@@ -908,6 +912,8 @@ class PostgresExecutionRepositoryTests(
             processing_policy=self.processing_policy,
             finish_policy=self.processing_policy,
         )
+        self._repositories.append(repository)
+        return repository
 
     @staticmethod
     def _admission(submission_key: str) -> Admission:

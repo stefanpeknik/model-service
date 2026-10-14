@@ -119,6 +119,7 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
                 yield
         finally:
             await client.aclose()
+            await repository.aclose()
 
     return create_api(
         scheduler,
