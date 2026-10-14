@@ -1,7 +1,8 @@
-"""Prepare SDK/shared-storage executions without an external job lifecycle.
+"""Standalone provider: shared-storage inputs and outputs, no external job lifecycle.
 
-Caller replay keys provide identity. Finish is a no-op because outputs already reside in
-shared storage, but it still passes through the common scheduler finish phase.
+The caller's idempotency key identifies a submission. Finish is a no-op because
+outputs already sit in shared storage, but it still runs through the common
+provider-finish phase.
 """
 
 from __future__ import annotations
@@ -11,51 +12,29 @@ import json
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
-from execution_scheduler.contracts import (
-    InvalidScheduleRequestError,
-    ScheduleRequest,
-)
-from execution_scheduler.domain import PreparedWorkflow, SubmissionIdentity
-from integrations.shared_storage import SharedStorageAccessAdapter
-from workflow_execution.application import validate_workflow_invocation
-from workflow_execution.contracts import SharedPathInput, WorkflowExecutionContext
-from workflow_execution.submission import WorkflowRequest, prepare_invocation
+from pydantic import ValidationError
+
+from builders.application import validate_invocation
+from builders.contracts import ExecutionContext, InvalidInvocation, SharedPathInput
+from builders.registry import get_builder
+from execution_scheduler.contracts import InvalidScheduleRequestError, ScheduleRequest
+from execution_scheduler.domain import PreparedInvocation, SubmissionIdentity
+from model_service.requests import BuilderRequest
 
 
 if TYPE_CHECKING:
+    from builders.contracts import JsonValue
     from execution_scheduler.providers import BeforeMutation, ProviderFinishOutcome
-    from workflow_execution.catalog import WorkflowCatalog
-    from workflow_execution.contracts import JsonValue
+    from integrations.shared_storage import SharedStorageAccessAdapter
 
 
 class StandaloneProviderAdapter:
-    """Adapt shared-storage schedule requests to the scheduler's provider interface."""
-
     name = "standalone"
 
-    def __init__(self, catalog: WorkflowCatalog) -> None:
-        """Retain the workflow catalog used to validate configuration and named inputs.
-
-        Args:
-            catalog: Workflow definitions and their configuration validators/defaults.
-        """
-        self._catalog = catalog
+    def __init__(self, shared_storage: SharedStorageAccessAdapter) -> None:
+        self._shared_storage = shared_storage
 
     def identify(self, request: ScheduleRequest) -> SubmissionIdentity:
-        """Require a replay key and fingerprint canonical finite JSON including workflow, body, and requested timeout.
-
-        Args:
-            request: Provider submission with workflow ID, caller body, replay key, and
-                optional execution budget.
-
-        Returns:
-            SubmissionIdentity: Provider-scoped replay key and canonical request
-                fingerprint.
-
-        Raises:
-            InvalidScheduleRequestError: Provider payload, configuration, paths, or
-                effective deadline are invalid.
-        """
         if not request.idempotency_key:
             raise InvalidScheduleRequestError(
                 "standalone scheduling requires an idempotency key"
@@ -63,7 +42,7 @@ class StandaloneProviderAdapter:
         try:
             canonical = json.dumps(
                 {
-                    "workflow_id": request.workflow_id,
+                    "builder_id": request.builder_id,
                     "body": request.body,
                     "requested_timeout_seconds": request.requested_timeout_seconds,
                 },
@@ -82,50 +61,33 @@ class StandaloneProviderAdapter:
         )
 
     async def prepare(
-        self,
-        request: ScheduleRequest,
-        deadline_at: datetime,
-    ) -> PreparedWorkflow:
-        """Validate shared inputs and leave processing settings to the workflow worker.
-
-        Args:
-            request: Provider submission with workflow ID, caller body, replay key, and
-                optional execution budget.
-            deadline_at: Absolute aware deadline for the entire execution, including
-                preparation.
-
-        Returns:
-            PreparedWorkflow: Validated invocation, private provider state, and
-                applicable deadline limits.
-
-        Raises:
-            InvalidScheduleRequestError: Provider payload, configuration, paths, or
-                effective deadline are invalid.
-        """
+        self, request: ScheduleRequest, deadline_at: datetime
+    ) -> PreparedInvocation:
+        """Check inputs exist now; processing settings are chosen per attempt."""
         try:
-            invocation = prepare_invocation(
-                WorkflowRequest.model_validate(request.body),
-                deadline_at=deadline_at,
-            )
-            definition = self._catalog.get(request.workflow_id)
-            validate_workflow_invocation(
-                definition,
+            body = BuilderRequest.model_validate(request.body)
+        except ValidationError as error:
+            raise InvalidScheduleRequestError(
+                "schedule request body is invalid"
+            ) from error
+        if body.model_id != request.model_id:
+            raise InvalidScheduleRequestError("model_id does not match the request")
+        invocation = body.invocation(deadline_at)
+        try:
+            validate_invocation(
+                get_builder(request.builder_id),
                 invocation,
                 now=deadline_at - timedelta(microseconds=1),
             )
             if invocation.input_access.kind != "shared_storage":
-                raise ValueError(
-                    "standalone scheduling requires shared-storage input access"
-                )
-            access = SharedStorageAccessAdapter().create(
-                invocation, WorkflowExecutionContext()
-            )
+                raise InvalidInvocation("standalone scheduling requires shared storage")
+            access = self._shared_storage.create(invocation, ExecutionContext())
             for name, value in invocation.inputs.items():
                 if isinstance(value, SharedPathInput):
                     access.input_path(name)
-        except (KeyError, TypeError, ValueError) as error:
+        except InvalidInvocation as error:
             raise InvalidScheduleRequestError(str(error)) from error
-        return PreparedWorkflow(invocation=invocation, protected_context={})
+        return PreparedInvocation(invocation=invocation, protected_context={})
 
     async def finish(
         self,
@@ -134,18 +96,4 @@ class StandaloneProviderAdapter:
         *,
         before_mutation: BeforeMutation,
     ) -> None:
-        """Complete without an external mutation because standalone results already reference shared artifacts.
-
-        Args:
-            _protected_context: Unused private provider state that persistence encrypts
-                and internal dispatch carries separately; retained to match the
-                interface.
-            _outcome: Unused stored success, safe failure, or cancellation to report
-                through the provider; retained to match the interface.
-            before_mutation: Async guard awaited before the first external write to
-                persist and validate its durable claim.
-
-        Returns:
-            None: No return value.
-        """
         del before_mutation

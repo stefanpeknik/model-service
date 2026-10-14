@@ -28,14 +28,7 @@ _RESPONSE_EXCLUDED_HEADERS = frozenset(
 
 @dataclass(frozen=True, slots=True)
 class InferenceRequest:
-    """Carry the original model path, query string, binary payload, and allowed inference headers.
-
-    Attributes:
-        path: Requested model route following the public origin.
-        query: Original URL query string, forwarded unchanged.
-        body: Raw binary inference payload, forwarded unchanged.
-        headers: Supported inference request headers retained by the public route.
-    """
+    """Carry the original model path, query string, binary payload, and allowed inference headers."""
 
     path: str
     query: str
@@ -45,13 +38,7 @@ class InferenceRequest:
 
 @dataclass(frozen=True, slots=True)
 class InferenceResponse:
-    """Carry the upstream HTTP status, payload bytes, and response headers safe to forward.
-
-    Attributes:
-        status_code: HTTP status of the upstream response.
-        content: Raw response payload bytes.
-        headers: Permitted HTTP request or response metadata.
-    """
+    """Carry the upstream HTTP status, payload bytes, and response headers safe to forward."""
 
     status_code: int
     content: bytes
@@ -72,19 +59,7 @@ class InferenceProxy(Protocol):
     """Define forwarding of raw model requests independently of the HTTP client implementation."""
 
     async def forward(self, request: InferenceRequest) -> InferenceResponse:
-        """Send a raw request upstream and return its status, bytes, and permitted headers.
-
-        Args:
-            request: Raw model path, query, payload bytes, and permitted inference
-                headers.
-
-        Returns:
-            InferenceResponse: Upstream status, binary response bytes, and permitted
-                HTTP headers.
-
-        Raises:
-            InferenceProxyUnavailableError: The upstream raw inference request fails.
-        """
+        """Send a raw request upstream and return its status, bytes, and permitted headers."""
         ...
 
 
@@ -99,15 +74,7 @@ class HttpInferenceProxy:
         model_origins: Mapping[str, str] | None = None,
         timeout: float = 900,
     ) -> None:
-        """Normalize configured origins and retain the caller-owned client and inference timeout.
-
-        Args:
-            client: Caller-owned HTTP client; this adapter does not close it.
-            origin: Upstream service HTTP origin, normalized without a trailing slash.
-            model_origins: Optional exact model-prefix to upstream HTTP origin
-                overrides.
-            timeout: Request or scenario time budget in seconds.
-        """
+        """Normalize configured origins and retain the caller-owned client and inference timeout."""
         self._client = client
         self._origin = origin.rstrip("/")
         self._model_origins = {
@@ -116,19 +83,7 @@ class HttpInferenceProxy:
         self._timeout = timeout
 
     async def forward(self, request: InferenceRequest) -> InferenceResponse:
-        """POST unchanged payload bytes and query parameters, preserving upstream status while filtering transport headers.
-
-        Args:
-            request: Raw model path, query, payload bytes, and permitted inference
-                headers.
-
-        Returns:
-            InferenceResponse: Upstream status, binary response bytes, and permitted
-                HTTP headers.
-
-        Raises:
-            InferenceProxyUnavailableError: The upstream raw inference request fails.
-        """
+        """POST unchanged payload bytes and query parameters, preserving upstream status while filtering transport headers."""
         path = request.path.lstrip("/")
         origin = self._model_origins.get(path.partition("/")[0], self._origin)
         try:
@@ -156,15 +111,7 @@ class HttpInferenceProxy:
 
 
 def create_inference_router(proxy: InferenceProxy | None) -> APIRouter:
-    """Create a catch-all model POST route for registration after the explicit workflow and execution routes.
-
-    Args:
-        proxy: Optional raw model request forwarding boundary.
-
-    Returns:
-        APIRouter: Catch-all raw model POST router for inclusion after explicit public
-            routes.
-    """
+    """Create a catch-all model POST route for registration after the explicit workflow and execution routes."""
     router = APIRouter()
 
     @router.post("/{model_path:path}", include_in_schema=False)
@@ -172,21 +119,7 @@ def create_inference_router(proxy: InferenceProxy | None) -> APIRouter:
         request: Request,
         model_path: str,
     ) -> Response:
-        """Read the incoming binary request, forward permitted headers, and return the upstream response or a safe 503.
-
-        Args:
-            request: Incoming HTTP request containing the binary body, query string, and
-                headers.
-            model_path: Raw inference path following the public origin.
-
-        Returns:
-            Response: Upstream HTTP status and binary body with transport headers
-                filtered.
-
-        Raises:
-            HTTPException: No proxy is configured or upstream transport fails, producing
-                a safe HTTP 503.
-        """
+        """Read the incoming binary request, forward permitted headers, and return the upstream response or a safe 503."""
         if proxy is None:
             raise _unavailable("model inference is unavailable")
         try:
@@ -210,15 +143,7 @@ def create_inference_router(proxy: InferenceProxy | None) -> APIRouter:
 
 
 def inference_headers(headers: Mapping[str, str]) -> dict[str, str]:
-    """Keep only the supported inference request headers, excluding unrelated or credential-bearing headers.
-
-    Args:
-        headers: HTTP metadata to filter, send, or include in an error response.
-
-    Returns:
-        dict[str, str]: Only Accept, Content-Type, X-Output-Dtype, and X-Pool-Tokens
-            headers supplied by the request.
-    """
+    """Keep only the supported inference request headers, excluding unrelated or credential-bearing headers."""
     return {
         name: value
         for name, value in headers.items()
@@ -227,14 +152,7 @@ def inference_headers(headers: Mapping[str, str]) -> dict[str, str]:
 
 
 def _unavailable(message: str) -> HTTPException:
-    """Build the safe retryable 503 response for an unavailable inference proxy.
-
-    Args:
-        message: Safe user-facing failure or cancellation text.
-
-    Returns:
-        HTTPException: Structured safe HTTP error ready to raise at the route boundary.
-    """
+    """Build the safe retryable 503 response for an unavailable inference proxy."""
     return HTTPException(
         status_code=503,
         detail={

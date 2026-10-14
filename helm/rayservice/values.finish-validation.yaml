@@ -1,6 +1,0 @@
-validation:
-  appService:
-    image:
-      repository: cerit.io/stefanpeknik/model-service-appservice-validation
-      tag: validation-finish-20260923-1
-      pullPolicy: Always

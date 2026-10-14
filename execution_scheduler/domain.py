@@ -15,12 +15,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from execution_scheduler.contracts import ExecutionError, ExecutionStatus
-    from workflow_execution.contracts import (
+    from builders.contracts import (
+        BuilderResult,
+        Invocation,
         JsonValue,
-        WorkflowInvocation,
-        WorkflowResult,
     )
+    from execution_scheduler.contracts import ExecutionError, ExecutionStatus
 
 
 class WorkKind(StrEnum):
@@ -47,25 +47,14 @@ class StaleWorkClaimError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class RetryPolicy:
-    """Bound attempts and exponential delays separately for processing and provider work.
-
-    Attributes:
-        max_attempts: Maximum consumed attempts permitted by this policy.
-        initial_backoff: Delay after the first retryable outcome.
-        maximum_backoff: Upper bound on exponential retry delay.
-    """
+    """Bound attempts and exponential delays separately for processing and provider work."""
 
     max_attempts: int
     initial_backoff: timedelta
     maximum_backoff: timedelta
 
     def __post_init__(self) -> None:
-        """Reject nonpositive attempt limits, negative delays, and a maximum below the initial delay.
-
-        Raises:
-            ValueError: max_attempts is nonpositive, initial_backoff is negative, or
-                maximum_backoff is shorter than initial_backoff.
-        """
+        """Reject nonpositive attempt limits, negative delays, and a maximum below the initial delay."""
         if self.max_attempts <= 0:
             raise ValueError("max_attempts must be positive")
         if self.initial_backoff < timedelta(0):
@@ -74,16 +63,7 @@ class RetryPolicy:
             raise ValueError("maximum_backoff cannot be shorter than initial_backoff")
 
     def backoff(self, attempt: int) -> timedelta:
-        """Return the delay for a one-based attempt, doubling until the configured maximum without overflow.
-
-        Args:
-            attempt: One-based retry attempt number, or the fixture attempt identity
-                when constructing access.
-
-        Returns:
-            timedelta: Delay for the one-based attempt, exponentially doubled and capped
-                at maximum_backoff.
-        """
+        """Return the delay for a one-based attempt, doubling until the configured maximum without overflow."""
         delay = self.initial_backoff
         if delay == timedelta(0):
             return delay
@@ -98,15 +78,7 @@ class RetryPolicy:
 
 @dataclass(frozen=True, slots=True)
 class SubmissionIdentity:
-    """Scope a replay key to its provider and distinguish identical requests from conflicting ones.
-
-    Attributes:
-        provider: Integration name selecting identity, preparation, and terminal
-            reporting behavior.
-        key: Provider-scoped submission replay key.
-        fingerprint: Canonical request digest used to reject conflicting replay
-            contents.
-    """
+    """Scope a replay key to its provider and distinguish identical requests from conflicting ones."""
 
     provider: str
     key: str
@@ -114,20 +86,10 @@ class SubmissionIdentity:
 
 
 @dataclass(frozen=True, slots=True)
-class PreparedWorkflow:
-    """Carry a validated invocation, private provider state, and any provider-imposed deadline limits.
+class PreparedInvocation:
+    """Carry a validated invocation, private provider state, and any provider-imposed deadline limits."""
 
-    Attributes:
-        invocation: Prepared typed workflow inputs, configuration, access state, and
-            absolute deadline.
-        protected_context: Private provider JSON, encrypted in PostgreSQL and excluded
-            from public views.
-        deadline_cap: Optional provider-imposed upper bound on execution lifetime.
-        terminal_report_deadline_at: Optional later limit for reporting
-            failure/cancellation to the provider.
-    """
-
-    invocation: WorkflowInvocation
+    invocation: Invocation
     protected_context: dict[str, JsonValue]
     deadline_cap: datetime | None = None
     terminal_report_deadline_at: datetime | None = None
@@ -135,24 +97,12 @@ class PreparedWorkflow:
 
 @dataclass(frozen=True, slots=True)
 class Admission:
-    """Carry the complete prepared submission that persistence must admit atomically.
-
-    Attributes:
-        identity: Provider-scoped replay key and request fingerprint.
-        workflow_id: Declared workflow identifier selecting configuration and dispatch
-            routing.
-        invocation: Prepared typed workflow inputs, configuration, access state, and
-            absolute deadline.
-        protected_context: Private provider JSON, encrypted in PostgreSQL and excluded
-            from public views.
-        deadline_at: Absolute aware deadline, including input acquisition and execution.
-        terminal_report_deadline_at: Optional later limit for reporting
-            failure/cancellation to the provider.
-    """
+    """Carry the complete prepared submission that persistence must admit atomically."""
 
     identity: SubmissionIdentity
-    workflow_id: str
-    invocation: WorkflowInvocation
+    builder_id: str
+    model_id: str
+    invocation: Invocation
     protected_context: dict[str, JsonValue]
     deadline_at: datetime
     terminal_report_deadline_at: datetime | None = None
@@ -160,52 +110,14 @@ class Admission:
 
 @dataclass(frozen=True, slots=True)
 class ExecutionRecord:
-    """Snapshot all durable state for one execution, including pending work, leases, and stored outcomes.
-
-    Processing may have a stored result while status remains running, because provider
-    finish is still outstanding. Protected context can contain credentials and must not
-    enter public views.
-
-    Attributes:
-        id: Durable scheduler execution identifier.
-        identity: Provider-scoped replay key and request fingerprint.
-        workflow_id: Declared workflow identifier selecting configuration and dispatch
-            routing.
-        status: Public queued, running, succeeded, failed, or cancelled execution
-            status.
-        invocation: Prepared typed workflow inputs, configuration, access state, and
-            absolute deadline.
-        protected_context: Private provider JSON, encrypted in PostgreSQL and excluded
-            from public views.
-        deadline_at: Absolute aware deadline, including input acquisition and execution.
-        terminal_report_deadline_at: Optional later limit for reporting
-            failure/cancellation to the provider.
-        work_kind: Pending computation/publication/report phase, or None when no work
-            remains.
-        next_attempt_at: Earliest eligible retry time, or None when no work remains.
-        processing_attempts: Number of computation attempts consumed; confirmed
-            preacceptance rejections restore this budget.
-        processing_rejections: Number of confirmed preacceptance rejections used for
-            backoff.
-        finish_attempts: Number of provider completion/report attempts consumed.
-        finish_mutation_started: Whether an external provider write began, making
-            interrupted outcome recovery uncertain.
-        lease_owner: Worker owning the current claim, or None without a lease.
-        fencing_token: Current attempt token required for durable mutations, or None
-            without a lease.
-        lease_expires_at: Time ownership ends without renewal, or None without a lease.
-        result: Stored workflow outputs; public visibility waits for successful provider
-            finish.
-        error: Safe terminal error, if established.
-        created_at: Initial durable admission timestamp.
-        updated_at: Timestamp of the latest durable state change.
-    """
+    """Snapshot all durable state for one execution, including pending work, leases, and stored outcomes."""
 
     id: str
     identity: SubmissionIdentity
-    workflow_id: str
+    builder_id: str
+    model_id: str
     status: ExecutionStatus
-    invocation: WorkflowInvocation
+    invocation: Invocation
     protected_context: dict[str, JsonValue]
     deadline_at: datetime
     terminal_report_deadline_at: datetime | None
@@ -218,7 +130,7 @@ class ExecutionRecord:
     lease_owner: str | None
     fencing_token: str | None
     lease_expires_at: datetime | None
-    result: WorkflowResult | None
+    result: BuilderResult | None
     error: ExecutionError | None
     created_at: datetime
     updated_at: datetime
@@ -226,12 +138,7 @@ class ExecutionRecord:
 
 @dataclass(frozen=True, slots=True)
 class AdmissionResult:
-    """Pair the admitted record with a flag distinguishing insertion from an idempotent replay.
-
-    Attributes:
-        execution: Immutable execution record after this state decision.
-        created: True for insertion and False for an identical replay.
-    """
+    """Pair the admitted record with a flag distinguishing insertion from an idempotent replay."""
 
     execution: ExecutionRecord
     created: bool
@@ -239,47 +146,26 @@ class AdmissionResult:
 
 @dataclass(frozen=True, slots=True)
 class WorkClaim:
-    """Give a worker the inputs and token for one leased processing or provider attempt.
-
-    Attributes:
-        execution_id: Identifier of the durable execution containing this attempt.
-        workflow_id: Workflow identifier selecting configuration and dispatch routing.
-        provider: Integration name selecting preparation and terminal reporting
-            behavior.
-        kind: Processing, publication, failure-report, or cancellation-report phase
-            claimed by the worker.
-        invocation: Prepared workflow inputs, resolved configuration, access state, and
-            absolute deadline.
-        protected_context: Private provider JSON; PostgreSQL encrypts it at rest.
-        attempt: One-based attempt counter for this processing or provider phase.
-        fencing_token: Unique token required for renewal, settlement, and provider
-            mutation.
-        result: Stored computation outputs, if publication is due.
-        error: Stored safe terminal failure, if failure reporting is due.
-    """
+    """Give a worker the inputs and token for one leased processing or provider attempt."""
 
     execution_id: str
-    workflow_id: str
+    builder_id: str
+    model_id: str
     provider: str
     kind: WorkKind
-    invocation: WorkflowInvocation
+    invocation: Invocation
     protected_context: dict[str, JsonValue]
     attempt: int
     fencing_token: str
-    result: WorkflowResult | None
+    result: BuilderResult | None
     error: ExecutionError | None
 
 
 @dataclass(frozen=True, slots=True)
 class ProcessingSucceeded:
-    """Report a computation result to store before scheduling provider finish.
+    """Report a computation result to store before scheduling provider finish."""
 
-    Attributes:
-        result: Stored workflow outputs; public visibility waits for successful provider
-            finish.
-    """
-
-    result: WorkflowResult
+    result: BuilderResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -289,24 +175,14 @@ class ProviderFinishSucceeded:
 
 @dataclass(frozen=True, slots=True)
 class ProcessingRejected:
-    """Report confirmed rejection before acceptance, optionally with a minimum retry delay.
-
-    Attributes:
-        retry_after: Optional minimum delay supplied by confirmed preacceptance
-            rejection.
-    """
+    """Report confirmed rejection before acceptance, optionally with a minimum retry delay."""
 
     retry_after: timedelta | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class ProcessingFailed:
-    """Report a safe processing error and whether another attempt is permitted.
-
-    Attributes:
-        error: Safe terminal error, if established.
-        retryable: Whether this classified failure permits another attempt.
-    """
+    """Report a safe processing error and whether another attempt is permitted."""
 
     error: ExecutionError
     retryable: bool
@@ -314,14 +190,7 @@ class ProcessingFailed:
 
 @dataclass(frozen=True, slots=True)
 class ProviderFinishFailed:
-    """Report a provider failure, including whether a remote mutation's outcome is uncertain.
-
-    Attributes:
-        error: Safe terminal error, if established.
-        retryable: Whether this classified failure permits another attempt.
-        outcome_unknown: Whether an external mutation may have happened without
-            confirmation.
-    """
+    """Report a provider failure, including whether a remote mutation's outcome is uncertain."""
 
     error: ExecutionError
     retryable: bool

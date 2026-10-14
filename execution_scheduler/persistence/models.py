@@ -27,18 +27,9 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
 
+from builders.contracts import INVOCATION, RESULT, BuilderResult, Invocation
 from execution_scheduler.contracts import ExecutionStatus
 from execution_scheduler.domain import WorkKind
-from workflow_execution.contracts import (
-    WorkflowInvocation,
-    WorkflowResult,
-)
-from workflow_execution.serialization import (
-    invocation_from_dict,
-    invocation_to_dict,
-    result_from_dict,
-    result_to_dict,
-)
 
 
 if TYPE_CHECKING:
@@ -48,89 +39,34 @@ if TYPE_CHECKING:
 DEFAULT_SCHEMA = "model_service"
 
 
-class WorkflowInvocationType(TypeDecorator[WorkflowInvocation]):
-    """Serialize typed workflow invocations into JSONB and validate them when reading rows."""
-
+class InvocationType(TypeDecorator[Invocation]):
     impl = JSONB(none_as_null=True)
     cache_ok = True
 
     def process_bind_param(
-        self, value: WorkflowInvocation | None, dialect: Dialect
+        self, value: Invocation | None, dialect: Dialect
     ) -> dict[str, object] | None:
-        """Convert an invocation to JSON-compatible fields, preserving None as SQL NULL.
-
-        Args:
-            value: Typed invocation to store, or None for SQL NULL.
-            dialect: SQLAlchemy dialect supplied by the type-conversion hook; conversion
-                is dialect-independent.
-
-        Returns:
-            dict[str, object] | None: JSON-compatible invocation fields, or None to
-                store SQL NULL.
-        """
-        return invocation_to_dict(value) if value is not None else None
+        return INVOCATION.dump_python(value, mode="json") if value is not None else None
 
     def process_result_value(
         self, value: object, dialect: Dialect
-    ) -> WorkflowInvocation | None:
-        """Validate a JSONB value as a workflow invocation, preserving SQL NULL as None.
-
-        Args:
-            value: Decoded JSONB invocation, or None for SQL NULL.
-            dialect: SQLAlchemy dialect supplied by the type-conversion hook; conversion
-                is dialect-independent.
-
-        Returns:
-            WorkflowInvocation | None: Validated stored invocation, or None for SQL
-                NULL.
-
-        Raises:
-            ValidationError: Stored invocation JSON does not satisfy the workflow
-                schema.
-        """
-        return invocation_from_dict(value) if value is not None else None
+    ) -> Invocation | None:
+        return INVOCATION.validate_python(value) if value is not None else None
 
 
-class WorkflowResultType(TypeDecorator[WorkflowResult]):
-    """Serialize typed workflow results into JSONB and validate them when reading rows."""
-
+class ResultType(TypeDecorator[BuilderResult]):
     impl = JSONB(none_as_null=True)
     cache_ok = True
 
     def process_bind_param(
-        self, value: WorkflowResult | None, dialect: Dialect
+        self, value: BuilderResult | None, dialect: Dialect
     ) -> dict[str, object] | None:
-        """Convert a result to its JSON representation or preserve SQL NULL.
-
-        Args:
-            value: Typed workflow result to store, or None for SQL NULL.
-            dialect: SQLAlchemy dialect supplied by the type-conversion hook; conversion
-                is dialect-independent.
-
-        Returns:
-            dict[str, object] | None: JSON-compatible output fields, or None to store
-                SQL NULL.
-        """
-        return result_to_dict(value) if value is not None else None
+        return RESULT.dump_python(value, mode="json") if value is not None else None
 
     def process_result_value(
         self, value: object, dialect: Dialect
-    ) -> WorkflowResult | None:
-        """Validate stored JSON as a workflow result or preserve an absent result.
-
-        Args:
-            value: Decoded JSONB result, or None for SQL NULL.
-            dialect: SQLAlchemy dialect supplied by the type-conversion hook; conversion
-                is dialect-independent.
-
-        Returns:
-            WorkflowResult | None: Validated stored result, or None for SQL NULL.
-
-        Raises:
-            ValidationError: Stored output JSON does not satisfy the workflow result
-                schema.
-        """
-        return result_from_dict(value) if value is not None else None
+    ) -> BuilderResult | None:
+        return RESULT.validate_python(value) if value is not None else None
 
 
 class Base(DeclarativeBase):
@@ -138,47 +74,7 @@ class Base(DeclarativeBase):
 
 
 class ExecutionRow(Base):
-    """Map one execution, including encrypted context, replay identity, pending work, counters, leases, and stored outcomes.
-
-    Attributes:
-        id: Durable scheduler execution identifier.
-        provider: Integration name selecting identity, preparation, and terminal
-            reporting behavior.
-        submission_key: Provider-scoped replay key with a database uniqueness
-            constraint.
-        request_fingerprint: Canonical digest distinguishing identical replay contents.
-        workflow_id: Declared workflow identifier selecting configuration and dispatch
-            routing.
-        status: Public queued, running, succeeded, failed, or cancelled execution
-            status.
-        invocation: Prepared typed workflow inputs, configuration, access state, and
-            absolute deadline.
-        protected_context: Private provider JSON, encrypted in PostgreSQL and excluded
-            from public views.
-        deadline_at: Absolute aware deadline, including input acquisition and execution.
-        terminal_report_deadline_at: Optional later limit for reporting
-            failure/cancellation to the provider.
-        work_kind: Pending computation/publication/report phase, or None when no work
-            remains.
-        next_attempt_at: Earliest eligible retry time, or None when no work remains.
-        processing_attempts: Number of computation attempts consumed; confirmed
-            preacceptance rejections restore this budget.
-        processing_rejections: Number of confirmed preacceptance rejections used for
-            backoff.
-        finish_attempts: Number of provider completion/report attempts consumed.
-        finish_mutation_started: Whether an external provider write began, making
-            interrupted outcome recovery uncertain.
-        lease_owner: Worker owning the current claim, or None without a lease.
-        fencing_token: Current attempt token required for durable mutations, or None
-            without a lease.
-        lease_expires_at: Time ownership ends without renewal, or None without a lease.
-        result: Stored workflow outputs; public visibility waits for successful provider
-            finish.
-        error_code: Stored safe error identifier, paired with error_message.
-        error_message: Stored safe message, paired with error_code.
-        created_at: Initial durable admission timestamp.
-        updated_at: Timestamp of the latest durable state change.
-    """
+    """Map one execution, including encrypted context, replay identity, pending work, counters, leases, and stored outcomes."""
 
     __tablename__ = "executions"
     __table_args__ = (
@@ -190,7 +86,8 @@ class ExecutionRow(Base):
     provider: Mapped[str] = mapped_column(Text)
     submission_key: Mapped[str] = mapped_column(Text)
     request_fingerprint: Mapped[str] = mapped_column(Text)
-    workflow_id: Mapped[str] = mapped_column(Text)
+    builder_id: Mapped[str] = mapped_column(Text)
+    model_id: Mapped[str] = mapped_column(Text)
     status: Mapped[ExecutionStatus] = mapped_column(
         Enum(
             ExecutionStatus,
@@ -200,7 +97,7 @@ class ExecutionRow(Base):
             values_callable=lambda enum: [status.value for status in enum],
         )
     )
-    invocation: Mapped[WorkflowInvocation] = mapped_column(WorkflowInvocationType())
+    invocation: Mapped[Invocation] = mapped_column(InvocationType())
     protected_context: Mapped[bytes] = mapped_column(LargeBinary)
     deadline_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     terminal_report_deadline_at: Mapped[datetime | None] = mapped_column(
@@ -223,7 +120,7 @@ class ExecutionRow(Base):
     lease_owner: Mapped[str | None] = mapped_column(Text)
     fencing_token: Mapped[str | None] = mapped_column(UUID(as_uuid=False))
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    result: Mapped[WorkflowResult | None] = mapped_column(WorkflowResultType())
+    result: Mapped[BuilderResult | None] = mapped_column(ResultType())
     error_code: Mapped[str | None] = mapped_column(Text)
     error_message: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
@@ -279,7 +176,7 @@ Index(
 )
 Index(
     "executions_active_processing_idx",
-    ExecutionRow.workflow_id,
+    ExecutionRow.model_id,
     ExecutionRow.lease_expires_at,
     postgresql_where=and_(
         ExecutionRow.work_kind == WorkKind.PROCESSING,

@@ -1,0 +1,21 @@
+# Replace only the application code in an existing image whose dependencies
+# are unchanged. Much faster than rebuilding the GPU image from scratch.
+#   podman build -f docker/Dockerfile.code-refresh --build-arg BASE=<image> \
+#     --build-arg RUN_USER=1000|10001 -t <new image> .
+ARG BASE
+FROM ${BASE}
+ARG RUN_USER=1000
+USER root
+RUN rm -rf /app/models /app/providers /app/builders /app/integrations \
+    /app/validation /app/model_service /app/execution_scheduler \
+    /app/workflow_execution /app/workflows /app/workflow-definitions
+COPY models /app/models
+COPY providers /app/providers
+COPY builders /app/builders
+COPY integrations /app/integrations
+COPY validation /app/validation
+COPY model_service /app/model_service
+COPY execution_scheduler /app/execution_scheduler
+ARG SOURCE_REVISION
+LABEL org.opencontainers.image.revision=${SOURCE_REVISION}
+USER ${RUN_USER}

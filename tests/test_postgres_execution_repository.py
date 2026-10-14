@@ -23,6 +23,16 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from psycopg.errors import CheckViolation
 from psycopg.types.json import Jsonb
 
+from builders.contracts import (
+    INVOCATION,
+    RESULT,
+    BuilderResult,
+    InlineOutput,
+    InputAccessContext,
+    Invocation,
+    SharedArtifact,
+    SharedPathInput,
+)
 from execution_scheduler.contracts import ScheduleConflictError
 from execution_scheduler.domain import (
     Admission,
@@ -40,18 +50,10 @@ from execution_scheduler.persistence.protected_context import ProtectedContextCi
 from execution_scheduler.persistence.schema import MIGRATIONS_DIRECTORY
 from execution_scheduler.repository import ExecutionRepositoryUnavailableError
 from tests.repository_contract import ExecutionRepositoryContract
-from workflow_execution.contracts import (
-    InlineInput,
-    InlineOutput,
-    InputAccessContext,
-    SharedArtifact,
-    SharedPathInput,
-    WorkflowInvocation,
-    WorkflowResult,
-)
-from workflow_execution.serialization import invocation_to_dict, result_to_dict
 
 
+ALL_MIGRATIONS = {path.stem for path in MIGRATIONS_DIRECTORY.glob("*.sql")}
+LATEST_MIGRATION = max(ALL_MIGRATIONS)
 DATABASE_DEADLINE_WINDOW = timedelta(milliseconds=500)
 DATABASE_DEADLINE_WAIT_SECONDS = 0.7
 
@@ -59,26 +61,10 @@ DATABASE_DEADLINE_WAIT_SECONDS = 0.7
 class PostgresExecutionRepositoryTests(
     ExecutionRepositoryContract, unittest.IsolatedAsyncioTestCase
 ):
-    """Exercise real PostgreSQL admission races, locking, leases, schema compatibility, and encrypted context."""
-
     async def _advance_time(self, duration: timedelta) -> None:
-        """Advance the repository test clock or wait for database time according to the concrete adapter.
-
-        Args:
-            duration: Amount of time to advance or wait in a deterministic lifecycle
-                scenario.
-
-        Returns:
-            None: No return value.
-        """
         await asyncio.sleep(duration.total_seconds())
 
     async def asyncSetUp(self) -> None:
-        """Create isolated fixtures and clients for real PostgreSQL admission races, locking, leases, schema compatibility, and encrypted context.
-
-        Returns:
-            None: No return value.
-        """
         dsn = os.environ.get("TEST_POSTGRES_DSN")
         if dsn is None:
             self.skipTest("TEST_POSTGRES_DSN is not configured")
@@ -95,11 +81,6 @@ class PostgresExecutionRepositoryTests(
         await self.repository.initialize()
 
     async def asyncTearDown(self) -> None:
-        """Release test-owned clients and isolated storage after the case completes.
-
-        Returns:
-            None: No return value.
-        """
         if not hasattr(self, "dsn"):
             return
         async with await AsyncConnection.connect(self.dsn) as connection:
@@ -108,14 +89,6 @@ class PostgresExecutionRepositoryTests(
             )
 
     async def test_concurrent_equivalent_admission_creates_one_execution(self) -> None:
-        """Verify concurrent equivalent admission creates one execution.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
         admission = self._admission("submission-1")
 
         first, second = await asyncio.gather(
@@ -127,25 +100,9 @@ class PostgresExecutionRepositoryTests(
         self.assertEqual(first.execution.id, second.execution.id)
 
     async def test_readiness_checks_initialized_execution_storage(self) -> None:
-        """Verify readiness checks initialized execution storage.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
         await self.repository.check_ready()
 
     async def test_initialize_is_safe_for_concurrent_repositories(self) -> None:
-        """Verify initialize is safe for concurrent repositories.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
         admitted = await self.repository.admit(self._admission("existing"))
 
         await asyncio.gather(*(self._repository().initialize() for _ in range(4)))
@@ -189,7 +146,7 @@ class PostgresExecutionRepositoryTests(
         self.assertTrue(
             {"executions_due_idx", "executions_active_processing_idx"} <= index_names
         )
-        self.assertEqual(await self._applied_migrations(), {"0001-create-executions"})
+        self.assertEqual(await self._applied_migrations(), ALL_MIGRATIONS)
 
     async def test_concurrent_initialization_of_fresh_schema(self) -> None:
         other_schema = f"test_execution_{uuid4().hex}"
@@ -207,9 +164,10 @@ class PostgresExecutionRepositoryTests(
         before = await self._stored_record(admitted.execution.id)
         with TemporaryDirectory() as temporary_directory:
             directory = Path(temporary_directory)
-            shutil.copy(MIGRATIONS_DIRECTORY / "0001-create-executions.sql", directory)
-            (directory / "0002-test-upgrade.sql").write_text(
-                "-- depends: 0001-create-executions\n"
+            for migration in MIGRATIONS_DIRECTORY.glob("*.sql"):
+                shutil.copy(migration, directory)
+            (directory / "9999-test-upgrade.sql").write_text(
+                f"-- depends: {LATEST_MIGRATION}\n"
                 "ALTER TABLE executions ADD COLUMN migration_test_marker TEXT;\n",
                 encoding="utf-8",
             )
@@ -226,7 +184,7 @@ class PostgresExecutionRepositoryTests(
         self.assertEqual(after, before)
         self.assertEqual(
             await self._applied_migrations(),
-            {"0001-create-executions", "0002-test-upgrade"},
+            ALL_MIGRATIONS | {"9999-test-upgrade"},
         )
         self.assertEqual(
             await self.repository.get(admitted.execution.id), admitted.execution
@@ -237,10 +195,11 @@ class PostgresExecutionRepositoryTests(
         before = await self._stored_record(admitted.execution.id)
         with TemporaryDirectory() as temporary_directory:
             directory = Path(temporary_directory)
-            shutil.copy(MIGRATIONS_DIRECTORY / "0001-create-executions.sql", directory)
-            migration = directory / "0002-test-upgrade.sql"
+            for migration in MIGRATIONS_DIRECTORY.glob("*.sql"):
+                shutil.copy(migration, directory)
+            migration = directory / "9999-test-upgrade.sql"
             migration.write_text(
-                "-- depends: 0001-create-executions\n"
+                f"-- depends: {LATEST_MIGRATION}\n"
                 "ALTER TABLE executions ADD COLUMN migration_test_marker TEXT;\n"
                 "SELECT 1 / 0;\n",
                 encoding="utf-8",
@@ -253,11 +212,9 @@ class PostgresExecutionRepositoryTests(
                 self.assertEqual(
                     await self._stored_record(admitted.execution.id), before
                 )
-                self.assertEqual(
-                    await self._applied_migrations(), {"0001-create-executions"}
-                )
+                self.assertEqual(await self._applied_migrations(), ALL_MIGRATIONS)
                 migration.write_text(
-                    "-- depends: 0001-create-executions\n"
+                    f"-- depends: {LATEST_MIGRATION}\n"
                     "ALTER TABLE executions ADD COLUMN migration_test_marker TEXT;\n",
                     encoding="utf-8",
                 )
@@ -265,11 +222,75 @@ class PostgresExecutionRepositoryTests(
 
         self.assertEqual(
             await self._applied_migrations(),
-            {"0001-create-executions", "0002-test-upgrade"},
+            ALL_MIGRATIONS | {"9999-test-upgrade"},
         )
         self.assertEqual(
             await self.repository.get(admitted.execution.id), admitted.execution
         )
+
+    async def test_builder_migration_maps_legacy_workflows(self) -> None:
+        await self._drop_schema(self.schema)
+        with TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            shutil.copy(MIGRATIONS_DIRECTORY / "0001-create-executions.sql", directory)
+            with patch(
+                "execution_scheduler.persistence.schema.MIGRATIONS_DIRECTORY", directory
+            ):
+                await self.repository.initialize()
+        deadline = datetime.now(UTC) + timedelta(minutes=5)
+        legacy = {
+            "prostate-heatmap": {"stride_fraction": 0.5, "output_path": "a.tiff"},
+            "episeg-segmentation": None,
+            "virchow2-embeddings": None,
+            "gigapath-embeddings": None,
+        }
+        identifiers = {}
+        async with await AsyncConnection.connect(self.dsn) as connection:
+            for workflow_id, configuration in legacy.items():
+                identifiers[workflow_id] = str(uuid4())
+                invocation = {
+                    "inputs": {"slide": {"kind": "shared_path", "path": "slide.mrxs"}},
+                    "resolved_configuration": configuration,
+                    "input_access": {"kind": "shared_storage", "state": {"root": "/s"}},
+                    "deadline_at": deadline.isoformat(),
+                    "output_path": None,
+                }
+                await connection.execute(
+                    sql.SQL(
+                        "INSERT INTO {} (id, provider, submission_key, "
+                        "request_fingerprint, workflow_id, status, invocation, "
+                        "protected_context, deadline_at, work_kind, next_attempt_at) "
+                        "VALUES (%s, 'standalone', %s, 'f', %s, 'queued', %s, %s, %s, "
+                        "'processing', clock_timestamp())"
+                    ).format(sql.Identifier(self.schema, "executions")),
+                    (
+                        identifiers[workflow_id],
+                        workflow_id,
+                        workflow_id,
+                        Jsonb(invocation),
+                        self.cipher.encrypt({}),
+                        deadline,
+                    ),
+                )
+
+        await self.repository.initialize()
+
+        expected = {
+            "prostate-heatmap": ("heatmap", "prostate-classifier-1"),
+            "episeg-segmentation": ("heatmap", "episeg-1"),
+            "virchow2-embeddings": ("tile-embeddings", "virchow2"),
+            "gigapath-embeddings": ("tile-embeddings", "prov-gigapath"),
+        }
+        for workflow_id, (builder_id, model_id) in expected.items():
+            record = await self.repository.get(identifiers[workflow_id])
+            self.assertEqual(
+                (record.builder_id, record.model_id), (builder_id, model_id)
+            )
+        prostate = await self.repository.get(identifiers["prostate-heatmap"])
+        self.assertEqual(
+            prostate.invocation.resolved_configuration, {"stride_fraction": 0.5}
+        )
+        self.assertEqual(await self._applied_migrations(), ALL_MIGRATIONS)
 
     async def test_empty_migration_directory_fails_initialization(self) -> None:
         admitted = await self.repository.admit(self._admission("missing-migrations"))
@@ -296,14 +317,6 @@ class PostgresExecutionRepositoryTests(
             return {row[0] for row in await cursor.fetchall()}
 
     async def test_libpq_connection_string_remains_supported(self) -> None:
-        """Verify libpq connection string remains supported.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
         repository = PostgresExecutionRepository(
             make_conninfo(**conninfo_to_dict(self.dsn)),
             cipher=self.cipher,
@@ -318,14 +331,6 @@ class PostgresExecutionRepositoryTests(
         )
 
     async def test_schema_translation_keeps_repositories_isolated(self) -> None:
-        """Verify schema translation keeps repositories isolated.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
         other_schema = f"test_execution_{uuid4().hex}"
         self.addAsyncCleanup(self._drop_schema, other_schema)
         other = self._repository(schema=other_schema)
@@ -346,15 +351,7 @@ class PostgresExecutionRepositoryTests(
         self.assertEqual(second_found.id, second.execution.id)
 
     async def test_parallel_claims_respect_capacity_greater_than_one(self) -> None:
-        """Verify parallel claims respect capacity greater than one.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
-        repository = self._repository(per_workflow_limit=2)
+        repository = self._repository(per_model_limit=2)
         for index in range(6):
             await repository.admit(self._admission(f"capacity-{index}"))
         claims = []
@@ -362,7 +359,7 @@ class PostgresExecutionRepositoryTests(
         for _ in range(3):
             competing = await asyncio.gather(
                 *(
-                    self._repository(per_workflow_limit=2).claim_due(
+                    self._repository(per_model_limit=2).claim_due(
                         f"worker-{index}", timedelta(seconds=30)
                     )
                     for index in range(6)
@@ -376,17 +373,9 @@ class PostgresExecutionRepositoryTests(
             await repository.claim_due("extra-worker", timedelta(seconds=30))
         )
 
-    async def test_locked_execution_does_not_block_another_workflow(self) -> None:
-        """Verify locked execution does not block another workflow.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
-        locked_id = await self._admit_execution("locked", "first-workflow")
-        available_id = await self._admit_execution("available", "second-workflow")
+    async def test_locked_execution_does_not_block_another_model(self) -> None:
+        locked_id = await self._admit_execution("locked", "first-model")
+        available_id = await self._admit_execution("available", "second-model")
 
         async with await AsyncConnection.connect(self.dsn) as connection:
             await connection.execute(
@@ -403,15 +392,7 @@ class PostgresExecutionRepositoryTests(
         self.assertEqual(claim.execution_id, available_id)
         self.assertEqual((await self.repository.get(locked_id)).processing_attempts, 0)
 
-    async def test_failed_claim_rolls_back_and_releases_workflow_lock(self) -> None:
-        """Verify failed claim rolls back and releases workflow lock.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
+    async def test_failed_claim_rolls_back_and_releases_model_lock(self) -> None:
         admitted = await self.repository.admit(self._admission("rollback"))
         table = sql.Identifier(self.schema, "executions")
         async with await AsyncConnection.connect(self.dsn) as connection:
@@ -437,14 +418,6 @@ class PostgresExecutionRepositoryTests(
         self.assertEqual(claim.attempt, 1)
 
     async def test_orm_schema_retains_database_state_constraints(self) -> None:
-        """Verify ORM schema retains database state constraints.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
         admitted = await self.repository.admit(self._admission("constraints"))
         for assignment in (
             "processing_attempts = -1",
@@ -470,27 +443,12 @@ class PostgresExecutionRepositoryTests(
         )
 
     async def _drop_schema(self, schema: str) -> None:
-        """Drop only the explicitly named isolated PostgreSQL test schema with its contained objects.
-
-        Args:
-            schema: Validated PostgreSQL schema name, or a separate isolated schema for
-                the test.
-
-        Returns:
-            None: No return value.
-        """
         async with await AsyncConnection.connect(self.dsn) as connection:
             await connection.execute(
                 sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema))
             )
 
-    async def _install_pre_orm_record(self) -> tuple[str, Admission, WorkflowResult]:
-        """Install historical SQL schema/data with encrypted context and stored outputs to verify ORM initialization preserves them.
-
-        Returns:
-            tuple[str, Admission, WorkflowResult]: Selected records, identifiers, or
-                fixture values in the ordering described above.
-        """
+    async def _install_pre_orm_record(self) -> tuple[str, Admission, BuilderResult]:
         admission = self._admission("pre-orm")
         admission = replace(
             admission,
@@ -498,13 +456,12 @@ class PostgresExecutionRepositoryTests(
                 admission.invocation,
                 inputs={
                     "slide": SharedPathInput(path="/shared/input.tiff"),
-                    "threshold": InlineInput(value=0.5),
                 },
                 resolved_configuration={"level": 2, "optional": None},
             ),
             protected_context={"credential": "historical-test-token"},
         )
-        result = WorkflowResult(
+        result = BuilderResult(
             outputs={
                 "score": InlineOutput(value=0.9),
                 "empty": InlineOutput(value={}),
@@ -537,24 +494,16 @@ class PostgresExecutionRepositoryTests(
                     admission.identity.provider,
                     admission.identity.key,
                     admission.identity.fingerprint,
-                    admission.workflow_id,
-                    Jsonb(invocation_to_dict(admission.invocation)),
+                    "prostate-heatmap",
+                    Jsonb(INVOCATION.dump_python(admission.invocation, mode="json")),
                     self.cipher.encrypt(admission.protected_context),
                     admission.deadline_at,
-                    Jsonb(result_to_dict(result)),
+                    Jsonb(RESULT.dump_python(result, mode="json")),
                 ),
             )
         return execution_id, admission, result
 
     async def _stored_record(self, execution_id: str) -> dict[str, object]:
-        """Read the raw PostgreSQL execution row as JSON for persistence and compatibility assertions.
-
-        Args:
-            execution_id: Durable execution identifier, not an external provider job ID.
-
-        Returns:
-            dict[str, object]: Decoded, serialized, or recorded fields described above.
-        """
         async with await AsyncConnection.connect(self.dsn) as connection:
             cursor = await connection.execute(
                 sql.SQL("SELECT row_to_json(executions) FROM {} WHERE id = %s").format(
@@ -567,19 +516,12 @@ class PostgresExecutionRepositoryTests(
         return row[0]
 
     async def test_maintenance_expires_queued_work_without_claiming(self) -> None:
-        """Verify maintenance expires queued work without claiming.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
         admission = self._admission("queued-expiry")
         admitted = await self.repository.admit(
             Admission(
                 identity=admission.identity,
-                workflow_id=admission.workflow_id,
+                builder_id=admission.builder_id,
+                model_id=admission.model_id,
                 invocation=admission.invocation,
                 protected_context=admission.protected_context,
                 deadline_at=datetime.now(UTC) + DATABASE_DEADLINE_WINDOW,
@@ -597,14 +539,6 @@ class PostgresExecutionRepositoryTests(
         self.assertEqual(failed.error.code, "execution_deadline_exceeded")
 
     async def test_maintenance_recovers_expired_lease_without_claiming(self) -> None:
-        """Verify maintenance recovers expired lease without claiming.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
         admitted = await self.repository.admit(self._admission("lease-recovery"))
         claim = await self.repository.claim_due("worker-1", timedelta(milliseconds=30))
         assert claim is not None
@@ -618,14 +552,6 @@ class PostgresExecutionRepositoryTests(
         self.assertEqual(recovered.processing_attempts, 1)
 
     async def test_expired_lease_rejects_settlement_before_recovery(self) -> None:
-        """Verify expired lease rejects settlement before recovery.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
         admitted = await self.repository.admit(self._admission("late-result"))
         claim = await self.repository.claim_due("worker-1", timedelta(milliseconds=30))
         assert claim is not None
@@ -635,21 +561,13 @@ class PostgresExecutionRepositoryTests(
             await self.repository.settle(
                 claim.execution_id,
                 claim.fencing_token,
-                ProcessingSucceeded(WorkflowResult(outputs={})),
+                ProcessingSucceeded(BuilderResult(outputs={})),
             )
         durable = await self.repository.get(admitted.execution.id)
         self.assertIsNone(durable.result)
         self.assertEqual(durable.fencing_token, claim.fencing_token)
 
     async def test_conflicting_admission_is_rejected(self) -> None:
-        """Verify conflicting admission is rejected.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
         first = self._admission("submission-1")
         conflicting = Admission(
             identity=SubmissionIdentity(
@@ -657,7 +575,8 @@ class PostgresExecutionRepositoryTests(
                 key=first.identity.key,
                 fingerprint="different-request",
             ),
-            workflow_id=first.workflow_id,
+            builder_id=first.builder_id,
+            model_id=first.model_id,
             invocation=first.invocation,
             protected_context=first.protected_context,
             deadline_at=first.deadline_at,
@@ -667,15 +586,7 @@ class PostgresExecutionRepositoryTests(
         with self.assertRaises(ScheduleConflictError):
             await self._repository().admit(conflicting)
 
-    async def test_workflow_limit_and_fencing_hold_across_connections(self) -> None:
-        """Verify workflow limit and fencing hold across connections.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
+    async def test_model_limit_and_fencing_hold_across_connections(self) -> None:
         first = await self.repository.admit(self._admission("submission-1"))
         second = await self.repository.admit(self._admission("submission-2"))
 
@@ -697,14 +608,6 @@ class PostgresExecutionRepositoryTests(
     async def test_expired_processing_lease_is_recovered_and_stale_settlement_fails(
         self,
     ) -> None:
-        """Verify expired processing lease is recovered and stale settlement fails.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
         admitted = await self.repository.admit(self._admission("submission-1"))
         abandoned = await self.repository.claim_due(
             "worker-1",
@@ -722,7 +625,7 @@ class PostgresExecutionRepositoryTests(
         self.assertEqual(replacement.execution_id, admitted.execution.id)
         self.assertNotEqual(replacement.fencing_token, abandoned.fencing_token)
         self.assertEqual(replacement.attempt, 2)
-        result = WorkflowResult(outputs={"score": InlineOutput(value=0.9)})
+        result = BuilderResult(outputs={"score": InlineOutput(value=0.9)})
         with self.assertRaises(StaleWorkClaimError):
             await self.repository.settle(
                 abandoned.execution_id,
@@ -752,14 +655,6 @@ class PostgresExecutionRepositoryTests(
         self.assertEqual(succeeded.result, result)
 
     async def test_renewal_and_cancellation_fence_competing_workers(self) -> None:
-        """Verify renewal and cancellation fence competing workers.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
         admitted = await self.repository.admit(self._admission("submission-1"))
         claim = await self.repository.claim_due("worker-1", timedelta(seconds=1))
         assert claim is not None
@@ -790,27 +685,19 @@ class PostgresExecutionRepositoryTests(
             await self.repository.settle(
                 claim.execution_id,
                 claim.fencing_token,
-                ProcessingSucceeded(WorkflowResult(outputs={})),
+                ProcessingSucceeded(BuilderResult(outputs={})),
             )
 
     async def test_expired_finish_lease_preserves_result_and_processing_attempt(
         self,
     ) -> None:
-        """Verify expired finish lease preserves result and processing attempt.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
         admitted = await self.repository.admit(self._admission("submission-1"))
         processing = await self.repository.claim_due(
             "worker-1",
             timedelta(seconds=1),
         )
         assert processing is not None
-        result = WorkflowResult(outputs={"score": InlineOutput(value=0.9)})
+        result = BuilderResult(outputs={"score": InlineOutput(value=0.9)})
         await self.repository.settle(
             processing.execution_id,
             processing.fencing_token,
@@ -837,18 +724,11 @@ class PostgresExecutionRepositoryTests(
         self.assertEqual(durable.processing_attempts, 1)
 
     async def test_database_deadline_rejects_a_late_settlement(self) -> None:
-        """Verify database deadline rejects a late settlement.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
         admission = self._admission("submission-1")
         expiring = Admission(
             identity=admission.identity,
-            workflow_id=admission.workflow_id,
+            builder_id=admission.builder_id,
+            model_id=admission.model_id,
             invocation=admission.invocation,
             protected_context=admission.protected_context,
             deadline_at=datetime.now(UTC) + DATABASE_DEADLINE_WINDOW,
@@ -862,7 +742,7 @@ class PostgresExecutionRepositoryTests(
             await self.repository.settle(
                 claim.execution_id,
                 claim.fencing_token,
-                ProcessingSucceeded(WorkflowResult(outputs={})),
+                ProcessingSucceeded(BuilderResult(outputs={})),
             )
         failed = await self.repository.get(admitted.execution.id)
         self.assertEqual(failed.status, "failed")
@@ -872,19 +752,12 @@ class PostgresExecutionRepositoryTests(
     async def test_deadline_failure_remains_reportable_until_provider_deadline(
         self,
     ) -> None:
-        """Verify deadline failure remains reportable until provider deadline.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
         admission = self._admission("submission-report-deadline")
         execution_deadline = datetime.now(UTC) + DATABASE_DEADLINE_WINDOW
         expiring = Admission(
             identity=admission.identity,
-            workflow_id=admission.workflow_id,
+            builder_id=admission.builder_id,
+            model_id=admission.model_id,
             invocation=admission.invocation,
             protected_context=admission.protected_context,
             deadline_at=execution_deadline,
@@ -917,18 +790,11 @@ class PostgresExecutionRepositoryTests(
         self.assertEqual(report.error.code, "execution_deadline_exceeded")
 
     async def test_stale_renewal_cannot_apply_deadline_transition(self) -> None:
-        """Verify stale renewal cannot apply deadline transition.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
         admission = self._admission("submission-1")
         expiring = Admission(
             identity=admission.identity,
-            workflow_id=admission.workflow_id,
+            builder_id=admission.builder_id,
+            model_id=admission.model_id,
             invocation=admission.invocation,
             protected_context=admission.protected_context,
             deadline_at=datetime.now(UTC) + DATABASE_DEADLINE_WINDOW,
@@ -959,18 +825,11 @@ class PostgresExecutionRepositoryTests(
         )
 
     async def test_protected_context_is_not_stored_as_plaintext(self) -> None:
-        """Verify protected context is not stored as plaintext.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
         admission = self._admission("submission-1")
         admission = Admission(
             identity=admission.identity,
-            workflow_id=admission.workflow_id,
+            builder_id=admission.builder_id,
+            model_id=admission.model_id,
             invocation=admission.invocation,
             protected_context={"credential": "secret-job-token"},
             deadline_at=admission.deadline_at,
@@ -995,39 +854,19 @@ class PostgresExecutionRepositoryTests(
         )
 
     def _repository(
-        self, *, schema: str | None = None, per_workflow_limit: int = 1
+        self, *, schema: str | None = None, per_model_limit: int = 1
     ) -> PostgresExecutionRepository:
-        """Construct an isolated PostgreSQL repository with the test cipher, schema, and zero-delay retry policy.
-
-        Args:
-            schema: Validated PostgreSQL schema name, or a separate isolated schema for
-                the test.
-            per_workflow_limit: Maximum simultaneous leased processing attempts per
-                workflow.
-
-        Returns:
-            PostgresExecutionRepository: Repository configured for the isolated test
-                schema and retry policy.
-        """
         return PostgresExecutionRepository(
             self.dsn,
             cipher=self.cipher,
             schema=schema or self.schema,
-            per_workflow_limit=per_workflow_limit,
+            per_model_limit=per_model_limit,
             processing_policy=self.processing_policy,
             finish_policy=self.processing_policy,
         )
 
     @staticmethod
     def _admission(submission_key: str) -> Admission:
-        """Prepare a minimal unique standalone admission with a future deadline for repository tests.
-
-        Args:
-            submission_key: Provider-scoped replay key for the repository fixture.
-
-        Returns:
-            Admission: Prepared standalone repository fixture with a future deadline.
-        """
         deadline = datetime.now(UTC) + timedelta(minutes=5)
         return Admission(
             identity=SubmissionIdentity(
@@ -1035,8 +874,9 @@ class PostgresExecutionRepositoryTests(
                 key=submission_key,
                 fingerprint=f"fingerprint-{submission_key}",
             ),
-            workflow_id="prostate-heatmap",
-            invocation=WorkflowInvocation(
+            builder_id="heatmap",
+            model_id="prostate-classifier-1",
+            invocation=Invocation(
                 inputs={},
                 resolved_configuration={},
                 input_access=InputAccessContext(

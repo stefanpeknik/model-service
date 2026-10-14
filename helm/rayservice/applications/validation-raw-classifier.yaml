@@ -1,8 +1,0 @@
-- name: prostate-classifier-1
-  import_path: validation.classifier_serve:app
-  route_prefix: /prostate-classifier-1
-  deployments:
-    - name: ValidationProstateClassifier
-      num_replicas: 1
-      ray_actor_options:
-        num_cpus: 0

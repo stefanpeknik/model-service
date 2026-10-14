@@ -39,12 +39,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class ClaimDecision:
-    """Pair the new leased record with the attempt description returned to its worker.
-
-    Attributes:
-        execution: Immutable execution record after this state decision.
-        claim: Leased worker attempt corresponding to the updated execution.
-    """
+    """Pair the new leased record with the attempt description returned to its worker."""
 
     execution: ExecutionRecord
     claim: WorkClaim
@@ -52,12 +47,7 @@ class ClaimDecision:
 
 @dataclass(frozen=True, slots=True)
 class RenewalDecision:
-    """Return an optional state update and the instruction a lease-renewing worker must follow.
-
-    Attributes:
-        execution: Immutable execution record after this state decision.
-        directive: Whether the worker may continue or must stop.
-    """
+    """Return an optional state update and the instruction a lease-renewing worker must follow."""
 
     execution: ExecutionRecord | None
     directive: RenewDirective
@@ -72,27 +62,13 @@ class SettlementRejection(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class SettlementDecision:
-    """Carry an accepted state update or a rejection, including deadline changes that must still be persisted.
-
-    Attributes:
-        execution: Immutable execution record after this state decision.
-        rejection: Reason settlement is refused, or None for acceptance.
-    """
+    """Carry an accepted state update or a rejection, including deadline changes that must still be persisted."""
 
     execution: ExecutionRecord | None
     rejection: SettlementRejection | None = None
 
     def accepted_execution(self) -> ExecutionRecord:
-        """Return the accepted record or raise StaleWorkClaimError after any required state update is persisted.
-
-        Returns:
-            ExecutionRecord: Internal durable execution snapshot, including work and
-                ownership fields.
-
-        Raises:
-            StaleWorkClaimError: The token, lease, deadline, or work kind no longer
-                permits this operation.
-        """
+        """Return the accepted record or raise StaleWorkClaimError after any required state update is persisted."""
         if self.rejection is not None:
             raise StaleWorkClaimError(self.rejection.value)
         assert self.execution is not None
@@ -107,13 +83,7 @@ class ExecutionTransitions:
         processing_policy: RetryPolicy,
         finish_policy: RetryPolicy,
     ) -> None:
-        """Retain the policies used to bound attempts and calculate retry delays.
-
-        Args:
-            processing_policy: Attempt/backoff limits for workflow computation.
-            finish_policy: Attempt/backoff limits for publication and terminal
-                reporting.
-        """
+        """Retain the policies used to bound attempts and calculate retry delays."""
         self._processing_policy = processing_policy
         self._finish_policy = finish_policy
 
@@ -123,22 +93,12 @@ class ExecutionTransitions:
         execution_id: str,
         now: datetime,
     ) -> ExecutionRecord:
-        """Create a queued execution with immediate processing due, zero attempts, and no lease or outcome.
-
-        Args:
-            admission: Prepared submission containing replay identity, invocation,
-                deadlines, and private context.
-            execution_id: Durable execution identifier, not an external provider job ID.
-            now: Aware current time supplied by the repository or validation clock.
-
-        Returns:
-            ExecutionRecord: Queued, unleased record with processing immediately due and
-                zero consumed attempts.
-        """
+        """Create a queued execution with immediate processing due, zero attempts, and no lease or outcome."""
         return ExecutionRecord(
             id=execution_id,
             identity=admission.identity,
-            workflow_id=admission.workflow_id,
+            builder_id=admission.builder_id,
+            model_id=admission.model_id,
             status=ExecutionStatus.QUEUED,
             invocation=admission.invocation,
             protected_context=admission.protected_context,
@@ -161,17 +121,7 @@ class ExecutionTransitions:
 
     @staticmethod
     def cancel(execution: ExecutionRecord, now: datetime) -> ExecutionRecord:
-        """Make a nonterminal execution cancelled, fence its attempt, and queue provider cancellation reporting.
-
-        Args:
-            execution: Current immutable execution record; transitions return a
-                replacement without mutating it.
-            now: Aware current time supplied by the repository or validation clock.
-
-        Returns:
-            ExecutionRecord: Cancelled and fenced record with provider cancellation
-                reporting due, or the original terminal record unchanged.
-        """
+        """Make a nonterminal execution cancelled, fence its attempt, and queue provider cancellation reporting."""
         if execution.status in {
             ExecutionStatus.SUCCEEDED,
             ExecutionStatus.FAILED,
@@ -198,26 +148,7 @@ class ExecutionTransitions:
         lease_duration: timedelta,
         now: datetime,
     ) -> ClaimDecision:
-        """Assign ownership and a fencing token, advance the appropriate attempt counter, and return the leased record and claim.
-
-        Args:
-            execution: Current immutable execution record; transitions return a
-                replacement without mutating it.
-            owner: Unique worker identity recorded on the durable lease.
-            fencing_token: Current claim token; stale tokens cannot mutate execution
-                state.
-            lease_duration: How long a claimed attempt retains ownership without
-                renewal.
-            now: Aware current time supplied by the repository or validation clock.
-
-        Returns:
-            ClaimDecision: New leased execution state and the corresponding worker
-                claim.
-
-        Raises:
-            StaleWorkClaimError: The token, lease, deadline, or work kind no longer
-                permits this operation.
-        """
+        """Assign ownership and a fencing token, advance the appropriate attempt counter, and return the leased record and claim."""
         if execution.work_kind is None:
             raise StaleWorkClaimError("execution has no due work")
         processing_attempts = execution.processing_attempts
@@ -252,7 +183,8 @@ class ExecutionTransitions:
             execution=claimed,
             claim=WorkClaim(
                 execution_id=claimed.id,
-                workflow_id=claimed.workflow_id,
+                builder_id=claimed.builder_id,
+                model_id=claimed.model_id,
                 provider=claimed.identity.provider,
                 kind=claimed.work_kind,
                 invocation=claimed.invocation,
@@ -272,21 +204,7 @@ class ExecutionTransitions:
         lease_duration: timedelta,
         now: datetime,
     ) -> RenewalDecision:
-        """Reject a stale or expired lease, apply an elapsed work deadline, or extend valid ownership.
-
-        Args:
-            execution: Current immutable execution record; transitions return a
-                replacement without mutating it.
-            fencing_token: Current claim token; stale tokens cannot mutate execution
-                state.
-            lease_duration: How long a claimed attempt retains ownership without
-                renewal.
-            now: Aware current time supplied by the repository or validation clock.
-
-        Returns:
-            RenewalDecision: Optional durable update and the worker's ownership/deadline
-                directive.
-        """
+        """Reject a stale or expired lease, apply an elapsed work deadline, or extend valid ownership."""
         if (
             execution.fencing_token != fencing_token
             or execution.lease_expires_at is None
@@ -321,21 +239,7 @@ class ExecutionTransitions:
         settlement: Settlement,
         now: datetime,
     ) -> SettlementDecision:
-        """Check token, deadline, and lease before applying an outcome; preserve a deadline update even when settlement is rejected.
-
-        Args:
-            execution: Current immutable execution record; transitions return a
-                replacement without mutating it.
-            fencing_token: Current claim token; stale tokens cannot mutate execution
-                state.
-            settlement: Processing or provider outcome produced by the current leased
-                attempt.
-            now: Aware current time supplied by the repository or validation clock.
-
-        Returns:
-            SettlementDecision: Accepted state update or rejection, possibly with a
-                deadline update to persist.
-        """
+        """Check token, deadline, and lease before applying an outcome; preserve a deadline update even when settlement is rejected."""
         if execution.fencing_token != fencing_token:
             return SettlementDecision(
                 execution=None,
@@ -359,23 +263,7 @@ class ExecutionTransitions:
         fencing_token: str,
         now: datetime,
     ) -> ExecutionRecord:
-        """Validate a live provider claim and mark that an external write is about to begin.
-
-        Args:
-            execution: Current immutable execution record; transitions return a
-                replacement without mutating it.
-            fencing_token: Current claim token; stale tokens cannot mutate execution
-                state.
-            now: Aware current time supplied by the repository or validation clock.
-
-        Returns:
-            ExecutionRecord: Current provider record with finish_mutation_started set
-                and updated_at advanced.
-
-        Raises:
-            StaleWorkClaimError: The token, lease, deadline, or work kind no longer
-                permits this operation.
-        """
+        """Validate a live provider claim and mark that an external write is about to begin."""
         self._require_provider_kind(execution)
         if (
             execution.fencing_token != fencing_token
@@ -392,28 +280,7 @@ class ExecutionTransitions:
         settlement: Settlement,
         now: datetime,
     ) -> ExecutionRecord:
-        """Advance processing or provider work according to its outcome and retry policy.
-
-        Processing success stores the result and queues finish rather than marking
-        success. Confirmed rejection restores the processing attempt budget. Unknown
-        provider mutation outcomes are never blindly retried.
-
-        Args:
-            execution: Current immutable execution record; transitions return a
-                replacement without mutating it.
-            settlement: Processing or provider outcome produced by the current leased
-                attempt.
-            now: Aware current time supplied by the repository or validation clock.
-
-        Returns:
-            ExecutionRecord: Next processing/provider state, with ownership released and
-                retries or terminal reporting scheduled as required.
-
-        Raises:
-            StaleWorkClaimError: The settlement belongs to a different processing or
-                provider work kind.
-            TypeError: settlement is not one of the supported settlement types.
-        """
+        """Advance processing or provider work according to its outcome and retry policy."""
         if isinstance(settlement, ProcessingSucceeded):
             self._require_kind(execution, WorkKind.PROCESSING)
             return replace(
@@ -495,7 +362,11 @@ class ExecutionTransitions:
                     finish_mutation_started=False,
                 )
             if execution.work_kind is WorkKind.PROVIDER_FINISH:
-                return self._terminal_failure(execution, settlement.error, now)
+                # Tell the provider: an EMPAIA job must not stay open after a
+                # publication that failed or whose outcome is unknown.
+                return self._terminal_failure(
+                    execution, settlement.error, now, report=True
+                )
             return self._clear_work(execution, now)
         raise TypeError("unknown work settlement")
 
@@ -504,17 +375,7 @@ class ExecutionTransitions:
         execution: ExecutionRecord,
         now: datetime,
     ) -> ExecutionRecord:
-        """Recover abandoned work through retry or terminal failure, respecting attempt limits and uncertain provider writes.
-
-        Args:
-            execution: Current immutable execution record; transitions return a
-                replacement without mutating it.
-            now: Aware current time supplied by the repository or validation clock.
-
-        Returns:
-            ExecutionRecord: Retried or terminal record after abandonment, preserving
-                stored results and uncertainty at the provider mutation boundary.
-        """
+        """Recover abandoned work through retry or terminal failure, respecting attempt limits and uncertain provider writes."""
         if (
             execution.work_kind is WorkKind.PROVIDER_FINISH
             and execution.finish_mutation_started
@@ -555,6 +416,7 @@ class ExecutionTransitions:
                         ),
                     ),
                     now,
+                    report=True,
                 )
             return self._clear_work(execution, now)
         attempts = (
@@ -579,17 +441,7 @@ class ExecutionTransitions:
         )
 
     def deadline(self, execution: ExecutionRecord, now: datetime) -> ExecutionRecord:
-        """Fail overdue active work or stop overdue terminal reporting; interrupted publication can instead become outcome-unknown.
-
-        Args:
-            execution: Current immutable execution record; transitions return a
-                replacement without mutating it.
-            now: Aware current time supplied by the repository or validation clock.
-
-        Returns:
-            ExecutionRecord: Deadline failure or cleared terminal reporting work,
-                possibly unchanged while a later report deadline remains open.
-        """
+        """Fail overdue active work or stop overdue terminal reporting; interrupted publication can instead become outcome-unknown."""
         if (
             execution.work_kind is WorkKind.PROVIDER_FINISH
             and execution.finish_mutation_started
@@ -620,17 +472,7 @@ class ExecutionTransitions:
         execution: ExecutionRecord,
         now: datetime,
     ) -> ExecutionRecord:
-        """Fail result publication whose external outcome cannot be established, without scheduling another write.
-
-        Args:
-            execution: Current immutable execution record; transitions return a
-                replacement without mutating it.
-            now: Aware current time supplied by the repository or validation clock.
-
-        Returns:
-            ExecutionRecord: Terminal provider_finish_outcome_unknown failure with no
-                further publication due.
-        """
+        """Fail a publication whose outcome is unknown; never retry the publication itself."""
         return ExecutionTransitions._terminal_failure(
             execution,
             ExecutionError(
@@ -638,20 +480,12 @@ class ExecutionTransitions:
                 message="provider finish outcome is unknown after work was interrupted",
             ),
             now,
+            report=True,
         )
 
     @staticmethod
     def work_deadline_at(execution: ExecutionRecord) -> datetime:
-        """Use the terminal reporting deadline for failure/cancellation reports when supplied; otherwise use the execution deadline.
-
-        Args:
-            execution: Current immutable execution record; transitions return a
-                replacement without mutating it.
-
-        Returns:
-            datetime: Execution deadline, or the provider reporting deadline for
-                terminal report work when configured.
-        """
+        """Use the terminal reporting deadline for failure/cancellation reports when supplied; otherwise use the execution deadline."""
         if (
             execution.work_kind
             in {
@@ -665,39 +499,13 @@ class ExecutionTransitions:
 
     @staticmethod
     def _require_kind(execution: ExecutionRecord, expected: WorkKind) -> None:
-        """Reject settlement applied to a work kind different from the expected processing or provider phase.
-
-        Args:
-            execution: Current immutable execution record; transitions return a
-                replacement without mutating it.
-            expected: Required status, work kind, or permitted lifecycle states for this
-                check.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            StaleWorkClaimError: The token, lease, deadline, or work kind no longer
-                permits this operation.
-        """
+        """Reject settlement applied to a work kind different from the expected processing or provider phase."""
         if execution.work_kind is not expected:
             raise StaleWorkClaimError(f"claim is not {expected.value}")
 
     @staticmethod
     def _require_provider_kind(execution: ExecutionRecord) -> None:
-        """Reject operations outside publication, failure reporting, or cancellation reporting.
-
-        Args:
-            execution: Current immutable execution record; transitions return a
-                replacement without mutating it.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            StaleWorkClaimError: The token, lease, deadline, or work kind no longer
-                permits this operation.
-        """
+        """Reject operations outside publication, failure reporting, or cancellation reporting."""
         if execution.work_kind not in {
             WorkKind.PROVIDER_FINISH,
             WorkKind.PROVIDER_FAILURE_REPORT,
@@ -713,19 +521,7 @@ class ExecutionTransitions:
         *,
         status: ExecutionStatus,
     ) -> ExecutionRecord:
-        """Release ownership and schedule a retry no later than the applicable work deadline.
-
-        Args:
-            execution: Current immutable execution record; transitions return a
-                replacement without mutating it.
-            now: Aware current time supplied by the repository or validation clock.
-            backoff: Delay before this work becomes eligible for another attempt.
-            status: Expected caller-visible execution status.
-
-        Returns:
-            ExecutionRecord: Unleased record with the requested status and a retry due
-                no later than its work deadline.
-        """
+        """Release ownership and schedule a retry no later than the applicable work deadline."""
         return replace(
             execution,
             status=status,
@@ -744,25 +540,17 @@ class ExecutionTransitions:
         *,
         report: bool = False,
     ) -> ExecutionRecord:
-        """Record a safe failure, release the lease, and optionally queue provider failure reporting.
+        """Record a safe failure, release the lease, and optionally queue a failure report.
 
-        Args:
-            execution: Current immutable execution record; transitions return a
-                replacement without mutating it.
-            error: Safe domain error or injected integration exception to classify.
-            now: Aware current time supplied by the repository or validation clock.
-            report: Whether terminal failure should leave provider failure-report work
-                due.
-
-        Returns:
-            ExecutionRecord: Failed, unleased record, optionally retaining due provider
-                failure-report work.
+        The report is new provider work, so it gets its own finish attempts.
         """
         return replace(
             execution,
             status=ExecutionStatus.FAILED,
             work_kind=(WorkKind.PROVIDER_FAILURE_REPORT if report else None),
             next_attempt_at=now if report else None,
+            finish_attempts=0 if report else execution.finish_attempts,
+            finish_mutation_started=False,
             lease_owner=None,
             fencing_token=None,
             lease_expires_at=None,
@@ -772,17 +560,7 @@ class ExecutionTransitions:
 
     @staticmethod
     def _clear_work(execution: ExecutionRecord, now: datetime) -> ExecutionRecord:
-        """Remove pending work and ownership while preserving the already established public outcome.
-
-        Args:
-            execution: Current immutable execution record; transitions return a
-                replacement without mutating it.
-            now: Aware current time supplied by the repository or validation clock.
-
-        Returns:
-            ExecutionRecord: Record retaining its public outcome but with pending work
-                and ownership cleared.
-        """
+        """Remove pending work and ownership while preserving the already established public outcome."""
         return replace(
             execution,
             work_kind=None,

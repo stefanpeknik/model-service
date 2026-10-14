@@ -14,27 +14,24 @@ from integrations.empaia.gateway import EmpaiaGatewayError
 
 
 if TYPE_CHECKING:
+    from builders.contracts import SharedArtifact
     from integrations.empaia.http_gateway import (
         HttpEmpaiaGateway,
         Rectangle,
         SlideLevel,
         SlideMetadata,
     )
-    from workflow_execution.contracts import SharedArtifact
 
 
 class TiffPixelmapPublisher:
-    """Publish an unsigned 8-bit TIFF as an EMPAIA continuous pixelmap with values scaled to zero through one."""
+    """Publish a score TIFF as an EMPAIA float32 continuous pixelmap in [0, 1].
+
+    8-bit TIFFs (the heatmap builder's default) are scaled from 0-255; float32
+    TIFFs are published unchanged. Tiles are sent channel-major.
+    """
 
     def __init__(self, tile_size: int = 512) -> None:
-        """Require a provider tile size between 256 and 2048 pixels.
-
-        Args:
-            tile_size: Input or provider publication tile extent in pixels.
-
-        Raises:
-            ValueError: tile_size is outside the inclusive 256 to 2048 pixel range.
-        """
+        """Require a provider tile size between 256 and 2048 pixels."""
         if not 256 <= tile_size <= 2048:
             raise ValueError("EMPAIA pixelmap tile size must be between 256 and 2048")
         self._tile_size = tile_size
@@ -45,22 +42,7 @@ class TiffPixelmapPublisher:
         name: str,
         artifact: SharedArtifact,
     ) -> None:
-        """Validate and read the TIFF, choose the nearest slide level, create a pixelmap, and upload padded float32 tiles sequentially.
-
-        Args:
-            gateway: Job-scoped provider boundary used for publication or cleanup.
-            name: Declared workflow output name registered with AppService.
-            artifact: Completed shared output reference to publish.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            EmpaiaGatewayError: The TIFF is unsupported/unavailable or AppService
-                publication fails.
-            StaleWorkClaimError: The mutation guard rejects external publication after
-                ownership is lost.
-        """
+        """Validate and read the TIFF, choose the nearest slide level, create a pixelmap, and upload padded float32 tiles sequentially."""
         if artifact.media_type != "image/tiff":
             raise _invalid("EMPAIA shared output must be an image/tiff artifact")
         path = Path(artifact.path)
@@ -72,8 +54,9 @@ class TiffPixelmapPublisher:
             image = pyvips.Image.new_from_file(str(path), access="sequential")
         except Exception as error:
             raise _invalid("EMPAIA output artifact is not a readable TIFF") from error
-        if image.format != "uchar":
-            raise _invalid("EMPAIA heatmap TIFF must contain unsigned 8-bit values")
+        if image.format not in {"uchar", "float"}:
+            raise _invalid("EMPAIA score TIFF must contain uint8 or float32 values")
+        scale = 255.0 if image.format == "uchar" else 1.0
         slide = await gateway.slide_metadata()
         level = _matching_level(slide.levels, image.width, image.height)
         tiles_x = math.ceil(image.width / self._tile_size)
@@ -118,14 +101,22 @@ class TiffPixelmapPublisher:
                         self._tile_size,
                         extend="black",
                     )
-                tile = tile.cast("float") / 255.0
                 await gateway.put_pixelmap_tile(
                     pixelmap_id,
                     level.index,
                     tile_x,
                     tile_y,
-                    bytes(tile.write_to_memory()),
+                    _channel_major(tile.cast("float") / scale),
                 )
+
+
+def _channel_major(tile: object) -> bytes:
+    """Libvips stores bands interleaved; EMPAIA expects one plane per channel."""
+    if tile.bands == 1:  # type: ignore[attr-defined]
+        return bytes(tile.write_to_memory())  # type: ignore[attr-defined]
+    # Render once: the source is opened for sequential access.
+    rendered = tile.copy_memory()  # type: ignore[attr-defined]
+    return b"".join(bytes(band.write_to_memory()) for band in rendered.bandsplit())
 
 
 class VipsRectangleMaskWriter:
@@ -137,22 +128,7 @@ class VipsRectangleMaskWriter:
         slide: SlideMetadata,
         rectangle: Rectangle,
     ) -> None:
-        """Clip the rectangle to slide bounds and save an 8-bit tiled mask with slide-derived resolution; reject an empty intersection.
-
-        Args:
-            destination: Local path where input materialization or mask writing must
-                produce a file.
-            slide: Validated slide dimensions, pyramid levels, and nanometer pixel
-                sizes.
-            rectangle: Slide-space region origin and dimensions to rasterize.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            EmpaiaGatewayError: The rectangle has no slide overlap or mask creation
-                cannot complete.
-        """
+        """Clip the rectangle to slide bounds and save an 8-bit tiled mask with slide- derived resolution; reject an empty intersection."""
         try:
             import pyvips
 
@@ -189,16 +165,7 @@ def _matching_level(
     width: int,
     height: int,
 ) -> SlideLevel:
-    """Choose the pyramid level minimizing the total absolute width and height mismatch.
-
-    Args:
-        levels: Available slide pyramid levels and their dimensions.
-        width: Image or crop width in pixels.
-        height: Image or crop height in pixels.
-
-    Returns:
-        SlideLevel: Pyramid level with the smallest combined width/height mismatch.
-    """
+    """Choose the pyramid level minimizing the total absolute width and height mismatch."""
     return min(
         levels,
         key=lambda level: abs(level.width - width) + abs(level.height - height),
@@ -206,26 +173,10 @@ def _matching_level(
 
 
 def _invalid(message: str) -> EmpaiaGatewayError:
-    """Construct a nonretryable error for unsupported artifacts or invalid image geometry.
-
-    Args:
-        message: Safe user-facing failure or cancellation text.
-
-    Returns:
-        EmpaiaGatewayError: Safe integration error carrying retry and uncertain-outcome
-            metadata.
-    """
+    """Construct a nonretryable error for unsupported artifacts or invalid image geometry."""
     return EmpaiaGatewayError(message, retryable=False)
 
 
 def _unavailable(message: str) -> EmpaiaGatewayError:
-    """Construct a retryable error for image materialization failures.
-
-    Args:
-        message: Safe user-facing failure or cancellation text.
-
-    Returns:
-        EmpaiaGatewayError: Safe integration error carrying retry and uncertain-outcome
-            metadata.
-    """
+    """Construct a retryable error for image materialization failures."""
     return EmpaiaGatewayError(message, retryable=True)

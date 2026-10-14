@@ -10,6 +10,16 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
+from builders.application import BuilderApplication, validate_model
+from builders.contracts import (
+    BuilderResult,
+    ExecutionContext,
+    Invocation,
+    ModelBinding,
+    SharedArtifact,
+    SpatialScoresModel,
+)
+from builders.registry import get_builder
 from execution_scheduler.active_work import ActiveWorkRegistry
 from execution_scheduler.contracts import (
     InvalidScheduleRequestError,
@@ -17,28 +27,109 @@ from execution_scheduler.contracts import (
     SchedulingUnavailableError,
 )
 from execution_scheduler.domain import RetryPolicy
-from execution_scheduler.persistence.memory import InMemoryExecutionRepository
 from execution_scheduler.providers import ProviderFinishFailureError, ProviderSuccess
 from execution_scheduler.scheduler import ExecutionScheduler
 from execution_scheduler.worker import ExecutionWorker
 from integrations.empaia.gateway import EmpaiaGatewayError, EmpaiaJobContext
 from integrations.empaia.input_access import EmpaiaInputAccessAdapter
 from integrations.empaia.provider import EmpaiaProviderAdapter
-from workflow_execution.application import WorkflowApplication
-from workflow_execution.catalog import WorkflowCatalog
-from workflow_execution.contracts import (
-    SharedArtifact,
-    WorkflowExecutionContext,
-    WorkflowInvocation,
-    WorkflowResult,
-)
-from workflow_execution.dispatch import InMemoryWorkflowDispatch
+from tests.memory_repository import InMemoryExecutionRepository
 
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+    from builders.application import BuilderContext
+    from builders.contracts import BuilderOutput, JsonValue
     from integrations.empaia.gateway import MutationGuard
-    from workflow_execution.application import WorkflowContext
-    from workflow_execution.contracts import JsonValue, WorkflowOutput
+
+
+MODEL = SpatialScoresModel(
+    id="prostate-classifier-1",
+    tile_size=512,
+    output_tile_size=1,
+    n_channels=1,
+    mpp=0.468,
+)
+DEFAULT_CONFIGURATION: dict[str, JsonValue] = {
+    "stride_fraction": 0.5,
+    "output_tile_height": 256,
+    "output_tile_width": 256,
+    "encoding": "uint8",
+}
+
+
+API_URL = "https://empaia.invalid"
+
+
+def resolve_model(builder_id: str, model_id: str) -> ModelBinding:
+    if model_id != MODEL.id:
+        raise KeyError(model_id)
+    validate_model(get_builder(builder_id), MODEL)
+    return MODEL
+
+
+type Handler = Callable[
+    [Invocation, ModelBinding, ExecutionContext], Awaitable[BuilderResult]
+]
+
+
+class Dispatch:
+    """Route builder runs to in-process handlers instead of Ray."""
+
+    def __init__(self, handlers: dict[str, Handler] | None = None) -> None:
+        self._handlers = handlers or {}
+
+    async def run(
+        self,
+        builder_id: str,
+        invocation: Invocation,
+        model: ModelBinding,
+        execution_context: ExecutionContext,
+    ) -> BuilderResult:
+        return await self._handlers[builder_id](invocation, model, execution_context)
+
+
+def scheduler_for(
+    repository: InMemoryExecutionRepository,
+    provider: EmpaiaProviderAdapter,
+    now: datetime,
+) -> ExecutionScheduler:
+    return ExecutionScheduler(
+        repository=repository,
+        dispatch=Dispatch(),
+        providers={provider.name: provider},
+        resolve_model=resolve_model,
+        default_timeout=timedelta(hours=1),
+        maximum_timeout=timedelta(hours=6),
+        clock=lambda: now,
+    )
+
+
+def worker_for(
+    repository: InMemoryExecutionRepository,
+    provider: EmpaiaProviderAdapter,
+    run: Handler,
+) -> ExecutionWorker:
+    return ExecutionWorker(
+        repository=repository,
+        active_work=ActiveWorkRegistry(),
+        providers={provider.name: provider},
+        dispatch=Dispatch({"heatmap": run}),
+        resolve_model=resolve_model,
+        owner="worker-1",
+        lease_duration=timedelta(minutes=1),
+    )
+
+
+def copy_inputs_application(
+    service: ControlledEmpaiaService, directory: str
+) -> BuilderApplication:
+    return BuilderApplication(
+        get_builder("heatmap"),
+        CopyInputsBuilder(),
+        {"empaia": EmpaiaInputAccessAdapter(service.gateway, Path(directory))},
+    )
 
 
 class ControlledEmpaiaService:
@@ -46,16 +137,11 @@ class ControlledEmpaiaService:
 
     def __init__(self) -> None:
         """Initialize valid configuration, observable call lists, and independently injectable publication/finalization/cleanup failures."""
-        self.configuration: dict[str, JsonValue] = {
-            "output_path": "heatmap.tiff",
-            "stride_fraction": 0.5,
-            "output_tile_height": 256,
-            "output_tile_width": 256,
-        }
+        self.configuration: dict[str, JsonValue] = dict(DEFAULT_CONFIGURATION)
         self.configuration_reads = 0
         self.credentials: list[str] = []
         self.materialized: list[str] = []
-        self.published: list[tuple[str, WorkflowOutput]] = []
+        self.published: list[tuple[str, BuilderOutput]] = []
         self.publish_failures: list[EmpaiaGatewayError] = []
         self.finalize_failures: list[EmpaiaGatewayError] = []
         self.close_failures: list[EmpaiaGatewayError] = []
@@ -63,14 +149,7 @@ class ControlledEmpaiaService:
         self.failures: list[str] = []
 
     def gateway(self, context: EmpaiaJobContext) -> FakeGateway:
-        """Construct a job gateway backed by shared observable test state.
-
-        Args:
-            context: External job origin/ID and protected bearer credential.
-
-        Returns:
-            FakeGateway: A gateway backed by the controlled provider fixture.
-        """
+        """Construct a job gateway backed by shared observable test state."""
         self.credentials.append(context.credential)
         return FakeGateway(self, context.api_url, context.job_id)
 
@@ -84,80 +163,38 @@ class FakeGateway:
         api_url: str,
         job_id: str,
     ) -> None:
-        """Retain fake service/job identity and start without an external-mutation guard.
-
-        Args:
-            service: Shared controlled provider state used by a fake gateway.
-            api_url: AppService origin for the external job.
-            job_id: External EMPAIA job identifier.
-        """
+        """Retain fake service/job identity and start without an external-mutation guard."""
         self._service = service
         self._api_url = api_url
         self._job_id = job_id
         self._before_mutation: MutationGuard | None = None
 
     def set_before_mutation(self, callback: MutationGuard) -> None:
-        """Store the durable mutation guard for later fake external writes.
-
-        Args:
-            callback: Async callback invoked before an external provider mutation.
-
-        Returns:
-            None: No return value.
-        """
+        """Store the durable mutation guard for later fake external writes."""
         self._before_mutation = callback
 
     async def get_configuration(self) -> dict[str, JsonValue]:
-        """Count configuration reads and return a copy of the configured values.
-
-        Returns:
-            dict[str, JsonValue]: Decoded, serialized, or recorded fields described
-                above.
-        """
+        """Count configuration reads and return a copy of the configured values."""
         self._service.configuration_reads += 1
         return dict(self._service.configuration)
 
     async def materialize_input(self, name: str, destination: str) -> None:
-        """Record the input name and write identifiable fixture bytes to the destination.
-
-        Args:
-            name: Input/output name or configuration field selected by this operation.
-            destination: Local path where input materialization or mask writing must
-                produce a file.
-
-        Returns:
-            None: No return value.
-        """
+        """Record the input name and write identifiable fixture bytes to the destination."""
         self._service.materialized.append(name)
         Path(destination).write_bytes(f"{name}-from-empaia".encode())
 
-    async def publish_output(self, name: str, output: WorkflowOutput) -> None:
-        """Await the mutation guard, inject any queued failure, and record a still-existing artifact or inline output.
-
-        Args:
-            name: Input/output name or configuration field selected by this operation.
-            output: Inline JSON value or completed shared artifact to publish.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
+    async def publish_output(self, name: str, output: BuilderOutput) -> None:
+        """Await the mutation guard, inject any queued failure, and record a still-existing artifact or inline output."""
         if self._before_mutation is not None:
             await self._before_mutation()
         if self._service.publish_failures:
             raise self._service.publish_failures.pop(0)
         if isinstance(output, SharedArtifact) and not Path(output.path).is_file():
-            raise AssertionError("durable workflow artifact disappeared")
+            raise AssertionError("durable builder artifact disappeared")
         self._service.published.append((name, output))
 
     async def finalize(self) -> None:
-        """Await the guard, inject any queued finalization error, or record successful job finalization.
-
-        Returns:
-            None: No return value.
-        """
+        """Await the guard, inject any queued finalization error, or record successful job finalization."""
         if self._before_mutation is not None:
             await self._before_mutation()
         if self._service.finalize_failures:
@@ -165,48 +202,27 @@ class FakeGateway:
         self._service.finalized = True
 
     async def report_failure(self, message: str) -> None:
-        """Await the mutation guard and record the reported safe terminal message.
-
-        Args:
-            message: Safe user-facing failure or cancellation text.
-
-        Returns:
-            None: No return value.
-        """
+        """Await the mutation guard and record the reported safe terminal message."""
         if self._before_mutation is not None:
             await self._before_mutation()
         self._service.failures.append(message)
 
     async def close(self) -> None:
-        """Raise the next queued cleanup failure, otherwise complete without resources to release.
-
-        Returns:
-            None: No return value.
-        """
+        """Raise the next queued cleanup failure, otherwise complete without resources to release."""
         if self._service.close_failures:
             raise self._service.close_failures.pop(0)
 
 
-class CopyInputsWorkflow:
-    """Produce an artifact from both materialized inputs to verify provider access reaches computation."""
+class CopyInputsBuilder:
+    """Write both materialized inputs into the artifact, proving access reaches the builder."""
 
-    async def run(self, context: WorkflowContext) -> WorkflowResult:
-        """Read both provider inputs, concatenate their bytes, and return a completed TIFF-tagged artifact.
-
-        Args:
-            context: Invocation-scoped input/output access, resolved configuration, and
-                absolute deadline.
-
-        Returns:
-            WorkflowResult: Named inline outputs and/or references to completed artifact
-                files.
-        """
+    async def run(self, context: BuilderContext) -> BuilderResult:
         slide = context.input_path("slide").read_bytes()
         roi = context.input_path("region_of_interest").read_bytes()
-        output = context.output_path("heatmap.tiff")
+        output = context.output_path("heatmap")
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(slide + b"|" + roi)
-        return WorkflowResult(
+        return BuilderResult(
             outputs={
                 "heatmap": SharedArtifact(
                     path=str(output),
@@ -219,67 +235,28 @@ class CopyInputsWorkflow:
 class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
     """Exercise EMPAIA admission, publication retry boundaries, and credential-limited deadlines."""
 
-    async def test_workflow_defaults_fill_missing_empaia_configuration(self) -> None:
-        """Verify workflow defaults fill missing EMPAIA configuration.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
+    async def test_builder_defaults_fill_missing_empaia_configuration(self) -> None:
         now = datetime.now(UTC)
         service = ControlledEmpaiaService()
         service.configuration = {}
-        catalog = WorkflowCatalog.default()
         repository = InMemoryExecutionRepository(clock=lambda: now)
-        provider = EmpaiaProviderAdapter(catalog, service.gateway)
-        scheduler = ExecutionScheduler(
-            repository=repository,
-            dispatch=InMemoryWorkflowDispatch({}),
-            providers={provider.name: provider},
-            known_workflows=catalog.identifiers,
-            default_timeout=timedelta(hours=1),
-            maximum_timeout=timedelta(hours=6),
-            clock=lambda: now,
-        )
+        provider = EmpaiaProviderAdapter(service.gateway, allowed_api_urls=(API_URL,))
+        scheduler = scheduler_for(repository, provider, now)
 
         scheduled = await scheduler.schedule(self._request(now, "credential"))
         execution = await repository.get(scheduled.execution.id)
 
         self.assertEqual(
-            execution.invocation.resolved_configuration,
-            {
-                "output_path": "heatmap.tiff",
-                "stride_fraction": 0.5,
-                "output_tile_height": 256,
-                "output_tile_width": 256,
-            },
+            execution.invocation.resolved_configuration, DEFAULT_CONFIGURATION
         )
+        self.assertEqual(execution.builder_id, "heatmap")
+        self.assertEqual(execution.model_id, MODEL.id)
 
     async def test_gateway_factory_failure_is_classified_during_prepare(self) -> None:
-        """Verify gateway factory failure is classified during prepare.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
+        """Verify gateway factory failure is classified during prepare."""
 
         def unavailable_gateway(context: EmpaiaJobContext) -> FakeGateway:
-            """Inject classified retryable gateway-construction failure without opening a connection.
-
-            Args:
-                context: External job origin/ID and protected bearer credential.
-
-            Returns:
-                FakeGateway: A gateway backed by the controlled provider fixture.
-
-            Raises:
-                EmpaiaGatewayError: AppService transport, authentication, response data,
-                    or image conversion fails.
-            """
+            """Inject classified retryable gateway-construction failure without opening a connection."""
             del context
             raise EmpaiaGatewayError(
                 "EMPAIA is temporarily unavailable",
@@ -287,51 +264,30 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
             )
 
         now = datetime.now(UTC)
-        catalog = WorkflowCatalog.default()
-        provider = EmpaiaProviderAdapter(catalog, unavailable_gateway)
-        scheduler = ExecutionScheduler(
-            repository=InMemoryExecutionRepository(clock=lambda: now),
-            dispatch=InMemoryWorkflowDispatch({}),
-            providers={provider.name: provider},
-            known_workflows=catalog.identifiers,
-            default_timeout=timedelta(hours=1),
-            maximum_timeout=timedelta(hours=6),
-            clock=lambda: now,
+        provider = EmpaiaProviderAdapter(
+            unavailable_gateway, allowed_api_urls=(API_URL,)
+        )
+        scheduler = scheduler_for(
+            InMemoryExecutionRepository(clock=lambda: now), provider, now
         )
 
         with self.assertRaises(SchedulingUnavailableError):
             await scheduler.schedule(self._request(now, "credential"))
 
     async def test_gateway_factory_failure_is_classified_during_finish(self) -> None:
-        """Verify gateway factory failure is classified during finish.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
+        """Verify gateway factory failure is classified during finish."""
 
         def unavailable_gateway(context: EmpaiaJobContext) -> FakeGateway:
-            """Inject classified retryable gateway-construction failure without opening a connection.
-
-            Args:
-                context: External job origin/ID and protected bearer credential.
-
-            Returns:
-                FakeGateway: A gateway backed by the controlled provider fixture.
-
-            Raises:
-                EmpaiaGatewayError: AppService transport, authentication, response data,
-                    or image conversion fails.
-            """
+            """Inject classified retryable gateway-construction failure without opening a connection."""
             del context
             raise EmpaiaGatewayError(
                 "EMPAIA is temporarily unavailable",
                 retryable=True,
             )
 
-        provider = EmpaiaProviderAdapter(WorkflowCatalog.default(), unavailable_gateway)
+        provider = EmpaiaProviderAdapter(
+            unavailable_gateway, allowed_api_urls=(API_URL,)
+        )
 
         with self.assertRaises(ProviderFinishFailureError) as raised:
             await provider.finish(
@@ -340,21 +296,14 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
                     "job_id": "job-1",
                     "credential": "credential",
                 },
-                ProviderSuccess(WorkflowResult(outputs={})),
+                ProviderSuccess(BuilderResult(outputs={})),
             )
 
         self.assertTrue(raised.exception.retryable)
         self.assertFalse(raised.exception.outcome_unknown)
 
     async def test_gateway_cleanup_does_not_replace_successful_finish(self) -> None:
-        """Verify gateway cleanup does not replace successful finish.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
+        """Verify gateway cleanup does not replace successful finish."""
         service = ControlledEmpaiaService()
         service.close_failures.append(
             EmpaiaGatewayError(
@@ -362,7 +311,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
                 retryable=True,
             )
         )
-        provider = EmpaiaProviderAdapter(WorkflowCatalog.default(), service.gateway)
+        provider = EmpaiaProviderAdapter(service.gateway, allowed_api_urls=(API_URL,))
 
         await provider.finish(
             {
@@ -370,55 +319,21 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
                 "job_id": "job-1",
                 "credential": "credential",
             },
-            ProviderSuccess(WorkflowResult(outputs={})),
+            ProviderSuccess(BuilderResult(outputs={})),
         )
 
         self.assertTrue(service.finalized)
 
     async def test_controlled_empaia_lifecycle_and_admitted_replay(self) -> None:
-        """Verify controlled EMPAIA lifecycle and admitted replay.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
+        """Verify controlled EMPAIA lifecycle and admitted replay."""
         now = datetime.now(UTC)
         service = ControlledEmpaiaService()
-        catalog = WorkflowCatalog.default()
-        provider = EmpaiaProviderAdapter(catalog, service.gateway)
+        provider = EmpaiaProviderAdapter(service.gateway, allowed_api_urls=(API_URL,))
         repository = InMemoryExecutionRepository(clock=lambda: now)
-        scheduler = ExecutionScheduler(
-            repository=repository,
-            dispatch=InMemoryWorkflowDispatch({}),
-            providers={provider.name: provider},
-            known_workflows=catalog.identifiers,
-            default_timeout=timedelta(hours=1),
-            maximum_timeout=timedelta(hours=6),
-            clock=lambda: now,
-        )
+        scheduler = scheduler_for(repository, provider, now)
         with TemporaryDirectory() as directory:
-            application = WorkflowApplication(
-                catalog.get("prostate-heatmap"),
-                CopyInputsWorkflow(),
-                access_adapters={
-                    "empaia": EmpaiaInputAccessAdapter(
-                        service.gateway,
-                        Path(directory),
-                    )
-                },
-            )
-            worker = ExecutionWorker(
-                repository=repository,
-                active_work=ActiveWorkRegistry(),
-                providers={provider.name: provider},
-                dispatch=InMemoryWorkflowDispatch(
-                    {"prostate-heatmap": application.run}
-                ),
-                owner="worker-1",
-                lease_duration=timedelta(minutes=1),
-            )
+            application = copy_inputs_application(service, directory)
+            worker = worker_for(repository, provider, application.run)
             request = self._request(now, "original")
 
             admitted = await scheduler.schedule(request)
@@ -452,29 +367,13 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_credential_expiry_caps_the_execution_deadline(self) -> None:
-        """Verify credential expiry caps the execution deadline.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
+        """Verify credential expiry caps the execution deadline."""
         now = datetime.now(UTC)
         expiry = now + timedelta(minutes=10)
         service = ControlledEmpaiaService()
-        catalog = WorkflowCatalog.default()
-        provider = EmpaiaProviderAdapter(catalog, service.gateway)
+        provider = EmpaiaProviderAdapter(service.gateway, allowed_api_urls=(API_URL,))
         repository = InMemoryExecutionRepository(clock=lambda: now)
-        scheduler = ExecutionScheduler(
-            repository=repository,
-            dispatch=InMemoryWorkflowDispatch({}),
-            providers={provider.name: provider},
-            known_workflows=catalog.identifiers,
-            default_timeout=timedelta(hours=1),
-            maximum_timeout=timedelta(hours=6),
-            clock=lambda: now,
-        )
+        scheduler = scheduler_for(repository, provider, now)
 
         admitted = await scheduler.schedule(
             self._request(now, "credential", expiry=expiry)
@@ -495,29 +394,13 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
             )
 
     async def test_invalid_configuration_is_rejected_before_admission(self) -> None:
-        """Verify invalid configuration is rejected before admission.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
+        """Verify invalid configuration is rejected before admission."""
         now = datetime.now(UTC)
         service = ControlledEmpaiaService()
         service.configuration["stride_fraction"] = 0
-        catalog = WorkflowCatalog.default()
         repository = InMemoryExecutionRepository(clock=lambda: now)
-        provider = EmpaiaProviderAdapter(catalog, service.gateway)
-        scheduler = ExecutionScheduler(
-            repository=repository,
-            dispatch=InMemoryWorkflowDispatch({}),
-            providers={provider.name: provider},
-            known_workflows=catalog.identifiers,
-            default_timeout=timedelta(hours=1),
-            maximum_timeout=timedelta(hours=6),
-            clock=lambda: now,
-        )
+        provider = EmpaiaProviderAdapter(service.gateway, allowed_api_urls=(API_URL,))
+        scheduler = scheduler_for(repository, provider, now)
 
         request = self._request(now, "credential")
         with self.assertRaises(InvalidScheduleRequestError):
@@ -529,14 +412,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
     async def test_known_preacceptance_publication_failure_retries_result_only(
         self,
     ) -> None:
-        """Verify known preacceptance publication failure retries result only.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
+        """Verify known preacceptance publication failure retries result only."""
         now = datetime.now(UTC)
         service = ControlledEmpaiaService()
         service.publish_failures.append(
@@ -545,63 +421,27 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
                 retryable=True,
             )
         )
-        catalog = WorkflowCatalog.default()
-        provider = EmpaiaProviderAdapter(catalog, service.gateway)
+        provider = EmpaiaProviderAdapter(service.gateway, allowed_api_urls=(API_URL,))
         repository = InMemoryExecutionRepository(
             clock=lambda: now,
             finish_policy=RetryPolicy(3, timedelta(0), timedelta(0)),
         )
-        scheduler = ExecutionScheduler(
-            repository=repository,
-            dispatch=InMemoryWorkflowDispatch({}),
-            providers={provider.name: provider},
-            known_workflows=catalog.identifiers,
-            default_timeout=timedelta(hours=1),
-            maximum_timeout=timedelta(hours=6),
-            clock=lambda: now,
-        )
-        workflow_runs = 0
+        scheduler = scheduler_for(repository, provider, now)
+        builder_runs = 0
 
         with TemporaryDirectory() as directory:
-            application = WorkflowApplication(
-                catalog.get("prostate-heatmap"),
-                CopyInputsWorkflow(),
-                access_adapters={
-                    "empaia": EmpaiaInputAccessAdapter(
-                        service.gateway,
-                        Path(directory),
-                    )
-                },
-            )
+            application = copy_inputs_application(service, directory)
 
             async def run(
-                invocation: WorkflowInvocation,
-                execution_context: WorkflowExecutionContext,
-            ) -> WorkflowResult:
-                """Execute the scenario workflow fixture to expose the result or failure checked by its enclosing test.
+                invocation: Invocation,
+                model: ModelBinding,
+                execution_context: ExecutionContext,
+            ) -> BuilderResult:
+                nonlocal builder_runs
+                builder_runs += 1
+                return await application.run(invocation, model, execution_context)
 
-                Args:
-                    invocation: Named inputs, resolved configuration, public access
-                        state, and absolute workflow deadline.
-                    execution_context: Private attempt identity and provider context
-                        kept separate from the invocation.
-
-                Returns:
-                    WorkflowResult: Named inline outputs and/or references to completed
-                        artifact files.
-                """
-                nonlocal workflow_runs
-                workflow_runs += 1
-                return await application.run(invocation, execution_context)
-
-            worker = ExecutionWorker(
-                repository=repository,
-                active_work=ActiveWorkRegistry(),
-                providers={provider.name: provider},
-                dispatch=InMemoryWorkflowDispatch({"prostate-heatmap": run}),
-                owner="worker-1",
-                lease_duration=timedelta(minutes=1),
-            )
+            worker = worker_for(repository, provider, run)
             admitted = await scheduler.schedule(self._request(now, "credential"))
 
             await worker.run_once()
@@ -612,18 +452,13 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(retrying.status, "running")
         self.assertEqual(completed.status, "succeeded")
-        self.assertEqual(workflow_runs, 1)
+        self.assertEqual(builder_runs, 1)
         self.assertEqual([name for name, _ in service.published], ["heatmap"])
 
-    async def test_finalization_failure_after_upload_is_not_retried(self) -> None:
-        """Verify finalization failure after upload is not retried.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
+    async def test_finalization_failure_after_upload_reports_failure_instead_of_retrying(
+        self,
+    ) -> None:
+        """Verify finalization failure after upload is not retried."""
         now = datetime.now(UTC)
         service = ControlledEmpaiaService()
         service.finalize_failures.append(
@@ -632,50 +467,28 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
                 retryable=True,
             )
         )
-        catalog = WorkflowCatalog.default()
-        provider = EmpaiaProviderAdapter(catalog, service.gateway)
+        provider = EmpaiaProviderAdapter(service.gateway, allowed_api_urls=(API_URL,))
         repository = InMemoryExecutionRepository(
             clock=lambda: now,
             finish_policy=RetryPolicy(3, timedelta(0), timedelta(0)),
         )
-        scheduler = ExecutionScheduler(
-            repository=repository,
-            dispatch=InMemoryWorkflowDispatch({}),
-            providers={provider.name: provider},
-            known_workflows=catalog.identifiers,
-            default_timeout=timedelta(hours=1),
-            maximum_timeout=timedelta(hours=6),
-            clock=lambda: now,
-        )
+        scheduler = scheduler_for(repository, provider, now)
         with TemporaryDirectory() as directory:
-            application = WorkflowApplication(
-                catalog.get("prostate-heatmap"),
-                CopyInputsWorkflow(),
-                access_adapters={
-                    "empaia": EmpaiaInputAccessAdapter(
-                        service.gateway,
-                        Path(directory),
-                    )
-                },
-            )
-            worker = ExecutionWorker(
-                repository=repository,
-                active_work=ActiveWorkRegistry(),
-                providers={provider.name: provider},
-                dispatch=InMemoryWorkflowDispatch(
-                    {"prostate-heatmap": application.run}
-                ),
-                owner="worker-1",
-                lease_duration=timedelta(minutes=1),
-            )
+            application = copy_inputs_application(service, directory)
+            worker = worker_for(repository, provider, application.run)
             admitted = await scheduler.schedule(self._request(now, "credential"))
 
             await worker.run_once()
             await worker.run_once()
             failed = await scheduler.get(admitted.execution.id)
 
+            # The publication is not retried, but EMPAIA is told the job failed.
+            self.assertTrue(await worker.run_once())
+
         self.assertEqual(failed.status, "failed")
         self.assertEqual([name for name, _ in service.published], ["heatmap"])
+        self.assertFalse(service.finalized)
+        self.assertEqual(len(service.failures), 1)
         self.assertFalse(await worker.run_once())
 
     @staticmethod
@@ -686,21 +499,10 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         expiry: datetime | None = None,
         job_id: str = "job-1",
     ) -> ScheduleRequest:
-        """Build a provider request for the selected fixture identity and deadline settings.
-
-        Args:
-            now: Aware current time supplied by the repository or validation clock.
-            credential: Private bearer credential for the external job; never include it
-                in public errors.
-            expiry: Absolute expiration time included in the synthetic credential.
-            job_id: External EMPAIA job identifier.
-
-        Returns:
-            ScheduleRequest: Provider-specific admission payload, replay identity, and
-                optional timeout.
-        """
+        """Build a provider request for the selected fixture identity and deadline settings."""
         return ScheduleRequest(
-            workflow_id="prostate-heatmap",
+            builder_id="heatmap",
+            model_id=MODEL.id,
             provider="empaia",
             body={
                 "installation_id": "installation-1",
@@ -716,15 +518,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
 
 
 def _credential(expiry: datetime, marker: str) -> str:
-    """Build an unsigned synthetic JWT-shaped credential with an expiry claim for validation fixtures.
-
-    Args:
-        expiry: Absolute expiration time included in the synthetic credential.
-        marker: Non-secret test marker embedded in a synthetic credential.
-
-    Returns:
-        str: Synthetic unsigned JWT-shaped test credential with an expiration claim.
-    """
+    """Build an unsigned synthetic JWT-shaped credential with an expiry claim for validation fixtures."""
     header = _base64_json({"alg": "test"})
     payload = _base64_json({"exp": expiry.timestamp(), "marker": marker})
     signature = base64.urlsafe_b64encode(b"test-signature").rstrip(b"=").decode()
@@ -732,14 +526,7 @@ def _credential(expiry: datetime, marker: str) -> str:
 
 
 def _base64_json(value: dict[str, object]) -> str:
-    """Encode JSON as unpadded URL-safe base64 for a synthetic test credential.
-
-    Args:
-        value: Value being validated, serialized, converted, or checked by this helper.
-
-    Returns:
-        str: Unpadded URL-safe base64 representation of the supplied JSON.
-    """
+    """Encode JSON as unpadded URL-safe base64 for a synthetic test credential."""
     encoded = base64.urlsafe_b64encode(json.dumps(value).encode()).decode()
     return encoded.rstrip("=")
 

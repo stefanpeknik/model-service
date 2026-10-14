@@ -10,9 +10,9 @@ import httpx
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 
+from builders.contracts import SharedArtifact
 from integrations.empaia.http_gateway import HttpEmpaiaGateway
 from validation.empaia_app_service import app
-from workflow_execution.contracts import SharedArtifact
 
 
 try:
@@ -28,14 +28,7 @@ class ValidationEmpaiaPublicationTests(unittest.IsolatedAsyncioTestCase):
     """Exercise TIFF-to-pixelmap publication through the mock AppService."""
 
     async def test_tiff_pixelmap_publication(self) -> None:
-        """Verify TIFF pixelmap publication.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
+        """Verify TIFF pixelmap publication."""
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "heatmap.tiff"
             pyvips.Image.black(8, 8).new_from_image(128).tiffsave(str(path))
@@ -45,14 +38,7 @@ class ValidationEmpaiaPublicationTests(unittest.IsolatedAsyncioTestCase):
             ) as client:
 
                 async def forward(request: web.Request) -> web.Response:
-                    """Bridge the SDK's loopback HTTP calls to the existing ASGI mock.
-
-                    Args:
-                        request: Request sent by the real AppService SDK transport.
-
-                    Returns:
-                        web.Response: Mock AppService status, headers, and body.
-                    """
+                    """Bridge the SDK's loopback HTTP calls to the existing ASGI mock."""
                     response = await client.request(
                         request.method,
                         request.path_qs,

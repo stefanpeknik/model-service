@@ -1,0 +1,64 @@
+groupName: gpu-workers
+replicas: 0
+minReplicas: 0
+maxReplicas: 1
+rayStartParams:
+  num-cpus: "4"
+  num-gpus: "1"
+  object-store-memory: "1073741824"
+template:
+  spec:
+    securityContext:
+      fsGroup: 1000
+      fsGroupChangePolicy: OnRootMismatch
+      runAsNonRoot: true
+      runAsUser: 1000
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: ray-worker
+        image: "{{ .Values.rayImage.repository }}:{{ .Values.rayImage.tag }}"
+        imagePullPolicy: {{ .Values.rayImage.pullPolicy }}
+        resources:
+          requests:
+            cpu: 4
+            memory: 18Gi
+            nvidia.com/mig-2g.20gb: 1
+          limits:
+            cpu: 4
+            memory: 20Gi
+            nvidia.com/mig-2g.20gb: 1
+        env:
+          {{- include "peknik.proxyEnv" . | nindent 10 }}
+          - name: MLFLOW_TRACKING_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: mlflow-public-credentials
+                key: username
+          - name: MLFLOW_TRACKING_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: mlflow-public-credentials
+                key: token
+          - name: HF_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: huggingface-secret
+                key: token
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsUser: 1000
+        volumeMounts:
+          - name: trt-cache
+            mountPath: /mnt/cache
+          - name: hf-cache
+            mountPath: /mnt/huggingface_cache
+    volumes:
+      - name: trt-cache
+        persistentVolumeClaim:
+          claimName: peknik-persist-model-service-trt-cache
+      - name: hf-cache
+        persistentVolumeClaim:
+          claimName: peknik-persist-model-service-hf-cache

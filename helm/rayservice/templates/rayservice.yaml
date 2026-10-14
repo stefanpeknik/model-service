@@ -2,7 +2,7 @@ apiVersion: ray.io/v1
 kind: RayService
 metadata:
   name: {{ .Release.Name }}
-  namespace: {{ .Release.Namespace | default "rationai-jobs-ns" }}
+  namespace: {{ .Release.Namespace }}
 spec:
   rayClusterConfig:
     rayVersion: 2.58.0
@@ -60,6 +60,23 @@ spec:
 {{- end }}
   serveConfigV2: |
     applications:
-{{- range $appName := .Values.applications }}
-{{ tpl (printf "applications/%s.yaml" $appName | $.Files.Get) $ | indent 4 }}
+{{- range $path := .Values.models }}
+{{- $model := tpl (printf "models/%s.yaml" $path | $.Files.Get) $ | fromYaml }}
+{{- if not $model.serve }}{{ fail (printf "models/%s.yaml has no serve block" $path) }}{{ end }}
+      - {{ toYaml $model.serve | nindent 8 | trim }}
+{{- end }}
+{{- range $id, $builder := .Values.builders }}
+      - name: builder-{{ $id }}
+        import_path: builders.serve:app
+        route_prefix: /builders/{{ $id }}
+        deployments:
+          - name: BuilderDeployment
+            {{- toYaml $builder.deployment | nindent 12 }}
+            user_config:
+              builder_id: {{ $id }}
+              model_origin: http://{{ $.Release.Name }}-serve-svc.{{ $.Release.Namespace }}.svc.cluster.local:8000
+              shared_storage_roots: {{ toJson $.Values.sharedStorageRoots }}
+              {{- with $builder.userConfig }}
+              {{- toYaml . | nindent 14 }}
+              {{- end }}
 {{- end }}

@@ -1,1 +1,1 @@
-"""Contain legacy Ray Serve builder entry points. The heatmap builder delegates computation to workflows.heatmap.processor."""
+"""Reusable whole-slide builders, their runtime and the Ray Serve ingress."""

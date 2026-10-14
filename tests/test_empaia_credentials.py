@@ -12,17 +12,19 @@ import jwt
 from execution_scheduler.contracts import InvalidScheduleRequestError, ScheduleRequest
 from integrations.empaia.provider import EmpaiaProviderAdapter
 from tests.test_empaia_execution import ControlledEmpaiaService
-from workflow_execution.catalog import WorkflowCatalog
+
+
+API_URL = "https://empaia.invalid"
 
 
 class EmpaiaCredentialTests(unittest.IsolatedAsyncioTestCase):
     """Validate token structure and deadline caps without authenticating JWT signatures."""
 
     def setUp(self) -> None:
-        """Create a provider with a controlled gateway and a future workflow deadline."""
+        """Create a provider with a controlled gateway and a future execution deadline."""
         self.service = ControlledEmpaiaService()
         self.provider = EmpaiaProviderAdapter(
-            WorkflowCatalog.default(), self.service.gateway
+            self.service.gateway, allowed_api_urls=(API_URL,)
         )
         self.deadline = datetime.now(UTC) + timedelta(hours=1)
 
@@ -43,8 +45,8 @@ class EmpaiaCredentialTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(prepared.terminal_report_deadline_at, expected)
                 self.assertEqual(prepared.invocation.deadline_at, expected)
 
-    async def test_later_expiry_does_not_extend_the_workflow_deadline(self) -> None:
-        """Use the earlier workflow deadline even when the credential lasts longer."""
+    async def test_later_expiry_does_not_extend_the_execution_deadline(self) -> None:
+        """Use the earlier execution deadline even when the credential lasts longer."""
         expiry = self.deadline + timedelta(hours=1)
         prepared = await self.provider.prepare(
             self._request(_token({"exp": expiry.timestamp()})), self.deadline
@@ -137,7 +139,8 @@ class EmpaiaCredentialTests(unittest.IsolatedAsyncioTestCase):
     def _request(token: str) -> ScheduleRequest:
         """Build a synthetic job request without contacting an external AppService."""
         return ScheduleRequest(
-            workflow_id="prostate-heatmap",
+            builder_id="heatmap",
+            model_id="prostate-classifier-1",
             provider="empaia",
             body={
                 "installation_id": "test-installation",

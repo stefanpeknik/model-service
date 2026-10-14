@@ -65,7 +65,8 @@ RUN uv pip install --python /home/ray/anaconda3/bin/python --no-cache \
 
 WORKDIR /app
 ENV PYTHONPATH=/app
+COPY models models
+COPY providers providers
+COPY builders builders
 COPY integrations integrations
-COPY workflow_execution workflow_execution
-COPY workflows workflows
-COPY workflow-definitions workflow-definitions
+COPY validation validation

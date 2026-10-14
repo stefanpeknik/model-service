@@ -7,6 +7,7 @@ uncertain mutation outcomes.
 
 from __future__ import annotations
 
+import asyncio
 import math
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +16,7 @@ from typing import TYPE_CHECKING, Protocol
 from aiohttp import ClientError, ClientResponseError
 from rationai.empaia.app_service import AppServiceClient, AppServiceDecodeError
 
+from builders.contracts import InlineOutput, SharedArtifact
 from integrations.empaia.gateway import EmpaiaGatewayError, EmpaiaJobContext
 from integrations.empaia.materialization import link_direct_input, write_rectangle_input
 from integrations.empaia.responses import (
@@ -24,24 +26,18 @@ from integrations.empaia.responses import (
     RectangleResponse,
     SlideResponse,
 )
-from workflow_execution.contracts import InlineOutput, SharedArtifact
 
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
 
+    from builders.contracts import BuilderOutput, JsonValue
     from integrations.empaia.gateway import MutationGuard
-    from workflow_execution.contracts import JsonValue, WorkflowOutput
 
 
 @dataclass(frozen=True, slots=True)
 class DirectAccess:
-    """Describe a shared input file and the provider's direct-access support flag.
-
-    Attributes:
-        storage_path: Provider shared file path or authorized storage locator.
-        supported: Whether this provider input supports direct shared access.
-    """
+    """Describe a shared input file and the provider's direct-access support flag."""
 
     storage_path: Path
     supported: bool
@@ -49,13 +45,7 @@ class DirectAccess:
 
 @dataclass(frozen=True, slots=True)
 class SlideLevel:
-    """Describe the index and pixel dimensions of one slide pyramid level.
-
-    Attributes:
-        index: Zero-based slide pyramid level index.
-        width: Pixel width or positive rectangle width.
-        height: Pixel height or positive rectangle height.
-    """
+    """Describe the index and pixel dimensions of one slide pyramid level."""
 
     index: int
     width: int
@@ -64,16 +54,7 @@ class SlideLevel:
 
 @dataclass(frozen=True, slots=True)
 class SlideMetadata:
-    """Carry slide identity, base dimensions, nanometer pixel sizes, and pyramid levels.
-
-    Attributes:
-        identifier: External whole-slide image identifier.
-        width: Pixel width or positive rectangle width.
-        height: Pixel height or positive rectangle height.
-        pixel_size_nm_x: Horizontal physical pixel size in nanometers.
-        pixel_size_nm_y: Vertical physical pixel size in nanometers.
-        levels: Available slide pyramid levels and their geometry.
-    """
+    """Carry slide identity, base dimensions, nanometer pixel sizes, and pyramid levels."""
 
     identifier: str
     width: int
@@ -85,14 +66,7 @@ class SlideMetadata:
 
 @dataclass(frozen=True, slots=True)
 class Rectangle:
-    """Carry integer slide-space coordinates and dimensions for a region of interest.
-
-    Attributes:
-        x: Horizontal origin in base slide pixels.
-        y: Vertical origin in base slide pixels.
-        width: Positive rectangle width in base slide pixels.
-        height: Positive rectangle height in base slide pixels.
-    """
+    """Carry integer slide-space coordinates and dimensions for a region of interest."""
 
     x: int
     y: int
@@ -109,16 +83,7 @@ class ArtifactPublisher(Protocol):
         name: str,
         artifact: SharedArtifact,
     ) -> None:
-        """Publish one named artifact using the gateway's guarded external-write operations.
-
-        Args:
-            gateway: Job-scoped provider boundary used for publication or cleanup.
-            name: Declared workflow output name registered with AppService.
-            artifact: Completed shared output reference to publish.
-
-        Returns:
-            None: No return value.
-        """
+        """Publish one named artifact using the gateway's guarded external-write operations."""
         ...
 
 
@@ -131,18 +96,7 @@ class RectangleMaskWriter(Protocol):
         slide: SlideMetadata,
         rectangle: Rectangle,
     ) -> None:
-        """Write a region mask with geometry and physical resolution derived from the slide.
-
-        Args:
-            destination: Local path where input materialization or mask writing must
-                produce a file.
-            slide: Validated slide dimensions, pyramid levels, and nanometer pixel
-                sizes.
-            rectangle: Slide-space region origin and dimensions to rasterize.
-
-        Returns:
-            None: No return value.
-        """
+        """Write a region mask with geometry and physical resolution derived from the slide."""
         ...
 
 
@@ -159,22 +113,7 @@ class HttpEmpaiaGateway:
         artifact_publisher: ArtifactPublisher | None = None,
         rectangle_writer: RectangleMaskWriter | None = None,
     ) -> None:
-        """Require complete connection settings and select the SDK client, TIFF publisher, and rectangle writer. close() closes even an injected client.
-
-        Args:
-            api_url: AppService origin for the external job.
-            job_id: External EMPAIA job identifier.
-            credential: Private bearer credential for the external job; never include it
-                in public errors.
-            client: Optional job-scoped SDK client; the gateway closes it, including when supplied
-                by the caller.
-            artifact_publisher: Artifact conversion/publication adapter; defaults to the
-                TIFF pixelmap publisher.
-            rectangle_writer: Optional mask rasterizer; defaults to the libvips writer.
-
-        Raises:
-            EmpaiaGatewayError: api_url, job_id, or credential is empty.
-        """
+        """Require complete connection settings and select the SDK client, TIFF publisher, and rectangle writer. close() closes even an injected client."""
         if not api_url or not job_id or not credential:
             raise EmpaiaGatewayError(
                 "EMPAIA connection settings are incomplete",
@@ -192,45 +131,16 @@ class HttpEmpaiaGateway:
         self._rectangle_writer = rectangle_writer or VipsRectangleMaskWriter()
 
     def set_before_mutation(self, callback: MutationGuard) -> None:
-        """Install the async durable-claim guard used immediately before each external mutation.
-
-        Args:
-            callback: Async callback invoked before an external provider mutation.
-
-        Returns:
-            None: No return value.
-        """
+        """Install the async durable-claim guard used immediately before each external mutation."""
         self._client.set_before_mutation(callback)
 
     async def get_configuration(self) -> dict[str, JsonValue]:
-        """GET and validate job configuration, rejecting overlapping global/customer keys.
-
-        Returns:
-            dict[str, JsonValue]: Global and customer configuration merged after
-                checking that their keys are disjoint.
-
-        Raises:
-            EmpaiaGatewayError: AppService transport, authentication, response data, or
-                image conversion fails.
-        """
+        """GET and validate job configuration, rejecting overlapping global/customer keys."""
         value = await self._call(self._client.get_configuration())
         return ConfigurationResponse.parse(value).merged()
 
     async def materialize_input(self, name: str, destination: str) -> None:
-        """Link a directly accessible shared input or fetch slide/rectangle metadata and write a local mask.
-
-        Args:
-            name: Declared workflow input name to resolve.
-            destination: Local path where input materialization or mask writing must
-                produce a file.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            EmpaiaGatewayError: AppService transport, authentication, response data, or
-                image conversion fails.
-        """
+        """Link a directly accessible shared input or fetch slide/rectangle metadata and write a local mask."""
         target = Path(destination)
         direct = await self._direct_access(name)
         if direct is not None:
@@ -240,20 +150,8 @@ class HttpEmpaiaGateway:
         rectangle = _rectangle(await self._call(self._client.get_input_data(name)))
         write_rectangle_input(self._rectangle_writer, target, slide, rectangle)
 
-    async def publish_output(self, name: str, output: WorkflowOutput) -> None:
-        """POST a supported inline primitive or delegate shared artifact publication to the image adapter.
-
-        Args:
-            name: Declared workflow output name registered with AppService.
-            output: Inline JSON value or completed shared artifact to publish.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            EmpaiaGatewayError: AppService transport, authentication, response data, or
-                image conversion fails.
-        """
+    async def publish_output(self, name: str, output: BuilderOutput) -> None:
+        """POST a supported inline primitive or delegate shared artifact publication to the image adapter."""
         if isinstance(output, InlineOutput):
             await self._call(
                 self._client.post_output_data(
@@ -268,60 +166,24 @@ class HttpEmpaiaGateway:
         raise _invalid("EMPAIA output type is unsupported")
 
     async def finalize(self) -> None:
-        """PUT the guarded successful job-finalization request.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            EmpaiaGatewayError: AppService transport, authentication, response data, or
-                image conversion fails.
-        """
+        """PUT the guarded successful job-finalization request."""
         await self._call(self._client.put_finalize(), mutation=True)
 
     async def report_failure(self, message: str) -> None:
-        """PUT a guarded failure request with the safe user message truncated to 255 characters.
-
-        Args:
-            message: Safe user-facing failure or cancellation text.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            EmpaiaGatewayError: AppService transport, authentication, response data, or
-                image conversion fails.
-        """
+        """PUT a guarded failure request with the safe user message truncated to 255 characters."""
         await self._call(self._client.put_failure(message[:255]), mutation=True)
 
     async def close(self) -> None:
-        """Close the gateway's HTTP client and release its network resources.
-
-        Returns:
-            None: No return value.
-        """
+        """Close the gateway's HTTP client and release its network resources."""
         await self._client.close()
 
     @property
     def job_id(self) -> str:
-        """Expose the external job ID for publication metadata.
-
-        Returns:
-            str: External job ID used in publication creator metadata.
-        """
+        """Expose the external job ID for publication metadata."""
         return self._job_id
 
     async def slide_metadata(self) -> SlideMetadata:
-        """Fetch validated slide geometry for artifact publication.
-
-        Returns:
-            SlideMetadata: Slide identity, geometry, pixel sizes, and available pyramid
-                levels.
-
-        Raises:
-            EmpaiaGatewayError: AppService transport, authentication, response data, or
-                image conversion fails.
-        """
+        """Fetch validated slide geometry for artifact publication."""
         return await self._slide_metadata()
 
     async def create_pixelmap(
@@ -329,19 +191,7 @@ class HttpEmpaiaGateway:
         name: str,
         body: dict[str, object],
     ) -> str:
-        """Create a named pixelmap through a guarded POST and return its validated ID.
-
-        Args:
-            name: Declared workflow output name registered with AppService.
-            body: Typed or JSON request payload accepted by this boundary.
-
-        Returns:
-            str: Nonempty external pixelmap ID returned by the output creation response.
-
-        Raises:
-            EmpaiaGatewayError: AppService transport, authentication, response data, or
-                image conversion fails.
-        """
+        """Create a named pixelmap through a guarded POST and return its validated ID."""
         value = await self._call(
             self._client.post_output_data(name, body), mutation=True
         )
@@ -360,41 +210,21 @@ class HttpEmpaiaGateway:
         tile_y: int,
         data: bytes,
     ) -> None:
-        """Upload binary tile values to a pixelmap level and position through a guarded PUT.
-
-        Args:
-            pixelmap_id: External output pixelmap identifier returned by AppService.
-            level: Selected pyramid level index.
-            tile_x: Horizontal pixelmap tile position.
-            tile_y: Vertical pixelmap tile position.
-            data: Raw float32 pixelmap tile bytes to upload.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            EmpaiaGatewayError: AppService transport, authentication, response data, or
-                image conversion fails.
-        """
-        await self._call(
-            self._client.put_tile(pixelmap_id, level, tile_x, tile_y, data),
-            mutation=True,
-        )
+        """Upload one tile; a PUT of the same tile is idempotent, so transient failures retry."""
+        for attempt in range(_TILE_ATTEMPTS):
+            try:
+                await self._call(
+                    self._client.put_tile(pixelmap_id, level, tile_x, tile_y, data),
+                    mutation=True,
+                )
+                return
+            except EmpaiaGatewayError as error:
+                if not error.retryable or attempt + 1 == _TILE_ATTEMPTS:
+                    raise
+                await asyncio.sleep(_TILE_RETRY_SECONDS * 2**attempt)
 
     async def _direct_access(self, name: str) -> DirectAccess | None:
-        """Query the extension endpoint; only a 404 permits rectangle fallback, while other failures remain errors.
-
-        Args:
-            name: Declared workflow input name to resolve.
-
-        Returns:
-            DirectAccess | None: Validated shared input metadata, or None only when the
-                direct-access endpoint returns 404.
-
-        Raises:
-            EmpaiaGatewayError: AppService transport, authentication, response data, or
-                image conversion fails.
-        """
+        """Query the extension endpoint; only a 404 permits rectangle fallback, while other failures remain errors."""
         value = await self._call(self._client.get_direct_access(name))
         if value is None:
             return None
@@ -405,34 +235,12 @@ class HttpEmpaiaGateway:
         )
 
     async def _slide_metadata(self) -> SlideMetadata:
-        """Fetch and decode the job's slide input metadata.
-
-        Returns:
-            SlideMetadata: Slide identity, geometry, pixel sizes, and available pyramid
-                levels.
-
-        Raises:
-            EmpaiaGatewayError: AppService transport, authentication, response data, or
-                image conversion fails.
-        """
+        """Fetch and decode the job's slide input metadata."""
         value = await self._call(self._client.get_input_data("slide"))
         return _slide_metadata(value)
 
     async def _call[T](self, operation: Awaitable[T], *, mutation: bool = False) -> T:
-        """Translate SDK failures without exposing upstream details.
-
-        Args:
-            operation: SDK operation to await once, including its mutation guard.
-            mutation: Whether a lost acknowledgment can hide a remote state change.
-
-        Returns:
-            T: The SDK result, validated by the caller when fields are consumed.
-
-        Raises:
-            EmpaiaGatewayError: HTTP rejection, transport failure, or invalid JSON.
-                Transient writes and invalid write acknowledgments are outcome-unknown.
-                Guard failures and cancellation propagate unchanged.
-        """
+        """Translate SDK failures without exposing upstream details."""
         try:
             return await operation
         except ClientResponseError as error:
@@ -459,19 +267,12 @@ class HttpEmpaiaGateway:
             ) from error
 
 
+_TILE_ATTEMPTS = 4
+_TILE_RETRY_SECONDS = 1.0
+
+
 def create_http_gateway(context: EmpaiaJobContext) -> HttpEmpaiaGateway:
-    """Construct the default HTTP gateway from protected job settings.
-
-    Args:
-        context: External job origin/ID and protected bearer credential.
-
-    Returns:
-        HttpEmpaiaGateway: Configured default authenticated AppService HTTP gateway.
-
-    Raises:
-        EmpaiaGatewayError: The supplied context contains empty connection or
-            authentication settings.
-    """
+    """Construct the default HTTP gateway from protected job settings."""
     return HttpEmpaiaGateway(
         context.api_url,
         context.job_id,
@@ -480,19 +281,7 @@ def create_http_gateway(context: EmpaiaJobContext) -> HttpEmpaiaGateway:
 
 
 def _primitive_output(name: str, job_id: str, value: JsonValue) -> dict[str, object]:
-    """Encode a bool, integer, float, or nonempty string with EMPAIA output and creator metadata; reject other JSON values.
-
-    Args:
-        name: Declared workflow output name registered with AppService.
-        job_id: External EMPAIA job identifier.
-        value: Inline output value to encode as an EMPAIA primitive.
-
-    Returns:
-        dict[str, object]: EMPAIA primitive output fields with job creator metadata.
-
-    Raises:
-        EmpaiaGatewayError: value is not a boolean, integer, float, or nonempty string.
-    """
+    """Encode a bool, integer, float, or nonempty string with EMPAIA output and creator metadata; reject other JSON values."""
     output_type: str
     if isinstance(value, bool):
         output_type = "bool"
@@ -514,16 +303,7 @@ def _primitive_output(name: str, job_id: str, value: JsonValue) -> dict[str, obj
 
 
 def _slide_metadata(value: object) -> SlideMetadata:
-    """Convert validated provider slide data into local geometry values.
-
-    Args:
-        value: AppService slide input response requiring geometry, physical pixel size,
-            and levels.
-
-    Returns:
-        SlideMetadata: Slide identity, geometry, pixel sizes, and available pyramid
-            levels.
-    """
+    """Convert validated provider slide data into local geometry values."""
     slide = SlideResponse.parse(value)
     return SlideMetadata(
         identifier=slide.id,
@@ -539,15 +319,7 @@ def _slide_metadata(value: object) -> SlideMetadata:
 
 
 def _rectangle(value: object) -> Rectangle:
-    """Floor rectangle origins and ceil dimensions when converting provider geometry to integer pixels.
-
-    Args:
-        value: AppService rectangle response requiring finite origin coordinates and
-            positive dimensions.
-
-    Returns:
-        Rectangle: Integer slide-space region coordinates and dimensions.
-    """
+    """Floor rectangle origins and ceil dimensions when converting provider geometry to integer pixels."""
     rectangle = RectangleResponse.parse(value)
     return Rectangle(
         x=math.floor(rectangle.upper_left[0]),
@@ -558,13 +330,5 @@ def _rectangle(value: object) -> Rectangle:
 
 
 def _invalid(message: str) -> EmpaiaGatewayError:
-    """Construct a safe nonretryable gateway error for rejected or malformed integration data.
-
-    Args:
-        message: Safe user-facing failure or cancellation text.
-
-    Returns:
-        EmpaiaGatewayError: Safe integration error carrying retry and uncertain-outcome
-            metadata.
-    """
+    """Construct a safe nonretryable gateway error for rejected or malformed integration data."""
     return EmpaiaGatewayError(message, retryable=False)

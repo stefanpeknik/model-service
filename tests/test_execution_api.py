@@ -1,4 +1,4 @@
-"""Check public execution routes, immediate dispatch, safe errors, and separate storage/compute readiness."""
+"""Check the public API: catalog listings, builder runs, scheduling and safe errors."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
-from fastapi import FastAPI
 from httpx import (
     ASGITransport,
     AsyncClient,
@@ -19,8 +18,19 @@ from httpx import (
     Request,
     Response,
 )
-from starlette.types import Message, Scope
 
+from builders.client import (
+    ConfirmedRejectionError,
+    RemoteFailureError,
+    UnknownOutcomeError,
+)
+from builders.contracts import (
+    BuilderResult,
+    InlineOutput,
+    SharedArtifact,
+    SpatialScoresModel,
+    TileEmbeddingModel,
+)
 from execution_scheduler.contracts import (
     ExecutionStatus,
     ExecutionView,
@@ -28,1137 +38,540 @@ from execution_scheduler.contracts import (
     ScheduleResult,
     SchedulingUnavailableError,
 )
-from execution_scheduler.persistence.memory import InMemoryExecutionRepository
-from execution_scheduler.repository import (
-    ExecutionRepositoryUnavailableError,
-)
+from execution_scheduler.repository import ExecutionRepositoryUnavailableError
 from execution_scheduler.scheduler import ExecutionScheduler
+from integrations.shared_storage import SharedStorageAccessAdapter
 from integrations.standalone import StandaloneProviderAdapter
-from model_service.api import create_execution_app
-from model_service.health import WorkflowDeploymentHealth
+from model_service.api import create_app
+from model_service.catalog import ModelCatalog
+from model_service.health import DeploymentHealth
 from model_service.inference import HttpInferenceProxy
-from model_service.synchronous import SynchronousWorkflowService
-from tests.test_execution_scheduler import StandaloneProvider
-from workflow_execution.application import WorkflowApplication, WorkflowContext
-from workflow_execution.catalog import WorkflowCatalog, WorkflowConfiguration
-from workflow_execution.contracts import (
-    InlineOutput,
-    SharedArtifact,
-    WorkflowResult,
-)
-from workflow_execution.dispatch import (
-    ConfirmedDispatchRejectionError,
-    HTTPWorkflowDispatch,
-    InMemoryWorkflowDispatch,
-)
-from workflow_execution.http import WorkflowRunRequest, run_workflow_http
-from workflows.heatmap.prostate import validate_configuration
+from model_service.runtime import model_resolver
+from model_service.synchronous import SynchronousBuilderService
+from tests.memory_repository import InMemoryExecutionRepository
 
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+    from fastapi import FastAPI
+    from starlette.types import Message, Scope
+
+    from builders.contracts import ExecutionContext, Invocation, ModelBinding
     from execution_scheduler.domain import ExecutionRecord
+
+    type Handler = Callable[
+        [str, Invocation, ModelBinding, ExecutionContext], Awaitable[BuilderResult]
+    ]
+
+
+PROSTATE = SpatialScoresModel(
+    id="prostate-classifier-1",
+    tile_size=512,
+    output_tile_size=1,
+    n_channels=1,
+    mpp=0.468,
+)
+VIRCHOW = TileEmbeddingModel(
+    id="virchow2", tile_size=224, mpp=0.5, summaries=("global", "local_mean")
+)
+CATALOG = ModelCatalog([PROSTATE, VIRCHOW])
+SECRET = "secret-job-token"
+
+
+class FakeDispatch:
+    """Record dispatched calls and delegate to a test handler."""
+
+    def __init__(self, handler: Handler | None = None) -> None:
+        self.calls: list[tuple[str, Invocation, ModelBinding, ExecutionContext]] = []
+        self._handler = handler
+
+    async def run(
+        self,
+        builder_id: str,
+        invocation: Invocation,
+        model: ModelBinding,
+        execution_context: ExecutionContext,
+    ) -> BuilderResult:
+        self.calls.append((builder_id, invocation, model, execution_context))
+        if self._handler is None:
+            return BuilderResult(outputs={"score": InlineOutput(value=0.9)})
+        return await self._handler(builder_id, invocation, model, execution_context)
 
 
 class RecordingScheduler:
-    """Record admitted HTTP requests and return a fixed queued public execution view."""
+    """Record admitted requests and return a fixed queued execution."""
 
     def __init__(self) -> None:
-        """Start an empty collection of schedule requests received through the public API."""
         self.requests: list[ScheduleRequest] = []
 
     async def check_ready(self) -> None:
-        """Report readiness without contacting storage.
-
-        Returns:
-            None: No return value.
-        """
         return None
 
     async def schedule(self, request: ScheduleRequest) -> ScheduleResult:
-        """Record the request and return a fixed newly created queued execution.
-
-        Args:
-            request: Provider submission with workflow ID, caller body, replay key, and
-                optional execution budget.
-
-        Returns:
-            ScheduleResult: Public execution view and insertion-versus-replay flag.
-        """
         self.requests.append(request)
         return ScheduleResult(
             execution=ExecutionView(
                 id="execution-1",
-                workflow_id=request.workflow_id,
+                builder_id=request.builder_id,
+                model_id=request.model_id,
                 status=ExecutionStatus.QUEUED,
             ),
             created=True,
         )
 
     async def get(self, execution_id: str) -> ExecutionView:
-        """Fail if this admission-only fixture unexpectedly receives a status read.
-
-        Args:
-            execution_id: Durable execution identifier, not an external provider job ID.
-
-        Returns:
-            ExecutionView: Caller-visible execution status and its permitted terminal
-                result or error.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
         raise AssertionError(execution_id)
 
     async def cancel(self, execution_id: str) -> ExecutionView:
-        """Fail if this admission-only fixture unexpectedly receives cancellation.
-
-        Args:
-            execution_id: Durable execution identifier, not an external provider job ID.
-
-        Returns:
-            ExecutionView: Caller-visible execution status and its permitted terminal
-                result or error.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
         raise AssertionError(execution_id)
 
 
-class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
-    """Exercise public execution routes, immediate dispatch, safe errors, and separate storage/compute readiness."""
-
+class ApiTestCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        """Create isolated fixtures and clients for public execution routes, immediate dispatch, safe errors, and separate storage/compute readiness.
+        directory = TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        (self.root / "slide.svs").touch()
+        (self.root / "roi.tiff").touch()
+        self.dispatch = FakeDispatch()
+        self.repository = InMemoryExecutionRepository()
+        self.scheduler = self.make_scheduler(self.repository, self.dispatch)
 
-        Returns:
-            None: No return value.
-        """
-        now = datetime(2026, 9, 17, 8, tzinfo=UTC)
-        provider = StandaloneProvider()
-        self.scheduler = ExecutionScheduler(
-            repository=InMemoryExecutionRepository(clock=lambda: now),
-            dispatch=InMemoryWorkflowDispatch({}),
-            providers={provider.name: provider},
-            known_workflows={"prostate-heatmap"},
-            default_timeout=timedelta(hours=1),
-            maximum_timeout=timedelta(hours=6),
-            clock=lambda: now,
-        )
-        self.client = AsyncClient(
-            transport=ASGITransport(app=create_execution_app(self.scheduler)),
-            base_url="http://model-service",
-        )
-
-    async def asyncTearDown(self) -> None:
-        """Release test-owned clients and isolated storage after the case completes.
-
-        Returns:
-            None: No return value.
-        """
-        await self.client.aclose()
-
-    async def test_schedule_replay_poll_and_cancel_use_public_execution_shape(
-        self,
-    ) -> None:
-        """Verify schedule replay poll and cancel use public execution shape.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
-        request = {
-            "provider": "standalone",
-            "body": {},
-            "idempotency_key": "request-1",
-        }
-
-        created = await self.client.post(
-            "/v1/workflows/prostate-heatmap/schedule",
-            json=request,
-        )
-        replay = await self.client.post(
-            "/v1/workflows/prostate-heatmap/schedule",
-            json=request,
-        )
-
-        self.assertEqual(created.status_code, 202)
-        self.assertEqual(replay.status_code, 200)
-        created_body = created.json()
-        replay_body = replay.json()
-        self.assertTrue(created_body["created"])
-        self.assertFalse(replay_body["created"])
-        self.assertEqual(
-            created_body["execution"]["id"], replay_body["execution"]["id"]
-        )
-        self.assertEqual(created_body["execution"]["status"], "queued")
-        self.assertEqual(
-            set(created_body["execution"]),
-            {"id", "workflow_id", "status", "result", "error"},
-        )
-
-        execution_id = created_body["execution"]["id"]
-        polled = await self.client.get(f"/v1/executions/{execution_id}")
-        cancelled = await self.client.post(f"/v1/executions/{execution_id}/cancel")
-        repeated = await self.client.post(f"/v1/executions/{execution_id}/cancel")
-
-        self.assertEqual(polled.status_code, 200)
-        self.assertEqual(cancelled.json()["status"], "cancelled")
-        self.assertEqual(repeated.json(), cancelled.json())
-
-    async def test_empaia_ingress_owns_a_typed_request_shape(self) -> None:
-        """Verify EMPAIA ingress owns a typed request shape.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
-        scheduler = RecordingScheduler()
-        async with AsyncClient(
-            transport=ASGITransport(app=create_execution_app(scheduler)),
-            base_url="http://model-service",
-        ) as client:
-            response = await client.post(
-                "/v1/providers/empaia/workflows/prostate-heatmap/schedule",
-                json={
-                    "installation_id": "installation-1",
-                    "api_url": "https://empaia.example",
-                    "job_id": "job-1",
-                    "credential": "secret",
-                    "requested_timeout_seconds": 600,
-                },
-            )
-            malformed = await client.post(
-                "/v1/providers/empaia/workflows/prostate-heatmap/schedule",
-                json={
-                    "installation_id": "installation-1",
-                    "api_url": "https://empaia.example",
-                    "job_id": "job-1",
-                },
-            )
-
-        self.assertEqual(response.status_code, 202)
-        self.assertEqual(malformed.status_code, 422)
-        self.assertEqual(len(scheduler.requests), 1)
-        request = scheduler.requests[0]
-        self.assertEqual(request.provider, "empaia")
-        self.assertEqual(request.workflow_id, "prostate-heatmap")
-        self.assertEqual(request.requested_timeout_seconds, 600)
-        self.assertIsNone(request.idempotency_key)
-        self.assertEqual(
-            request.body,
-            {
-                "installation_id": "installation-1",
-                "api_url": "https://empaia.example",
-                "job_id": "job-1",
-                "credential": "secret",
-            },
-        )
-
-    async def test_scheduled_workflow_completes_through_public_api(self) -> None:
-        """Verify scheduled workflow completes through public API.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
-        now = datetime(2026, 9, 17, 8, tzinfo=UTC)
-        provider = StandaloneProvider()
-        repository = InMemoryExecutionRepository(clock=lambda: now)
-        started = asyncio.Event()
-        release = asyncio.Event()
-        result = WorkflowResult(
-            outputs={
-                "heatmap": SharedArtifact(
-                    path="/shared/heatmap.tiff",
-                    media_type="image/tiff",
-                )
-            }
-        )
-
-        async def dispatch(_invocation, _execution_context):
-            """Simulate the scenario computation, using events or injected failures to control completion and ownership races.
-
-            Args:
-                _invocation: Unused named inputs, resolved configuration, public access
-                    state, and absolute workflow deadline; retained to match the
-                    interface.
-                _execution_context: Unused private attempt identity and provider context
-                    kept separate from the invocation; retained to match the interface.
-
-            Returns:
-                object: The delegated operation's result or controlled fixture value
-                    described above.
-            """
-            started.set()
-            await release.wait()
-            return result
-
-        scheduler = ExecutionScheduler(
+    def make_scheduler(
+        self, repository: InMemoryExecutionRepository, dispatch: FakeDispatch
+    ) -> ExecutionScheduler:
+        return ExecutionScheduler(
             repository=repository,
-            providers={provider.name: provider},
-            dispatch=InMemoryWorkflowDispatch({"prostate-heatmap": dispatch}),
-            known_workflows={"prostate-heatmap"},
+            dispatch=dispatch,
+            providers={
+                "standalone": StandaloneProviderAdapter(
+                    SharedStorageAccessAdapter([self.root])
+                )
+            },
+            resolve_model=model_resolver(CATALOG),
             default_timeout=timedelta(hours=1),
             maximum_timeout=timedelta(hours=6),
-            clock=lambda: now,
             poll_interval=0.01,
         )
-        async with (
-            scheduler.running(),
-            AsyncClient(
-                transport=ASGITransport(app=create_execution_app(scheduler)),
-                base_url="http://model-service",
-            ) as client,
-        ):
-            response = await client.post(
-                "/v1/workflows/prostate-heatmap/schedule",
-                json={
-                    "provider": "standalone",
-                    "body": {},
-                    "idempotency_key": "public-e2e",
-                },
-            )
-            execution_id = response.json()["execution"]["id"]
-            await asyncio.wait_for(started.wait(), timeout=1)
-            running = await client.get(f"/v1/executions/{execution_id}")
-            release.set()
-            async with asyncio.timeout(1):
-                while True:
-                    completed = await client.get(f"/v1/executions/{execution_id}")
-                    if completed.json()["status"] == "succeeded":
-                        break
-                    await asyncio.sleep(0.001)
 
-        self.assertEqual(response.status_code, 202)
-        self.assertEqual(running.json()["status"], "running")
-        self.assertIsNone(running.json()["result"])
-        self.assertEqual(completed.json()["status"], "succeeded")
-        self.assertEqual(
-            completed.json()["result"]["outputs"]["heatmap"],
-            {
-                "kind": "shared_artifact",
-                "path": "/shared/heatmap.tiff",
-                "media_type": "image/tiff",
-            },
-        )
-
-    async def test_synchronous_workflow_runs_through_the_same_public_origin(
-        self,
-    ) -> None:
-        """Verify synchronous workflow runs through the same public origin.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
-        result = WorkflowResult(outputs={"score": InlineOutput(value=0.9)})
-        runner = SynchronousWorkflowService(
-            WorkflowCatalog.default(),
-            InMemoryWorkflowDispatch(
-                {"prostate-heatmap": lambda _invocation, _execution_context: result}
-            ),
-        )
-        async with AsyncClient(
-            transport=ASGITransport(
-                app=create_execution_app(
-                    self.scheduler,
-                    workflow_runner=runner,
-                )
-            ),
+    def client(self, app: FastAPI, *, raise_app_exceptions: bool = True) -> AsyncClient:
+        return AsyncClient(
+            transport=ASGITransport(app=app, raise_app_exceptions=raise_app_exceptions),
             base_url="http://model-service",
-        ) as client:
-            response = await client.post(
-                "/v1/workflows/prostate-heatmap/run",
-                json=self._workflow_invocation(),
-            )
-            unknown = await client.post(
-                "/v1/workflows/missing/run",
-                json=self._workflow_invocation(),
-            )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response.json(),
-            {"outputs": {"score": {"kind": "inline", "value": 0.9}}},
-        )
-        self.assertEqual(unknown.status_code, 404)
-        self.assertEqual(unknown.json()["detail"]["code"], "unknown_workflow")
-
-    async def test_legacy_model_and_slide_calls_use_public_origin(
-        self,
-    ) -> None:
-        """Verify legacy model and slide calls use public origin.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
-        forwarded: list[Request] = []
-
-        def ray_handler(request: Request) -> Response:
-            """Simulate Ray inference responses and redirects while recording forwarded requests.
-
-            Args:
-                request: Request to validate, admit, dispatch, forward, or process, as
-                    specified by its declared type.
-
-            Returns:
-                Response: HTTP response returned by the transport or controlled scenario
-                    handler.
-            """
-            forwarded.append(request)
-            if request.url.path == "/heatmap-builder":
-                return Response(200, text="/mnt/output/heatmap.tiff")
-            return Response(
-                200,
-                content=b"compressed-result",
-                headers={
-                    "content-type": "application/octet-stream",
-                    "x-output-shape": "(1, 2, 2)",
-                },
-            )
-
-        async with (
-            AsyncClient(transport=MockTransport(ray_handler)) as ray_client,
-            AsyncClient(
-                transport=ASGITransport(
-                    app=create_execution_app(
-                        self.scheduler,
-                        inference_proxy=HttpInferenceProxy(
-                            ray_client, origin="http://ray-serve"
-                        ),
-                    )
-                ),
-                base_url="http://model-service",
-            ) as client,
-        ):
-            response = await client.post(
-                "/prostate-classifier-1?variant=probe",
-                content=b"compressed-image",
-                headers={
-                    "content-type": "application/octet-stream",
-                    "x-output-dtype": "float32",
-                    "x-pool-tokens": "false",
-                    "authorization": "Bearer scheduler-only",
-                },
-            )
-            heatmap = await client.post(
-                "/heatmap-builder",
-                params={
-                    "model_id": "prostate-classifier-1",
-                    "slide_path": "/mnt/input/slide.svs",
-                    "output_path": "/mnt/output/heatmap.tiff",
-                },
-            )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.content, b"compressed-result")
-        self.assertEqual(response.headers["x-output-shape"], "(1, 2, 2)")
-        self.assertEqual(len(forwarded), 2)
-        self.assertEqual(
-            forwarded[0].url, "http://ray-serve/prostate-classifier-1?variant=probe"
-        )
-        self.assertEqual(forwarded[0].content, b"compressed-image")
-        self.assertEqual(
-            forwarded[0].headers["content-type"],
-            "application/octet-stream",
-        )
-        self.assertEqual(forwarded[0].headers["x-output-dtype"], "float32")
-        self.assertEqual(forwarded[0].headers["x-pool-tokens"], "false")
-        self.assertNotIn("authorization", forwarded[0].headers)
-        self.assertEqual(heatmap.status_code, 200)
-        self.assertEqual(heatmap.text, "/mnt/output/heatmap.tiff")
-        self.assertEqual(forwarded[1].url.path, "/heatmap-builder")
-        self.assertEqual(forwarded[1].url.params["model_id"], "prostate-classifier-1")
-        self.assertEqual(forwarded[1].url.params["slide_path"], "/mnt/input/slide.svs")
-        self.assertEqual(
-            forwarded[1].url.params["output_path"], "/mnt/output/heatmap.tiff"
         )
 
-        unavailable = await self.client.post(
-            "/prostate-classifier-1",
-            content=b"compressed-image",
-        )
-        self.assertEqual(unavailable.status_code, 503)
-        self.assertEqual(
-            unavailable.json()["detail"]["code"],
-            "model_inference_unavailable",
-        )
-
-    async def test_model_inference_resolves_upstream_route_redirect(self) -> None:
-        """Verify model inference resolves upstream route redirect.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
-        forwarded: list[Request] = []
-
-        def ray_handler(request: Request) -> Response:
-            """Simulate Ray inference responses and redirects while recording forwarded requests.
-
-            Args:
-                request: Request to validate, admit, dispatch, forward, or process, as
-                    specified by its declared type.
-
-            Returns:
-                Response: HTTP response returned by the transport or controlled scenario
-                    handler.
-            """
-            forwarded.append(request)
-            if request.url.path == "/prostate-classifier-1":
-                return Response(
-                    307,
-                    headers={"location": "http://ray-serve/prostate-classifier-1/"},
-                )
-            return Response(200, json=0.25)
-
-        async with (
-            AsyncClient(transport=MockTransport(ray_handler)) as ray_client,
-            AsyncClient(
-                transport=ASGITransport(
-                    app=create_execution_app(
-                        self.scheduler,
-                        inference_proxy=HttpInferenceProxy(
-                            ray_client, origin="http://ray-serve"
-                        ),
-                    )
-                ),
-                base_url="http://model-service",
-            ) as client,
-        ):
-            response = await client.post(
-                "/prostate-classifier-1", content=b"compressed-image"
-            )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), 0.25)
-        self.assertEqual(len(forwarded), 2)
-        self.assertEqual(forwarded[1].url, "http://ray-serve/prostate-classifier-1/")
-        self.assertEqual(forwarded[1].content, b"compressed-image")
-
-    async def test_immediate_workflow_defers_settings_without_caller_configuration(
-        self,
-    ) -> None:
-        """Dispatch inputs and a destination without capturing processing settings.
-
-        Returns:
-            None: The HTTP result and external dispatch payload are verified.
-        """
-        forwarded: list[dict[str, object]] = []
-
-        def ray_handler(request: Request) -> Response:
-            """Record the external Ray invocation and return a completed artifact.
-
-            Args:
-                request: Internal dispatch request sent to the simulated Ray origin.
-
-            Returns:
-                Response: Successful workflow artifact response.
-            """
-            forwarded.append(json.loads(request.content))
-            return Response(
-                200,
-                json={
-                    "outputs": {
-                        "heatmap": {
-                            "kind": "shared_artifact",
-                            "path": "/shared/outputs/requested.tiff",
-                            "media_type": "image/tiff",
-                        }
-                    }
-                },
-            )
-
-        body = self._workflow_invocation()
-        body["output_path"] = "outputs/requested.tiff"
-        async with AsyncClient(transport=MockTransport(ray_handler)) as ray_client:
-            runner = SynchronousWorkflowService(
-                WorkflowCatalog.default(),
-                HTTPWorkflowDispatch(ray_client, origin="http://ray-serve"),
-            )
-            async with AsyncClient(
-                transport=ASGITransport(
-                    app=create_execution_app(self.scheduler, workflow_runner=runner)
-                ),
-                base_url="http://model-service",
-            ) as client:
-                response = await client.post(
-                    "/v1/workflows/prostate-heatmap/run", json=body
-                )
-        self.assertEqual(response.status_code, 200, response.text)
-        self.assertIsNone(forwarded[0]["resolved_configuration"])
-        self.assertEqual(forwarded[0]["output_path"], "outputs/requested.tiff")
-
-    async def test_queued_workflow_uses_worker_defaults_when_processing_starts(
-        self,
-    ) -> None:
-        """Replay queued work and execute it using the worker's current defaults.
-
-        Returns:
-            None: HTTP replay, polling, and output verify execution-time defaults.
-        """
-        forwarded: list[dict[str, object]] = []
-
-        class WriteSettingsWorkflow:
-            """Expose execution-time settings in a test artifact through the runtime."""
-
-            async def run(self, context: WorkflowContext) -> WorkflowResult:
-                """Write the selected settings beneath the invocation output root.
-
-                Args:
-                    context: Input access and settings resolved by the real runtime.
-
-                Returns:
-                    WorkflowResult: Completed fixture artifact containing its settings.
-                """
-                path = context.output_path(str(context.configuration["output_path"]))
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(json.dumps(context.configuration), encoding="utf-8")
-                return WorkflowResult(
-                    outputs={"heatmap": SharedArtifact(str(path), "image/tiff")}
-                )
-
-        application: WorkflowApplication | None = None
-        ray = FastAPI()
-
-        @ray.post("/workflows/prostate-heatmap/", response_model=WorkflowResult)
-        async def ray_handler(request: WorkflowRunRequest) -> WorkflowResult:
-            """Run the real application behind a simulated external Ray ingress.
-
-            Args:
-                request: Internal dispatch envelope with deferred processing settings.
-
-            Returns:
-                WorkflowResult: Fixture artifact from the worker's current settings.
-            """
-            assert application is not None
-            forwarded.append({"resolved_configuration": request.resolved_configuration})
-            return await run_workflow_http(
-                application, request, request.execution_context
-            )
-
-        with TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / "slide.svs").touch()
-            (root / "roi.tiff").touch()
-            catalog = WorkflowCatalog.default()
-            repository = InMemoryExecutionRepository()
-            body = self._workflow_invocation()
-            body.pop("output_path")
-            body.pop("deadline_at")
-            body["input_access"] = {
-                "kind": "shared_storage",
-                "state": {"root": directory},
-            }
-            submission = {
-                "provider": "standalone",
-                "body": body,
-                "idempotency_key": "snapshot-1",
-            }
-            async with AsyncClient(transport=ASGITransport(app=ray)) as ray_client:
-                dispatch = HTTPWorkflowDispatch(ray_client, origin="http://ray-serve")
-
-                def scheduler_for(
-                    configured_catalog: WorkflowCatalog,
-                ) -> ExecutionScheduler:
-                    """Recreate the scheduler while retaining durable execution storage.
-
-                    Args:
-                        configured_catalog: Server defaults active for new admissions.
-
-                    Returns:
-                        ExecutionScheduler: Scheduler using the retained repository.
-                    """
-                    return ExecutionScheduler(
-                        repository=repository,
-                        dispatch=dispatch,
-                        providers={
-                            "standalone": StandaloneProviderAdapter(configured_catalog)
-                        },
-                        known_workflows=configured_catalog.identifiers,
-                        default_timeout=timedelta(minutes=1),
-                        maximum_timeout=timedelta(hours=1),
-                        poll_interval=0.01,
-                    )
-
-                first_scheduler = scheduler_for(catalog)
-                async with AsyncClient(
-                    transport=ASGITransport(app=create_execution_app(first_scheduler)),
-                    base_url="http://model-service",
-                ) as client:
-                    for field, value in (
-                        ("resolved_configuration", {}),
-                        ("configuration", {"stride_fraction": 0.25}),
-                        ("stride_fraction", 0.25),
-                        ("output_tile_width", 128),
-                    ):
-                        with self.subTest(field=field):
-                            rejected = await client.post(
-                                "/v1/workflows/prostate-heatmap/schedule",
-                                json={**submission, "body": {**body, field: value}},
-                            )
-                            self.assertEqual(rejected.status_code, 422, rejected.text)
-                    admitted = await client.post(
-                        "/v1/workflows/prostate-heatmap/schedule", json=submission
-                    )
-                self.assertEqual(admitted.status_code, 202, admitted.text)
-                execution_id = admitted.json()["execution"]["id"]
-                changed_catalog = WorkflowCatalog(
-                    (catalog.get("prostate-heatmap"),),
-                    configurations={
-                        "prostate-heatmap": WorkflowConfiguration(
-                            validator=validate_configuration,
-                            defaults={
-                                "output_path": "new-default.tiff",
-                                "stride_fraction": 0.25,
-                                "output_tile_height": 128,
-                                "output_tile_width": 128,
-                            },
-                        )
-                    },
-                )
-                restarted = scheduler_for(changed_catalog)
-                application = WorkflowApplication(
-                    changed_catalog.get("prostate-heatmap"),
-                    WriteSettingsWorkflow(),
-                    catalog=changed_catalog,
-                )
-                async with AsyncClient(
-                    transport=ASGITransport(app=create_execution_app(restarted)),
-                    base_url="http://model-service",
-                ) as client:
-                    replay = await client.post(
-                        "/v1/workflows/prostate-heatmap/schedule", json=submission
-                    )
-                    self.assertFalse(replay.json()["created"])
-                    self.assertEqual(replay.json()["execution"]["id"], execution_id)
-                    async with restarted.running():
-                        async with asyncio.timeout(2):
-                            while True:
-                                state = await client.get(
-                                    f"/v1/executions/{execution_id}"
-                                )
-                                if state.json()["status"] == "succeeded":
-                                    break
-                                await asyncio.sleep(0.01)
-                artifact = Path(state.json()["result"]["outputs"]["heatmap"]["path"])
-                self.assertEqual(artifact.name, "new-default.tiff")
-                self.assertEqual(
-                    json.loads(artifact.read_text(encoding="utf-8")),
-                    {
-                        "output_path": "new-default.tiff",
-                        "stride_fraction": 0.25,
-                        "output_tile_height": 128,
-                        "output_tile_width": 128,
-                    },
-                )
-        self.assertIsNone(forwarded[0]["resolved_configuration"])
-
-    async def test_missing_worker_settings_are_retryable_server_failures(self) -> None:
-        """Treat missing worker configuration as a server fault, not caller input.
-
-        Returns:
-            None: Public HTTP reports retryable 503 for missing catalogs or defaults.
-        """
-
-        class UnexpectedWorkflow:
-            """Reject computation before the worker has resolved its own settings."""
-
-            async def run(self, context: WorkflowContext) -> WorkflowResult:
-                """Fail if unresolved worker settings reach computation.
-
-                Args:
-                    context: Invocation access and selected worker configuration.
-
-                Raises:
-                    AssertionError: Missing settings incorrectly reach computation.
-                """
-                raise AssertionError(context)
-
-        catalog = WorkflowCatalog.default()
-        required_settings = WorkflowCatalog(
-            (catalog.get("prostate-heatmap"),),
-            configurations={
-                "prostate-heatmap": WorkflowConfiguration(
-                    validator=validate_configuration
-                )
-            },
-        )
-        for worker_catalog in (None, required_settings):
-            with self.subTest(catalog=worker_catalog):
-                application = WorkflowApplication(
-                    catalog.get("prostate-heatmap"),
-                    UnexpectedWorkflow(),
-                    catalog=worker_catalog,
-                )
-                ray = FastAPI()
-
-                @ray.post("/workflows/prostate-heatmap/", response_model=WorkflowResult)
-                async def run(body: WorkflowRunRequest) -> WorkflowResult:
-                    """Execute the real runtime behind the simulated Ray ingress.
-
-                    Args:
-                        body: Deferred internal invocation and attempt context.
-
-                    Returns:
-                        WorkflowResult: Never returned for missing worker settings.
-
-                    Raises:
-                        HTTPException: Safe runtime failure from worker configuration.
-                    """
-                    return await run_workflow_http(
-                        application,
-                        body,
-                        body.execution_context,  # noqa: B023 - Each client scope completes before the next iteration.
-                    )
-
-                async with AsyncClient(transport=ASGITransport(app=ray)) as ray_client:
-                    runner = SynchronousWorkflowService(
-                        catalog,
-                        HTTPWorkflowDispatch(ray_client, origin="http://ray-serve"),
-                    )
-                    async with AsyncClient(
-                        transport=ASGITransport(
-                            app=create_execution_app(
-                                self.scheduler, workflow_runner=runner
-                            )
-                        ),
-                        base_url="http://model-service",
-                    ) as client:
-                        body = self._workflow_invocation()
-                        body.pop("output_path")
-                        response = await client.post(
-                            "/v1/workflows/prostate-heatmap/run", json=body
-                        )
-                self.assertEqual(response.status_code, 503, response.text)
-                self.assertEqual(
-                    response.json()["detail"]["code"], "workflow_settings_unavailable"
-                )
-                self.assertTrue(response.json()["detail"]["retryable"])
-
-    async def test_synchronous_workflow_validates_before_dispatch(self) -> None:
-        """Verify synchronous workflow validates before dispatch.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
-
-        async def reject_dispatch(
-            _invocation: object, _execution_context: object
-        ) -> WorkflowResult:
-            """Fail if an invalid invocation reaches computation instead of being rejected before dispatch.
-
-            Args:
-                _invocation: Unused named inputs, resolved configuration, public access
-                    state, and absolute workflow deadline; retained to match the
-                    interface.
-                _execution_context: Unused private attempt identity and provider context
-                    kept separate from the invocation; retained to match the interface.
-
-            Returns:
-                WorkflowResult: Named inline outputs and/or references to completed
-                    artifact files.
-
-            Raises:
-                AssertionError: An expected invariant or fixture interaction does not
-                    hold.
-            """
-            raise AssertionError("invalid invocation was dispatched")
-
-        runner = SynchronousWorkflowService(
-            WorkflowCatalog.default(),
-            InMemoryWorkflowDispatch({"prostate-heatmap": reject_dispatch}),
-        )
-        async with AsyncClient(
-            transport=ASGITransport(
-                app=create_execution_app(
-                    self.scheduler,
-                    workflow_runner=runner,
-                )
-            ),
-            base_url="http://model-service",
-        ) as client:
-            for field, value in (
-                ("resolved_configuration", {}),
-                ("configuration", {"stride_fraction": 0.25}),
-                ("stride_fraction", 0.25),
-                ("output_tile_width", 128),
-            ):
-                with self.subTest(field=field):
-                    response = await client.post(
-                        "/v1/workflows/prostate-heatmap/run",
-                        json={**self._workflow_invocation(), field: value},
-                    )
-                    self.assertEqual(response.status_code, 422)
-                    self.assertEqual(
-                        response.json()["detail"]["code"], "invalid_workflow_invocation"
-                    )
-
-    async def test_synchronous_workflow_requires_explicit_input_kind(self) -> None:
-        """Verify synchronous workflow requires explicit input kind.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
-        runner = SynchronousWorkflowService(
-            WorkflowCatalog.default(),
-            InMemoryWorkflowDispatch(
-                {
-                    "prostate-heatmap": lambda _invocation, _execution_context: (
-                        WorkflowResult(outputs={})
-                    )
-                }
-            ),
-        )
-        body = self._workflow_invocation()
-        body["inputs"] = {
-            "slide": {"path": "slide.svs"},
-            "region_of_interest": {"kind": "shared_path", "path": "roi.tiff"},
+    def app(self, **kwargs: object) -> FastAPI:
+        options: dict[str, object] = {
+            "catalog": CATALOG,
+            "builder_runner": SynchronousBuilderService(CATALOG, self.dispatch),
         }
-        async with AsyncClient(
-            transport=ASGITransport(
-                app=create_execution_app(self.scheduler, workflow_runner=runner)
-            ),
-            base_url="http://model-service",
-        ) as client:
-            response = await client.post(
-                "/v1/workflows/prostate-heatmap/run", json=body
+        options.update(kwargs)
+        return create_app(self.scheduler, **options)  # type: ignore[arg-type]
+
+    def builder_request(self, model_id: str = PROSTATE.id) -> dict[str, object]:
+        return {
+            "model_id": model_id,
+            "inputs": {
+                "slide": {"kind": "shared_path", "path": "slide.svs"},
+                "region_of_interest": {"kind": "shared_path", "path": "roi.tiff"},
+            },
+            "input_access": {
+                "kind": "shared_storage",
+                "state": {"root": str(self.root)},
+            },
+        }
+
+    def run_request(self, model_id: str = PROSTATE.id) -> dict[str, object]:
+        return {
+            **self.builder_request(model_id),
+            "output_path": "outputs/heatmap.tiff",
+            "deadline_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+        }
+
+    def schedule_request(
+        self, key: str = "request-1", model_id: str = PROSTATE.id
+    ) -> dict[str, object]:
+        return {
+            "provider": "standalone",
+            "body": self.builder_request(model_id),
+            "idempotency_key": key,
+        }
+
+    def assert_error(
+        self,
+        response: Response,
+        status_code: int,
+        code: str,
+        *,
+        retryable: bool = False,
+    ) -> None:
+        self.assertEqual(response.status_code, status_code, response.text)
+        self.assertEqual(response.json()["detail"]["code"], code)
+        self.assertEqual(response.json()["detail"]["retryable"], retryable)
+
+
+class CatalogRouteTests(ApiTestCase):
+    async def test_models_list_contracts_parameters_and_compatible_builders(
+        self,
+    ) -> None:
+        async with self.client(self.app()) as client:
+            listed = await client.get("/v1/models")
+            single = await client.get("/v1/models/virchow2")
+            missing = await client.get("/v1/models/missing")
+
+        self.assertEqual(
+            listed.json(),
+            [
+                {
+                    "id": "prostate-classifier-1",
+                    "contract": "spatial-scores",
+                    "parameters": {
+                        "tile_size": 512,
+                        "mpp": 0.468,
+                        "output_tile_size": 1,
+                        "n_channels": 1,
+                    },
+                    "builders": ["heatmap"],
+                },
+                {
+                    "id": "virchow2",
+                    "contract": "tile-embedding",
+                    "parameters": {
+                        "tile_size": 224,
+                        "mpp": 0.5,
+                        "summaries": ["global", "local_mean"],
+                    },
+                    "builders": ["tile-embeddings"],
+                },
+            ],
+        )
+        self.assertEqual(single.json()["id"], "virchow2")
+        self.assert_error(missing, 404, "unknown_model")
+
+    async def test_builders_list_contracts_io_and_default_configuration(self) -> None:
+        async with self.client(self.app()) as client:
+            response = await client.get("/v1/builders")
+
+        builders = {item["id"]: item for item in response.json()}
+        self.assertEqual(set(builders), {"heatmap", "tile-embeddings"})
+        heatmap = builders["heatmap"]
+        self.assertEqual(heatmap["accepts"], "spatial-scores")
+        self.assertEqual(
+            heatmap["inputs"]["region_of_interest"],
+            {"required": False, "media_type": "image/tiff"},
+        )
+        self.assertTrue(heatmap["inputs"]["slide"]["required"])
+        self.assertEqual(
+            heatmap["outputs"],
+            {"heatmap": {"kind": "shared_artifact", "media_type": "image/tiff"}},
+        )
+        self.assertEqual(heatmap["configuration"]["encoding"], "uint8")
+        self.assertEqual(builders["tile-embeddings"]["accepts"], "tile-embedding")
+
+
+class ScheduleRouteTests(ApiTestCase):
+    async def test_schedule_replay_poll_and_cancel(self) -> None:
+        async with self.client(self.app()) as client:
+            created = await client.post(
+                "/v1/builders/heatmap/schedule", json=self.schedule_request()
+            )
+            replay = await client.post(
+                "/v1/builders/heatmap/schedule", json=self.schedule_request()
+            )
+            execution_id = created.json()["execution"]["id"]
+            polled = await client.get(f"/v1/executions/{execution_id}")
+            cancelled = await client.post(f"/v1/executions/{execution_id}/cancel")
+            unknown = await client.get("/v1/executions/missing")
+
+        self.assertEqual(created.status_code, 202, created.text)
+        self.assertTrue(created.json()["created"])
+        self.assertEqual(replay.status_code, 200)
+        self.assertFalse(replay.json()["created"])
+        self.assertEqual(replay.json()["execution"]["id"], execution_id)
+        self.assertEqual(
+            polled.json(),
+            {
+                "id": execution_id,
+                "builder_id": "heatmap",
+                "model_id": "prostate-classifier-1",
+                "status": "queued",
+                "result": None,
+                "error": None,
+            },
+        )
+        self.assertEqual(cancelled.json()["status"], "cancelled")
+        self.assert_error(unknown, 404, "unknown_execution")
+
+    async def test_lookup_and_validation_errors_are_distinct(self) -> None:
+        body = self.schedule_request()
+        request: dict[str, object] = body["body"]  # type: ignore[assignment]
+        async with self.client(self.app()) as client:
+            unknown_builder = await client.post(
+                "/v1/builders/missing/schedule", json=body
+            )
+            unknown_model = await client.post(
+                "/v1/builders/heatmap/schedule",
+                json=self.schedule_request(model_id="missing"),
+            )
+            incompatible = await client.post(
+                "/v1/builders/heatmap/schedule",
+                json=self.schedule_request(model_id="virchow2"),
+            )
+            missing_model = await client.post(
+                "/v1/builders/heatmap/schedule",
+                json={**body, "body": {**request, "model_id": ""}},
+            )
+            settings = await client.post(
+                "/v1/builders/heatmap/schedule",
+                json={
+                    **body,
+                    "body": {**request, "configuration": {"stride_fraction": 0.25}},
+                },
+            )
+            no_key = await client.post(
+                "/v1/builders/heatmap/schedule",
+                json={**body, "idempotency_key": None},
             )
 
-        self.assertEqual(response.status_code, 422)
-        self.assertEqual(
-            response.json()["detail"]["code"], "invalid_workflow_invocation"
-        )
+        self.assert_error(unknown_builder, 404, "unknown_builder")
+        self.assert_error(unknown_model, 404, "unknown_model")
+        self.assert_error(incompatible, 422, "incompatible_model")
+        self.assert_error(missing_model, 422, "invalid_request")
+        self.assert_error(settings, 422, "invalid_request")
+        self.assert_error(no_key, 422, "invalid_request")
 
-    async def test_synchronous_workflow_rejects_nonfinite_context_values(self) -> None:
-        """Verify synchronous workflow rejects nonfinite context values.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
-
-        async def reject_dispatch(
-            _invocation: object, _execution_context: object
-        ) -> WorkflowResult:
-            """Fail if an invalid invocation reaches computation instead of being rejected before dispatch.
-
-            Args:
-                _invocation: Unused named inputs, resolved configuration, public access
-                    state, and absolute workflow deadline; retained to match the
-                    interface.
-                _execution_context: Unused private attempt identity and provider context
-                    kept separate from the invocation; retained to match the interface.
-
-            Returns:
-                WorkflowResult: Named inline outputs and/or references to completed
-                    artifact files.
-
-            Raises:
-                AssertionError: An expected invariant or fixture interaction does not
-                    hold.
-            """
-            raise AssertionError("invalid invocation was dispatched")
-
-        runner = SynchronousWorkflowService(
-            WorkflowCatalog.default(),
-            InMemoryWorkflowDispatch({"prostate-heatmap": reject_dispatch}),
-        )
-        async with AsyncClient(
-            transport=ASGITransport(
-                app=create_execution_app(self.scheduler, workflow_runner=runner),
-                raise_app_exceptions=False,
-            ),
-            base_url="http://model-service",
-        ) as client:
-            for value in (float("nan"), float("inf"), float("-inf")):
-                with self.subTest(value=value):
-                    body = self._workflow_invocation()
-                    body["input_access"]["state"]["nested"] = [value]
-                    response = await client.post(
-                        "/v1/workflows/prostate-heatmap/run",
-                        content=json.dumps(body),
-                        headers={"content-type": "application/json"},
+    async def test_admission_checks_inputs_and_allowed_roots(self) -> None:
+        body = self.schedule_request()
+        request: dict[str, object] = body["body"]  # type: ignore[assignment]
+        with TemporaryDirectory() as other:
+            cases = [
+                {**request, "inputs": {}},
+                {
+                    **request,
+                    "inputs": {"slide": {"kind": "shared_path", "path": "absent.svs"}},
+                },
+                {
+                    **request,
+                    "input_access": {
+                        "kind": "shared_storage",
+                        "state": {"root": other},
+                    },
+                },
+            ]
+            async with self.client(self.app()) as client:
+                responses = [
+                    await client.post(
+                        "/v1/builders/heatmap/schedule",
+                        json={**body, "body": case, "idempotency_key": f"case-{i}"},
                     )
-                    self.assertEqual(response.status_code, 422)
-                    self.assertFalse(response.json()["detail"]["retryable"])
+                    for i, case in enumerate(cases)
+                ]
 
-    async def test_synchronous_backpressure_preserves_retry_after(self) -> None:
-        """Verify synchronous backpressure preserves retry after.
+        for response in responses:
+            self.assert_error(response, 422, "invalid_request")
+        self.assertIn("not allowed", responses[2].json()["detail"]["message"])
 
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
-
-        async def reject_for_capacity(
-            _invocation: object, _execution_context: object
-        ) -> WorkflowResult:
-            """Inject confirmed preacceptance rejection with a seven-second retry hint.
-
-            Args:
-                _invocation: Unused named inputs, resolved configuration, public access
-                    state, and absolute workflow deadline; retained to match the
-                    interface.
-                _execution_context: Unused private attempt identity and provider context
-                    kept separate from the invocation; retained to match the interface.
-
-            Returns:
-                WorkflowResult: Named inline outputs and/or references to completed
-                    artifact files.
-
-            Raises:
-                ConfirmedDispatchRejectionError: The remote deployment confirms
-                    rejection before accepting work.
-            """
-            raise ConfirmedDispatchRejectionError(timedelta(seconds=7))
-
-        runner = SynchronousWorkflowService(
-            WorkflowCatalog.default(),
-            InMemoryWorkflowDispatch({"prostate-heatmap": reject_for_capacity}),
-        )
-        async with AsyncClient(
-            transport=ASGITransport(
-                app=create_execution_app(
-                    self.scheduler,
-                    workflow_runner=runner,
-                )
-            ),
-            base_url="http://model-service",
-        ) as client:
+    async def test_optional_region_of_interest_may_be_omitted(self) -> None:
+        body = self.schedule_request()
+        request = {
+            **body["body"],  # type: ignore[dict-item]
+            "inputs": {"slide": {"kind": "shared_path", "path": "slide.svs"}},
+        }
+        async with self.client(self.app()) as client:
             response = await client.post(
-                "/v1/workflows/prostate-heatmap/run",
-                json=self._workflow_invocation(),
+                "/v1/builders/heatmap/schedule", json={**body, "body": request}
             )
 
-        self.assertEqual(response.status_code, 429)
-        self.assertEqual(response.headers["retry-after"], "7")
+        self.assertEqual(response.status_code, 202, response.text)
+
+    async def test_scheduled_execution_dispatches_current_model_binding(self) -> None:
+        artifact = str(self.root / "heatmap.tiff")
+
+        async def produce(*_args: object) -> BuilderResult:
+            return BuilderResult(
+                outputs={
+                    "heatmap": SharedArtifact(path=artifact, media_type="image/tiff")
+                }
+            )
+
+        self.dispatch = FakeDispatch(produce)
+        self.scheduler = self.make_scheduler(self.repository, self.dispatch)
+        async with self.client(self.app()) as client:
+            admitted = await client.post(
+                "/v1/builders/heatmap/schedule", json=self.schedule_request()
+            )
+            execution_id = admitted.json()["execution"]["id"]
+            async with self.scheduler.running(), asyncio.timeout(2):
+                while True:
+                    state = await client.get(f"/v1/executions/{execution_id}")
+                    if state.json()["status"] == "succeeded":
+                        break
+                    await asyncio.sleep(0.01)
+
+        self.assertEqual(state.json()["result"]["outputs"]["heatmap"]["path"], artifact)
+        [(builder_id, invocation, model, context)] = self.dispatch.calls
+        self.assertEqual(builder_id, "heatmap")
+        self.assertEqual(model, PROSTATE)
+        self.assertIsNone(invocation.resolved_configuration)
+        self.assertIsNotNone(context.processing_attempt_id)
+
+    async def test_empaia_route_maps_job_context_and_model(self) -> None:
+        scheduler = RecordingScheduler()
+        app = create_app(scheduler, catalog=CATALOG)
+        job = {
+            "model_id": PROSTATE.id,
+            "installation_id": "installation-1",
+            "api_url": "https://app-service.example",
+            "job_id": "job-1",
+            "credential": SECRET,
+            "requested_timeout_seconds": 600,
+        }
+        async with self.client(app) as client:
+            admitted = await client.post(
+                "/v1/providers/empaia/builders/heatmap/schedule", json=job
+            )
+            invalid = await client.post(
+                "/v1/providers/empaia/builders/heatmap/schedule",
+                json={**job, "model_id": "", "unexpected": SECRET},
+            )
+
+        self.assertEqual(admitted.status_code, 202, admitted.text)
         self.assertEqual(
-            response.json()["detail"]["code"],
-            "workflow_backpressure",
-        )
-        self.assertTrue(response.json()["detail"]["retryable"])
-
-    async def test_synchronous_caller_cancellation_cancels_dispatch(self) -> None:
-        """Verify synchronous caller cancellation cancels dispatch.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
-        started = asyncio.Event()
-        cancelled = asyncio.Event()
-
-        async def wait_for_cancellation(
-            _invocation: object, _execution_context: object
-        ) -> WorkflowResult:
-            """Block after dispatch starts and signal when cancellation unwinds the operation.
-
-            Args:
-                _invocation: Unused named inputs, resolved configuration, public access
-                    state, and absolute workflow deadline; retained to match the
-                    interface.
-                _execution_context: Unused private attempt identity and provider context
-                    kept separate from the invocation; retained to match the interface.
-
-            Returns:
-                WorkflowResult: Named inline outputs and/or references to completed
-                    artifact files.
-
-            Raises:
-                AssertionError: An expected invariant or fixture interaction does not
-                    hold.
-            """
-            started.set()
-            try:
-                await asyncio.Event().wait()
-                raise AssertionError("dispatch unexpectedly completed")
-            finally:
-                cancelled.set()
-
-        runner = SynchronousWorkflowService(
-            WorkflowCatalog.default(),
-            InMemoryWorkflowDispatch({"prostate-heatmap": wait_for_cancellation}),
-        )
-        async with AsyncClient(
-            transport=ASGITransport(
-                app=create_execution_app(
-                    self.scheduler,
-                    workflow_runner=runner,
+            scheduler.requests,
+            [
+                ScheduleRequest(
+                    builder_id="heatmap",
+                    model_id=PROSTATE.id,
+                    provider="empaia",
+                    body={
+                        "installation_id": "installation-1",
+                        "api_url": "https://app-service.example",
+                        "job_id": "job-1",
+                        "credential": SECRET,
+                    },
+                    requested_timeout_seconds=600,
                 )
-            ),
-            base_url="http://model-service",
-        ) as client:
-            request = asyncio.create_task(
-                client.post(
-                    "/v1/workflows/prostate-heatmap/run",
-                    json=self._workflow_invocation(),
-                )
+            ],
+        )
+        self.assert_error(invalid, 422, "invalid_request")
+        self.assertNotIn(SECRET, invalid.text)
+
+
+class RunRouteTests(ApiTestCase):
+    async def test_run_returns_result_and_dispatches_without_settings(self) -> None:
+        async with self.client(self.app()) as client:
+            response = await client.post(
+                "/v1/builders/heatmap/run", json=self.run_request()
             )
-            await asyncio.wait_for(started.wait(), timeout=1)
-            request.cancel()
-            with self.assertRaises(asyncio.CancelledError):
-                await request
-            await asyncio.wait_for(cancelled.wait(), timeout=1)
 
-    async def test_synchronous_asgi_disconnect_cancels_dispatch(self) -> None:
-        """Verify synchronous ASGI disconnect cancels dispatch.
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(
+            response.json(), {"outputs": {"score": {"kind": "inline", "value": 0.9}}}
+        )
+        [(builder_id, invocation, model, context)] = self.dispatch.calls
+        self.assertEqual(builder_id, "heatmap")
+        self.assertEqual(model, PROSTATE)
+        self.assertIsNone(invocation.resolved_configuration)
+        self.assertEqual(invocation.output_path, "outputs/heatmap.tiff")
+        self.assertIsNone(context.processing_attempt_id)
 
-        Returns:
-            None: No return value.
+    async def test_lookup_and_validation_errors_happen_before_dispatch(self) -> None:
+        request = self.run_request()
+        async with self.client(self.app()) as client:
+            responses = {
+                "unknown builder": await client.post(
+                    "/v1/builders/missing/run", json=request
+                ),
+                "unknown model": await client.post(
+                    "/v1/builders/heatmap/run", json=self.run_request("missing")
+                ),
+                "incompatible": await client.post(
+                    "/v1/builders/tile-embeddings/run", json=request
+                ),
+                "missing input": await client.post(
+                    "/v1/builders/heatmap/run", json={**request, "inputs": {}}
+                ),
+                "untagged input": await client.post(
+                    "/v1/builders/heatmap/run",
+                    json={**request, "inputs": {"slide": {"path": "slide.svs"}}},
+                ),
+                "past deadline": await client.post(
+                    "/v1/builders/heatmap/run",
+                    json={**request, "deadline_at": "2000-01-01T00:00:00+00:00"},
+                ),
+                "settings": await client.post(
+                    "/v1/builders/heatmap/run",
+                    json={**request, "stride_fraction": 0.25},
+                ),
+            }
 
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
+        self.assert_error(responses.pop("unknown builder"), 404, "unknown_builder")
+        self.assert_error(responses.pop("unknown model"), 404, "unknown_model")
+        self.assert_error(responses.pop("incompatible"), 422, "incompatible_model")
+        for name, response in responses.items():
+            with self.subTest(name):
+                self.assert_error(response, 422, "invalid_request")
+        self.assertEqual(self.dispatch.calls, [])
+
+    async def test_dispatch_outcomes_map_to_safe_errors(self) -> None:
+        def failing(error: Exception) -> Handler:
+            async def handler(*_args: object) -> BuilderResult:
+                raise error
+
+            return handler
+
+        cases = [
+            (
+                ConfirmedRejectionError(timedelta(seconds=7)),
+                429,
+                "builder_backpressure",
+                True,
+            ),
+            (
+                RemoteFailureError(
+                    code="model_contract_mismatch",
+                    safe_message="model changed",
+                    retryable=False,
+                ),
+                422,
+                "model_contract_mismatch",
+                False,
+            ),
+            (
+                RemoteFailureError(
+                    code="model_unavailable", safe_message="down", retryable=True
+                ),
+                503,
+                "model_unavailable",
+                True,
+            ),
+            (UnknownOutcomeError("lost"), 503, "builder_unavailable", True),
+        ]
+        for error, status_code, code, retryable in cases:
+            with self.subTest(code=code):
+                self.dispatch = FakeDispatch(failing(error))
+                async with self.client(self.app()) as client:
+                    response = await client.post(
+                        "/v1/builders/heatmap/run", json=self.run_request()
+                    )
+                self.assert_error(response, status_code, code, retryable=retryable)
+                if status_code == 429:
+                    self.assertEqual(response.headers["retry-after"], "7")
+
+    async def test_run_is_unavailable_without_a_runner(self) -> None:
+        async with self.client(self.app(builder_runner=None)) as client:
+            response = await client.post(
+                "/v1/builders/heatmap/run", json=self.run_request()
+            )
+
+        self.assert_error(response, 503, "builder_unavailable", retryable=True)
+
+    async def test_client_disconnect_cancels_dispatch(self) -> None:
         started = asyncio.Event()
         cancelled = asyncio.Event()
 
-        async def wait_for_disconnect(
-            _invocation: object, _execution_context: object
-        ) -> WorkflowResult:
-            """Block after dispatch starts and signal when client disconnect unwinds the operation.
-
-            Args:
-                _invocation: Unused named inputs, resolved configuration, public access
-                    state, and absolute workflow deadline; retained to match the
-                    interface.
-                _execution_context: Unused private attempt identity and provider context
-                    kept separate from the invocation; retained to match the interface.
-
-            Returns:
-                WorkflowResult: Named inline outputs and/or references to completed
-                    artifact files.
-
-            Raises:
-                AssertionError: An expected invariant or fixture interaction does not
-                    hold.
-            """
+        async def wait_forever(*_args: object) -> BuilderResult:
             started.set()
             try:
                 await asyncio.Event().wait()
@@ -1166,46 +579,31 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 cancelled.set()
 
-        runner = SynchronousWorkflowService(
-            WorkflowCatalog.default(),
-            InMemoryWorkflowDispatch({"prostate-heatmap": wait_for_disconnect}),
-        )
-        app = create_execution_app(self.scheduler, workflow_runner=runner)
-        body = json.dumps(self._workflow_invocation()).encode()
-        request_sent = False
+        self.dispatch = FakeDispatch(wait_forever)
+        app = self.app()
+        body = json.dumps(self.run_request()).encode()
+        sent = False
 
         async def receive() -> Message:
-            """Deliver the ASGI body once and signal disconnect after dispatch has started.
-
-            Returns:
-                Message: ASGI body or disconnect event for the request simulation.
-            """
-            nonlocal request_sent
-            if not request_sent:
-                request_sent = True
+            nonlocal sent
+            if not sent:
+                sent = True
                 return {"type": "http.request", "body": body, "more_body": False}
             await started.wait()
             return {"type": "http.disconnect"}
 
         async def send(_message: Message) -> None:
-            """Discard ASGI response messages in the client-disconnect simulation.
+            return None
 
-            Args:
-                _message: Unused safe user-facing failure or cancellation text; retained
-                    to match the interface.
-
-            Returns:
-                None: No return value.
-            """
-
+        path = "/v1/builders/heatmap/run"
         scope: Scope = {
             "type": "http",
             "asgi": {"version": "3.0"},
             "http_version": "1.1",
             "method": "POST",
             "scheme": "http",
-            "path": "/v1/workflows/prostate-heatmap/run",
-            "raw_path": b"/v1/workflows/prostate-heatmap/run",
+            "path": path,
+            "raw_path": path.encode(),
             "query_string": b"",
             "root_path": "",
             "headers": [
@@ -1222,372 +620,166 @@ class ExecutionApiTests(unittest.IsolatedAsyncioTestCase):
             await app(scope, receive, send)
         await asyncio.wait_for(cancelled.wait(), timeout=1)
 
-    async def test_unknown_workflow_and_execution_have_distinct_errors(self) -> None:
-        """Verify unknown workflow and execution have distinct errors.
 
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
-        unknown_workflow = await self.client.post(
-            "/v1/workflows/missing/schedule",
-            json={
-                "provider": "standalone",
-                "body": {},
-                "idempotency_key": "request-1",
-            },
-        )
-        unknown_execution = await self.client.get("/v1/executions/missing")
-
-        self.assertEqual(unknown_workflow.status_code, 404)
-        self.assertEqual(unknown_workflow.json()["detail"]["code"], "unknown_workflow")
-        self.assertEqual(unknown_execution.status_code, 404)
-        self.assertEqual(
-            unknown_execution.json()["detail"]["code"], "unknown_execution"
+class HealthAndAvailabilityTests(ApiTestCase):
+    def health(self, client: AsyncClient) -> DeploymentHealth:
+        return DeploymentHealth(
+            client,
+            origin="http://ray",
+            routes=["/builders/heatmap", "/prostate-classifier-1"],
         )
 
-    async def test_missing_application_is_reported_separately_from_readiness(
-        self,
-    ) -> None:
-        """Verify missing application is reported separately from readiness.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
+    async def test_missing_routes_are_separate_from_readiness(self) -> None:
+        routes = {"/builders/heatmap/": "heatmap"}
         async with (
             AsyncClient(
-                transport=MockTransport(lambda _request: Response(200, json={}))
-            ) as ray_client,
-            AsyncClient(
-                transport=ASGITransport(
-                    app=create_execution_app(
-                        self.scheduler,
-                        deployment_health=WorkflowDeploymentHealth(
-                            ray_client,
-                            origin="http://ray",
-                            workflow_ids={"prostate-heatmap"},
-                        ),
-                    )
-                ),
-                base_url="http://model-service",
-            ) as client,
+                transport=MockTransport(lambda _request: Response(200, json=routes))
+            ) as ray,
+            self.client(self.app(deployment_health=self.health(ray))) as client,
         ):
             live = await client.get("/healthz")
             ready = await client.get("/readyz")
-            workflows = await client.get("/healthz/workflows")
+            deployments = await client.get("/healthz/deployments")
 
         self.assertEqual(live.status_code, 200)
         self.assertEqual(ready.status_code, 200)
-        self.assertEqual(workflows.status_code, 503)
-        self.assertEqual(workflows.json()["status"], "missing_applications")
+        self.assertEqual(deployments.status_code, 503)
         self.assertEqual(
-            workflows.json()["missing_workflows"],
-            ["prostate-heatmap"],
+            deployments.json(),
+            {
+                "status": "missing_applications",
+                "missing_routes": ["/prostate-classifier-1"],
+            },
         )
 
-    async def test_ray_outage_keeps_durable_api_ready_and_usable(self) -> None:
-        """Verify Ray outage keeps durable API ready and usable.
+    async def test_all_routes_present_is_ready(self) -> None:
+        routes = {"/builders/heatmap": "heatmap", "/prostate-classifier-1": "p"}
+        async with (
+            AsyncClient(
+                transport=MockTransport(lambda _request: Response(200, json=routes))
+            ) as ray,
+            self.client(self.app(deployment_health=self.health(ray))) as client,
+        ):
+            deployments = await client.get("/healthz/deployments")
+        async with self.client(self.app()) as client:
+            unconfigured = await client.get("/healthz/deployments")
 
-        Returns:
-            None: No return value.
+        self.assertEqual(deployments.status_code, 200)
+        self.assertEqual(deployments.json()["status"], "ready")
+        self.assertEqual(unconfigured.json()["status"], "not_configured")
 
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
-
+    async def test_ray_outage_keeps_durable_api_usable(self) -> None:
         def unavailable(request: Request) -> Response:
-            """Inject a Ray connection failure while durable API operations use independent storage.
-
-            Args:
-                request: Request to validate, admit, dispatch, forward, or process, as
-                    specified by its declared type.
-
-            Returns:
-                Response: HTTP response returned by the transport or controlled scenario
-                    handler.
-            """
             raise ConnectError("Ray is unavailable", request=request)
 
-        async with AsyncClient(transport=MockTransport(unavailable)) as ray_client:
-            app = create_execution_app(
-                self.scheduler,
-                deployment_health=WorkflowDeploymentHealth(
-                    ray_client,
-                    origin="http://ray",
-                    workflow_ids={"prostate-heatmap"},
-                ),
+        async with (
+            AsyncClient(transport=MockTransport(unavailable)) as ray,
+            self.client(self.app(deployment_health=self.health(ray))) as client,
+        ):
+            ready = await client.get("/readyz")
+            deployments = await client.get("/healthz/deployments")
+            admitted = await client.post(
+                "/v1/builders/heatmap/schedule", json=self.schedule_request()
             )
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://model-service"
-            ) as client:
-                ready = await client.get("/readyz")
-                workflows = await client.get("/healthz/workflows")
-                admitted = await client.post(
-                    "/v1/workflows/prostate-heatmap/schedule",
-                    json={
-                        "provider": "standalone",
-                        "body": {},
-                        "idempotency_key": "ray-outage",
-                    },
-                )
-                execution_id = admitted.json()["execution"]["id"]
-                polled = await client.get(f"/v1/executions/{execution_id}")
-                cancelled = await client.post(f"/v1/executions/{execution_id}/cancel")
+            execution_id = admitted.json()["execution"]["id"]
+            polled = await client.get(f"/v1/executions/{execution_id}")
+            cancelled = await client.post(f"/v1/executions/{execution_id}/cancel")
 
         self.assertEqual(ready.status_code, 200)
-        self.assertEqual(workflows.status_code, 503)
-        self.assertEqual(workflows.json()["status"], "unreachable")
-        self.assertEqual(workflows.json()["missing_workflows"], [])
+        self.assertEqual(deployments.status_code, 503)
+        self.assertEqual(deployments.json()["status"], "unreachable")
         self.assertEqual(admitted.status_code, 202)
         self.assertEqual(polled.json()["status"], "queued")
         self.assertEqual(cancelled.json()["status"], "cancelled")
 
-    async def test_database_outage_fails_durable_readiness(self) -> None:
-        """Verify database outage fails durable readiness.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
-
+    async def test_database_outage_is_retryable(self) -> None:
         class UnavailableRepository(InMemoryExecutionRepository):
-            """Provide the unavailable repository fixture local to this failure or cancellation scenario."""
-
             async def check_ready(self) -> None:
-                """Inject repository/scheduler unavailability during the readiness probe.
-
-                Returns:
-                    None: No return value.
-
-                Raises:
-                    ExecutionRepositoryUnavailableError: Database access or the storage
-                        transaction fails.
-                """
                 raise ExecutionRepositoryUnavailableError("database unavailable")
 
-        provider = StandaloneProvider()
-        scheduler = ExecutionScheduler(
-            repository=UnavailableRepository(),
-            dispatch=InMemoryWorkflowDispatch({}),
-            providers={provider.name: provider},
-            known_workflows={"prostate-heatmap"},
-            default_timeout=timedelta(hours=1),
-            maximum_timeout=timedelta(hours=6),
-        )
-        async with AsyncClient(
-            transport=ASGITransport(app=create_execution_app(scheduler)),
-            base_url="http://model-service",
-        ) as client:
-            ready = await client.get("/readyz")
-            live = await client.get("/healthz")
-
-        self.assertEqual(ready.status_code, 503)
-        self.assertEqual(ready.json()["detail"]["code"], "scheduling_unavailable")
-        self.assertEqual(live.status_code, 200)
-
-    async def test_database_outage_makes_polling_and_cancellation_retryable(
-        self,
-    ) -> None:
-        """Verify database outage makes polling and cancellation retryable.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
-
-        class UnavailableRepository(InMemoryExecutionRepository):
-            """Provide the unavailable repository fixture local to this failure or cancellation scenario."""
-
             async def get(self, execution_id: str) -> ExecutionRecord:
-                """Inject a storage failure or unexpected-operation assertion during status access.
-
-                Args:
-                    execution_id: Durable execution identifier, not an external provider
-                        job ID.
-
-                Returns:
-                    ExecutionRecord: Internal durable execution snapshot, including work
-                        and ownership fields.
-
-                Raises:
-                    ExecutionRepositoryUnavailableError: Database access or the storage
-                        transaction fails.
-                """
                 raise ExecutionRepositoryUnavailableError(execution_id)
 
             async def request_cancel(self, execution_id: str) -> ExecutionRecord:
-                """Inject storage unavailability while cancellation attempts to change durable state.
-
-                Args:
-                    execution_id: Durable execution identifier, not an external provider
-                        job ID.
-
-                Returns:
-                    ExecutionRecord: Internal durable execution snapshot, including work
-                        and ownership fields.
-
-                Raises:
-                    ExecutionRepositoryUnavailableError: Database access or the storage
-                        transaction fails.
-                """
                 raise ExecutionRepositoryUnavailableError(execution_id)
 
-        provider = StandaloneProvider()
-        scheduler = ExecutionScheduler(
-            repository=UnavailableRepository(),
-            dispatch=InMemoryWorkflowDispatch({}),
-            providers={provider.name: provider},
-            known_workflows={"prostate-heatmap"},
-            default_timeout=timedelta(hours=1),
-            maximum_timeout=timedelta(hours=6),
-        )
-        async with AsyncClient(
-            transport=ASGITransport(
-                app=create_execution_app(scheduler), raise_app_exceptions=False
-            ),
-            base_url="http://model-service",
-        ) as client:
+            async def find_submission(self, identity: object) -> None:
+                raise ExecutionRepositoryUnavailableError("database unavailable")
+
+        self.scheduler = self.make_scheduler(UnavailableRepository(), self.dispatch)
+        async with self.client(self.app(), raise_app_exceptions=False) as client:
             responses = [
+                await client.get("/readyz"),
                 await client.get("/v1/executions/execution-1"),
                 await client.post("/v1/executions/execution-1/cancel"),
+                await client.post(
+                    "/v1/builders/heatmap/schedule", json=self.schedule_request()
+                ),
             ]
+            live = await client.get("/healthz")
 
         for response in responses:
-            self.assertEqual(response.status_code, 503)
-            self.assertEqual(
-                response.json()["detail"]["code"], "scheduling_unavailable"
-            )
-            self.assertTrue(response.json()["detail"]["retryable"])
+            self.assert_error(response, 503, "scheduling_unavailable", retryable=True)
+        self.assertEqual(live.status_code, 200)
 
-    async def test_temporary_scheduling_unavailability_is_retryable(self) -> None:
-        """Verify temporary scheduling unavailability is retryable.
+    async def test_scheduler_unavailability_is_retryable(self) -> None:
+        class UnavailableScheduler(RecordingScheduler):
+            async def schedule(self, request: ScheduleRequest) -> ScheduleResult:
+                raise SchedulingUnavailableError("temporarily unavailable")
 
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
-
-        class UnavailableScheduler:
-            """Provide the unavailable scheduler fixture local to this failure or cancellation scenario."""
-
-            async def check_ready(self) -> None:
-                """Inject repository/scheduler unavailability during the readiness probe.
-
-                Returns:
-                    None: No return value.
-
-                Raises:
-                    SchedulingUnavailableError: Admission or durable storage is
-                        temporarily unavailable.
-                """
-                raise SchedulingUnavailableError("repository unavailable")
-
-            async def schedule(self, _request: ScheduleRequest) -> ScheduleResult:
-                """Submit minimal standalone fixture work under the selected replay key.
-
-                Args:
-                    _request: Unused request to validate, admit, dispatch, forward, or
-                        process, as specified by its declared type; retained to match
-                        the interface.
-
-                Returns:
-                    ScheduleResult: Public execution view and insertion-versus-replay
-                        flag.
-
-                Raises:
-                    SchedulingUnavailableError: Admission or durable storage is
-                        temporarily unavailable.
-                """
-                raise SchedulingUnavailableError(
-                    "execution scheduling is temporarily unavailable"
-                )
-
-            async def get(self, _execution_id: str) -> ExecutionView:
-                """Inject a storage failure or unexpected-operation assertion during status access.
-
-                Args:
-                    _execution_id: Unused durable execution identifier, not an external
-                        provider job id; retained to match the interface.
-
-                Returns:
-                    ExecutionView: Caller-visible execution status and its permitted
-                        terminal result or error.
-
-                Raises:
-                    AssertionError: An expected invariant or fixture interaction does
-                        not hold.
-                """
-                raise AssertionError
-
-            async def cancel(self, _execution_id: str) -> ExecutionView:
-                """Reject an unexpected cancellation call in the scenario fixture.
-
-                Args:
-                    _execution_id: Unused durable execution identifier, not an external
-                        provider job id; retained to match the interface.
-
-                Returns:
-                    ExecutionView: Caller-visible execution status and its permitted
-                        terminal result or error.
-
-                Raises:
-                    AssertionError: An expected invariant or fixture interaction does
-                        not hold.
-                """
-                raise AssertionError
-
-        async with AsyncClient(
-            transport=ASGITransport(
-                app=create_execution_app(UnavailableScheduler()),
-            ),
-            base_url="http://model-service",
-        ) as client:
+        app = create_app(UnavailableScheduler(), catalog=CATALOG)
+        async with self.client(app) as client:
             response = await client.post(
-                "/v1/workflows/prostate-heatmap/schedule",
-                json={
-                    "provider": "standalone",
-                    "body": {},
-                    "idempotency_key": "request-1",
-                },
+                "/v1/builders/heatmap/schedule", json=self.schedule_request()
             )
 
-        self.assertEqual(response.status_code, 503)
-        self.assertEqual(response.json()["detail"]["code"], "scheduling_unavailable")
-        self.assertTrue(response.json()["detail"]["retryable"])
+        self.assert_error(response, 503, "scheduling_unavailable", retryable=True)
 
-    @staticmethod
-    def _workflow_invocation() -> dict[str, object]:
-        """Build a public prostate request with tagged inputs, destination, and deadline.
 
-        Returns:
-            dict[str, object]: Decoded, serialized, or recorded fields described above.
-        """
-        return {
-            "inputs": {
-                "slide": {"kind": "shared_path", "path": "slide.svs"},
-                "region_of_interest": {
-                    "kind": "shared_path",
-                    "path": "roi.tiff",
-                },
-            },
-            "output_path": "outputs/heatmap.tiff",
-            "input_access": {
-                "kind": "shared_storage",
-                "state": {"root": "/shared"},
-            },
-            "deadline_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
-        }
+class RawInferenceTests(ApiTestCase):
+    async def test_raw_model_calls_are_forwarded_with_allowed_headers(self) -> None:
+        forwarded: list[Request] = []
+
+        def ray(request: Request) -> Response:
+            forwarded.append(request)
+            if request.url.path == "/prostate-classifier-1":
+                return Response(
+                    307, headers={"location": "http://ray/prostate-classifier-1/"}
+                )
+            return Response(
+                200,
+                content=b"compressed-result",
+                headers={"x-output-shape": "(1, 2, 2)"},
+            )
+
+        async with AsyncClient(transport=MockTransport(ray)) as ray_client:
+            proxy = HttpInferenceProxy(ray_client, origin="http://ray")
+            async with self.client(self.app(inference_proxy=proxy)) as client:
+                response = await client.post(
+                    "/prostate-classifier-1?variant=probe",
+                    content=b"compressed-image",
+                    headers={
+                        "content-type": "application/octet-stream",
+                        "x-output-dtype": "float32",
+                        "authorization": "Bearer facade-only",
+                    },
+                )
+        async with self.client(self.app()) as client:
+            unavailable = await client.post("/prostate-classifier-1", content=b"x")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"compressed-result")
+        self.assertEqual(response.headers["x-output-shape"], "(1, 2, 2)")
+        self.assertEqual(
+            forwarded[0].url, "http://ray/prostate-classifier-1?variant=probe"
+        )
+        self.assertEqual(forwarded[0].headers["x-output-dtype"], "float32")
+        self.assertNotIn("authorization", forwarded[0].headers)
+        self.assertEqual(forwarded[1].url, "http://ray/prostate-classifier-1/")
+        self.assertEqual(forwarded[1].content, b"compressed-image")
+        self.assert_error(
+            unavailable, 503, "model_inference_unavailable", retryable=True
+        )
 
 
 if __name__ == "__main__":

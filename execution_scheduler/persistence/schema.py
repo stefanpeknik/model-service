@@ -21,19 +21,7 @@ MIGRATIONS_DIRECTORY = Path(__file__).with_name("migrations")
 
 
 async def initialize_execution_schema(dsn: str, *, schema: str) -> None:
-    """Apply pending migrations in a worker thread, closing all database connections.
-
-    Args:
-        dsn: PostgreSQL URL or libpq DSN, also used by the ORM repository.
-        schema: Target PostgreSQL schema for both execution and Yoyo tables.
-
-    Returns:
-        None: Pending migrations have committed and migration locks are released.
-
-    Raises:
-        ExecutionRepositoryUnavailableError: Database access, migration execution,
-            or acquisition of Yoyo's migration lock fails.
-    """
+    """Apply pending migrations in a worker thread, closing all database connections."""
     try:
         await asyncio.to_thread(_apply_migrations, dsn, schema)
     except (Error, BadMigration, LockTimeout, MigrationConflict) as error:

@@ -17,15 +17,7 @@ from PIL import Image, ImageFilter
 
 
 def tissue_mask(overview: Image.Image) -> Image.Image:
-    """Select colored or dark overview pixels, then median-filter and dilate the binary region mask.
-
-    Args:
-        overview: Low-resolution slide image used for heuristic tissue selection.
-
-    Returns:
-        Image.Image: Filtered 8-bit region mask with selected pixels set to 255 and
-            background zero.
-    """
+    """Select colored or dark overview pixels, then median-filter and dilate the binary region mask."""
     pixels = np.asarray(overview.convert("RGB"), dtype=np.int16)
     minimum = pixels.min(axis=2)
     spread = pixels.max(axis=2) - minimum
@@ -36,15 +28,7 @@ def tissue_mask(overview: Image.Image) -> Image.Image:
 
 
 def preview(overview: Image.Image, mask: Image.Image) -> Image.Image:
-    """Overlay selected mask pixels with a translucent green tint on the slide overview.
-
-    Args:
-        overview: Low-resolution slide image used for heuristic tissue selection.
-        mask: Binary overview mask selecting tissue pixels.
-
-    Returns:
-        Image.Image: RGB overview with selected mask pixels tinted translucent green.
-    """
+    """Overlay selected mask pixels with a translucent green tint on the slide overview."""
     base = overview.convert("RGBA")
     tint = Image.new("RGBA", base.size, (0, 180, 0, 95))
     tint.putalpha(mask.point(lambda value: 95 if value else 0))
@@ -52,16 +36,7 @@ def preview(overview: Image.Image, mask: Image.Image) -> Image.Image:
 
 
 def main() -> None:
-    """Parse paths, read a bounded slide overview, derive mask resolution, and write TIFF/preview files without overwriting existing outputs.
-
-    Returns:
-        None: No return value.
-
-    Raises:
-        FileExistsError: An output already exists and the command refuses to overwrite
-            it.
-        ValueError: A value fails the validation described above.
-    """
+    """Parse paths, read a bounded slide overview, derive mask resolution, and write TIFF/preview files without overwriting existing outputs."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--slide", type=Path, required=True)
     parser.add_argument("--max-overview-edge", type=int, default=1600)

@@ -1,69 +1,70 @@
-"""Check generated EMPAIA metadata and input-reference validation."""
+"""Check EAD generation from app files and builder EMPAIA mappings."""
 
 from __future__ import annotations
 
 import unittest
 from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import TYPE_CHECKING
 
 import yaml
 from jsonschema import ValidationError
 
+from builders.registry import BuilderSpec, OutputSpec, get_builder
 from scripts.generate_ead import ROOT, generate_ead, generate_file, load_yaml
 
 
+if TYPE_CHECKING:
+    from builders.contracts import JsonValue
+
+
+APP_PATH = ROOT / "eads" / "apps" / "prostate-heatmap.yaml"
+
+
+def _with_heatmap_output(**empaia: JsonValue) -> BuilderSpec:
+    spec = get_builder("heatmap")
+    heatmap = spec.outputs["heatmap"]
+    return replace(
+        spec,
+        outputs={"heatmap": replace(heatmap, empaia={**heatmap.empaia, **empaia})},
+    )
+
+
 class EadGenerationTests(unittest.TestCase):
-    """Exercise generated EMPAIA metadata and input-reference validation."""
-
     def setUp(self) -> None:
-        """Create isolated fixtures and clients for generated EMPAIA metadata and input-reference validation.
+        self.app = load_yaml(APP_PATH)
 
-        Returns:
-            None: No return value.
-        """
-        self.definition_path = ROOT / "workflow-definitions" / "prostate-heatmap.yaml"
-        self.definition = load_yaml(self.definition_path)
-
-    def test_prostate_ead_is_generated_from_workflow_contract(self) -> None:
-        """Verify prostate ead is generated from workflow contract.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
-        ead = generate_ead(self.definition)
+    def test_prostate_ead_comes_from_builder_mappings(self) -> None:
+        ead = generate_ead(self.app)
 
         self.assertEqual(ead["namespace"], "org.empaia.rationai.prostate_cls.v3.0")
+        self.assertEqual(ead["io"]["slide"], {"type": "wsi"})
         self.assertEqual(ead["io"]["region_of_interest"]["reference"], "io.slide")
-        self.assertEqual(ead["modes"]["standalone"]["outputs"], ["heatmap"])
-        self.assertNotIn("configuration", ead)
-        self.assertNotIn("parameters", self.definition)
-        self.assertNotIn("model", self.definition)
+        self.assertEqual(ead["io"]["heatmap"]["type"], "continuous_pixelmap")
+        self.assertEqual(
+            ead["modes"]["standalone"],
+            {"inputs": ["slide", "region_of_interest"], "outputs": ["heatmap"]},
+        )
         self.assertTrue(
-            generate_file(
-                self.definition_path,
-                ROOT / "eads" / "prostate-heatmap.json",
-                check=True,
-            )
+            generate_file(APP_PATH, ROOT / "eads" / "prostate-heatmap.json", check=True)
         )
 
+    def test_app_must_name_a_model(self) -> None:
+        app = deepcopy(self.app)
+        del app["model"]
+        with self.assertRaisesRegex(ValueError, "model deployment"):
+            generate_ead(app)
+
+    def test_outputs_without_empaia_type_are_rejected(self) -> None:
+        app = {**deepcopy(self.app), "builder": "tile-embeddings", "model": "virchow2"}
+        with self.assertRaisesRegex(ValueError, "no EMPAIA type"):
+            generate_ead(app)
+
     def test_references_must_target_inputs(self) -> None:
-        """Verify references must target inputs.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            AssertionError: An expected invariant or fixture interaction does not hold.
-        """
-        definition = deepcopy(self.definition)
-        definition["outputs"]["heatmap"]["empaia"]["reference"] = "missing"
-
         with self.assertRaisesRegex(ValueError, "unknown input"):
-            generate_ead(definition)
+            generate_ead(self.app, _with_heatmap_output(reference="missing"))
 
     def test_schema_rejects_invalid_metadata(self) -> None:
         for field, value in (
@@ -73,32 +74,32 @@ class EadGenerationTests(unittest.TestCase):
             ("permissions", {"datatransmissionexternal": "true"}),
         ):
             with self.subTest(field=field):
-                definition = deepcopy(self.definition)
-                definition["empaia"][field] = value
+                app = deepcopy(self.app)
+                app["empaia"][field] = value
                 with self.assertRaises(ValidationError):
-                    generate_ead(definition)
+                    generate_ead(app)
 
     def test_schema_rejects_invalid_io(self) -> None:
         for field, value in (("type", "unknown-type"), ("unexpected", True)):
             with self.subTest(field=field):
-                definition = deepcopy(self.definition)
-                definition["outputs"]["heatmap"]["empaia"][field] = value
+                spec = _with_heatmap_output(**{field: value})
+                self.assertIsInstance(spec.outputs["heatmap"], OutputSpec)
                 with self.assertRaises(ValidationError):
-                    generate_ead(definition)
+                    generate_ead(self.app, spec)
 
     def test_invalid_generation_preserves_existing_file(self) -> None:
-        definition = deepcopy(self.definition)
-        definition["empaia"]["namespace"] = "invalid"
+        app = deepcopy(self.app)
+        app["empaia"]["namespace"] = "invalid"
         with TemporaryDirectory() as temporary_directory:
-            definition_path = Path(temporary_directory) / "workflow.yaml"
+            app_path = Path(temporary_directory) / "app.yaml"
             output_path = Path(temporary_directory) / "ead.json"
-            definition_path.write_text(yaml.safe_dump(definition), encoding="utf-8")
+            app_path.write_text(yaml.safe_dump(app), encoding="utf-8")
             output_path.write_text("existing content", encoding="utf-8")
 
             for check in (False, True):
                 with self.subTest(check=check):
                     with self.assertRaises(ValidationError):
-                        generate_file(definition_path, output_path, check=check)
+                        generate_file(app_path, output_path, check=check)
                     self.assertEqual(
                         output_path.read_text(encoding="utf-8"), "existing content"
                     )

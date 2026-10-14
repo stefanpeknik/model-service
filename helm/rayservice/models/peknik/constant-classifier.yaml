@@ -1,0 +1,18 @@
+# CPU-only spatial-scores model returning a constant score; used to exercise
+# builders and scheduling without a GPU.
+inference:
+  contract: spatial-scores
+serve:
+  name: constant-classifier
+  import_path: validation.constant_classifier:app
+  route_prefix: /constant-classifier
+  deployments:
+    - name: ConstantClassifier
+      num_replicas: 1
+      ray_actor_options:
+        num_cpus: 0.5
+      user_config:
+        tile_size: 128
+        output_tile_size: 1
+        n_channels: 1
+        mpp: 0.5

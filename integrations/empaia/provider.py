@@ -7,25 +7,39 @@ outcome is uncertain.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
 import math
+import shutil
 from contextlib import asynccontextmanager
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Never
 
 import jwt
 from pydantic import Field, ValidationError
 
+from builders.application import validate_invocation
+from builders.contracts import (
+    BuilderResult,
+    InputAccessContext,
+    InvalidInvocation,
+    Invocation,
+    ProviderInput,
+    SharedArtifact,
+    is_json_value,
+)
+from builders.registry import get_builder
 from execution_scheduler.contracts import (
     InvalidScheduleRequestError,
     ScheduleRequest,
     SchedulingUnavailableError,
 )
-from execution_scheduler.domain import PreparedWorkflow, SubmissionIdentity
+from execution_scheduler.domain import PreparedInvocation, SubmissionIdentity
 from execution_scheduler.providers import (
     ProviderCancellation,
     ProviderFailure,
@@ -40,21 +54,13 @@ from integrations.empaia.gateway import (
     EmpaiaInputState,
     EmpaiaJobContext,
 )
-from workflow_execution.application import validate_workflow_invocation
-from workflow_execution.contracts import (
-    InputAccessContext,
-    ProviderInput,
-    WorkflowInvocation,
-    is_json_value,
-)
 
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+    from builders.contracts import JsonValue
     from execution_scheduler.providers import BeforeMutation
-    from workflow_execution.catalog import WorkflowCatalog
-    from workflow_execution.contracts import JsonValue
 
 
 class EmpaiaErrorCode(StrEnum):
@@ -64,12 +70,7 @@ class EmpaiaErrorCode(StrEnum):
 
 
 class EmpaiaSchedulePayload(EmpaiaJobContext):
-    """Require an installation ID alongside the job origin, ID, and private credential.
-
-    Attributes:
-        installation_id: Provider installation namespace used to scope job replay
-            identity.
-    """
+    """Require an installation ID alongside the job origin, ID, and private credential."""
 
     installation_id: Annotated[str, Field(min_length=1)]
 
@@ -84,38 +85,25 @@ class EmpaiaProviderAdapter:
 
     def __init__(
         self,
-        catalog: WorkflowCatalog,
         gateway_factory: EmpaiaGatewayFactory,
+        *,
+        allowed_api_urls: tuple[str, ...],
+        workspace_root: Path | None = None,
     ) -> None:
-        """Retain the catalog and gateway factory used for configuration lookup and external job completion.
-
-        Args:
-            catalog: Workflow definitions and their configuration validators/defaults.
-            gateway_factory: Callable constructing a job gateway from protected
-                connection context.
-        """
-        self._catalog = catalog
+        """Only `allowed_api_urls` origins or path prefixes receive job credentials."""
+        if not allowed_api_urls:
+            raise ValueError("EMPAIA needs at least one allowed AppService URL")
         self._gateway_factory = gateway_factory
+        self._allowed_api_urls = tuple(url.rstrip("/") for url in allowed_api_urls)
+        self._workspace_root = workspace_root
 
     def identify(self, request: ScheduleRequest) -> SubmissionIdentity:
-        """Key admission by installation and job, fingerprinting stable request fields while excluding renewable credentials.
-
-        Args:
-            request: Provider submission with workflow ID, caller body, replay key, and
-                optional execution budget.
-
-        Returns:
-            SubmissionIdentity: Provider-scoped replay key and canonical request
-                fingerprint.
-
-        Raises:
-            InvalidScheduleRequestError: Provider payload, configuration, paths, or
-                effective deadline are invalid.
-        """
+        """Key admission by installation and job, fingerprinting stable request fields while excluding renewable credentials."""
         context = _schedule_payload(request.body)
         canonical = json.dumps(
             {
-                "workflow_id": request.workflow_id,
+                "builder_id": request.builder_id,
+                "model_id": request.model_id,
                 "installation_id": context.installation_id,
                 "job_id": context.job_id,
                 "api_url": context.api_url,
@@ -134,26 +122,13 @@ class EmpaiaProviderAdapter:
         self,
         request: ScheduleRequest,
         deadline_at: datetime,
-    ) -> PreparedWorkflow:
-        """Fetch and resolve configuration, create provider input references, and separate public job state from protected credentials. Cap deadlines at credential expiry.
-
-        Args:
-            request: Provider submission with workflow ID, caller body, replay key, and
-                optional execution budget.
-            deadline_at: Absolute aware deadline for the entire execution, including
-                preparation.
-
-        Returns:
-            PreparedWorkflow: Validated invocation, private provider state, and
-                applicable deadline limits.
-
-        Raises:
-            InvalidScheduleRequestError: Provider payload, configuration, paths, or
-                effective deadline are invalid.
-            SchedulingUnavailableError: Admission or durable storage is temporarily
-                unavailable.
-        """
+    ) -> PreparedInvocation:
+        """Fetch and resolve configuration, create provider input references, and separate public job state from protected credentials. Cap deadlines at credential expiry."""
         context = _schedule_payload(request.body)
+        if not _allowed(context.api_url, self._allowed_api_urls):
+            raise InvalidScheduleRequestError(
+                "EMPAIA api_url is not an allowed AppService"
+            )
         credential_expires_at = _credential_expiry(context.credential)
         async with _preparation_gateway(
             self._gateway_factory,
@@ -169,17 +144,16 @@ class EmpaiaProviderAdapter:
                 raise InvalidScheduleRequestError(
                     "EMPAIA configuration must contain only JSON-compatible values"
                 )
+            spec = get_builder(request.builder_id)
             try:
-                configuration = self._catalog.resolve_configuration(
-                    request.workflow_id,
-                    configuration,
+                configuration = spec.resolve_configuration(configuration).model_dump(
+                    mode="json"
                 )
-            except (TypeError, ValueError) as error:
+            except InvalidInvocation as error:
                 raise InvalidScheduleRequestError(str(error)) from error
         effective_deadline = min(deadline_at, credential_expires_at)
-        definition = self._catalog.get(request.workflow_id)
-        invocation = WorkflowInvocation(
-            inputs={name: ProviderInput(name=name) for name in definition.inputs},
+        invocation = Invocation(
+            inputs={name: ProviderInput(name=name) for name in spec.inputs},
             resolved_configuration=deepcopy(configuration),
             input_access=InputAccessContext(
                 kind="empaia",
@@ -190,14 +164,14 @@ class EmpaiaProviderAdapter:
             deadline_at=effective_deadline,
         )
         try:
-            validate_workflow_invocation(
-                definition,
+            validate_invocation(
+                spec,
                 invocation,
                 now=effective_deadline - timedelta(microseconds=1),
             )
         except (TypeError, ValueError) as error:
             raise InvalidScheduleRequestError(str(error)) from error
-        return PreparedWorkflow(
+        return PreparedInvocation(
             invocation=invocation,
             protected_context=context.protected_values(),
             deadline_cap=credential_expires_at,
@@ -211,31 +185,7 @@ class EmpaiaProviderAdapter:
         *,
         before_mutation: BeforeMutation | None = None,
     ) -> None:
-        """Publish stored outputs and finalize, or report failure/cancellation.
-
-        Install the durable mutation guard when supplied. A failure after an output was
-        published is outcome-unknown and cannot safely trigger blind publication
-        retries.
-
-        Args:
-            protected_context: Private provider state that persistence encrypts and
-                internal dispatch carries separately.
-            outcome: Stored success, safe failure, or cancellation to report through the
-                provider.
-            before_mutation: Async guard awaited before the first external write to
-                persist and validate its durable claim.
-
-        Returns:
-            None: No return value.
-
-        Raises:
-            InvalidScheduleRequestError: Provider payload, configuration, paths, or
-                effective deadline are invalid.
-            ProviderFinishFailureError: Publication or terminal reporting fails;
-                metadata states whether retry is safe.
-            StaleWorkClaimError: The token, lease, deadline, or work kind no longer
-                permits this operation.
-        """
+        """Publish stored outputs and finalize, or report failure/cancellation."""
         context = _job_context(protected_context)
         async with _finish_gateway(
             self._gateway_factory,
@@ -250,10 +200,11 @@ class EmpaiaProviderAdapter:
                         await gateway.publish_output(name, output)
                         mutation_completed = True
                     await gateway.finalize()
+                    await self._remove_workspaces(outcome.result)
                 elif isinstance(outcome, ProviderFailure):
                     await gateway.report_failure(outcome.error.message)
                 elif isinstance(outcome, ProviderCancellation):
-                    await gateway.report_failure("workflow execution was cancelled")
+                    await gateway.report_failure("execution was cancelled")
             except EmpaiaGatewayError as error:
                 raise ProviderFinishFailureError(
                     code=EmpaiaErrorCode.FINISH_FAILED,
@@ -262,25 +213,20 @@ class EmpaiaProviderAdapter:
                     outcome_unknown=error.outcome_unknown or mutation_completed,
                 ) from error
 
+    async def _remove_workspaces(self, result: BuilderResult) -> None:
+        if self._workspace_root is None:
+            return
+        for directory in _workspace_dirs(self._workspace_root, result):
+            # Best effort: publication already succeeded.
+            await asyncio.to_thread(shutil.rmtree, directory, True)
+
 
 @asynccontextmanager
 async def _preparation_gateway(
     factory: EmpaiaGatewayFactory,
     context: EmpaiaJobContext,
 ) -> AsyncIterator[EmpaiaGateway]:
-    """Own a preparation gateway and translate acquisition/cleanup failures without replacing a primary preparation error.
-
-    Args:
-        factory: Callable that creates a provider gateway for one protected job context.
-        context: External job origin/ID and protected bearer credential.
-
-    Yields:
-        EmpaiaGateway: Job-scoped gateway that is closed when the context exits.
-
-    Raises:
-        SchedulingUnavailableError: Admission or durable storage is temporarily
-            unavailable.
-    """
+    """Own a preparation gateway and translate acquisition/cleanup failures without replacing a primary preparation error."""
     try:
         gateway = factory(context)
     except EmpaiaGatewayError as error:
@@ -309,19 +255,7 @@ async def _finish_gateway(
     factory: EmpaiaGatewayFactory,
     context: EmpaiaJobContext,
 ) -> AsyncIterator[EmpaiaGateway]:
-    """Own a finish gateway, translate acquisition failures, and preserve the external completion outcome if cleanup fails.
-
-    Args:
-        factory: Callable that creates a provider gateway for one protected job context.
-        context: External job origin/ID and protected bearer credential.
-
-    Yields:
-        EmpaiaGateway: Job-scoped gateway that is closed when the context exits.
-
-    Raises:
-        ProviderFinishFailureError: Publication or terminal reporting fails; metadata
-            states whether retry is safe.
-    """
+    """Own a finish gateway, translate acquisition failures, and preserve the external completion outcome if cleanup fails."""
     try:
         gateway = factory(context)
     except EmpaiaGatewayError as error:
@@ -344,14 +278,7 @@ async def _finish_gateway(
 
 
 async def _close_preserving_outcome(gateway: EmpaiaGateway) -> None:
-    """Close a gateway and log cleanup errors without replacing an already established outcome.
-
-    Args:
-        gateway: Job-scoped provider boundary used for publication or cleanup.
-
-    Returns:
-        None: No return value.
-    """
+    """Close a gateway and log cleanup errors without replacing an already established outcome."""
     try:
         await gateway.close()
     except Exception as error:
@@ -359,32 +286,14 @@ async def _close_preserving_outcome(gateway: EmpaiaGateway) -> None:
 
 
 def _raise_preparation_error(error: EmpaiaGatewayError) -> Never:
-    """Map retryable gateway errors to scheduling unavailability and other errors to invalid requests.
-
-    Args:
-        error: Safe domain error or injected integration exception to classify.
-
-    Raises:
-        InvalidScheduleRequestError: Provider payload, configuration, paths, or
-            effective deadline are invalid.
-        SchedulingUnavailableError: Admission or durable storage is temporarily
-            unavailable.
-    """
+    """Map retryable gateway errors to scheduling unavailability and other errors to invalid requests."""
     if error.retryable:
         raise SchedulingUnavailableError(error.safe_message) from error
     raise InvalidScheduleRequestError(error.safe_message) from error
 
 
 def _finish_failure(error: EmpaiaGatewayError) -> ProviderFinishFailureError:
-    """Translate safe gateway retry and uncertainty metadata into a provider finish failure.
-
-    Args:
-        error: Safe domain error or injected integration exception to classify.
-
-    Returns:
-        ProviderFinishFailureError: Safe provider finish error with retry and
-            uncertainty classification.
-    """
+    """Translate safe gateway retry and uncertainty metadata into a provider finish failure."""
     return ProviderFinishFailureError(
         code=EmpaiaErrorCode.FINISH_FAILED,
         safe_message=error.safe_message,
@@ -393,19 +302,28 @@ def _finish_failure(error: EmpaiaGatewayError) -> ProviderFinishFailureError:
     )
 
 
+def _workspace_dirs(root: Path, result: BuilderResult) -> set[Path]:
+    """Per-attempt workspace directories (direct children of root) holding outputs."""
+    resolved_root = root.resolve()
+    directories = set()
+    for output in result.outputs.values():
+        if isinstance(output, SharedArtifact):
+            try:
+                relative = Path(output.path).resolve().relative_to(resolved_root)
+            except ValueError:
+                continue
+            if len(relative.parts) > 1:
+                directories.add(resolved_root / relative.parts[0])
+    return directories
+
+
+def _allowed(api_url: str, allowed: tuple[str, ...]) -> bool:
+    url = api_url.rstrip("/")
+    return any(url == prefix or url.startswith(prefix + "/") for prefix in allowed)
+
+
 def _schedule_payload(values: dict[str, JsonValue]) -> EmpaiaSchedulePayload:
-    """Validate provider admission fields, hiding detailed credential-bearing validation input from public errors.
-
-    Args:
-        values: Configuration/context/environment mapping consumed by this validator.
-
-    Returns:
-        EmpaiaSchedulePayload: Validated installation/job admission context.
-
-    Raises:
-        InvalidScheduleRequestError: Provider payload, configuration, paths, or
-            effective deadline are invalid.
-    """
+    """Validate provider admission fields, hiding detailed credential-bearing validation input from public errors."""
     try:
         return EmpaiaSchedulePayload.model_validate(values)
     except ValidationError as error:
@@ -415,18 +333,7 @@ def _schedule_payload(values: dict[str, JsonValue]) -> EmpaiaSchedulePayload:
 
 
 def _job_context(values: dict[str, JsonValue]) -> EmpaiaJobContext:
-    """Validate stored protected job context and return a safe error if it is malformed.
-
-    Args:
-        values: Configuration/context/environment mapping consumed by this validator.
-
-    Returns:
-        EmpaiaJobContext: Validated job origin, identity, and private bearer credential.
-
-    Raises:
-        InvalidScheduleRequestError: Provider payload, configuration, paths, or
-            effective deadline are invalid.
-    """
+    """Validate stored protected job context and return a safe error if it is malformed."""
     try:
         return EmpaiaJobContext.model_validate(values)
     except ValidationError as error:
@@ -436,19 +343,7 @@ def _job_context(values: dict[str, JsonValue]) -> EmpaiaJobContext:
 
 
 def _credential_expiry(credential: str) -> datetime:
-    """Read a numeric exp claim from the credential to cap deadlines. This parses the JWT payload without verifying its signature.
-
-    Args:
-        credential: Private bearer credential for the external job; never include it in
-            public errors.
-
-    Returns:
-        datetime: Credential expiration time in UTC, read from its numeric exp claim.
-
-    Raises:
-        InvalidScheduleRequestError: Provider payload, configuration, paths, or
-            effective deadline are invalid.
-    """
+    """Read a numeric exp claim from the credential to cap deadlines. This parses the JWT payload without verifying its signature."""
     try:
         claims = jwt.decode(
             credential,
