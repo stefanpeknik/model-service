@@ -15,10 +15,12 @@ from execution_scheduler.contracts import (
     ExecutionError,
     ExecutionErrorCode,
     ExecutionStatus,
+    Operation,
 )
 from execution_scheduler.domain import (
     Admission,
     ExecutionRecord,
+    InferenceSucceeded,
     ProcessingFailed,
     ProcessingRejected,
     ProcessingSucceeded,
@@ -117,6 +119,7 @@ class ExecutionTransitions:
             error=None,
             created_at=now,
             updated_at=now,
+            operation=admission.operation,
         )
 
     @staticmethod
@@ -128,11 +131,12 @@ class ExecutionTransitions:
             ExecutionStatus.CANCELLED,
         }:
             return execution
+        report = _has_provider_phase(execution)
         return replace(
             execution,
             status=ExecutionStatus.CANCELLED,
-            work_kind=WorkKind.PROVIDER_CANCELLATION_REPORT,
-            next_attempt_at=now,
+            work_kind=WorkKind.PROVIDER_CANCELLATION_REPORT if report else None,
+            next_attempt_at=now if report else None,
             lease_owner=None,
             fencing_token=None,
             lease_expires_at=None,
@@ -193,6 +197,7 @@ class ExecutionTransitions:
                 fencing_token=claimed.fencing_token,
                 result=claimed.result,
                 error=claimed.error,
+                operation=claimed.operation,
             ),
         )
 
@@ -281,8 +286,27 @@ class ExecutionTransitions:
         now: datetime,
     ) -> ExecutionRecord:
         """Advance processing or provider work according to its outcome and retry policy."""
+        if isinstance(settlement, InferenceSucceeded):
+            self._require_kind(execution, WorkKind.PROCESSING)
+            if _has_provider_phase(execution):
+                raise StaleWorkClaimError("a builder cannot settle a model response")
+            return replace(
+                execution,
+                status=ExecutionStatus.SUCCEEDED,
+                result=settlement.result,
+                work_kind=None,
+                next_attempt_at=None,
+                lease_owner=None,
+                fencing_token=None,
+                lease_expires_at=None,
+                updated_at=now,
+            )
         if isinstance(settlement, ProcessingSucceeded):
             self._require_kind(execution, WorkKind.PROCESSING)
+            if not _has_provider_phase(execution):
+                raise StaleWorkClaimError(
+                    "raw inference cannot settle a builder result"
+                )
             return replace(
                 execution,
                 status=ExecutionStatus.RUNNING,
@@ -544,6 +568,7 @@ class ExecutionTransitions:
 
         The report is new provider work, so it gets its own finish attempts.
         """
+        report = report and _has_provider_phase(execution)
         return replace(
             execution,
             status=ExecutionStatus.FAILED,
@@ -570,3 +595,8 @@ class ExecutionTransitions:
             lease_expires_at=None,
             updated_at=now,
         )
+
+
+def _has_provider_phase(execution: ExecutionRecord) -> bool:
+    """Raw inference has no provider to publish to or report back to."""
+    return execution.operation is Operation.BUILDER

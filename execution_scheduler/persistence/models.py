@@ -13,6 +13,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     Enum,
+    ForeignKey,
     Index,
     LargeBinary,
     Text,
@@ -27,8 +28,14 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
 
-from builders.contracts import INVOCATION, RESULT, BuilderResult, Invocation
-from execution_scheduler.contracts import ExecutionStatus
+from execution_scheduler.contracts import (
+    STORED_INVOCATION,
+    STORED_RESULT,
+    ExecutionStatus,
+    Operation,
+    StoredInvocation,
+    StoredResult,
+)
 from execution_scheduler.domain import WorkKind
 
 
@@ -39,34 +46,38 @@ if TYPE_CHECKING:
 DEFAULT_SCHEMA = "model_service"
 
 
-class InvocationType(TypeDecorator[Invocation]):
+class InvocationType(TypeDecorator[StoredInvocation]):
     impl = JSONB(none_as_null=True)
     cache_ok = True
 
     def process_bind_param(
-        self, value: Invocation | None, dialect: Dialect
-    ) -> dict[str, object] | None:
-        return INVOCATION.dump_python(value, mode="json") if value is not None else None
+        self, value: StoredInvocation | None, dialect: Dialect
+    ) -> object:
+        if value is None:
+            return None
+        return STORED_INVOCATION.dump_python(value, mode="json")
 
     def process_result_value(
         self, value: object, dialect: Dialect
-    ) -> Invocation | None:
-        return INVOCATION.validate_python(value) if value is not None else None
+    ) -> StoredInvocation | None:
+        return STORED_INVOCATION.validate_python(value) if value is not None else None
 
 
-class ResultType(TypeDecorator[BuilderResult]):
+class ResultType(TypeDecorator[StoredResult]):
     impl = JSONB(none_as_null=True)
     cache_ok = True
 
     def process_bind_param(
-        self, value: BuilderResult | None, dialect: Dialect
-    ) -> dict[str, object] | None:
-        return RESULT.dump_python(value, mode="json") if value is not None else None
+        self, value: StoredResult | None, dialect: Dialect
+    ) -> object:
+        return (
+            STORED_RESULT.dump_python(value, mode="json") if value is not None else None
+        )
 
     def process_result_value(
         self, value: object, dialect: Dialect
-    ) -> BuilderResult | None:
-        return RESULT.validate_python(value) if value is not None else None
+    ) -> StoredResult | None:
+        return STORED_RESULT.validate_python(value) if value is not None else None
 
 
 class Base(DeclarativeBase):
@@ -86,7 +97,16 @@ class ExecutionRow(Base):
     provider: Mapped[str] = mapped_column(Text)
     submission_key: Mapped[str] = mapped_column(Text)
     request_fingerprint: Mapped[str] = mapped_column(Text)
-    builder_id: Mapped[str] = mapped_column(Text)
+    operation: Mapped[Operation] = mapped_column(
+        Enum(
+            Operation,
+            native_enum=False,
+            create_constraint=True,
+            length=None,
+            values_callable=lambda enum: [operation.value for operation in enum],
+        )
+    )
+    builder_id: Mapped[str | None] = mapped_column(Text)
     model_id: Mapped[str] = mapped_column(Text)
     status: Mapped[ExecutionStatus] = mapped_column(
         Enum(
@@ -97,7 +117,7 @@ class ExecutionRow(Base):
             values_callable=lambda enum: [status.value for status in enum],
         )
     )
-    invocation: Mapped[Invocation] = mapped_column(InvocationType())
+    invocation: Mapped[StoredInvocation] = mapped_column(InvocationType())
     protected_context: Mapped[bytes] = mapped_column(LargeBinary)
     deadline_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     terminal_report_deadline_at: Mapped[datetime | None] = mapped_column(
@@ -120,7 +140,7 @@ class ExecutionRow(Base):
     lease_owner: Mapped[str | None] = mapped_column(Text)
     fencing_token: Mapped[str | None] = mapped_column(UUID(as_uuid=False))
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    result: Mapped[BuilderResult | None] = mapped_column(ResultType())
+    result: Mapped[StoredResult | None] = mapped_column(ResultType())
     error_code: Mapped[str | None] = mapped_column(Text)
     error_message: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
@@ -129,6 +149,21 @@ class ExecutionRow(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.clock_timestamp()
     )
+
+
+class InferencePayloadRow(Base):
+    """Request and response bytes of one inference execution."""
+
+    __tablename__ = "inference_payloads"
+    __table_args__ = ({"schema": DEFAULT_SCHEMA},)
+
+    execution_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey(f"{DEFAULT_SCHEMA}.executions.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    request: Mapped[bytes | None] = mapped_column(LargeBinary)
+    response: Mapped[bytes | None] = mapped_column(LargeBinary)
 
 
 for counter in (
@@ -177,9 +212,25 @@ Index(
 Index(
     "executions_active_processing_idx",
     ExecutionRow.model_id,
+    ExecutionRow.operation,
     ExecutionRow.lease_expires_at,
     postgresql_where=and_(
         ExecutionRow.work_kind == WorkKind.PROCESSING,
         ExecutionRow.fencing_token.is_not(None),
     ),
+)
+for name, column in (
+    ("executions_deadline_idx", ExecutionRow.deadline_at),
+    ("executions_report_deadline_idx", ExecutionRow.terminal_report_deadline_at),
+):
+    Index(name, column, postgresql_where=ExecutionRow.work_kind.is_not(None))
+Index(
+    "executions_lease_idx",
+    ExecutionRow.lease_expires_at,
+    postgresql_where=ExecutionRow.fencing_token.is_not(None),
+)
+Index(
+    "executions_finished_idx",
+    ExecutionRow.updated_at,
+    postgresql_where=ExecutionRow.work_kind.is_(None),
 )

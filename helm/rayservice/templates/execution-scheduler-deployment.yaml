@@ -91,6 +91,18 @@ spec:
               value: {{ .Values.executionScheduler.perModelLimit | quote }}
             - name: MAX_CONCURRENT_EXECUTIONS
               value: {{ .Values.executionScheduler.maxConcurrentExecutions | quote }}
+            {{- with .Values.executionScheduler.scheduledInference }}
+            - name: PER_MODEL_INFERENCE_LIMIT
+              value: {{ .perModelLimit | quote }}
+            - name: MAX_CONCURRENT_INFERENCE
+              value: {{ .maxConcurrent | quote }}
+            - name: INFERENCE_MAX_REQUEST_BYTES
+              value: {{ .maxRequestBytes | int64 | quote }}
+            - name: INFERENCE_MAX_RESULT_BYTES
+              value: {{ .maxResultBytes | int64 | quote }}
+            - name: INFERENCE_RETENTION_SECONDS
+              value: {{ .retentionSeconds | int64 | quote }}
+            {{- end }}
             {{- if .Values.executionScheduler.empaia.enabled }}
             - name: EMPAIA_GATEWAY_FACTORY
               value: {{ .Values.executionScheduler.empaia.gatewayFactory | quote }}

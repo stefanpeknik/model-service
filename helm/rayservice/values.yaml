@@ -84,6 +84,15 @@ executionScheduler:
   maximumDeadlineSeconds: 86400
   perModelLimit: 1
   maxConcurrentExecutions: 4
+  # POST /v1/models/{id}/schedule: one execution per tile, with its own
+  # slots so tiles and builders cannot starve each other. Worst-case facade
+  # memory for running tiles is maxConcurrent x (maxRequestBytes + maxResultBytes).
+  scheduledInference:
+    perModelLimit: 32
+    maxConcurrent: 32
+    maxRequestBytes: 2097152
+    maxResultBytes: 4194304
+    retentionSeconds: 86400
   empaia:
     enabled: false
     gatewayFactory: integrations.empaia.http_gateway:create_http_gateway

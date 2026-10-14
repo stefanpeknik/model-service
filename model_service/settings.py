@@ -115,6 +115,23 @@ class SchedulerSettings(BaseSettings):
     max_concurrent_executions: int = Field(
         default=4, gt=0, validation_alias="MAX_CONCURRENT_EXECUTIONS"
     )
+    per_model_inference_limit: int = Field(
+        default=32, gt=0, validation_alias="PER_MODEL_INFERENCE_LIMIT"
+    )
+    max_concurrent_inference: int = Field(
+        default=32, gt=0, validation_alias="MAX_CONCURRENT_INFERENCE"
+    )
+    inference_max_request_bytes: int = Field(
+        default=2 * 1024 * 1024, gt=0, validation_alias="INFERENCE_MAX_REQUEST_BYTES"
+    )
+    inference_max_result_bytes: int = Field(
+        default=4 * 1024 * 1024, gt=0, validation_alias="INFERENCE_MAX_RESULT_BYTES"
+    )
+    inference_retention: _SecondsDuration = Field(
+        default=timedelta(hours=24),
+        gt=timedelta(0),
+        validation_alias="INFERENCE_RETENTION_SECONDS",
+    )
     empaia_api_urls: tuple[str, ...] = Field(
         default=(), validation_alias="EMPAIA_API_URLS"
     )

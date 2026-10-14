@@ -9,10 +9,15 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Annotated
+
+from pydantic import Field, TypeAdapter
 
 from builders.contracts import (
     BuilderResult,
+    Deadline,
     IncompatibleModelError,
+    Invocation,
     JsonValue,
     ModelBinding,
     UnknownBuilderError,
@@ -31,6 +36,13 @@ class ExecutionStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class Operation(StrEnum):
+    """What an execution runs: a builder over a slide, or one raw model request."""
+
+    BUILDER = "builder"
+    INFERENCE = "inference"
+
+
 class ExecutionErrorCode(StrEnum):
     BUILDER_OUTCOME_UNKNOWN = "builder_outcome_unknown"
     PROVIDER_FINISH_OUTCOME_UNKNOWN = "provider_finish_outcome_unknown"
@@ -39,6 +51,11 @@ class ExecutionErrorCode(StrEnum):
     DEADLINE_EXCEEDED = "execution_deadline_exceeded"
     UNKNOWN_MODEL = "unknown_model"
     INCOMPATIBLE_MODEL = "incompatible_model"
+    INCOMPATIBLE_INPUT = "incompatible_input"
+    MODEL_REJECTED_INPUT = "model_rejected_input"
+    MODEL_FAILED = "model_failed"
+    MODEL_UNAVAILABLE = "model_unavailable"
+    RESULT_TOO_LARGE = "inference_result_too_large"
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +68,40 @@ class ScheduleRequest:
     body: dict[str, JsonValue]
     requested_timeout_seconds: int | None = None
     idempotency_key: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class InferenceScheduleRequest:
+    """One raw model request, exactly as `POST /{model_id}/` would receive it."""
+
+    model_id: str
+    payload: bytes
+    headers: dict[str, str]
+    idempotency_key: str
+    requested_timeout_seconds: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class InferenceInvocation:
+    """The stored part of a raw request; the payload bytes are kept separately."""
+
+    headers: Annotated[dict[str, str], Field(strict=True)]
+    deadline_at: Deadline
+
+
+@dataclass(frozen=True, slots=True)
+class InferenceResult:
+    """Describes a stored model response; its bytes are served by `/result`."""
+
+    media_type: str | None
+    headers: Annotated[dict[str, str], Field(strict=True)]
+    size: Annotated[int, Field(strict=True, ge=0)]
+
+
+type StoredInvocation = Invocation | InferenceInvocation
+type StoredResult = BuilderResult | InferenceResult
+STORED_INVOCATION: TypeAdapter[StoredInvocation] = TypeAdapter(StoredInvocation)
+STORED_RESULT: TypeAdapter[StoredResult] = TypeAdapter(StoredResult)
 
 
 type ModelResolver = Callable[[str, str], ModelBinding]
@@ -67,10 +118,11 @@ class ExecutionError:
 @dataclass(frozen=True, slots=True)
 class ExecutionView:
     id: str
-    builder_id: str
+    operation: Operation
+    builder_id: str | None
     model_id: str
     status: ExecutionStatus
-    result: BuilderResult | None = None
+    result: StoredResult | None = None
     error: ExecutionError | None = None
 
 
@@ -94,3 +146,7 @@ class SchedulingUnavailableError(RuntimeError):
 
 class UnknownExecutionError(KeyError):
     pass
+
+
+class ResultUnavailableError(RuntimeError):
+    """The execution has no stored inference response to download."""

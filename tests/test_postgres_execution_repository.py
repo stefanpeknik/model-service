@@ -33,9 +33,14 @@ from builders.contracts import (
     SharedArtifact,
     SharedPathInput,
 )
-from execution_scheduler.contracts import ScheduleConflictError
+from execution_scheduler.contracts import (
+    InferenceResult,
+    ScheduleConflictError,
+    UnknownExecutionError,
+)
 from execution_scheduler.domain import (
     Admission,
+    InferenceSucceeded,
     ProcessingSucceeded,
     ProviderFinishSucceeded,
     RenewDirective,
@@ -49,7 +54,11 @@ from execution_scheduler.persistence.postgres import PostgresExecutionRepository
 from execution_scheduler.persistence.protected_context import ProtectedContextCipher
 from execution_scheduler.persistence.schema import MIGRATIONS_DIRECTORY
 from execution_scheduler.repository import ExecutionRepositoryUnavailableError
-from tests.repository_contract import ExecutionRepositoryContract
+from tests.repository_contract import (
+    INFERENCE_LIMIT,
+    INFERENCE_RETENTION,
+    ExecutionRepositoryContract,
+)
 
 
 ALL_MIGRATIONS = {path.stem for path in MIGRATIONS_DIRECTORY.glob("*.sql")}
@@ -144,7 +153,16 @@ class PostgresExecutionRepositoryTests(
             },
         )
         self.assertTrue(
-            {"executions_due_idx", "executions_active_processing_idx"} <= index_names
+            {
+                "executions_due_idx",
+                "executions_active_processing_idx",
+                "executions_deadline_idx",
+                "executions_report_deadline_idx",
+                "executions_lease_idx",
+                "executions_finished_idx",
+                "inference_payloads_pkey",
+            }
+            <= index_names
         )
         self.assertEqual(await self._applied_migrations(), ALL_MIGRATIONS)
 
@@ -502,6 +520,30 @@ class PostgresExecutionRepositoryTests(
                 ),
             )
         return execution_id, admission, result
+
+    async def test_finished_inference_keeps_only_its_response(self) -> None:
+        execution_id = await self._admit_inference("tile", payload=b"request")
+        claim = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert claim is not None
+        await self.repository.settle(
+            execution_id,
+            claim.fencing_token,
+            InferenceSucceeded(InferenceResult(None, {}, 8), b"response"),
+        )
+
+        async with await AsyncConnection.connect(self.dsn) as connection:
+            cursor = await connection.execute(
+                sql.SQL(
+                    "SELECT request, response FROM {} WHERE execution_id = %s"
+                ).format(sql.Identifier(self.schema, "inference_payloads")),
+                (execution_id,),
+            )
+            row = await cursor.fetchone()
+        self.assertEqual(row, (None, b"response"))
+
+    async def test_malformed_execution_id_is_unknown(self) -> None:
+        with self.assertRaises(UnknownExecutionError):
+            await self.repository.get("not-an-execution-id")
 
     async def _stored_record(self, execution_id: str) -> dict[str, object]:
         async with await AsyncConnection.connect(self.dsn) as connection:
@@ -861,6 +903,8 @@ class PostgresExecutionRepositoryTests(
             cipher=self.cipher,
             schema=schema or self.schema,
             per_model_limit=per_model_limit,
+            per_model_inference_limit=INFERENCE_LIMIT,
+            inference_retention=INFERENCE_RETENTION,
             processing_policy=self.processing_policy,
             finish_policy=self.processing_policy,
         )

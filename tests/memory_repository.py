@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -24,6 +25,8 @@ from builders.contracts import (
 from builders.registry import get_builder
 from execution_scheduler.contracts import (
     ExecutionStatus,
+    Operation,
+    ResultUnavailableError,
     ScheduleConflictError,
     UnknownExecutionError,
 )
@@ -31,6 +34,7 @@ from execution_scheduler.domain import (
     Admission,
     AdmissionResult,
     ExecutionRecord,
+    InferenceSucceeded,
     RenewDirective,
     RetryPolicy,
     Settlement,
@@ -42,7 +46,12 @@ from execution_scheduler.transitions import ExecutionTransitions
 
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Mapping
+    from collections.abc import Awaitable, Callable, Collection, Mapping
+
+
+_TERMINAL = frozenset(
+    {ExecutionStatus.SUCCEEDED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED}
+)
 
 
 def utc_now() -> datetime:
@@ -58,14 +67,20 @@ class InMemoryExecutionRepository:
         *,
         clock: Callable[[], datetime] = utc_now,
         per_model_limit: int = 1,
+        per_model_inference_limit: int = 32,
+        inference_retention: timedelta = timedelta(hours=24),
         processing_policy: RetryPolicy | None = None,
         finish_policy: RetryPolicy | None = None,
     ) -> None:
         """Set capacity and retry policies, create the state machine, and start with empty records under one async lock."""
-        if per_model_limit <= 0:
-            raise ValueError("per_model_limit must be positive")
+        if per_model_limit <= 0 or per_model_inference_limit <= 0:
+            raise ValueError("per-model limits must be positive")
         self._clock = clock
-        self._per_model_limit = per_model_limit
+        self._limits = {
+            Operation.BUILDER: per_model_limit,
+            Operation.INFERENCE: per_model_inference_limit,
+        }
+        self._inference_retention = inference_retention
         self._processing_policy = processing_policy or RetryPolicy(
             max_attempts=3,
             initial_backoff=timedelta(seconds=5),
@@ -81,6 +96,8 @@ class InMemoryExecutionRepository:
             self._finish_policy,
         )
         self._executions: dict[str, ExecutionRecord] = {}
+        self.requests: dict[str, bytes] = {}
+        self._responses: dict[str, bytes] = {}
         self._submissions: dict[tuple[str, str], str] = {}
         self._lock = asyncio.Lock()
 
@@ -95,6 +112,18 @@ class InMemoryExecutionRepository:
             now = self._clock()
             self._expire_deadlines(now)
             self._recover_expired_leases(now)
+            for execution in tuple(self._executions.values()):
+                if (
+                    execution.operation is Operation.INFERENCE
+                    and execution.work_kind is None
+                    and execution.updated_at <= now - self._inference_retention
+                ):
+                    del self._executions[execution.id]
+                    del self._submissions[
+                        (execution.identity.provider, execution.identity.key)
+                    ]
+                    self.requests.pop(execution.id, None)
+                    self._responses.pop(execution.id, None)
 
     async def find_submission(
         self,
@@ -126,6 +155,8 @@ class InMemoryExecutionRepository:
             )
             self._executions[execution.id] = execution
             self._submissions[key] = execution.id
+            if admission.payload is not None:
+                self.requests[execution.id] = admission.payload
             return AdmissionResult(execution, created=True)
 
     async def get(self, execution_id: str) -> ExecutionRecord:
@@ -133,62 +164,72 @@ class InMemoryExecutionRepository:
         async with self._lock:
             return self._get(execution_id)
 
+    async def get_many(self, execution_ids: Collection[str]) -> list[ExecutionRecord]:
+        async with self._lock:
+            return [
+                self._executions[value]
+                for value in execution_ids
+                if value in self._executions
+            ]
+
     async def request_cancel(self, execution_id: str) -> ExecutionRecord:
         """Apply cancellation atomically and store the record with its previous claim invalidated."""
         async with self._lock:
             execution = self._get(execution_id)
             cancelled = self._transitions.cancel(execution, self._clock())
-            self._executions[execution_id] = cancelled
+            self._store(cancelled)
             return cancelled
 
     async def claim_due(
         self,
         owner: str,
         lease_duration: timedelta,
+        operations: Collection[Operation] | None = None,
     ) -> WorkClaim | None:
         """Run maintenance and lease the highest-priority due work within per-model processing capacity."""
+        allowed = frozenset(Operation if operations is None else operations)
         async with self._lock:
             now = self._clock()
             self._expire_deadlines(now)
             self._recover_expired_leases(now)
-            active_by_model = self._active_processing_by_model(now)
+            active = self._active_processing(now)
             due = [
                 execution
                 for execution in self._executions.values()
                 if execution.work_kind is not None
+                and execution.operation in allowed
                 and execution.next_attempt_at is not None
                 and execution.next_attempt_at <= now
                 and execution.fencing_token is None
             ]
-            first_created: dict[str, datetime] = {}
+            first_created: dict[tuple[Operation, str], datetime] = {}
             for execution in due:
                 if execution.work_kind is WorkKind.PROCESSING:
-                    first_created[execution.model_id] = min(
-                        first_created.get(execution.model_id, execution.created_at),
+                    target = (execution.operation, execution.model_id)
+                    first_created[target] = min(
+                        first_created.get(target, execution.created_at),
                         execution.created_at,
                     )
             for execution in sorted(
                 due,
                 key=lambda item: (
                     item.work_kind is WorkKind.PROCESSING,
-                    first_created[item.model_id]
+                    first_created[(item.operation, item.model_id)]
                     if item.work_kind is WorkKind.PROCESSING
                     else item.next_attempt_at,
                     item.next_attempt_at,
                     item.created_at,
                 ),
             ):
+                target = (execution.operation, execution.model_id)
                 if (
                     execution.work_kind is WorkKind.PROCESSING
-                    and active_by_model.get(execution.model_id, 0)
-                    >= self._per_model_limit
+                    and active.get(target, 0) >= self._limits[execution.operation]
                 ):
                     continue
                 token = str(uuid4())
                 if execution.work_kind is WorkKind.PROCESSING:
-                    active_by_model[execution.model_id] = (
-                        active_by_model.get(execution.model_id, 0) + 1
-                    )
+                    active[target] = active.get(target, 0) + 1
                 claimed = self._transitions.claim(
                     execution,
                     owner=owner,
@@ -197,8 +238,18 @@ class InMemoryExecutionRepository:
                     now=now,
                 )
                 self._executions[execution.id] = claimed.execution
+                if claimed.claim.operation is Operation.INFERENCE:
+                    return replace(claimed.claim, payload=self.requests[execution.id])
                 return claimed.claim
             return None
+
+    async def inference_content(self, execution_id: str) -> bytes:
+        async with self._lock:
+            execution = self._get(execution_id)
+            content = self._responses.get(execution_id)
+            if content is None or execution.status is not ExecutionStatus.SUCCEEDED:
+                raise ResultUnavailableError("execution has no inference response")
+            return content
 
     async def renew(
         self,
@@ -217,7 +268,7 @@ class InMemoryExecutionRepository:
                 now=now,
             )
             if decision.execution is not None:
-                self._executions[execution_id] = decision.execution
+                self._store(decision.execution)
             return decision.directive
 
     async def settle(
@@ -237,7 +288,11 @@ class InMemoryExecutionRepository:
                 now,
             )
             if decision.execution is not None:
-                self._executions[execution_id] = decision.execution
+                self._store(decision.execution)
+            if decision.rejection is None and isinstance(
+                settlement, InferenceSucceeded
+            ):
+                self._responses[execution_id] = settlement.content
             return decision.accepted_execution()
 
     async def mark_finish_mutation_started(
@@ -258,19 +313,23 @@ class InMemoryExecutionRepository:
 
     def _recover_expired_leases(self, now: datetime) -> None:
         """Replace each abandoned leased record with its shared recovery decision."""
-        for execution_id, execution in tuple(self._executions.items()):
+        for execution in tuple(self._executions.values()):
             if (
                 execution.fencing_token is None
                 or execution.lease_expires_at is None
                 or execution.lease_expires_at > now
             ):
                 continue
-            recovered = self._transitions.recover_expired(execution, now)
-            self._executions[execution_id] = recovered
+            self._store(self._transitions.recover_expired(execution, now))
 
-    def _active_processing_by_model(self, now: datetime) -> dict[str, int]:
-        """Count only processing claims with an unexpired lease for each model."""
-        counts: dict[str, int] = {}
+    def _store(self, execution: ExecutionRecord) -> None:
+        self._executions[execution.id] = execution
+        if execution.status in _TERMINAL:
+            self.requests.pop(execution.id, None)
+
+    def _active_processing(self, now: datetime) -> dict[tuple[Operation, str], int]:
+        """Count only processing claims with an unexpired lease per operation and model."""
+        counts: dict[tuple[Operation, str], int] = {}
         for execution in self._executions.values():
             if (
                 execution.work_kind is WorkKind.PROCESSING
@@ -278,12 +337,13 @@ class InMemoryExecutionRepository:
                 and execution.lease_expires_at is not None
                 and execution.lease_expires_at > now
             ):
-                counts[execution.model_id] = counts.get(execution.model_id, 0) + 1
+                target = (execution.operation, execution.model_id)
+                counts[target] = counts.get(target, 0) + 1
         return counts
 
     def _expire_deadlines(self, now: datetime) -> None:
         """Apply the appropriate execution or reporting deadline to records that still have work."""
-        for execution_id, execution in tuple(self._executions.items()):
+        for execution in tuple(self._executions.values()):
             deadline_at = self._transitions.work_deadline_at(execution)
             if deadline_at <= now and (
                 execution.status
@@ -294,10 +354,7 @@ class InMemoryExecutionRepository:
                 }
                 or execution.work_kind is not None
             ):
-                self._executions[execution_id] = self._transitions.deadline(
-                    execution,
-                    now,
-                )
+                self._store(self._transitions.deadline(execution, now))
 
     @staticmethod
     def _check_fingerprint(

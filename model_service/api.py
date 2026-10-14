@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated, Any, Protocol
 
-from fastapi import FastAPI, HTTPException, Request, Response, status
+from fastapi import FastAPI, Header, HTTPException, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import Field
@@ -34,15 +34,19 @@ from builders.contracts import (
 from builders.registry import BUILDERS
 from execution_scheduler.contracts import (
     ExecutionView,
+    InferenceResult,
+    InferenceScheduleRequest,
     InvalidScheduleRequestError,
+    ResultUnavailableError,
     ScheduleConflictError,
     ScheduleRequest,
     ScheduleResult,
     SchedulingUnavailableError,
     UnknownExecutionError,
 )
+from execution_scheduler.inference import IncompatibleInputError
 from model_service.health import DeploymentState, DeploymentStatus
-from model_service.inference import create_inference_router
+from model_service.inference import create_inference_router, inference_headers
 from model_service.requests import BuilderRequest, ImmediateBuilderRequest
 
 
@@ -65,6 +69,11 @@ class ApiErrorCode(StrEnum):
     UNKNOWN_EXECUTION = "unknown_execution"
     BUILDER_BACKPRESSURE = "builder_backpressure"
     BUILDER_UNAVAILABLE = "builder_unavailable"
+    PAYLOAD_TOO_LARGE = "payload_too_large"
+    RESULT_UNAVAILABLE = "result_unavailable"
+
+
+MAX_LOOKUP_IDS = 1000
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +94,11 @@ class EmpaiaScheduleBody:
     job_id: str
     credential: str
     requested_timeout_seconds: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionLookup:
+    ids: Annotated[list[str], Field(max_length=MAX_LOOKUP_IDS)]
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,7 +147,17 @@ class Scheduler(Protocol):
 
     async def schedule(self, request: ScheduleRequest) -> ScheduleResult: ...
 
+    async def schedule_inference(
+        self, request: InferenceScheduleRequest
+    ) -> ScheduleResult: ...
+
     async def get(self, execution_id: str) -> ExecutionView: ...
+
+    async def get_many(self, execution_ids: list[str]) -> list[ExecutionView]: ...
+
+    async def inference_result(
+        self, execution_id: str
+    ) -> tuple[InferenceResult, bytes]: ...
 
     async def cancel(self, execution_id: str) -> ExecutionView: ...
 
@@ -149,7 +173,7 @@ class DeploymentHealth(Protocol):
 
 
 _ERRORS: dict[int | str, dict[str, Any]] = {
-    code: {"model": ErrorResponse} for code in (404, 409, 422, 429, 503)
+    code: {"model": ErrorResponse} for code in (404, 409, 413, 422, 429, 503)
 }
 
 
@@ -172,6 +196,7 @@ def create_app(
     inference_proxy: InferenceProxy | None = None,
     lifespan: Lifespan[FastAPI] | None = None,
     deployment_health: DeploymentHealth | None = None,
+    inference_max_request_bytes: int = 2 * 1024 * 1024,
 ) -> FastAPI:
     app = FastAPI(title="model-service", lifespan=lifespan)
 
@@ -191,9 +216,14 @@ def create_app(
             },
         )
 
-    async def submit(request: ScheduleRequest, response: Response) -> ScheduleResult:
+    async def submit(
+        request: ScheduleRequest | InferenceScheduleRequest, response: Response
+    ) -> ScheduleResult:
         try:
-            result = await scheduler.schedule(request)
+            if isinstance(request, InferenceScheduleRequest):
+                result = await scheduler.schedule_inference(request)
+            else:
+                result = await scheduler.schedule(request)
         except (
             UnknownBuilderError,
             UnknownModelError,
@@ -204,7 +234,7 @@ def create_app(
             raise _http_error(
                 409, ApiErrorCode.SCHEDULE_CONFLICT, str(error)
             ) from error
-        except InvalidScheduleRequestError as error:
+        except (InvalidScheduleRequestError, IncompatibleInputError) as error:
             raise _http_error(422, ApiErrorCode.INVALID_REQUEST, str(error)) from error
         except SchedulingUnavailableError as error:
             raise _http_error(
@@ -223,6 +253,49 @@ def create_app(
             return model_view(catalog.get(model_id))
         except UnknownModelError as error:
             raise _lookup_error(error) from error
+
+    @app.post(
+        "/v1/models/{model_id}/schedule",
+        status_code=status.HTTP_202_ACCEPTED,
+        responses={200: {"model": ScheduleResult}, **_ERRORS},
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/octet-stream": {
+                        "schema": {"type": "string", "format": "binary"}
+                    }
+                },
+            }
+        },
+    )
+    async def schedule_inference(
+        model_id: str,
+        request: Request,
+        response: Response,
+        idempotency_key: Annotated[str | None, Header(min_length=1)] = None,
+        timeout_seconds: int | None = None,
+    ) -> ScheduleResult:
+        """Durably queue one raw model request (the body `POST /{model_id}/` takes)."""
+        if idempotency_key is None:
+            raise _http_error(
+                422, ApiErrorCode.INVALID_REQUEST, "Idempotency-Key header is required"
+            )
+        payload = await _read_body(request, inference_max_request_bytes)
+        return await submit(
+            InferenceScheduleRequest(
+                model_id=model_id,
+                payload=payload,
+                headers={
+                    name: value
+                    for name, value in inference_headers(request.headers).items()
+                    if name.startswith("x-")
+                },
+                idempotency_key=idempotency_key,
+                requested_timeout_seconds=timeout_seconds,
+            ),
+            response,
+        )
 
     @app.get("/v1/builders")
     async def list_builders() -> list[BuilderView]:
@@ -362,6 +435,45 @@ def create_app(
                 404, ApiErrorCode.UNKNOWN_EXECUTION, "execution does not exist"
             ) from error
 
+    @app.post("/v1/executions/lookup", responses=_ERRORS)
+    async def lookup_executions(body: ExecutionLookup) -> list[ExecutionView]:
+        """Views of the listed executions that exist; unknown IDs are left out."""
+        try:
+            return await scheduler.get_many(body.ids)
+        except SchedulingUnavailableError as error:
+            raise _http_error(
+                503, ApiErrorCode.SCHEDULING_UNAVAILABLE, str(error), retryable=True
+            ) from error
+
+    @app.get(
+        "/v1/executions/{execution_id}/result",
+        responses={
+            200: {"content": {"application/octet-stream": {}}},
+            **_ERRORS,
+        },
+    )
+    async def get_inference_result(execution_id: str) -> Response:
+        """The stored model response of a succeeded inference execution."""
+        try:
+            result, content = await scheduler.inference_result(execution_id)
+        except SchedulingUnavailableError as error:
+            raise _http_error(
+                503, ApiErrorCode.SCHEDULING_UNAVAILABLE, str(error), retryable=True
+            ) from error
+        except UnknownExecutionError as error:
+            raise _http_error(
+                404, ApiErrorCode.UNKNOWN_EXECUTION, "execution does not exist"
+            ) from error
+        except ResultUnavailableError as error:
+            raise _http_error(
+                409,
+                ApiErrorCode.RESULT_UNAVAILABLE,
+                "execution has no inference response",
+            ) from error
+        return Response(
+            content=content, media_type=result.media_type, headers=result.headers
+        )
+
     @app.post("/v1/executions/{execution_id}/cancel", responses=_ERRORS)
     async def cancel_execution(execution_id: str) -> ExecutionView:
         try:
@@ -421,6 +533,24 @@ async def _run_while_connected[T](request: Request, operation: Awaitable[T]) -> 
             if not task.done():
                 task.cancel()
         await asyncio.gather(operation_task, disconnect_task, return_exceptions=True)
+
+
+async def _read_body(request: Request, limit: int) -> bytes:
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > limit:
+        raise _payload_too_large(limit)
+    body = bytearray()
+    async for chunk in request.stream():
+        body += chunk
+        if len(body) > limit:
+            raise _payload_too_large(limit)
+    return bytes(body)
+
+
+def _payload_too_large(limit: int) -> HTTPException:
+    return _http_error(
+        413, ApiErrorCode.PAYLOAD_TOO_LARGE, f"request body exceeds {limit} bytes"
+    )
 
 
 async def _wait_for_disconnect(request: Request) -> None:

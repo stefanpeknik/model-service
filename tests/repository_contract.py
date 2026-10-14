@@ -10,8 +10,19 @@ from builders.contracts import (
     InputAccessContext,
     Invocation,
 )
+from execution_scheduler.contracts import (
+    ExecutionError,
+    ExecutionStatus,
+    InferenceInvocation,
+    InferenceResult,
+    Operation,
+    ResultUnavailableError,
+    UnknownExecutionError,
+)
 from execution_scheduler.domain import (
     Admission,
+    InferenceSucceeded,
+    ProcessingFailed,
     ProcessingRejected,
     ProcessingSucceeded,
     StaleWorkClaimError,
@@ -24,7 +35,13 @@ if TYPE_CHECKING:
     from execution_scheduler.repository import ExecutionRepository
 
 
+INFERENCE_RETENTION = timedelta(milliseconds=300)
+INFERENCE_LIMIT = 2
+
+
 class ExecutionRepositoryContract:
+    """Fixtures use INFERENCE_RETENTION and a per-model inference limit of INFERENCE_LIMIT."""
+
     repository: ExecutionRepository
 
     async def _advance_time(self, duration: timedelta) -> None:
@@ -50,6 +67,26 @@ class ExecutionRepositoryContract:
                 ),
                 protected_context={},
                 deadline_at=deadline,
+            )
+        )
+        return admitted.execution.id
+
+    async def _admit_inference(
+        self, key: str, model_id: str = "model-a", payload: bytes = b"tile"
+    ) -> str:
+        deadline = datetime.now(UTC) + timedelta(minutes=5)
+        admitted = await self.repository.admit(
+            Admission(
+                identity=SubmissionIdentity("inference", key, key),
+                builder_id=None,
+                model_id=model_id,
+                invocation=InferenceInvocation(
+                    headers={"x-output-dtype": "float32"}, deadline_at=deadline
+                ),
+                protected_context={},
+                deadline_at=deadline,
+                operation=Operation.INFERENCE,
+                payload=payload,
             )
         )
         return admitted.execution.id
@@ -204,3 +241,141 @@ class ExecutionRepositoryContract:
         execution = await self.repository.get(execution_id)
         assert execution.result is None
         assert execution.work_kind is WorkKind.PROVIDER_CANCELLATION_REPORT
+
+    async def test_inference_claim_carries_payload_and_settles_without_provider(
+        self,
+    ) -> None:
+        execution_id = await self._admit_inference("tile-1", payload=b"tile-bytes")
+        claim = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert claim is not None
+        assert claim.operation is Operation.INFERENCE
+        assert claim.payload == b"tile-bytes"
+        assert claim.builder_id is None
+        result = InferenceResult(
+            "application/octet-stream", {"x-output-shape": "(2,)"}, 3
+        )
+
+        await self.repository.settle(
+            execution_id, claim.fencing_token, InferenceSucceeded(result, b"out")
+        )
+
+        execution = await self.repository.get(execution_id)
+        assert execution.status is ExecutionStatus.SUCCEEDED
+        assert execution.work_kind is None
+        assert execution.result == result
+        assert await self.repository.inference_content(execution_id) == b"out"
+        assert await self.repository.claim_due("worker", timedelta(seconds=30)) is None
+
+    async def test_inference_rejects_a_builder_result(self) -> None:
+        execution_id = await self._admit_inference("tile-1")
+        claim = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert claim is not None
+        try:
+            await self.repository.settle(
+                execution_id,
+                claim.fencing_token,
+                ProcessingSucceeded(BuilderResult({})),
+            )
+        except StaleWorkClaimError:
+            pass
+        else:
+            raise AssertionError("inference accepted a builder result")
+
+    async def test_inference_capacity_is_per_model_and_separate_from_builders(
+        self,
+    ) -> None:
+        await self._admit_execution("builder")
+        for index in range(INFERENCE_LIMIT + 1):
+            await self._admit_inference(f"tile-{index}")
+        await self._admit_inference("other-model-tile", "model-b")
+
+        claims = []
+        while claim := await self.repository.claim_due("worker", timedelta(seconds=30)):
+            claims.append(claim)
+
+        operations = sorted((claim.operation.value, claim.model_id) for claim in claims)
+        assert operations == [
+            ("builder", "model-a"),
+            *[("inference", "model-a")] * INFERENCE_LIMIT,
+            ("inference", "model-b"),
+        ], operations
+
+    async def test_claims_are_limited_to_the_requested_operations(self) -> None:
+        builder_id = await self._admit_execution("builder")
+        await self._advance_time(timedelta(milliseconds=10))
+        await self._admit_inference("tile")
+
+        inference = await self.repository.claim_due(
+            "worker", timedelta(seconds=30), [Operation.INFERENCE]
+        )
+        builder = await self.repository.claim_due(
+            "worker", timedelta(seconds=30), [Operation.BUILDER]
+        )
+
+        assert inference is not None and inference.operation is Operation.INFERENCE
+        assert builder is not None and builder.execution_id == builder_id
+        assert (
+            await self.repository.claim_due(
+                "worker", timedelta(seconds=30), [Operation.BUILDER]
+            )
+            is None
+        )
+
+    async def test_cancelled_or_failed_inference_queues_no_report(self) -> None:
+        cancelled_id = await self._admit_inference("cancelled")
+        failed_id = await self._admit_inference("failed")
+        await self.repository.request_cancel(cancelled_id)
+        claim = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert claim is not None and claim.execution_id == failed_id
+        await self.repository.settle(
+            failed_id,
+            claim.fencing_token,
+            ProcessingFailed(ExecutionError("model_rejected_input", "no"), False),
+        )
+
+        cancelled = await self.repository.get(cancelled_id)
+        failed = await self.repository.get(failed_id)
+        assert cancelled.status is ExecutionStatus.CANCELLED
+        assert failed.status is ExecutionStatus.FAILED
+        assert cancelled.work_kind is None and failed.work_kind is None
+        assert await self.repository.claim_due("worker", timedelta(seconds=30)) is None
+        for execution_id in (cancelled_id, failed_id):
+            try:
+                await self.repository.inference_content(execution_id)
+            except ResultUnavailableError:
+                pass
+            else:
+                raise AssertionError("unfinished inference returned content")
+
+    async def test_finished_inference_is_deleted_after_retention(self) -> None:
+        finished_id = await self._admit_inference("finished")
+        builder_id = await self._admit_execution("builder")
+        await self.repository.request_cancel(finished_id)
+        await self.repository.request_cancel(builder_id)
+        queued_id = await self._admit_inference("queued", "model-b")
+        await self.repository.maintain()
+        await self.repository.get(finished_id)
+
+        await self._advance_time(INFERENCE_RETENTION * 2)
+        await self.repository.maintain()
+
+        try:
+            await self.repository.get(finished_id)
+        except UnknownExecutionError:
+            pass
+        else:
+            raise AssertionError("finished inference outlived its retention")
+        await self.repository.get(builder_id)
+        await self.repository.get(queued_id)
+        # The replay key is free again once the execution is gone.
+        assert await self._admit_inference("finished") != finished_id
+
+    async def test_get_many_keeps_order_and_skips_unknown_ids(self) -> None:
+        first = await self._admit_inference("first")
+        second = await self._admit_execution("second")
+
+        found = await self.repository.get_many(
+            [second, "not-an-id", "00000000-0000-0000-0000-000000000000", first]
+        )
+
+        assert [execution.id for execution in found] == [second, first]
