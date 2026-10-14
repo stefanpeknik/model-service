@@ -20,30 +20,27 @@ theme:
 nav:
   - Home: index.md
   - Documentation map: README.md
-  - Workflow operations:
-      - Durable execution: operations/durable-workflow-execution.md
-      - Full-WSI deployment: operations/full-wsi-deployment.md
-      - Full-WSI validation, 2026-10-04: operations/full-wsi-validation-postmortem-2026-10-04.md
-      - Local corrections, 2026-10-05: reviews/checkpoint-fixes-2026-10-05.md
-      - Final validation, 2026-10-06: operations/final-standalone-validation-2026-10-06.md
+  - Architecture:
+      - How it is put together: architecture/core.md
+      - Specification: spec.md
+      - Scheduler outside Ray Serve: adr/0001-run-scheduler-outside-ray-serve.md
+      - Ray layer overview: architecture/overview.md
+      - Request Lifecycle: architecture/request-lifecycle.md
+      - Batching: architecture/batching.md
+      - Queues and Backpressure: architecture/queues-and-backpressure.md
   - Get Started:
       - Quick Start: get-started/quick-start.md
       - Installation: https://docs.ray.io/en/latest/cluster/kubernetes/getting-started/kuberay-operator-installation.html
       - First Deployment: https://docs.ray.io/en/latest/serve/production-guide/kubernetes.html
   - Guides:
-      - Deployment Guide: guides/deployment-guide.md
       - Adding New Models: guides/adding-models.md
+      - Deployment Guide: guides/deployment-guide.md
       - Configuration Reference: guides/configuration-reference.md
       - Optimization Guide: guides/optimization-guide.md
       - Troubleshooting: guides/troubleshooting.md
-  - Architecture:
-      - Overview: architecture/overview.md
-      - Workflow execution proposal: architecture/workflow-execution-proposal.md
-      - Workflow execution interfaces: architecture/execution-interfaces.md
-      - Superseded EMPAIA prototype: architecture/empaia-control-plane.md
-      - Request Lifecycle: architecture/request-lifecycle.md
-      - Batching: architecture/batching.md
-      - Queues and Backpressure: architecture/queues-and-backpressure.md
+  - Operations:
+      - peknik-ns test deployment: operations/peknik-ns.md
+      - Core acceptance, 2026-10-14: operations/core-acceptance-2026-10-14.md
   - Available Models: available-models.md
 
 markdown_extensions:

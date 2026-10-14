@@ -83,7 +83,7 @@ Store the cache path in a shared location that persists across pod restarts.
 
 **Option 1: Use an emptyDir volume (data lost on pod restart)**
 
-In your application YAML in `helm/rayservice/applications/`, set the environment variable:
+In your model file in `helm/rayservice/models/`, set the environment variable:
 
 ```yaml
 deployments:

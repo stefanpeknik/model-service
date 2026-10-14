@@ -1,9 +1,8 @@
 # Model Service Documentation
 
-For workflow execution, scheduling, EMPAIA, or continuation of the current
-implementation, start at [the documentation map](README.md). It links the primary
-specification, current progress, and dated evidence. The model-deployment guides
-below describe the lower-level inference layer, not the full workflow platform.
+For builders, durable execution and the model catalog, start at
+[the architecture](architecture/core.md) and [the documentation map](README.md).
+The guides below cover deploying and writing models.
 
 ## Overview
 

@@ -2,8 +2,8 @@
 
 This document describes implemented model endpoints and their request and response
 formats. It is not a live deployment inventory; enabled applications depend on
-the deployment profile. For workflow APIs and the native GPU checkpoint, start
-at [the documentation map](README.md).
+the deployment profile. For builders and durable executions, see
+[the architecture](architecture/core.md).
 
 ## Overview of Endpoints
 
@@ -15,7 +15,6 @@ All endpoints receive and return data over HTTP using `POST` requests. To minimi
 | **Episeg 1**              | `/episeg-1`              | Semantic Segmentation         |
 | **Virchow2**              | `/virchow2`              | Foundation Model / Embeddings |
 | **Prov-GigaPath**         | `/prov-gigapath`         | Foundation Model / Embeddings |
-| **Heatmap Builder**       | `/heatmap-builder`       | Pipeline / Custom Builder     |
 
 ---
 
@@ -108,27 +107,34 @@ with Client() as client:
   print(emb.shape)
 ```
 
-### 5. Heatmap Builder (`/heatmap-builder`)
+### 5. Builders (`/v1/builders/...` on the facade)
 
-A processing pipeline element for aggregating inferences into spatial heatmaps.
+Builders run a model over a whole slide. They are called through the facade's
+public API, not on the Ray route, and take the model as a parameter:
 
-- **Input**: Typically takes standard HTTP POST requests with localized predictions to stitch into a global heatmap representations.
-- **Output**: Heatmap data structure (format depends on the implemented builder logic).
-- **SDK example**:
+| Builder | Accepts | Output |
+| --- | --- | --- |
+| `heatmap` | `spatial-scores` models (classifiers, segmentation) | pyramidal TIFF score map |
+| `tile-embeddings` | `tile-embedding` models (Virchow2, Prov-GigaPath) | HDF5 with one feature row per tile |
+
+`GET /v1/models` lists the deployed models and the builders each works with.
 
 ```python
 from rationai import Client
+from rationai.types import BuilderRequest, InputAccess, SharedPathInput
 
-with Client() as client:
-  client.slide.heatmap(
-    model="prostate-classifier-1",
-    slide_path="/mnt/data/slide.mrxs",
-    tissue_mask_path="/mnt/data/mask.tif",
-    output_path="/mnt/data/output_heatmap.tif",
-    stride_fraction=0.5,
-    output_bigtiff_tile_height=512,
-    output_bigtiff_tile_width=512,
-    timeout=1000,
+with Client(base_url="http://<facade>:8080") as client:
+  result = client.builders.run(
+    "heatmap",
+    BuilderRequest(
+      model_id="prostate-classifier-1",
+      inputs={
+        "slide": SharedPathInput("slides/slide.mrxs"),
+        "region_of_interest": SharedPathInput("masks/mask.tif"),  # optional
+      },
+      input_access=InputAccess("shared_storage", {"root": "/mnt/data"}),
+      output_path="outputs/heatmap.tif",
+    ),
   )
 ```
 

@@ -36,16 +36,17 @@ If you want to deploy your own model, start by adding the model code and Ray Ser
 
 In Model Service, configurations are managed using **Helm**. The environment configuration is split into values and applications inside the `helm/rayservice/` directory.
 
-Applications are configured by adding simple YAML definitions into the `helm/rayservice/applications/` folder.
+Models are configured by YAML files in the `helm/rayservice/models/` folder.
 
-Let's look at a sample application definition (e.g. `helm/rayservice/applications/prostate-classifier-1.yaml`):
+Let's look at a sample model file (`helm/rayservice/models/prostate-classifier-1.yaml`):
 
 ```yaml
-- name: prostate-classifier-1
+inference:
+  contract: spatial-scores
+serve:
+  name: prostate-classifier-1
   import_path: models.binary_classifier:app
   route_prefix: /prostate-classifier-1
-  runtime_env:
-    working_dir: https://github.com/RationAI/model-service/archive/refs/heads/main.zip
   # ...
 ```
 
@@ -54,7 +55,7 @@ Let's look at a sample application definition (e.g. `helm/rayservice/application
 - `name`: Logical app name (visible in the Ray dashboard and logs).
 - `import_path`: Python entrypoint (`module.path:variable`).
 - `route_prefix`: HTTP path under the Serve gateway.
-- `runtime_env.working_dir`: Git ZIP URL Ray downloads before startup. It must point to committed and pushed code.
+- `inference.contract`: how builders call the model; `heatmap` accepts `spatial-scores`.
 
 For your first deployment, we will use the existing configuration without changes.
 
@@ -72,7 +73,7 @@ Use a dedicated test release name (for example `rayservice-model-my-model`) so t
 
 This command automates the deployment process by compiling your Helm templates and applying the final manifest to the Kubernetes cluster.
 
-If you changed or added an application definition that points `runtime_env.working_dir` to your branch, commit and push those changes before running Helm so Ray can fetch the updated code snapshot.
+Code runs from the image, so a code change needs a new image tag in the values file.
 
 **Tip for avoiding cache issues:** Ray caches the downloaded `working_dir` based on the URL string. If you push new code to the same branch/zip URL, Ray will use the old cached version. A great way to bypass this and force a refresh is to add a query parameter to the `working_dir` URL in your config, like `?v=1`, `?v=2`, etc. You can just do this locally before deploying; it doesn't even need to be pushed to the remote repo.
 
