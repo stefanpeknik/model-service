@@ -1,6 +1,8 @@
 # Model-service core: builders, model catalog and durable execution
 
-Status: active, 2026-10-14. Branch `claude/model-service-core`.
+Status: implemented and accepted live on 2026-10-14
+([evidence](operations/core-acceptance-2026-10-14.md)). Branch
+`claude/model-service-core`.
 
 This is the specification for finishing model-service so that EMPAIA (or any
 other caller) can treat it as a black-box service. It keeps the decisions the
@@ -142,7 +144,8 @@ the unsafe legacy `builders/heatmap_builder.py` endpoint, and
 1. Unit and PostgreSQL-backed tests pass locally.
 2. Live in `peknik-ns`, one GPU worker at a time, scaled to zero afterwards:
    - prostate heatmap via `heatmap` + `prostate-classifier-1`, synchronous and
-     scheduled, pixel-identical to the October 8 artifact;
+     scheduled, pixel-identical to the previous implementation on the same
+     inputs (the October 8 file turned out not to match those inputs);
    - a second model onboarded by YAML only (no Python change, no image
      rebuild) and run through the same builder;
    - `tile-embeddings` with one embedding model on the same slide;
