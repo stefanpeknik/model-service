@@ -12,8 +12,10 @@ from math import ceil, floor
 from typing import TYPE_CHECKING
 
 import numpy as np
-from openslide import PROPERTY_NAME_MPP_X, PROPERTY_NAME_MPP_Y
+from openslide import PROPERTY_NAME_MPP_X, PROPERTY_NAME_MPP_Y, OpenSlideError
 from ratiopath.openslide import OpenSlide
+
+from builders.contracts import InvalidInvocation
 
 
 if TYPE_CHECKING:
@@ -21,6 +23,17 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from numpy.typing import NDArray
+
+
+@contextmanager
+def open_slide(path: Path, name: str) -> Iterator[OpenSlide]:
+    """Open an input slide; an unreadable file is the caller's error, not a retry."""
+    try:
+        slide = OpenSlide(str(path))
+    except OpenSlideError as error:
+        raise InvalidInvocation(f"input {name!r} is not a readable slide") from error
+    with slide:
+        yield slide
 
 
 def select_mask_level(mask: OpenSlide, target_mpp: float | tuple[float, float]) -> int:
@@ -53,7 +66,7 @@ class TileReader:
         if mask_path is None:
             yield cls(slide, None, mpp)
             return
-        with OpenSlide(str(mask_path)) as mask:
+        with open_slide(mask_path, "region_of_interest") as mask:
             yield cls(slide, mask, mpp)
 
     def read(self, x: int, y: int, tile_size: int) -> NDArray[np.uint8] | None:

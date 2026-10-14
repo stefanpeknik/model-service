@@ -152,7 +152,9 @@ class HeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
             "ratiopath.openslide": module("ratiopath.openslide", OpenSlide=FakeSlide),
             "ratiopath.tiling": module("ratiopath.tiling", grid_tiles=grid_tiles),
             "builders.tile_reader": module(
-                "builders.tile_reader", TileReader=FakeTileReader
+                "builders.tile_reader",
+                TileReader=FakeTileReader,
+                open_slide=lambda path, _name: FakeSlide(str(path)),
             ),
         }
         with TemporaryDirectory() as directory, patch.dict(sys.modules, fake_modules):
@@ -420,3 +422,15 @@ class HeatmapBuilderTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UnreadableInputTests(unittest.TestCase):
+    def test_a_file_that_is_not_a_slide_is_an_invalid_input(self) -> None:
+        from builders.contracts import InvalidInvocation
+        from builders.tile_reader import open_slide
+
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "notes.txt"
+            path.write_text("not a slide")
+            with self.assertRaises(InvalidInvocation), open_slide(path, "slide"):
+                pass

@@ -33,16 +33,15 @@ async def build_embeddings(
 ) -> None:
     """Coordinates are tile origins at the slide level closest to the model's mpp."""
     import h5py
-    from ratiopath.openslide import OpenSlide
 
-    from builders.tile_reader import TileReader
+    from builders.tile_reader import TileReader, open_slide
 
     tile_size = model.tile_size
     stride = max(1, round(tile_size * stride_fraction))
     loop = asyncio.get_running_loop()
     tasks: deque[asyncio.Task[tuple[int, int, NDArray[np.float32] | None]]] = deque()
     with (
-        OpenSlide(str(slide_path)) as slide,
+        open_slide(slide_path, "slide") as slide,
         TileReader.open(slide, mask_path, model.mpp) as reader,
         ThreadPoolExecutor(max_workers=num_threads) as executor,
         h5py.File(output_path, "w") as output,

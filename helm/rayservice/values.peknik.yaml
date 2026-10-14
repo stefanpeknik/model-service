@@ -49,8 +49,10 @@ workers:
   - peknik-gpu-workers
 
 rayImage:
-  repository: cerit.io/stefanpeknik/model-service-ray
-  tag: ""
+  # Thin code layer over the October GPU image (same Harbor repository, so
+  # its large base layers are not uploaded again).
+  repository: cerit.io/stefanpeknik/model-service-workflow-gpu
+  tag: core-eb93a32
   pullPolicy: IfNotPresent
 
 storage:
@@ -67,7 +69,7 @@ executionScheduler:
   replicas: 1
   image:
     repository: cerit.io/stefanpeknik/model-service-scheduler
-    tag: ""
+    tag: core-eb93a32
     pullPolicy: IfNotPresent
   database:
     existingSecret: model-service-validation-db

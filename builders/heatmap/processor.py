@@ -52,10 +52,9 @@ class SlideHeatmapProcessor:
         import numpy as np
         import pyvips
         from ratiopath.masks.mask_builders import MaskBuilder
-        from ratiopath.openslide import OpenSlide
         from ratiopath.tiling import grid_tiles
 
-        from builders.tile_reader import TileReader
+        from builders.tile_reader import TileReader, open_slide
 
         tile_size = model.tile_size
         output_tile_size = model.output_tile_size
@@ -64,7 +63,7 @@ class SlideHeatmapProcessor:
         loop = asyncio.get_running_loop()
         tasks: set[asyncio.Task[None]] = set()
         with (
-            OpenSlide(str(request.slide_path)) as slide,
+            open_slide(request.slide_path, "slide") as slide,
             TileReader.open(slide, request.mask_path, model.mpp) as reader,
             ThreadPoolExecutor(max_workers=self._num_threads) as executor,
         ):
