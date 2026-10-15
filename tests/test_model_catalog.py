@@ -185,3 +185,39 @@ class ModelCatalogTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# Methods a builder calls through a deployment handle, per contract.
+_HANDLE_METHODS = {
+    InferenceContract.SPATIAL_SCORES: ("get_config", "predict"),
+    InferenceContract.TILE_EMBEDDING: ("get_config", "embed"),
+}
+MODEL_FILES = sorted(
+    Path(__file__).parents[1].joinpath("helm/rayservice/models").rglob("*.yaml")
+)
+
+
+class ModelImplementationTests(unittest.TestCase):
+    def test_every_model_file_points_to_an_implementation_of_its_contract(
+        self,
+    ) -> None:
+        import importlib
+
+        import yaml
+
+        self.assertTrue(MODEL_FILES)
+        for path in MODEL_FILES:
+            with self.subTest(path.name):
+                document = yaml.safe_load(path.read_text(encoding="utf-8"))
+                contract = InferenceContract(document["inference"]["contract"])
+                module_name = document["serve"]["import_path"].partition(":")[0]
+                deployment = getattr(
+                    importlib.import_module(module_name),
+                    document["serve"]["deployments"][0]["name"],
+                )
+                implementation = deployment.func_or_class
+                for method in _HANDLE_METHODS[contract]:
+                    self.assertTrue(
+                        callable(getattr(implementation, method, None)),
+                        f"{module_name} lacks {method} for {contract}",
+                    )

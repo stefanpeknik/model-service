@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from builders.contracts import TileEmbeddingModel
-    from builders.embeddings.predictor import HttpEmbeddingPredictor
+    from builders.embeddings.predictor import EmbeddingPredictor
 
 
 async def build_embeddings(
@@ -25,7 +25,7 @@ async def build_embeddings(
     mask_path: Path | None,
     output_path: Path,
     *,
-    predictor: HttpEmbeddingPredictor,
+    predictor: EmbeddingPredictor,
     model: TileEmbeddingModel,
     stride_fraction: float,
     num_threads: int,

@@ -4,17 +4,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import httpx
-
 from builders.artifacts import atomic_artifact
 from builders.contracts import BuilderResult, SharedArtifact, TileEmbeddingModel
-from builders.embeddings.predictor import HttpEmbeddingPredictor
+from builders.embeddings.predictor import RayEmbeddingPredictor
 from builders.embeddings.processor import build_embeddings
 from builders.registry import EmbeddingConfiguration
 
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from builders.application import BuilderContext
+    from builders.embeddings.predictor import EmbeddingPredictor
     from builders.settings import WorkerSettings
 
 
@@ -23,37 +24,35 @@ class EmbeddingBuilder:
         self,
         settings: WorkerSettings,
         *,
-        transport: httpx.AsyncBaseTransport | None = None,
+        predictor: Callable[[TileEmbeddingModel], EmbeddingPredictor] = (
+            RayEmbeddingPredictor
+        ),
     ) -> None:
         self._settings = settings
-        self._transport = transport
+        self._predictor = predictor
 
     async def run(self, context: BuilderContext) -> BuilderResult:
         model = context.model
         config = context.configuration
         assert isinstance(model, TileEmbeddingModel)
         assert isinstance(config, EmbeddingConfiguration)
+        predictor = self._predictor(model)
+        await predictor.verify()
         slide = context.input_path("slide")
         mask = context.optional_input_path("region_of_interest")
         destination = context.output_path("embeddings")
         inputs = (slide,) if mask is None else (slide, mask)
         with atomic_artifact(destination, inputs=inputs) as temporary:
-            async with httpx.AsyncClient(
-                base_url=str(self._settings.model_origin),
-                transport=self._transport,
-                timeout=None,
-                trust_env=False,
-            ) as client:
-                await build_embeddings(
-                    slide,
-                    mask,
-                    temporary,
-                    predictor=HttpEmbeddingPredictor(client, model),
-                    model=model,
-                    stride_fraction=config.stride_fraction,
-                    num_threads=self._settings.num_threads,
-                    max_concurrent_tasks=self._settings.max_concurrent_tasks,
-                )
+            await build_embeddings(
+                slide,
+                mask,
+                temporary,
+                predictor=predictor,
+                model=model,
+                stride_fraction=config.stride_fraction,
+                num_threads=self._settings.num_threads,
+                max_concurrent_tasks=self._settings.max_concurrent_tasks,
+            )
         return BuilderResult(
             outputs={
                 "embeddings": SharedArtifact(

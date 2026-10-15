@@ -74,7 +74,6 @@ spec:
             {{- toYaml $builder.deployment | nindent 12 }}
             user_config:
               builder_id: {{ $id }}
-              model_origin: http://{{ $.Release.Name }}-serve-svc.{{ $.Release.Namespace }}.svc.cluster.local:8000
               shared_storage_roots: {{ toJson $.Values.sharedStorageRoots }}
               {{- with $builder.userConfig }}
               {{- toYaml . | nindent 14 }}

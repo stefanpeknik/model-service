@@ -7,15 +7,17 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import TYPE_CHECKING
 
 import httpx
 import numpy as np
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI
 
 from builders.application import BuilderApplication
 from builders.client import HTTPBuilderDispatch
 from builders.contracts import TileEmbeddingModel
 from builders.embeddings.builder import EmbeddingBuilder
+from builders.embeddings.predictor import RayEmbeddingPredictor
 from builders.http import RunRequest, run_http
 from builders.registry import get_builder
 from builders.settings import WorkerSettings
@@ -30,9 +32,12 @@ from tests.builder_fixtures import write_slide
 from tests.memory_repository import InMemoryExecutionRepository
 
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+
 try:
     import h5py
-    import lz4.frame
     import pyvips
 except (ImportError, OSError):
     HAS_NATIVE = False
@@ -42,35 +47,39 @@ else:
 TILE = 32
 
 
-class FakeEmbeddingModel:
-    """Raw-route model: the feature is the tile's mean value per summary."""
+class _Method:
+    def __init__(self, function: Callable[..., object]) -> None:
+        self._function = function
 
-    def __init__(self, summaries: int) -> None:
+    async def remote(self, *args: object) -> object:
+        return self._function(*args)
+
+
+class FakeEmbeddingDeployment:
+    """Stands in for a deployment handle: the feature is the tile's mean value."""
+
+    def __init__(self, summaries: tuple[str, ...]) -> None:
         self.summaries = summaries
+        self.tile_size = TILE
         self.calls = 0
-        self.failure: int | None = None
+        self.failure: Exception | None = None
         self.dimension = 4
-        self.app = FastAPI()
-        self.app.post("/encoder/")(self.predict)
+        self.get_config = _Method(
+            lambda: {"tile_size": self.tile_size, "summaries": list(self.summaries)}
+        )
+        self.embed = _Method(self._embed)
 
-    async def predict(self, request: Request) -> Response:
+    def _embed(self, tile: np.ndarray) -> np.ndarray:
         self.calls += 1
         if self.failure is not None:
-            return Response(status_code=self.failure)
-        tile = np.frombuffer(lz4.frame.decompress(await request.body()), np.uint8)
-        assert tile.size == TILE * TILE * 3
-        assert request.headers["x-pool-tokens"] == "true"
-        value = float(tile.mean())
+            raise self.failure
+        assert tile.shape == (3, TILE, TILE) and tile.dtype == np.uint8
         shape = (
             (self.dimension,)
-            if self.summaries == 1
-            else (self.summaries, self.dimension)
+            if len(self.summaries) == 1
+            else (len(self.summaries), self.dimension)
         )
-        features = np.full(shape, value, dtype=np.float32)
-        return Response(
-            content=lz4.frame.compress(features.tobytes()),
-            headers={"x-output-shape": str(shape)},
-        )
+        return np.full(shape, float(tile.mean()), dtype=np.float32)
 
 
 @unittest.skipUnless(HAS_NATIVE, "libvips, h5py or lz4 is unavailable")
@@ -88,7 +97,7 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
         write_slide(self.root / "mask.tiff", mask, mpp=0.25)
 
     async def client(self, summaries: tuple[str, ...]) -> httpx.AsyncClient:
-        self.model = FakeEmbeddingModel(len(summaries))
+        self.model = FakeEmbeddingDeployment(summaries)
         catalog = ModelCatalog(
             [
                 TileEmbeddingModel(
@@ -101,7 +110,11 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
         application = BuilderApplication(
             get_builder("tile-embeddings"),
             EmbeddingBuilder(
-                settings, transport=httpx.ASGITransport(app=self.model.app)
+                settings,
+                predictor=lambda model: RayEmbeddingPredictor(
+                    model,
+                    self.model,  # type: ignore[arg-type]
+                ),
             ),
             {"shared_storage": storage},
         )
@@ -234,7 +247,7 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_model_failure_leaves_no_artifact(self) -> None:
         client = await self.client(("tile",))
-        self.model.failure = 503
+        self.model.failure = RuntimeError("CUDA out of memory")
 
         response = await client.post(
             "/v1/builders/tile-embeddings/run", json=self.body()
@@ -256,6 +269,18 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()["detail"]["code"], "invalid_model_output")
         self.assertFalse((self.root / "out" / "features.h5").exists())
+
+    async def test_running_model_must_match_its_declaration(self) -> None:
+        client = await self.client(("tile",))
+        self.model.tile_size = 64
+
+        response = await client.post(
+            "/v1/builders/tile-embeddings/run", json=self.body()
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["detail"]["code"], "model_contract_mismatch")
+        self.assertEqual(self.model.calls, 0)
 
     async def test_heatmap_model_is_rejected_for_embeddings(self) -> None:
         client = await self.client(("tile",))
