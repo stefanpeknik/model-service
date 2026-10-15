@@ -70,7 +70,7 @@ executionScheduler:
   replicas: 1
   image:
     repository: cerit.io/stefanpeknik/model-service-scheduler
-    tag: core-eb93a32
+    tag: core-c1396a9
     pullPolicy: IfNotPresent
   database:
     existingSecret: model-service-validation-db

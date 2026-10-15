@@ -7,19 +7,21 @@ behind one public API that can also run builders durably.
              callers: RationAI SDK, EMPAIA (via JES), notebooks
                                   │ HTTP
 ┌─────────────────────────────────▼──────────────────────────────────┐
-│ facade (model_service/, one Deployment, outside Ray)                │
-│  /v1/models  /v1/builders  /v1/builders/{b}/run|schedule            │
-│  /v1/executions/{id}[/cancel]   /v1/providers/empaia/...   /{model} │
-│  model catalog ◄── ConfigMap rendered from helm/rayservice/models/  │
-│  execution scheduler (execution_scheduler/) ◄──► PostgreSQL         │
+│ facade (model_service/, one Deployment, outside Ray)               │
+│  /v1/models   /v1/models/{m}/schedule (tiles)                      │
+│  /v1/builders   /v1/builders/{b}/run|schedule                      │
+│  /v1/executions/{id}[/cancel|/result]   /v1/executions/lookup      │
+│  /v1/providers/empaia/...   /{model} (raw proxy)                   │
+│  model catalog ◄── ConfigMap rendered from helm/rayservice/models/ │
+│  execution scheduler (execution_scheduler/) ◄──► PostgreSQL        │
 └───────────────┬───────────────────────────────────┬────────────────┘
-   builder call │ POST /builders/{b}/               │ raw inference proxy
+   builder call │ POST /builders/{b}/               │ raw proxy, scheduled tiles
 ┌───────────────▼───────────────────────────────────▼────────────────┐
-│ Ray Serve (RayService)                                              │
-│  builder-heatmap, builder-tile-embeddings (builders/serve.py)       │
-│        │ Ray handle or HTTP, per model contract                     │
-│  model deployments: prostate-classifier-1, virchow2, … (models/)    │
-└─────────────────────────────────────────────────────────────────────┘
+│ Ray Serve (RayService)                                             │
+│  builder-heatmap, builder-tile-embeddings (builders/serve.py)      │
+│        │ Ray handle or HTTP, per model contract                    │
+│  model deployments: prostate-classifier-1, virchow2, … (models/)   │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Pieces
@@ -49,6 +51,13 @@ behind one public API that can also run builders durably.
 5. Provider finish delivers the result: nothing to do for standalone, or
    publication to the AppService for EMPAIA.
 
+A scheduled tile (`POST /v1/models/{m}/schedule`) is the same lifecycle with a
+different payload: the facade checks the tile against the model's `tile_size`,
+stores its bytes with the execution, and an attempt sends them to
+`POST /{m}/` exactly as the raw proxy would. The response is stored for a
+day and served by `GET /v1/executions/{id}/result`. There is no provider
+finish. `POST /v1/executions/lookup` polls many executions at once.
+
 ## Contracts
 
 | Contract | Models | How a builder calls it | Declared where |
@@ -58,9 +67,12 @@ behind one public API that can also run builders durably.
 
 ## Capacity and failure behaviour
 
-- One facade process runs up to `MAX_CONCURRENT_EXECUTIONS` claims. At most
-  `PER_MODEL_LIMIT` processing attempts per model run at once, across all
-  facade replicas (PostgreSQL advisory lock per model).
+- One facade process runs up to `MAX_CONCURRENT_EXECUTIONS` builder claims and,
+  separately, `MAX_CONCURRENT_INFERENCE` tile claims. At most `PER_MODEL_LIMIT`
+  builder attempts and `PER_MODEL_INFERENCE_LIMIT` tile attempts per model run
+  at once, across all facade replicas (PostgreSQL advisory lock per operation
+  and model). Tiles are claimed in batches; one 1-CPU facade replica handles
+  about 100 tiles/s.
 - Builder replicas return 429 when full; the scheduler requeues without
   spending an attempt. Synchronous callers get 429 with `Retry-After`.
 - Delivery is at least once. A lost facade lets its lease expire and another

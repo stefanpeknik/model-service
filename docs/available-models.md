@@ -173,3 +173,30 @@ with Client() as client:
   )
   print(f"Embedding shape: {embedding.shape}")
 ```
+
+### Scheduling many tiles
+
+When you tile slides yourself, schedule the tiles instead of keeping one
+request open per tile. Model-service stores each tile, runs it once a model
+replica is up (a cold GPU worker takes a few minutes), and keeps the response
+for 24 hours.
+
+```python
+with Client() as client:
+  ids = [
+    client.models.schedule("virchow2", tile, output_dtype=np.float16).execution.id
+    for tile in tiles  # uint8 RGB arrays of the model's tile size
+  ]
+  finished = client.executions.wait(ids)  # polls up to 1000 at a time
+  embeddings = [
+    client.executions.result(execution.id).array(np.float16)
+    for execution in finished
+    if execution.status == "succeeded"
+  ]
+```
+
+A classifier's response decodes with `.json()`. The HTTP form is
+`POST /v1/models/{model}/schedule` with the raw route's body and an
+`Idempotency-Key` header; see [the specification](spec.md#scheduled-raw-inference).
+Concurrent requests to a batching model can differ slightly from a request run
+alone (Virchow2: up to about 0.1%), because Ray batches them together.

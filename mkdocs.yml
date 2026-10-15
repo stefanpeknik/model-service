@@ -41,6 +41,7 @@ nav:
   - Operations:
       - peknik-ns test deployment: operations/peknik-ns.md
       - Core acceptance, 2026-10-14: operations/core-acceptance-2026-10-14.md
+      - Scheduled raw inference acceptance, 2026-10-15: operations/raw-inference-acceptance-2026-10-15.md
   - Available Models: available-models.md
 
 markdown_extensions:

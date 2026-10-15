@@ -70,6 +70,12 @@ The durable model-service lifecycle created by one schedule request, including
 any repeated processing attempts and provider finish.
 _Avoid_: Batch job, model-service job
 
+**Scheduled inference**:
+A scheduled execution of one raw model request (one tile) instead of a
+builder. It has no provider finish; its stored response is downloaded
+separately and expires after a retention period.
+_Avoid_: Batch inference, tile job
+
 **Processing attempt**:
 One try to produce the builder result of a scheduled execution. A scheduled
 execution may have several processing attempts but only one accepted result.

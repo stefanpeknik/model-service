@@ -37,7 +37,8 @@ podman build -f docker/Dockerfile.code-refresh \
   -t cerit.io/stefanpeknik/model-service-workflow-gpu:core-$REV .
 podman build -f docker/Dockerfile.code-refresh \
   --build-arg BASE=cerit.io/stefanpeknik/model-service-scheduler:checkpoint-20261008-a91b519 \
-  --build-arg RUN_USER=10001 --build-arg SOURCE_REVISION=$REV \
+  --build-arg RUN_USER=10001 --build-arg 'EXTRA_PACKAGES=lz4>=4.4.5' \
+  --build-arg SOURCE_REVISION=$REV \
   -t cerit.io/stefanpeknik/model-service-scheduler:core-$REV .
 podman push cerit.io/stefanpeknik/model-service-workflow-gpu:core-$REV
 podman push cerit.io/stefanpeknik/model-service-scheduler:core-$REV
@@ -65,3 +66,12 @@ curl localhost:18080/healthz/deployments
 
 `constant-classifier` exercises the heatmap builder and the scheduler on the CPU
 worker only. `prostate-classifier-1` and `virchow2` start the GPU worker.
+
+Scheduled tiles are cheap to test on `constant-classifier` (128x128 tiles):
+
+```sh
+uv run python -c "import lz4.frame, sys; sys.stdout.buffer.write(lz4.frame.compress(bytes(128*128*3)))" > tile.lz4
+curl -s -XPOST localhost:18080/v1/models/constant-classifier/schedule \
+  -H 'Idempotency-Key: try-1' --data-binary @tile.lz4
+curl -s localhost:18080/v1/executions/<id>/result
+```

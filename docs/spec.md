@@ -1,7 +1,9 @@
 # Model-service core: builders, model catalog and durable execution
 
 Status: implemented and accepted live on 2026-10-14
-([evidence](operations/core-acceptance-2026-10-14.md)). Branch
+([evidence](operations/core-acceptance-2026-10-14.md)); scheduled raw inference
+added and accepted on 2026-10-15
+([evidence](operations/raw-inference-acceptance-2026-10-15.md)). Branch
 `claude/model-service-core`.
 
 This is the specification for finishing model-service so that EMPAIA (or any
@@ -104,7 +106,10 @@ defaults. One Ray application per builder (`builders.serve:app`, route
 | `POST /v1/builders/{builder}/run` | Synchronous run. Body: `model_id`, `inputs`, `input_access`, optional `output_path`, `deadline_at` |
 | `POST /v1/builders/{builder}/schedule` | Durable admission. Body: `provider`, `body` (with `model_id`), `idempotency_key`, `requested_timeout_seconds` |
 | `POST /v1/providers/empaia/builders/{builder}/schedule` | EMPAIA admission with `model_id` and job context |
-| `GET /v1/executions/{id}`, `POST …/cancel` | Unchanged; views carry `builder_id` and `model_id` |
+| `POST /v1/models/{model}/schedule` | Durable raw inference: the body `POST /{model}/` takes, an `Idempotency-Key` header, optional `timeout_seconds` |
+| `GET /v1/executions/{id}`, `POST …/cancel` | Views carry `operation` (`builder` or `inference`), `builder_id` (null for inference) and `model_id` |
+| `POST /v1/executions/lookup` | Up to 1000 views by ID in one call; unknown IDs are left out |
+| `GET /v1/executions/{id}/result` | A succeeded inference execution's stored model response |
 | `POST /{model_id}/…` | Raw inference proxy, unchanged |
 
 Unknown builder or model: 404 `unknown_builder` / `unknown_model`.
@@ -118,10 +123,48 @@ requests queue; synchronous requests get 503.
   GPU-bound model is the shared resource.
 - Lease renewal tolerates transient database errors until the lease would
   actually expire.
+- Database connections are pooled (`DATABASE_POOL_SIZE`, 20). A new
+  connection per transaction made PostgreSQL the bottleneck under many small
+  executions.
 - Migration `0002` renames `workflow_id` to `builder_id` and adds `model_id`,
   mapping existing rows from the retired workflow IDs.
-- Scheduled raw inference is deferred. Nothing in either assignment requires
-  it, and it would need durable payload storage. Raw calls stay transient.
+- Raw inference can be scheduled too; see below.
+
+### Scheduled raw inference
+
+A caller that tiles slides itself should not hold one connection per tile
+while a GPU worker starts. `POST /v1/models/{model}/schedule` takes exactly the
+request the raw route takes and returns an execution.
+
+- One execution per tile, the native inference unit. It shares the builder
+  lifecycle (leases, fencing, retries, deadlines, cancellation, idempotent
+  admission) but has no provider phase: there is nothing to publish or report.
+- Every model's raw input is one LZ4 frame holding an HWC uint8 RGB tile of the
+  model's `tile_size`. The facade checks that at admission and before every
+  attempt, decompressing at most one byte past the expected size. A model whose
+  tile size changed while a tile waited fails it with `incompatible_input`
+  instead of sending reinterpreted data.
+- The request bytes are stored in `inference_payloads` in the admission
+  transaction, so an acknowledged tile survives a restart. They are deleted
+  when the execution finishes. The response is kept for
+  `INFERENCE_RETENTION_SECONDS` (24 h) after finishing, then the execution is
+  deleted. `x-` response headers (e.g. `x-output-shape`) are kept with it.
+- Replay identity is the `Idempotency-Key` header; the fingerprint covers the
+  model, `x-` request headers, timeout and payload hash.
+- Model responses: 2xx succeeds; 429/503 requeue without spending an attempt;
+  400/413/415/422 fail with `model_rejected_input`; other statuses and lost
+  connections are retryable failures.
+- Tiles have their own capacity: `PER_MODEL_INFERENCE_LIMIT` (32) attempts per
+  model and `MAX_CONCURRENT_INFERENCE` (32) per facade process, separate from
+  builder slots, so neither starves the other. Ray Serve's own queue limits
+  still protect the replica. The worker claims tiles in batches of a quarter of
+  its tile slots per transaction.
+- Facade memory for running tiles is bounded by
+  `MAX_CONCURRENT_INFERENCE × (INFERENCE_MAX_REQUEST_BYTES + INFERENCE_MAX_RESULT_BYTES)`,
+  192 MiB with the defaults (2 MiB and 4 MiB).
+- Throughput is bounded by the facade's CPU, about 100 tiles/s per 1-CPU
+  replica. Replicas scale it: leases and the per-model locks already
+  coordinate them.
 
 ### Safety and correctness fixes
 
@@ -151,6 +194,9 @@ the unsafe legacy `builders/heatmap_builder.py` endpoint, and
    - `tile-embeddings` with one embedding model on the same slide;
    - cancellation and scheduler restart during a running execution.
 3. The RationAI SDK runs and schedules builders with a model ID.
+4. Scheduled raw inference (2026-10-15): tiles admitted while no GPU worker
+   exists complete after it starts, without the client staying connected;
+   results equal direct calls; a facade restart loses no tile.
 
 ## Out of scope
 
