@@ -15,8 +15,8 @@ from httpx import ASGITransport, AsyncClient, MockTransport, Request, Response
 from model_service.facade.app import create_app
 from model_service.facade.catalog import CatalogError
 from model_service.facade.settings import SchedulerSettings
+from tests.facade.test_model_catalog import embedding_document, spatial_document
 from tests.support.memory_repository import InMemoryExecutionRepository
-from tests.test_model_catalog import embedding_document, spatial_document
 
 
 class RuntimeTestCase(unittest.IsolatedAsyncioTestCase):

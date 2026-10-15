@@ -14,7 +14,7 @@ from model_service.scheduler.contracts import (
     InvalidScheduleRequestError,
     ScheduleRequest,
 )
-from tests.test_empaia_execution import ControlledEmpaiaService
+from tests.providers.test_empaia_execution import ControlledEmpaiaService
 
 
 API_URL = "https://empaia.invalid"

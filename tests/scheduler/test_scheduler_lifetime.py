@@ -11,12 +11,12 @@ from model_service.builders.contracts import BuilderResult
 from model_service.scheduler.contracts import ExecutionStatus, ScheduleRequest
 from model_service.scheduler.domain import RetryPolicy
 from model_service.scheduler.scheduler import ExecutionScheduler
+from tests.scheduler.test_execution_scheduler import MutableClock, StandaloneProvider
 from tests.support.memory_repository import (
     FakeDispatch,
     InMemoryExecutionRepository,
     resolve_test_model,
 )
-from tests.test_execution_scheduler import MutableClock, StandaloneProvider
 
 
 class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):

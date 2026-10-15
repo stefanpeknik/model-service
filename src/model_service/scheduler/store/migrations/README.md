@@ -48,7 +48,7 @@ An initialization failure prevents scheduler startup.
 
    ```sh
    UV_CACHE_DIR=.cache/uv uv run --locked --offline python -m unittest \
-     tests.test_postgres_execution_repository -v
+     tests.scheduler.test_postgres_execution_repository -v
    ```
 
 Never edit or rename an applied migration. Add a new migration instead. SQL

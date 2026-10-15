@@ -495,7 +495,10 @@ class PostgresExecutionRepositoryTests(
         execution_id = str(uuid4())
         table = sql.Identifier(self.schema, "executions")
         fixture = (
-            Path(__file__).parent / "support" / "fixtures" / "executions_pre_orm.sql"
+            Path(__file__).parents[1]
+            / "support"
+            / "fixtures"
+            / "executions_pre_orm.sql"
         )
         async with await AsyncConnection.connect(self.dsn) as connection:
             await connection.execute(

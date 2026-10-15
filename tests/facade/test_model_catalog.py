@@ -193,7 +193,7 @@ _HANDLE_METHODS = {
     InferenceContract.TILE_EMBEDDING: ("get_config", "embed"),
 }
 MODEL_FILES = sorted(
-    Path(__file__).parents[1].joinpath("deploy/helm/rayservice/models").rglob("*.yaml")
+    Path(__file__).parents[2].joinpath("deploy/helm/rayservice/models").rglob("*.yaml")
 )
 
 
