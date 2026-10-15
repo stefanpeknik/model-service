@@ -7,20 +7,20 @@ behind one public API that can also run builders durably.
              callers: RationAI SDK, EMPAIA (via JES), notebooks
                                   │ HTTP
 ┌─────────────────────────────────▼──────────────────────────────────┐
-│ facade (src/model_service/facade/, one Deployment, outside Ray)               │
+│ facade (model_service/facade/, one Deployment, outside Ray)        │
 │  /v1/models   /v1/models/{m}/schedule (tiles)                      │
 │  /v1/builders   /v1/builders/{b}/run|schedule                      │
 │  /v1/executions/{id}[/cancel|/result]   /v1/executions/lookup      │
 │  /v1/providers/empaia/...   /{model} (raw proxy)                   │
-│  model catalog ◄── ConfigMap rendered from deploy/helm/rayservice/models/ │
-│  execution scheduler (src/model_service/scheduler/) ◄──► PostgreSQL        │
+│  model catalog ◄── ConfigMap from deploy/helm/rayservice/models/   │
+│  execution scheduler (model_service/scheduler/) ◄──► PostgreSQL    │
 └───────────────┬───────────────────────────────────┬────────────────┘
    builder call │ POST /builders/{b}/               │ raw proxy, scheduled tiles
 ┌───────────────▼───────────────────────────────────▼────────────────┐
 │ Ray Serve (RayService)                                             │
-│  builder-heatmap, builder-tile-embeddings (src/model_service/builders/serve.py)      │
+│  builder-heatmap, builder-tile-embeddings (builders/serve.py)      │
 │        │ Ray handle or HTTP, per model contract                    │
-│  model deployments: prostate-classifier-1, virchow2, … (src/model_service/models/)   │
+│  model deployments: prostate-classifier-1, virchow2, … (models/)   │
 └────────────────────────────────────────────────────────────────────┘
 ```
 

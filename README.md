@@ -5,12 +5,17 @@ inference, and **builders** that run a chosen model over a whole slide, either
 synchronously or as durable executions you can poll and cancel.
 
 ```text
-deploy/helm/rayservice/models/<id>.yaml   one file per trained model: inference contract + Ray Serve app
-src/model_service/models/                            inference implementations (classifier, segmentation, encoders)
-src/model_service/builders/                          heatmap and tile-embeddings builders and their runtime
-src/model_service/facade/                     the public API (facade) and model catalog
-src/model_service/scheduler/               durable executions on PostgreSQL
-src/model_service/providers/                      providers: shared storage, EMPAIA
+src/model_service/
+  facade/        the public API pod: routes/, model catalog, raw inference proxy
+  scheduler/     durable executions on PostgreSQL (runs inside the facade pod)
+  providers/     where builders read input and publish output: standalone, EMPAIA
+  builders/      heatmap and tile-embeddings builders (Ray Serve)
+  models/        inference implementations (Ray Serve)
+deploy/
+  helm/rayservice/models/<id>.yaml   one file per trained model
+  images/  k8s/  empaia/             Dockerfiles, manifests, EADs
+testing/         deployable test doubles (constant classifier, mock AppService)
+tests/           unit and PostgreSQL tests
 ```
 
 Read [how it is put together](docs/architecture/core.md), then the
