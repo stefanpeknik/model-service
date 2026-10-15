@@ -25,7 +25,9 @@ if TYPE_CHECKING:
 EAD_SCHEMA = "https://gitlab.com/empaia/integration/definitions/-/raw/main/ead/ead-schema.v3.json"
 ROOT = Path(__file__).resolve().parents[1]
 _EAD_SCHEMA = json.loads(
-    (ROOT / "deploy" / "empaia" / "schemas" / "ead-v3.schema.json").read_text(encoding="utf-8")
+    (ROOT / "deploy" / "empaia" / "schemas" / "ead-v3.schema.json").read_text(
+        encoding="utf-8"
+    )
 )
 
 
