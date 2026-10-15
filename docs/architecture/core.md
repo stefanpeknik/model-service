@@ -63,7 +63,7 @@ finish. `POST /v1/executions/lookup` polls many executions at once.
 | Contract | Models | How a builder calls it | Declared where |
 | --- | --- | --- | --- |
 | `spatial-scores` | binary classifier, semantic segmentation, constant test model | Ray handle `predict(CHW uint8)`; the heatmap builder checks `get_config()` against the declaration before starting | `tile_size`, `output_tile_size`, `n_channels`, `mpp` in `user_config` |
-| `tile-embedding` | Virchow2, Prov-GigaPath | Raw HTTP route with LZ4 tiles and pooled tokens | `tile_size` in `user_config`; `mpp`, `summaries` in `inference` |
+| `tile-embedding` | Virchow2, Prov-GigaPath | Ray handle `embed(CHW uint8)` → pooled features; the builder checks `get_config()` (`tile_size`, `summaries`) first | `tile_size` in `user_config`; `mpp`, `summaries` in `inference` |
 
 ## Capacity and failure behaviour
 

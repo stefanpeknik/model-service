@@ -185,6 +185,8 @@ async def get_config(self) -> dict[str, Any]:
 
 The builder calls it with `await model.get_config.remote()` before each run and fails with `model_contract_mismatch` if the values differ from the model's catalog declaration; keep it cheap and avoid any I/O.
 
+A `tile-embedding` model (used by the `tile-embeddings` builder) instead provides `get_config()` returning `tile_size` and `summaries`, and `async def embed(self, tile)`: one CHW uint8 tile in, float32 `(dim,)` (one summary) or `(len(summaries), dim)` out, with the model's own preprocessing and pooling inside. See `models/virchow2.py`. Builders call both by handle; the raw HTTP route should wrap the same code. `tests/test_model_catalog.py` fails if a model file's implementation lacks the methods of its contract.
+
 ### `root`: HTTP request parsing and serialization
 
 ```python

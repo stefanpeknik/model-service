@@ -69,7 +69,13 @@ values the model does not read. Nothing is declared twice.
 | Contract | Transport | Parameters | Source |
 | --- | --- | --- | --- |
 | `spatial-scores` | Ray handle: `get_config()`, `predict(CHW uint8)` → `n_channels × output_tile_size²` scores in [0, 1] | `tile_size`, `output_tile_size`, `n_channels`, `mpp` | `user_config` |
-| `tile-embedding` | HTTP `POST /{id}/`: LZ4 HWC uint8 tile, `x-output-dtype: float32`, `x-pool-tokens: true` → float32 `(dim,)` or `(len(summaries), dim)` | `tile_size` from `user_config`; `mpp`, `summaries` from `inference` | both |
+| `tile-embedding` | Ray handle: `get_config()` (`tile_size`, `summaries`), `embed(CHW uint8)` → float32 `(dim,)` or `(len(summaries), dim)` | `tile_size` from `user_config`; `mpp`, `summaries` from `inference` | both |
+
+Builders call every model by deployment handle, never over HTTP, and check
+`get_config()` against the catalog before reading a slide. A test checks that
+each model file's implementation has the handle methods of its contract. The
+raw HTTP route (`POST /{id}/`) stays for external callers and wraps the same
+code, so both give identical outputs.
 
 Onboarding a compatible model: add one YAML file, list it in `values.yaml`
 `models`, `helm upgrade`. No Python, no image rebuild.
