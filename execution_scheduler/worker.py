@@ -128,30 +128,49 @@ class ExecutionWorker:
         running: dict[Operation, set[asyncio.Task[None]]] = {
             operation: set() for operation in Operation
         }
+        # Tiles are claimed in batches: one transaction per quarter of the slots
+        # instead of one per tile.
+        batch = max(1, self._slots[Operation.INFERENCE] // 4)
+        loop = asyncio.get_running_loop()
+        last_inference_claim = -poll_interval
         stopping = asyncio.ensure_future(stop.wait())
         try:
             while not stop.is_set():
-                free = [
-                    operation
+                free = {
+                    operation: self._slots[operation] - len(tasks)
                     for operation, tasks in running.items()
-                    if len(tasks) < self._slots[operation]
-                ]
-                claim = None
-                if free:
-                    try:
-                        claim = await self._repository.claim_due(
-                            self._owner, self._lease_duration, free
+                }
+                claims: list[WorkClaim] = []
+                try:
+                    if free[Operation.INFERENCE] >= batch or (
+                        free[Operation.INFERENCE] > 0
+                        and loop.time() - last_inference_claim >= poll_interval
+                    ):
+                        last_inference_claim = loop.time()
+                        claims.extend(
+                            await self._repository.claim_inference(
+                                self._owner,
+                                self._lease_duration,
+                                free[Operation.INFERENCE],
+                            )
                         )
-                    except Exception as error:
-                        logger.error("execution claim failed: %s", type(error).__name__)
-                if claim is not None:
+                    if free[Operation.BUILDER] > 0:
+                        claim = await self._repository.claim_due(
+                            self._owner, self._lease_duration, [Operation.BUILDER]
+                        )
+                        if claim is not None:
+                            claims.append(claim)
+                except Exception as error:
+                    logger.error("execution claim failed: %s", type(error).__name__)
+                for claim in claims:
                     running[claim.operation].add(
                         asyncio.create_task(self._process_logged(claim))
                     )
+                if claims:
                     continue
                 await asyncio.wait(
                     {stopping, *(task for tasks in running.values() for task in tasks)},
-                    timeout=poll_interval if free else None,
+                    timeout=poll_interval if any(free.values()) else None,
                     return_when=asyncio.FIRST_COMPLETED,
                 )
                 for tasks in running.values():

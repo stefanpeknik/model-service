@@ -72,6 +72,12 @@ class ExecutionRepository(Protocol):
         """
         ...
 
+    async def claim_inference(
+        self, owner: str, lease_duration: timedelta, limit: int
+    ) -> list[WorkClaim]:
+        """Lease up to `limit` due inference attempts, with payloads, at once."""
+        ...
+
     async def inference_content(self, execution_id: str) -> bytes:
         """Return a succeeded inference execution's stored response bytes.
 

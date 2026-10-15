@@ -54,6 +54,7 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
     repository = PostgresExecutionRepository(
         config.database_url,
         cipher=cipher,
+        pool_size=config.database_pool_size,
         per_model_limit=config.per_model_limit,
         per_model_inference_limit=config.per_model_inference_limit,
         inference_retention=config.inference_retention,

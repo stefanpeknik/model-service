@@ -249,7 +249,8 @@ class PostgresExecutionRepository:
             if Operation.BUILDER in allowed:
                 row = await self._select_finish(session, now)
             if row is None:
-                row = await self._select_processing(session, now, allowed)
+                rows = await self._select_processing(session, now, allowed, limit=1)
+                row = rows[0] if rows else None
             if row is None:
                 return None
             claimed = self._transitions.claim(
@@ -270,6 +271,47 @@ class PostgresExecutionRepository:
             if payload is None:
                 raise RuntimeError("inference execution has no stored request")
             return replace(claimed.claim, payload=payload)
+
+    async def claim_inference(
+        self, owner: str, lease_duration: timedelta, limit: int
+    ) -> list[WorkClaim]:
+        """Lease up to `limit` due inference attempts, with payloads, in one transaction."""
+        if limit <= 0:
+            return []
+        async with self._transaction() as session:
+            now = await self._database_now(session)
+            await self._expire_deadlines(session, now)
+            await self._recover_expired_leases(session, now)
+            rows = await self._select_processing(
+                session, now, frozenset({Operation.INFERENCE}), limit=limit
+            )
+            claims = []
+            for row in rows:
+                claimed = self._transitions.claim(
+                    self._record(row),
+                    owner=owner,
+                    fencing_token=str(uuid4()),
+                    lease_duration=lease_duration,
+                    now=now,
+                )
+                self._apply_state(row, claimed.execution)
+                claims.append(claimed.claim)
+            if not claims:
+                return []
+            await session.flush()
+            requests = await session.execute(
+                select(
+                    InferencePayloadRow.execution_id, InferencePayloadRow.request
+                ).where(
+                    InferencePayloadRow.execution_id.in_(
+                        [claim.execution_id for claim in claims]
+                    )
+                )
+            )
+            payloads = dict(requests.tuples().all())
+            return [
+                replace(claim, payload=payloads[claim.execution_id]) for claim in claims
+            ]
 
     async def inference_content(self, execution_id: str) -> bytes:
         """Return the stored response of a succeeded inference execution."""
@@ -324,14 +366,16 @@ class PostgresExecutionRepository:
                 await self._database_now(session),
             )
             if decision.execution is not None:
-                await self._persist_state(session, row, decision.execution)
-            if decision.rejection is None and isinstance(
-                settlement, InferenceSucceeded
-            ):
-                await session.execute(
-                    update(InferencePayloadRow)
-                    .where(InferencePayloadRow.execution_id == execution_id)
-                    .values(response=settlement.content)
+                await self._persist_state(
+                    session,
+                    row,
+                    decision.execution,
+                    response=(
+                        settlement.content
+                        if decision.rejection is None
+                        and isinstance(settlement, InferenceSucceeded)
+                        else None
+                    ),
                 )
         return decision.accepted_execution()
 
@@ -385,9 +429,14 @@ class PostgresExecutionRepository:
         )
 
     async def _select_processing(
-        self, session: AsyncSession, now: datetime, operations: frozenset[Operation]
-    ) -> ExecutionRow | None:
-        """Oldest eligible processing whose model is below its capacity limit.
+        self,
+        session: AsyncSession,
+        now: datetime,
+        operations: frozenset[Operation],
+        *,
+        limit: int,
+    ) -> list[ExecutionRow]:
+        """Up to `limit` oldest eligible processing rows within each model's capacity.
 
         Builders and raw inference have separate limits per model. A
         transaction-scoped advisory lock per (operation, model) serializes the
@@ -406,6 +455,7 @@ class PostgresExecutionRepository:
             .group_by(ExecutionRow.operation, ExecutionRow.model_id)
             .order_by(func.min(ExecutionRow.created_at))
         )
+        selected: list[ExecutionRow] = []
         for operation, model_id in targets.tuples():
             locked = await session.scalar(
                 select(
@@ -428,9 +478,10 @@ class PostgresExecutionRepository:
                 )
             )
             assert active is not None
-            if active >= self._limits[operation]:
+            wanted = min(self._limits[operation] - active, limit - len(selected))
+            if wanted <= 0:
                 continue
-            candidate = await session.scalar(
+            candidates = await session.scalars(
                 select(ExecutionRow)
                 .where(
                     ExecutionRow.model_id == model_id,
@@ -439,11 +490,12 @@ class PostgresExecutionRepository:
                 )
                 .order_by(ExecutionRow.next_attempt_at, ExecutionRow.created_at)
                 .with_for_update(skip_locked=True)
-                .limit(1)
+                .limit(wanted)
             )
-            if candidate is not None:
-                return candidate
-        return None
+            selected.extend(candidates)
+            if len(selected) >= limit:
+                break
+        return selected
 
     async def _recover_expired_leases(
         self, session: AsyncSession, now: datetime
@@ -526,9 +578,36 @@ class PostgresExecutionRepository:
         await session.execute(delete(ExecutionRow).where(ExecutionRow.id.in_(expired)))
 
     async def _persist_state(
-        self, session: AsyncSession, row: ExecutionRow, execution: ExecutionRecord
+        self,
+        session: AsyncSession,
+        row: ExecutionRow,
+        execution: ExecutionRecord,
+        *,
+        response: bytes | None = None,
     ) -> ExecutionRecord:
-        """Copy mutable state into an ORM row and flush within the caller's transaction; return a decoded snapshot."""
+        """Flush the new state within the caller's transaction; return a decoded snapshot.
+
+        A finished inference keeps only its response bytes.
+        """
+        self._apply_state(row, execution)
+        await session.flush()
+        if execution.operation is Operation.INFERENCE and execution.status in {
+            ExecutionStatus.SUCCEEDED,
+            ExecutionStatus.FAILED,
+            ExecutionStatus.CANCELLED,
+        }:
+            values: dict[str, bytes | None] = {"request": None}
+            if response is not None:
+                values["response"] = response
+            await session.execute(
+                update(InferencePayloadRow)
+                .where(InferencePayloadRow.execution_id == row.id)
+                .values(**values)
+            )
+        return self._record(row)
+
+    @staticmethod
+    def _apply_state(row: ExecutionRow, execution: ExecutionRecord) -> None:
         row.status = execution.status
         row.work_kind = execution.work_kind
         row.next_attempt_at = execution.next_attempt_at
@@ -545,22 +624,6 @@ class PostgresExecutionRepository:
             execution.error.message if execution.error is not None else None
         )
         row.updated_at = execution.updated_at
-        await session.flush()
-        if execution.operation is Operation.INFERENCE and execution.status in {
-            ExecutionStatus.SUCCEEDED,
-            ExecutionStatus.FAILED,
-            ExecutionStatus.CANCELLED,
-        }:
-            # A finished request is never sent again.
-            await session.execute(
-                update(InferencePayloadRow)
-                .where(
-                    InferencePayloadRow.execution_id == row.id,
-                    InferencePayloadRow.request.is_not(None),
-                )
-                .values(request=None)
-            )
-        return self._record(row)
 
     async def _fetch(
         self, session: AsyncSession, execution_id: str, *, for_update: bool = False

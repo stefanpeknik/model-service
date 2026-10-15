@@ -379,3 +379,27 @@ class ExecutionRepositoryContract:
         )
 
         assert [execution.id for execution in found] == [second, first]
+
+    async def test_inference_claims_in_batches_within_model_limits(self) -> None:
+        for index in range(INFERENCE_LIMIT + 1):
+            await self._admit_inference(f"a-{index}", payload=f"a-{index}".encode())
+        await self._admit_inference("b-0", "model-b", payload=b"b-0")
+        await self._admit_execution("builder")
+
+        claims = await self.repository.claim_inference(
+            "worker", timedelta(seconds=30), INFERENCE_LIMIT + 5
+        )
+
+        assert sorted(claim.payload or b"" for claim in claims) == [
+            *(f"a-{index}".encode() for index in range(INFERENCE_LIMIT)),
+            b"b-0",
+        ], claims
+        assert all(claim.operation is Operation.INFERENCE for claim in claims)
+        assert (
+            await self.repository.claim_inference("worker", timedelta(seconds=30), 5)
+            == []
+        )
+        limited = await self.repository.claim_inference(
+            "worker", timedelta(seconds=30), 0
+        )
+        assert limited == []

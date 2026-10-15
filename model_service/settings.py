@@ -54,6 +54,9 @@ class SchedulerSettings(BaseSettings):
     )
 
     database_url: _RequiredString = Field(validation_alias="DATABASE_URL", repr=False)
+    database_pool_size: int = Field(
+        default=20, gt=0, validation_alias="DATABASE_POOL_SIZE"
+    )
     provider_context_key: _RequiredString = Field(
         validation_alias="PROVIDER_CONTEXT_KEY", repr=False
     )

@@ -246,6 +246,16 @@ class InMemoryExecutionRepository:
                 return claimed.claim
             return None
 
+    async def claim_inference(
+        self, owner: str, lease_duration: timedelta, limit: int
+    ) -> list[WorkClaim]:
+        claims = []
+        while len(claims) < limit and (
+            claim := await self.claim_due(owner, lease_duration, [Operation.INFERENCE])
+        ):
+            claims.append(claim)
+        return claims
+
     async def inference_content(self, execution_id: str) -> bytes:
         async with self._lock:
             execution = self._get(execution_id)
