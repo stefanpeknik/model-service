@@ -13,23 +13,23 @@ import httpx
 import numpy as np
 from fastapi import FastAPI
 
-from builders.application import BuilderApplication
-from builders.client import HTTPBuilderDispatch
-from builders.contracts import TileEmbeddingModel
-from builders.embeddings.builder import EmbeddingBuilder
-from builders.embeddings.predictor import RayEmbeddingPredictor
-from builders.http import RunRequest, run_http
-from builders.registry import get_builder
-from builders.settings import WorkerSettings
-from execution_scheduler.scheduler import ExecutionScheduler
-from integrations.shared_storage import SharedStorageAccessAdapter
-from integrations.standalone import StandaloneProviderAdapter
-from model_service.api import create_app
-from model_service.catalog import ModelCatalog
-from model_service.runtime import model_resolver
-from model_service.synchronous import SynchronousBuilderService
-from tests.builder_fixtures import write_slide
-from tests.memory_repository import InMemoryExecutionRepository
+from model_service.builders.application import BuilderApplication
+from model_service.builders.client import HTTPBuilderDispatch
+from model_service.builders.contracts import TileEmbeddingModel
+from model_service.builders.embeddings.builder import EmbeddingBuilder
+from model_service.builders.embeddings.predictor import RayEmbeddingPredictor
+from model_service.builders.http import RunRequest, run_http
+from model_service.builders.registry import get_builder
+from model_service.builders.settings import WorkerSettings
+from model_service.facade.api import create_app
+from model_service.facade.app import model_resolver
+from model_service.facade.catalog import ModelCatalog
+from model_service.facade.synchronous import SynchronousBuilderService
+from model_service.providers.shared_storage import SharedStorageAccessAdapter
+from model_service.providers.standalone import StandaloneProviderAdapter
+from model_service.scheduler.scheduler import ExecutionScheduler
+from tests.support.builder_fixtures import write_slide
+from tests.support.memory_repository import InMemoryExecutionRepository
 
 
 if TYPE_CHECKING:

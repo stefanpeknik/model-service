@@ -9,8 +9,8 @@ from aiohttp import web
 from aiohttp.test_utils import TestServer
 from rationai.empaia.app_service import AppServiceClient
 
-from integrations.empaia.gateway import EmpaiaGatewayError
-from integrations.empaia.http_gateway import HttpEmpaiaGateway
+from model_service.providers.empaia.gateway import EmpaiaGatewayError
+from model_service.providers.empaia.http_gateway import HttpEmpaiaGateway
 
 
 class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):

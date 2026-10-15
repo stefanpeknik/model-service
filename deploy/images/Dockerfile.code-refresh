@@ -1,0 +1,22 @@
+# Replace only the application code in an existing image whose dependencies
+# are unchanged. Much faster than rebuilding the GPU image from scratch.
+#   podman build -f deploy/images/Dockerfile.code-refresh --build-arg BASE=<image> \
+#     --build-arg RUN_USER=1000|10001 -t <new image> .
+ARG BASE
+FROM ${BASE}
+ARG RUN_USER=1000
+# Packages missing from the base, e.g. "h5py>=3.11,<4 timm>=1.0,<2".
+ARG EXTRA_PACKAGES=""
+ARG PYTHON=python
+USER root
+RUN if [ -n "$EXTRA_PACKAGES" ]; then \
+        uv pip install --system --python "$PYTHON" --no-cache $EXTRA_PACKAGES; \
+    fi
+RUN rm -rf /app/models /app/providers /app/builders /app/integrations \
+    /app/validation /app/testing /app/model_service /app/execution_scheduler \
+    /app/workflow_execution /app/workflows /app/workflow-definitions
+COPY src/model_service /app/model_service
+COPY testing /app/testing
+ARG SOURCE_REVISION
+LABEL org.opencontainers.image.revision=${SOURCE_REVISION}
+USER ${RUN_USER}

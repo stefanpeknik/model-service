@@ -7,20 +7,20 @@ behind one public API that can also run builders durably.
              callers: RationAI SDK, EMPAIA (via JES), notebooks
                                   │ HTTP
 ┌─────────────────────────────────▼──────────────────────────────────┐
-│ facade (model_service/, one Deployment, outside Ray)               │
+│ facade (src/model_service/facade/, one Deployment, outside Ray)               │
 │  /v1/models   /v1/models/{m}/schedule (tiles)                      │
 │  /v1/builders   /v1/builders/{b}/run|schedule                      │
 │  /v1/executions/{id}[/cancel|/result]   /v1/executions/lookup      │
 │  /v1/providers/empaia/...   /{model} (raw proxy)                   │
-│  model catalog ◄── ConfigMap rendered from helm/rayservice/models/ │
-│  execution scheduler (execution_scheduler/) ◄──► PostgreSQL        │
+│  model catalog ◄── ConfigMap rendered from deploy/helm/rayservice/models/ │
+│  execution scheduler (src/model_service/scheduler/) ◄──► PostgreSQL        │
 └───────────────┬───────────────────────────────────┬────────────────┘
    builder call │ POST /builders/{b}/               │ raw proxy, scheduled tiles
 ┌───────────────▼───────────────────────────────────▼────────────────┐
 │ Ray Serve (RayService)                                             │
-│  builder-heatmap, builder-tile-embeddings (builders/serve.py)      │
+│  builder-heatmap, builder-tile-embeddings (src/model_service/builders/serve.py)      │
 │        │ Ray handle or HTTP, per model contract                    │
-│  model deployments: prostate-classifier-1, virchow2, … (models/)   │
+│  model deployments: prostate-classifier-1, virchow2, … (src/model_service/models/)   │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -28,12 +28,12 @@ behind one public API that can also run builders durably.
 
 | Package | Owns |
 | --- | --- |
-| `models/` | Inference implementations (binary classifier, segmentation, Virchow2, Prov-GigaPath). Each serves any trained model that fits it; the trained model is chosen in YAML. |
-| `helm/rayservice/models/` | One file per model deployment: an `inference` declaration plus the Ray Serve application. The same file feeds the RayService and the facade's catalog. |
-| `builders/` | Builder registry, the builder runtime (validation, deadline, input access, cleanup) and the two builders. One Ray ingress, `builders/serve.py`, hosts any builder. |
-| `model_service/` | The facade: public API, model catalog, synchronous runs, raw inference proxy, process wiring. |
-| `execution_scheduler/` | Durable executions: admission, leases with fencing, retries, deadlines, cancellation, provider finish. PostgreSQL with Yoyo migrations. |
-| `integrations/` | Providers: standalone (shared storage) and EMPAIA (AppService input and publication). |
+| `src/model_service/models/` | Inference implementations (binary classifier, segmentation, Virchow2, Prov-GigaPath). Each serves any trained model that fits it; the trained model is chosen in YAML. |
+| `deploy/helm/rayservice/models/` | One file per model deployment: an `inference` declaration plus the Ray Serve application. The same file feeds the RayService and the facade's catalog. |
+| `src/model_service/builders/` | Builder registry, the builder runtime (validation, deadline, input access, cleanup) and the two builders. One Ray ingress, `src/model_service/builders/serve.py`, hosts any builder. |
+| `src/model_service/facade/` | The facade: public API, model catalog, synchronous runs, raw inference proxy, process wiring. |
+| `src/model_service/scheduler/` | Durable executions: admission, leases with fencing, retries, deadlines, cancellation, provider finish. PostgreSQL with Yoyo migrations. |
+| `src/model_service/providers/` | Providers: standalone (shared storage) and EMPAIA (AppService input and publication). |
 
 ## A request, end to end
 

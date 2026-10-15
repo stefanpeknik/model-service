@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from pydantic import ValidationError
 
-from model_service.settings import SchedulerSettings
+from model_service.facade.settings import SchedulerSettings
 
 
 class SchedulerSettingsTests(unittest.TestCase):

@@ -14,9 +14,9 @@ from aiohttp import web
 from aiohttp.test_utils import TestServer
 from rationai.empaia.app_service import AppServiceClient
 
-from builders.contracts import InlineOutput, SharedArtifact
-from integrations.empaia.gateway import EmpaiaGatewayError
-from integrations.empaia.http_gateway import (
+from model_service.builders.contracts import InlineOutput, SharedArtifact
+from model_service.providers.empaia.gateway import EmpaiaGatewayError
+from model_service.providers.empaia.http_gateway import (
     HttpEmpaiaGateway,
     Rectangle,
     SlideMetadata,

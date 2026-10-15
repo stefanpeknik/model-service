@@ -9,10 +9,13 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 
-from builders.contracts import SpatialScoresModel
-from builders.heatmap.processor import HeatmapRequest, SlideHeatmapProcessor
-from builders.registry import ScoreEncoding
-from tests.builder_fixtures import write_slide
+from model_service.builders.contracts import SpatialScoresModel
+from model_service.builders.heatmap.processor import (
+    HeatmapRequest,
+    SlideHeatmapProcessor,
+)
+from model_service.builders.registry import ScoreEncoding
+from tests.support.builder_fixtures import write_slide
 
 
 class LandmarkPredictor:

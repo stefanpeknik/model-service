@@ -9,20 +9,22 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
-from builders.client import (
+from model_service.builders.client import (
     ConfirmedRejectionError,
     RemoteFailureError,
     UnknownOutcomeError,
 )
-from builders.contracts import (
+from model_service.builders.contracts import (
     BuilderResult,
     ExecutionContext,
     InputAccessContext,
     Invocation,
     SharedArtifact,
 )
-from execution_scheduler.active_work import ActiveWorkRegistry
-from execution_scheduler.contracts import (
+from model_service.providers.shared_storage import SharedStorageAccessAdapter
+from model_service.providers.standalone import StandaloneProviderAdapter
+from model_service.scheduler.active_work import ActiveWorkRegistry
+from model_service.scheduler.contracts import (
     ExecutionStatus,
     IncompatibleModelError,
     InvalidScheduleRequestError,
@@ -32,7 +34,7 @@ from execution_scheduler.contracts import (
     UnknownBuilderError,
     UnknownModelError,
 )
-from execution_scheduler.domain import (
+from model_service.scheduler.domain import (
     Admission,
     PreparedInvocation,
     ProcessingSucceeded,
@@ -43,20 +45,18 @@ from execution_scheduler.domain import (
     SubmissionIdentity,
     WorkKind,
 )
-from execution_scheduler.providers import (
+from model_service.scheduler.providers import (
     ProviderCancellation,
     ProviderFailure,
     ProviderFinishFailureError,
     ProviderSuccess,
 )
-from execution_scheduler.repository import (
+from model_service.scheduler.scheduler import ExecutionScheduler
+from model_service.scheduler.store.repository import (
     ExecutionRepositoryUnavailableError,
 )
-from execution_scheduler.scheduler import ExecutionScheduler
-from execution_scheduler.worker import ExecutionWorker
-from integrations.shared_storage import SharedStorageAccessAdapter
-from integrations.standalone import StandaloneProviderAdapter
-from tests.memory_repository import (
+from model_service.scheduler.worker import ExecutionWorker
+from tests.support.memory_repository import (
     FakeDispatch,
     InMemoryExecutionRepository,
     resolve_test_model,
@@ -66,9 +66,9 @@ from tests.memory_repository import (
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from builders.contracts import JsonValue, ModelBinding
-    from execution_scheduler.contracts import ModelResolver
-    from execution_scheduler.providers import BeforeMutation, ProviderFinishOutcome
+    from model_service.builders.contracts import JsonValue, ModelBinding
+    from model_service.scheduler.contracts import ModelResolver
+    from model_service.scheduler.providers import BeforeMutation, ProviderFinishOutcome
 
 
 class StandaloneProvider:

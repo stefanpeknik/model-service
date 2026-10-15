@@ -10,9 +10,9 @@ import httpx
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 
-from builders.contracts import SharedArtifact
-from integrations.empaia.http_gateway import HttpEmpaiaGateway
-from validation.empaia_app_service import app
+from model_service.builders.contracts import SharedArtifact
+from model_service.providers.empaia.http_gateway import HttpEmpaiaGateway
+from testing.empaia_app_service import app
 
 
 try:

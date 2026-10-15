@@ -17,7 +17,7 @@ open ones (05–08) with the smallest mechanism that meets them. Tickets live in
 - Adding a model that fits an existing builder needs Python edits. The
   per-model workflow wrappers (`prostate-heatmap`, `episeg-segmentation`,
   `gigapath-embeddings`, `virchow2-embeddings`) hardcode model names, even though
-  `models/` and the original heatmap builder were already generic.
+  `src/model_service/models/` and the original heatmap builder were already generic.
 - The scheduler processes one execution at a time per process, and limits
   capacity per workflow rather than per model.
 - Several correctness and safety gaps exist: caller-chosen storage roots,
@@ -42,7 +42,7 @@ open ones (05–08) with the smallest mechanism that meets them. Tickets live in
 
 ### Model catalog from deployment YAML
 
-Each model deployment is one file, `helm/rayservice/models/<model-id>.yaml`:
+Each model deployment is one file, `deploy/helm/rayservice/models/<model-id>.yaml`:
 
 ```yaml
 inference:
@@ -82,7 +82,7 @@ Onboarding a compatible model: add one YAML file, list it in `values.yaml`
 
 ### Builders
 
-Builders are Python, registered in `builders/registry.py`. Each declares the
+Builders are Python, registered in `src/model_service/builders/registry.py`. Each declares the
 contract it accepts, its inputs and outputs, and a Pydantic configuration with
 defaults. One Ray application per builder (`builders.serve:app`, route
 `/builders/<id>`), with the builder ID in `user_config`.
@@ -185,7 +185,7 @@ request the raw route takes and returns an execution.
 ### Removed
 
 Per-model workflow modules and serve entry points, `workflow-definitions/`,
-the unsafe legacy `builders/heatmap_builder.py` endpoint, and
+the unsafe legacy `src/model_service/builders/heatmap_builder.py` endpoint, and
 `prototypes/empaia-control-plane/`.
 
 ## Acceptance

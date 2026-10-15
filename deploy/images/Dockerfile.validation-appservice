@@ -1,0 +1,6 @@
+FROM cerit.io/stefanpeknik/model-service-scheduler:0fd9a57
+
+WORKDIR /app
+COPY testing testing
+
+CMD ["uvicorn", "testing.empaia_app_service:app", "--host", "0.0.0.0", "--port", "8000"]

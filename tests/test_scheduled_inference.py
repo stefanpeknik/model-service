@@ -11,29 +11,33 @@ import httpx
 import lz4.frame
 from httpx import ASGITransport, AsyncClient
 
-from builders.contracts import (
+from model_service.builders.contracts import (
     BuilderResult,
     InputAccessContext,
     Invocation,
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from execution_scheduler.domain import Admission, RetryPolicy, SubmissionIdentity
-from execution_scheduler.inference import IncompatibleInputError
-from execution_scheduler.scheduler import ExecutionScheduler
-from integrations.shared_storage import SharedStorageAccessAdapter
-from integrations.standalone import StandaloneProviderAdapter
-from model_service.api import create_app
-from model_service.catalog import ModelCatalog
-from model_service.inference import HttpInferenceProxy, ModelInference, check_tile
-from model_service.runtime import model_resolver
-from tests.memory_repository import FakeDispatch, InMemoryExecutionRepository
+from model_service.facade.api import create_app
+from model_service.facade.app import model_resolver
+from model_service.facade.catalog import ModelCatalog
+from model_service.facade.inference import (
+    HttpInferenceProxy,
+    ModelInference,
+    check_tile,
+)
+from model_service.providers.shared_storage import SharedStorageAccessAdapter
+from model_service.providers.standalone import StandaloneProviderAdapter
+from model_service.scheduler.domain import Admission, RetryPolicy, SubmissionIdentity
+from model_service.scheduler.inference import IncompatibleInputError
+from model_service.scheduler.scheduler import ExecutionScheduler
+from tests.support.memory_repository import FakeDispatch, InMemoryExecutionRepository
 
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from builders.contracts import ExecutionContext
+    from model_service.builders.contracts import ExecutionContext
 
 
 CLASSIFIER = SpatialScoresModel(

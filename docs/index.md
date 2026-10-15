@@ -19,9 +19,9 @@ Use this documentation when:
 
 ## What You Get
 
-- Ray Serve applications managed by a Helm chart in `helm/rayservice/`.
-- Per-model configuration in `helm/rayservice/applications/`.
-- Default worker profiles in `helm/rayservice/workers/`.
+- Ray Serve applications managed by a Helm chart in `deploy/helm/rayservice/`.
+- Per-model configuration in `deploy/helm/rayservice/applications/`.
+- Default worker profiles in `deploy/helm/rayservice/workers/`.
 - Operational guides for deployment, scaling, and troubleshooting.
 
 ## Two Ways to Use the Service

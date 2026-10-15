@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 from pydantic import ValidationError
 
-from builders.contracts import (
+from model_service.builders.contracts import (
     INVOCATION,
     MODEL_BINDING,
     RESULT,
@@ -14,7 +14,7 @@ from builders.contracts import (
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from builders.http import RUN_REQUEST
+from model_service.builders.http import RUN_REQUEST
 
 
 INVOCATION_BODY = {

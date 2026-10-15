@@ -7,11 +7,11 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
-from builders.contracts import BuilderResult
-from execution_scheduler.contracts import ExecutionStatus, ScheduleRequest
-from execution_scheduler.domain import RetryPolicy
-from execution_scheduler.scheduler import ExecutionScheduler
-from tests.memory_repository import (
+from model_service.builders.contracts import BuilderResult
+from model_service.scheduler.contracts import ExecutionStatus, ScheduleRequest
+from model_service.scheduler.domain import RetryPolicy
+from model_service.scheduler.scheduler import ExecutionScheduler
+from tests.support.memory_repository import (
     FakeDispatch,
     InMemoryExecutionRepository,
     resolve_test_model,
@@ -206,7 +206,7 @@ class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):
         scheduler = self.scheduler()
         with (
             patch(
-                "execution_scheduler.worker.ExecutionWorker.run",
+                "model_service.scheduler.worker.ExecutionWorker.run",
                 side_effect=RuntimeError("worker failed"),
             ),
             self.assertRaises(ExceptionGroup) as raised,

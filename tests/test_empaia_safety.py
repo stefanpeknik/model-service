@@ -10,13 +10,16 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from builders.contracts import BuilderResult, SharedArtifact
-from execution_scheduler.contracts import InvalidScheduleRequestError, ScheduleRequest
-from execution_scheduler.providers import ProviderSuccess
-from integrations.empaia.gateway import EmpaiaGatewayError
-from integrations.empaia.http_gateway import HttpEmpaiaGateway
-from integrations.empaia.image_io import TiffPixelmapPublisher
-from integrations.empaia.provider import EmpaiaProviderAdapter
+from model_service.builders.contracts import BuilderResult, SharedArtifact
+from model_service.providers.empaia.gateway import EmpaiaGatewayError
+from model_service.providers.empaia.http_gateway import HttpEmpaiaGateway
+from model_service.providers.empaia.image_io import TiffPixelmapPublisher
+from model_service.providers.empaia.provider import EmpaiaProviderAdapter
+from model_service.scheduler.contracts import (
+    InvalidScheduleRequestError,
+    ScheduleRequest,
+)
+from model_service.scheduler.providers import ProviderSuccess
 
 
 try:

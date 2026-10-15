@@ -34,6 +34,6 @@ The final standalone validation admitted execution
 
 ## Implementation and requirements
 
-The current source separates [public application wiring](../../model_service/runtime.py), [durable orchestration](../../execution_scheduler/README.md), and [workflow dispatch](../../workflow_execution/dispatch.py). The [scheduler Deployment](../../helm/rayservice/templates/execution-scheduler-deployment.yaml) is distinct from the [RayService](../../helm/rayservice/templates/rayservice.yaml).
+The current source separates [public application wiring](../../src/model_service/facade/app.py), [durable orchestration](../../src/model_service/scheduler/README.md), and [builder dispatch](../../src/model_service/builders/client.py). The [scheduler Deployment](../../deploy/helm/rayservice/templates/execution-scheduler-deployment.yaml) is distinct from the [RayService](../../deploy/helm/rayservice/templates/rayservice.yaml).
 
 The primary requirements remain the [durable workflow specification](/home/stefanpeknik/.claude/.scratch/model-service/durable-workflow-execution/spec.md), reached through [docs/README.md](../README.md). This ADR records placement rationale and alternatives; it changes no ticket status or validation boundary. The October 7 package moves are local source changes, not a new deployment validation.

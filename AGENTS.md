@@ -11,7 +11,7 @@ local test results, in a dated file under `docs/operations/`. Tests need
 
 Keep Git changes local; never push. Runtime operations need authorization for
 the active task, not merely a command copied from an old runbook. Preserve
-unrelated work and leave `models/` unchanged without explicit approval.
+unrelated work and leave `src/model_service/models/` unchanged without explicit approval.
 
 Use `uv` for Python and keep its cache in `.cache/uv`, never `/tmp`. Prepare
 `.venv` with `uv sync` when needed. Keep credential files and their contents out

@@ -5,8 +5,8 @@ from __future__ import annotations
 import unittest
 from datetime import UTC, datetime, timedelta
 
-from builders.application import validate_invocation, validate_model
-from builders.contracts import (
+from model_service.builders.application import validate_invocation, validate_model
+from model_service.builders.contracts import (
     IncompatibleModelError,
     InputAccessContext,
     InvalidInvocation,
@@ -16,7 +16,7 @@ from builders.contracts import (
     TileEmbeddingModel,
     UnknownBuilderError,
 )
-from builders.registry import (
+from model_service.builders.registry import (
     BUILDERS,
     HeatmapConfiguration,
     ScoreEncoding,

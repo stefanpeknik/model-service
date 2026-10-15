@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Never, cast
 
 from fastapi import HTTPException
 
-from builders.contracts import (
+from model_service.builders.contracts import (
     BuilderFailure,
     ContractViolation,
     ExecutionContext,
@@ -17,12 +17,12 @@ from builders.contracts import (
     Invocation,
     SpatialScoresModel,
 )
-from builders.http import ErrorCode, RunRequest, run_http
+from model_service.builders.http import ErrorCode, RunRequest, run_http
 
 
 if TYPE_CHECKING:
-    from builders.application import BuilderApplication
-    from builders.contracts import ModelBinding
+    from model_service.builders.application import BuilderApplication
+    from model_service.builders.contracts import ModelBinding
 
 
 class FailingApplication:

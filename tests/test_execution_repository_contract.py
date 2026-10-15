@@ -5,9 +5,9 @@ from __future__ import annotations
 import unittest
 from datetime import UTC, datetime, timedelta
 
-from execution_scheduler.domain import RetryPolicy
-from tests.memory_repository import InMemoryExecutionRepository
-from tests.repository_contract import (
+from model_service.scheduler.domain import RetryPolicy
+from tests.support.memory_repository import InMemoryExecutionRepository
+from tests.support.repository_contract import (
     INFERENCE_LIMIT,
     INFERENCE_RETENTION,
     ExecutionRepositoryContract,

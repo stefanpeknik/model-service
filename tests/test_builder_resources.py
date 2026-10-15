@@ -12,9 +12,9 @@ from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
-from builders.application import BuilderApplication
-from builders.cleanup import close_resource
-from builders.contracts import (
+from model_service.builders.application import BuilderApplication
+from model_service.builders.cleanup import close_resource
+from model_service.builders.contracts import (
     BuilderFailure,
     BuilderResult,
     ExecutionContext,
@@ -23,27 +23,27 @@ from builders.contracts import (
     ProviderInput,
     SharedArtifact,
 )
-from builders.registry import BUILDERS, get_builder
-from execution_scheduler.active_work import ActiveWorkRegistry
-from execution_scheduler.contracts import ExecutionStatus, ScheduleRequest
-from execution_scheduler.scheduler import ExecutionScheduler
-from execution_scheduler.worker import ExecutionWorker
-from integrations.empaia.input_access import EmpaiaInputAccessAdapter
-from integrations.shared_storage import SharedStorageAccessAdapter
-from integrations.standalone import StandaloneProviderAdapter
-from tests.builder_fixtures import (
+from model_service.builders.registry import BUILDERS, get_builder
+from model_service.providers.empaia.input_access import EmpaiaInputAccessAdapter
+from model_service.providers.shared_storage import SharedStorageAccessAdapter
+from model_service.providers.standalone import StandaloneProviderAdapter
+from model_service.scheduler.active_work import ActiveWorkRegistry
+from model_service.scheduler.contracts import ExecutionStatus, ScheduleRequest
+from model_service.scheduler.scheduler import ExecutionScheduler
+from model_service.scheduler.worker import ExecutionWorker
+from tests.support.builder_fixtures import (
     SPATIAL_MODEL,
     FunctionBuilder,
     artifact_output,
     invocation,
     spec,
 )
-from tests.memory_repository import InMemoryExecutionRepository
+from tests.support.memory_repository import InMemoryExecutionRepository
 
 
 if TYPE_CHECKING:
-    from builders.application import BuilderContext
-    from builders.contracts import Invocation, ModelBinding
+    from model_service.builders.application import BuilderContext
+    from model_service.builders.contracts import Invocation, ModelBinding
 
 
 async def empty(_context: BuilderContext) -> BuilderResult:

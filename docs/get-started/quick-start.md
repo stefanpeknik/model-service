@@ -34,11 +34,11 @@ If you want to deploy your own model, start by adding the model code and Ray Ser
 
 ## Step 3: Review the Configuration
 
-In Model Service, configurations are managed using **Helm**. The environment configuration is split into values and applications inside the `helm/rayservice/` directory.
+In Model Service, configurations are managed using **Helm**. The environment configuration is split into values and applications inside the `deploy/helm/rayservice/` directory.
 
-Models are configured by YAML files in the `helm/rayservice/models/` folder.
+Models are configured by YAML files in the `deploy/helm/rayservice/models/` folder.
 
-Let's look at a sample model file (`helm/rayservice/models/prostate-classifier-1.yaml`):
+Let's look at a sample model file (`deploy/helm/rayservice/models/prostate-classifier-1.yaml`):
 
 ```yaml
 inference:
@@ -66,7 +66,7 @@ For your first deployment, we will use the existing configuration without change
 To deploy the service, run Helm:
 
 ```bash
-helm upgrade --install <release-name> helm/rayservice -n rationai-jobs-ns
+helm upgrade --install <release-name> deploy/helm/rayservice -n rationai-jobs-ns
 ```
 
 Use a dedicated test release name (for example `rayservice-model-my-model`) so test actions do not affect the main deployment.

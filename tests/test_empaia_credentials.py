@@ -9,8 +9,11 @@ from datetime import UTC, datetime, timedelta
 
 import jwt
 
-from execution_scheduler.contracts import InvalidScheduleRequestError, ScheduleRequest
-from integrations.empaia.provider import EmpaiaProviderAdapter
+from model_service.providers.empaia.provider import EmpaiaProviderAdapter
+from model_service.scheduler.contracts import (
+    InvalidScheduleRequestError,
+    ScheduleRequest,
+)
 from tests.test_empaia_execution import ControlledEmpaiaService
 
 

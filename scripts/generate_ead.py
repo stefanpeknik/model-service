@@ -1,8 +1,8 @@
 """Generate an EMPAIA EAD from an app file binding a builder to a model.
 
-An app file (`eads/apps/<app>.yaml`) names the builder, the model deployment and
+An app file (`deploy/empaia/apps/<app>.yaml`) names the builder, the model deployment and
 the EMPAIA metadata. Input and output types come from the builder's EMPAIA
-mappings in `builders/registry.py`.
+mappings in `src/model_service/builders/registry.py`.
 """
 
 from __future__ import annotations
@@ -15,17 +15,17 @@ from typing import TYPE_CHECKING, Any
 import yaml
 from jsonschema import Draft7Validator, validate
 
-from builders.registry import get_builder
+from model_service.builders.registry import get_builder
 
 
 if TYPE_CHECKING:
-    from builders.registry import BuilderSpec
+    from model_service.builders.registry import BuilderSpec
 
 
 EAD_SCHEMA = "https://gitlab.com/empaia/integration/definitions/-/raw/main/ead/ead-schema.v3.json"
 ROOT = Path(__file__).resolve().parents[1]
 _EAD_SCHEMA = json.loads(
-    (ROOT / "eads" / "schemas" / "ead-v3.schema.json").read_text(encoding="utf-8")
+    (ROOT / "deploy" / "empaia" / "schemas" / "ead-v3.schema.json").read_text(encoding="utf-8")
 )
 
 

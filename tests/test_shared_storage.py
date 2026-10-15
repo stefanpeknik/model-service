@@ -7,9 +7,13 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from builders.contracts import ExecutionContext, InvalidInvocation, SharedPathInput
-from integrations.shared_storage import SharedStorageAccessAdapter
-from tests.builder_fixtures import invocation
+from model_service.builders.contracts import (
+    ExecutionContext,
+    InvalidInvocation,
+    SharedPathInput,
+)
+from model_service.providers.shared_storage import SharedStorageAccessAdapter
+from tests.support.builder_fixtures import invocation
 
 
 def shared(root: str | Path, **inputs: str):  # type: ignore[no-untyped-def]

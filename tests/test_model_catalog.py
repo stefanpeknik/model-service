@@ -8,13 +8,13 @@ from copy import deepcopy
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from builders.contracts import (
+from model_service.builders.contracts import (
     InferenceContract,
     SpatialScoresModel,
     TileEmbeddingModel,
     UnknownModelError,
 )
-from model_service.catalog import CatalogError, ModelCatalog
+from model_service.facade.catalog import CatalogError, ModelCatalog
 
 
 def spatial_document(model_id: str = "prostate-classifier-1") -> dict[str, object]:
@@ -23,7 +23,7 @@ def spatial_document(model_id: str = "prostate-classifier-1") -> dict[str, objec
         "serve": {
             "name": model_id,
             "route_prefix": f"/{model_id}",
-            "import_path": "models.binary_classifier:app",
+            "import_path": "model_service.models.binary_classifier:app",
             "deployments": [
                 {
                     "name": "BinaryClassifier",
@@ -33,7 +33,7 @@ def spatial_document(model_id: str = "prostate-classifier-1") -> dict[str, objec
                         "n_channels": 1,
                         "mpp": 0.468,
                         "max_batch_size": 64,
-                        "model": {"_target_": "providers.model_provider:mlflow"},
+                        "model": {"_target_": "model_service.models.artifacts:mlflow"},
                     },
                 }
             ],
@@ -51,7 +51,7 @@ def embedding_document(model_id: str = "virchow2") -> dict[str, object]:
         "serve": {
             "name": model_id,
             "route_prefix": f"/{model_id}",
-            "import_path": "models.virchow2:app",
+            "import_path": "model_service.models.virchow2:app",
             "deployments": [
                 {"name": "Virchow2", "user_config": {"tile_size": 224}},
             ],
@@ -193,7 +193,7 @@ _HANDLE_METHODS = {
     InferenceContract.TILE_EMBEDDING: ("get_config", "embed"),
 }
 MODEL_FILES = sorted(
-    Path(__file__).parents[1].joinpath("helm/rayservice/models").rglob("*.yaml")
+    Path(__file__).parents[1].joinpath("deploy/helm/rayservice/models").rglob("*.yaml")
 )
 
 

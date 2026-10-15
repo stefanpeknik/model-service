@@ -13,10 +13,10 @@ from typing import TYPE_CHECKING, Any, cast
 import httpx
 from fastapi import FastAPI
 
-from builders.application import BuilderApplication
-from builders.artifacts import atomic_artifact
-from builders.client import HTTPBuilderDispatch, RemoteFailureError
-from builders.contracts import (
+from model_service.builders.application import BuilderApplication
+from model_service.builders.artifacts import atomic_artifact
+from model_service.builders.client import HTTPBuilderDispatch, RemoteFailureError
+from model_service.builders.contracts import (
     INVOCATION,
     RESULT,
     BuilderFailure,
@@ -30,11 +30,11 @@ from builders.contracts import (
     SharedArtifact,
     SharedPathInput,
 )
-from builders.http import RunRequest, run_http
-from builders.registry import InputSpec
-from integrations.empaia.input_access import EmpaiaInputAccessAdapter
-from integrations.shared_storage import SharedStorageAccessAdapter
-from tests.builder_fixtures import (
+from model_service.builders.http import RunRequest, run_http
+from model_service.builders.registry import InputSpec
+from model_service.providers.empaia.input_access import EmpaiaInputAccessAdapter
+from model_service.providers.shared_storage import SharedStorageAccessAdapter
+from tests.support.builder_fixtures import (
     EMBEDDING_MODEL,
     SPATIAL_MODEL,
     FunctionBuilder,
@@ -47,7 +47,7 @@ from tests.builder_fixtures import (
 
 
 if TYPE_CHECKING:
-    from builders.application import BuilderContext
+    from model_service.builders.application import BuilderContext
 
 
 class FixedAccess:

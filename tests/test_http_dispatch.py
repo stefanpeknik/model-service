@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING
 
 import httpx
 
-from builders.client import (
+from model_service.builders.client import (
     ConfirmedRejectionError,
     HTTPBuilderDispatch,
     RemoteFailureError,
     UnknownOutcomeError,
 )
-from builders.contracts import (
+from model_service.builders.contracts import (
     BuilderResult,
     ExecutionContext,
     InlineOutput,

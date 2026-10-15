@@ -3,11 +3,11 @@
 ## A model that fits an existing implementation: YAML only
 
 Most new models are another trained artifact for an implementation that already
-exists in `models/`: another binary classifier ONNX, another segmentation model,
+exists in `src/model_service/models/`: another binary classifier ONNX, another segmentation model,
 another tile encoder. These need no Python and no image rebuild.
 
-1. Copy the closest file in `helm/rayservice/models/` (for example
-   `prostate-classifier-1.yaml`) to `helm/rayservice/models/<model-id>.yaml`.
+1. Copy the closest file in `deploy/helm/rayservice/models/` (for example
+   `prostate-classifier-1.yaml`) to `deploy/helm/rayservice/models/<model-id>.yaml`.
 2. Set `serve.name` and `serve.route_prefix: /<model-id>`, the artifact under
    `user_config.model`, and the model's geometry in `user_config`
    (`tile_size`, `output_tile_size`, `n_channels`, `mpp` for a classifier or
@@ -83,14 +83,14 @@ The deployment guide explains how the runtime reads this artifact back during st
 
 Do not start from an empty file. Copy the closest implementation and adapt only model-specific pieces.
 
-- **Binary classification (baseline)**: [`models/binary_classifier.py`](https://github.com/RationAI/model-service/blob/main/models/binary_classifier.py)
-- **Semantic segmentation**: [`models/semantic_segmentation.py`](https://github.com/RationAI/model-service/blob/main/models/semantic_segmentation.py)
-- **Virchow2 embedding/classification**: [`models/virchow2.py`](https://github.com/RationAI/model-service/blob/main/models/virchow2.py)
-Matching model files live in `helm/rayservice/models/`; the YAML itself is covered in the [Deployment Guide](deployment-guide.md).
+- **Binary classification (baseline)**: [`src/model_service/models/binary_classifier.py`](https://github.com/RationAI/model-service/blob/main/models/binary_classifier.py)
+- **Semantic segmentation**: [`src/model_service/models/semantic_segmentation.py`](https://github.com/RationAI/model-service/blob/main/models/semantic_segmentation.py)
+- **Virchow2 embedding/classification**: [`src/model_service/models/virchow2.py`](https://github.com/RationAI/model-service/blob/main/models/virchow2.py)
+Matching model files live in `deploy/helm/rayservice/models/`; the YAML itself is covered in the [Deployment Guide](deployment-guide.md).
 
 ## Python Entrypoint
 
-Create a new file in `models/` (for example `models/my_model.py`). The sections below explain what each method does and what belongs inside it.
+Create a new file in `src/model_service/models/` (for example `src/model_service/models/my_model.py`). The sections below explain what each method does and what belongs inside it.
 
 ### `__init__`: one-time lightweight setup
 
@@ -185,7 +185,7 @@ async def get_config(self) -> dict[str, Any]:
 
 The builder calls it with `await model.get_config.remote()` before each run and fails with `model_contract_mismatch` if the values differ from the model's catalog declaration; keep it cheap and avoid any I/O.
 
-A `tile-embedding` model (used by the `tile-embeddings` builder) instead provides `get_config()` returning `tile_size` and `summaries`, and `async def embed(self, tile)`: one CHW uint8 tile in, float32 `(dim,)` (one summary) or `(len(summaries), dim)` out, with the model's own preprocessing and pooling inside. See `models/virchow2.py`. Builders call both by handle; the raw HTTP route should wrap the same code. `tests/test_model_catalog.py` fails if a model file's implementation lacks the methods of its contract.
+A `tile-embedding` model (used by the `tile-embeddings` builder) instead provides `get_config()` returning `tile_size` and `summaries`, and `async def embed(self, tile)`: one CHW uint8 tile in, float32 `(dim,)` (one summary) or `(len(summaries), dim)` out, with the model's own preprocessing and pooling inside. See `src/model_service/models/virchow2.py`. Builders call both by handle; the raw HTTP route should wrap the same code. `tests/test_model_catalog.py` fails if a model file's implementation lacks the methods of its contract.
 
 ### `root`: HTTP request parsing and serialization
 
@@ -250,7 +250,7 @@ async def root(self, request: Request):
 
 ## Whole-Slide (WSI) Inference and Builders
 
-Builders in `builders/` do the whole-slide work; a model only answers per tile.
+Builders in `src/model_service/builders/` do the whole-slide work; a model only answers per tile.
 
 1. **Heatmaps and segmentation maps:** a `spatial-scores` model works with the
    `heatmap` builder, which tiles the slide at the model's resolution, averages
@@ -258,7 +258,7 @@ Builders in `builders/` do the whole-slide work; a model only answers per tile.
 2. **Tile embeddings:** a `tile-embedding` model works with the `tile-embeddings`
    builder, which writes one feature row per selected tile to HDF5.
 3. **Other slide-level outputs** (a slide score, annotations, statistics) need a
-   new builder: an entry in `builders/registry.py` declaring the contract it
+   new builder: an entry in `src/model_service/builders/registry.py` declaring the contract it
    accepts, its inputs, outputs and configuration, and a class with
    `async run(context) -> BuilderResult`. It then gets the public routes,
    scheduling and the SDK for free.

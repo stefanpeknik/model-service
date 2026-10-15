@@ -15,21 +15,24 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import numpy as np
 
-from builders.application import BuilderApplication
-from builders.contracts import (
+from model_service.builders.application import BuilderApplication
+from model_service.builders.contracts import (
     BuilderFailure,
     FailureCode,
     SharedArtifact,
     SharedPathInput,
     SpatialScoresModel,
 )
-from builders.heatmap.builder import HeatmapBuilder
-from builders.heatmap.predictor import RayModelPredictor
-from builders.heatmap.processor import HeatmapRequest, SlideHeatmapProcessor
-from builders.registry import ScoreEncoding, get_builder
-from builders.settings import WorkerSettings
-from integrations.shared_storage import SharedStorageAccessAdapter
-from tests.builder_fixtures import invocation, write_slide
+from model_service.builders.heatmap.builder import HeatmapBuilder
+from model_service.builders.heatmap.predictor import RayModelPredictor
+from model_service.builders.heatmap.processor import (
+    HeatmapRequest,
+    SlideHeatmapProcessor,
+)
+from model_service.builders.registry import ScoreEncoding, get_builder
+from model_service.builders.settings import WorkerSettings
+from model_service.providers.shared_storage import SharedStorageAccessAdapter
+from tests.support.builder_fixtures import invocation, write_slide
 
 
 if TYPE_CHECKING:
@@ -151,8 +154,8 @@ class HeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
             ),
             "ratiopath.openslide": module("ratiopath.openslide", OpenSlide=FakeSlide),
             "ratiopath.tiling": module("ratiopath.tiling", grid_tiles=grid_tiles),
-            "builders.tile_reader": module(
-                "builders.tile_reader",
+            "model_service.builders.tile_reader": module(
+                "model_service.builders.tile_reader",
                 TileReader=FakeTileReader,
                 open_slide=lambda path, _name: FakeSlide(str(path)),
             ),
@@ -426,8 +429,8 @@ if __name__ == "__main__":
 
 class UnreadableInputTests(unittest.TestCase):
     def test_a_file_that_is_not_a_slide_is_an_invalid_input(self) -> None:
-        from builders.contracts import InvalidInvocation
-        from builders.tile_reader import open_slide
+        from model_service.builders.contracts import InvalidInvocation
+        from model_service.builders.tile_reader import open_slide
 
         with TemporaryDirectory() as directory:
             path = Path(directory) / "notes.txt"

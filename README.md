@@ -5,12 +5,12 @@ inference, and **builders** that run a chosen model over a whole slide, either
 synchronously or as durable executions you can poll and cancel.
 
 ```text
-helm/rayservice/models/<id>.yaml   one file per trained model: inference contract + Ray Serve app
-models/                            inference implementations (classifier, segmentation, encoders)
-builders/                          heatmap and tile-embeddings builders and their runtime
-model_service/                     the public API (facade) and model catalog
-execution_scheduler/               durable executions on PostgreSQL
-integrations/                      providers: shared storage, EMPAIA
+deploy/helm/rayservice/models/<id>.yaml   one file per trained model: inference contract + Ray Serve app
+src/model_service/models/                            inference implementations (classifier, segmentation, encoders)
+src/model_service/builders/                          heatmap and tile-embeddings builders and their runtime
+src/model_service/facade/                     the public API (facade) and model catalog
+src/model_service/scheduler/               durable executions on PostgreSQL
+src/model_service/providers/                      providers: shared storage, EMPAIA
 ```
 
 Read [how it is put together](docs/architecture/core.md), then the
@@ -19,7 +19,7 @@ Read [how it is put together](docs/architecture/core.md), then the
 ## Add a model
 
 A model that fits an existing implementation needs only YAML: add
-`helm/rayservice/models/<id>.yaml`, list it under `models:` in the values file,
+`deploy/helm/rayservice/models/<id>.yaml`, list it under `models:` in the values file,
 and `helm upgrade`. See [Adding models](docs/guides/adding-models.md).
 
 ## Use it
@@ -51,7 +51,7 @@ podman run -d --name ms-test-pg -p 127.0.0.1:55432:5432 \
 TEST_POSTGRES_DSN=postgresql://postgres:test@127.0.0.1:55432/postgres \
   UV_CACHE_DIR=.cache/uv uv run python -m unittest discover -s tests -t .
 UV_CACHE_DIR=.cache/uv uv run ruff check
-UV_CACHE_DIR=.cache/uv uv run mypy builders execution_scheduler integrations model_service
+UV_CACHE_DIR=.cache/uv uv run mypy src testing
 ```
 
 Without `TEST_POSTGRES_DSN` the PostgreSQL tests are skipped.

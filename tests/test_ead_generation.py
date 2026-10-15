@@ -12,15 +12,15 @@ from typing import TYPE_CHECKING
 import yaml
 from jsonschema import ValidationError
 
-from builders.registry import BuilderSpec, OutputSpec, get_builder
+from model_service.builders.registry import BuilderSpec, OutputSpec, get_builder
 from scripts.generate_ead import ROOT, generate_ead, generate_file, load_yaml
 
 
 if TYPE_CHECKING:
-    from builders.contracts import JsonValue
+    from model_service.builders.contracts import JsonValue
 
 
-APP_PATH = ROOT / "eads" / "apps" / "prostate-heatmap.yaml"
+APP_PATH = ROOT / "deploy" / "empaia" / "apps" / "prostate-heatmap.yaml"
 
 
 def _with_heatmap_output(**empaia: JsonValue) -> BuilderSpec:
@@ -48,7 +48,11 @@ class EadGenerationTests(unittest.TestCase):
             {"inputs": ["slide", "region_of_interest"], "outputs": ["heatmap"]},
         )
         self.assertTrue(
-            generate_file(APP_PATH, ROOT / "eads" / "prostate-heatmap.json", check=True)
+            generate_file(
+                APP_PATH,
+                ROOT / "deploy" / "empaia" / "prostate-heatmap.json",
+                check=True,
+            )
         )
 
     def test_app_must_name_a_model(self) -> None:

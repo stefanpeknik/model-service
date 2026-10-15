@@ -1,7 +1,7 @@
 # The peknik-ns test deployment
 
 A playground: its data is disposable. Release `model-service-validation`,
-values `helm/rayservice/values.peknik.yaml`. Use the namespace's `kubectl`
+values `deploy/helm/rayservice/values.peknik.yaml`. Use the namespace's `kubectl`
 (`.cache/deploy-tools/kubectl` in the main checkout) with context `kuba-cluster`.
 
 ## Layout
@@ -29,13 +29,13 @@ large base layers.
 
 ```sh
 REV=$(git rev-parse --short HEAD)
-podman build -f docker/Dockerfile.code-refresh \
+podman build -f deploy/images/Dockerfile.code-refresh \
   --build-arg BASE=cerit.io/stefanpeknik/model-service-workflow-gpu:checkpoint-20261008-bc6a23b \
   --build-arg PYTHON=/home/ray/anaconda3/bin/python \
   --build-arg 'EXTRA_PACKAGES=h5py>=3.11,<4 timm>=1.0,<2' \
   --build-arg SOURCE_REVISION=$REV \
   -t cerit.io/stefanpeknik/model-service-workflow-gpu:core-$REV .
-podman build -f docker/Dockerfile.code-refresh \
+podman build -f deploy/images/Dockerfile.code-refresh \
   --build-arg BASE=cerit.io/stefanpeknik/model-service-scheduler:checkpoint-20261008-a91b519 \
   --build-arg RUN_USER=10001 --build-arg 'EXTRA_PACKAGES=lz4>=4.4.5' \
   --build-arg SOURCE_REVISION=$REV \
@@ -47,8 +47,8 @@ podman push cerit.io/stefanpeknik/model-service-scheduler:core-$REV
 Set both tags in `values.peknik.yaml`, then:
 
 ```sh
-helm upgrade model-service-validation helm/rayservice -n peknik-ns \
-  --reset-values --force-conflicts -f helm/rayservice/values.peknik.yaml
+helm upgrade model-service-validation deploy/helm/rayservice -n peknik-ns \
+  --reset-values --force-conflicts -f deploy/helm/rayservice/values.peknik.yaml
 ```
 
 `--force-conflicts` is needed while fields set by earlier `kubectl patch`

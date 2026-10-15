@@ -10,8 +10,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
-from builders.application import BuilderApplication, validate_model
-from builders.contracts import (
+from model_service.builders.application import BuilderApplication, validate_model
+from model_service.builders.contracts import (
     BuilderResult,
     ExecutionContext,
     Invocation,
@@ -19,29 +19,32 @@ from builders.contracts import (
     SharedArtifact,
     SpatialScoresModel,
 )
-from builders.registry import get_builder
-from execution_scheduler.active_work import ActiveWorkRegistry
-from execution_scheduler.contracts import (
+from model_service.builders.registry import get_builder
+from model_service.providers.empaia.gateway import EmpaiaGatewayError, EmpaiaJobContext
+from model_service.providers.empaia.input_access import EmpaiaInputAccessAdapter
+from model_service.providers.empaia.provider import EmpaiaProviderAdapter
+from model_service.scheduler.active_work import ActiveWorkRegistry
+from model_service.scheduler.contracts import (
     InvalidScheduleRequestError,
     ScheduleRequest,
     SchedulingUnavailableError,
 )
-from execution_scheduler.domain import RetryPolicy
-from execution_scheduler.providers import ProviderFinishFailureError, ProviderSuccess
-from execution_scheduler.scheduler import ExecutionScheduler
-from execution_scheduler.worker import ExecutionWorker
-from integrations.empaia.gateway import EmpaiaGatewayError, EmpaiaJobContext
-from integrations.empaia.input_access import EmpaiaInputAccessAdapter
-from integrations.empaia.provider import EmpaiaProviderAdapter
-from tests.memory_repository import InMemoryExecutionRepository
+from model_service.scheduler.domain import RetryPolicy
+from model_service.scheduler.providers import (
+    ProviderFinishFailureError,
+    ProviderSuccess,
+)
+from model_service.scheduler.scheduler import ExecutionScheduler
+from model_service.scheduler.worker import ExecutionWorker
+from tests.support.memory_repository import InMemoryExecutionRepository
 
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from builders.application import BuilderContext
-    from builders.contracts import BuilderOutput, JsonValue
-    from integrations.empaia.gateway import MutationGuard
+    from model_service.builders.application import BuilderContext
+    from model_service.builders.contracts import BuilderOutput, JsonValue
+    from model_service.providers.empaia.gateway import MutationGuard
 
 
 MODEL = SpatialScoresModel(

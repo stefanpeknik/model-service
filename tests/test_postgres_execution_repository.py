@@ -23,7 +23,7 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from psycopg.errors import CheckViolation
 from psycopg.types.json import Jsonb
 
-from builders.contracts import (
+from model_service.builders.contracts import (
     INVOCATION,
     RESULT,
     BuilderResult,
@@ -33,12 +33,12 @@ from builders.contracts import (
     SharedArtifact,
     SharedPathInput,
 )
-from execution_scheduler.contracts import (
+from model_service.scheduler.contracts import (
     InferenceResult,
     ScheduleConflictError,
     UnknownExecutionError,
 )
-from execution_scheduler.domain import (
+from model_service.scheduler.domain import (
     Admission,
     InferenceSucceeded,
     ProcessingSucceeded,
@@ -49,12 +49,12 @@ from execution_scheduler.domain import (
     SubmissionIdentity,
     WorkKind,
 )
-from execution_scheduler.persistence.models import ExecutionRow
-from execution_scheduler.persistence.postgres import PostgresExecutionRepository
-from execution_scheduler.persistence.protected_context import ProtectedContextCipher
-from execution_scheduler.persistence.schema import MIGRATIONS_DIRECTORY
-from execution_scheduler.repository import ExecutionRepositoryUnavailableError
-from tests.repository_contract import (
+from model_service.scheduler.store.models import ExecutionRow
+from model_service.scheduler.store.postgres import PostgresExecutionRepository
+from model_service.scheduler.store.protected_context import ProtectedContextCipher
+from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
+from model_service.scheduler.store.schema import MIGRATIONS_DIRECTORY
+from tests.support.repository_contract import (
     INFERENCE_LIMIT,
     INFERENCE_RETENTION,
     ExecutionRepositoryContract,
@@ -193,7 +193,7 @@ class PostgresExecutionRepositoryTests(
                 encoding="utf-8",
             )
             with patch(
-                "execution_scheduler.persistence.schema.MIGRATIONS_DIRECTORY", directory
+                "model_service.scheduler.store.schema.MIGRATIONS_DIRECTORY", directory
             ):
                 await asyncio.gather(
                     self.repository.initialize(), self._repository().initialize()
@@ -226,7 +226,7 @@ class PostgresExecutionRepositoryTests(
                 encoding="utf-8",
             )
             with patch(
-                "execution_scheduler.persistence.schema.MIGRATIONS_DIRECTORY", directory
+                "model_service.scheduler.store.schema.MIGRATIONS_DIRECTORY", directory
             ):
                 with self.assertRaises(ExecutionRepositoryUnavailableError):
                     await self.repository.initialize()
@@ -255,7 +255,7 @@ class PostgresExecutionRepositoryTests(
             directory = Path(temporary_directory)
             shutil.copy(MIGRATIONS_DIRECTORY / "0001-create-executions.sql", directory)
             with patch(
-                "execution_scheduler.persistence.schema.MIGRATIONS_DIRECTORY", directory
+                "model_service.scheduler.store.schema.MIGRATIONS_DIRECTORY", directory
             ):
                 await self.repository.initialize()
         deadline = datetime.now(UTC) + timedelta(minutes=5)
@@ -318,7 +318,7 @@ class PostgresExecutionRepositoryTests(
         with (
             TemporaryDirectory() as temporary_directory,
             patch(
-                "execution_scheduler.persistence.schema.MIGRATIONS_DIRECTORY",
+                "model_service.scheduler.store.schema.MIGRATIONS_DIRECTORY",
                 Path(temporary_directory),
             ),
             self.assertRaises(ExecutionRepositoryUnavailableError),
@@ -494,7 +494,9 @@ class PostgresExecutionRepositoryTests(
         )
         execution_id = str(uuid4())
         table = sql.Identifier(self.schema, "executions")
-        fixture = Path(__file__).with_name("fixtures") / "executions_pre_orm.sql"
+        fixture = (
+            Path(__file__).parent / "support" / "fixtures" / "executions_pre_orm.sql"
+        )
         async with await AsyncConnection.connect(self.dsn) as connection:
             await connection.execute(
                 sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(self.schema))

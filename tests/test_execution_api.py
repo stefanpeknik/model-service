@@ -19,19 +19,27 @@ from httpx import (
     Response,
 )
 
-from builders.client import (
+from model_service.builders.client import (
     ConfirmedRejectionError,
     RemoteFailureError,
     UnknownOutcomeError,
 )
-from builders.contracts import (
+from model_service.builders.contracts import (
     BuilderResult,
     InlineOutput,
     SharedArtifact,
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from execution_scheduler.contracts import (
+from model_service.facade.api import create_app
+from model_service.facade.app import model_resolver
+from model_service.facade.catalog import ModelCatalog
+from model_service.facade.health import DeploymentHealth
+from model_service.facade.inference import HttpInferenceProxy
+from model_service.facade.synchronous import SynchronousBuilderService
+from model_service.providers.shared_storage import SharedStorageAccessAdapter
+from model_service.providers.standalone import StandaloneProviderAdapter
+from model_service.scheduler.contracts import (
     ExecutionStatus,
     ExecutionView,
     Operation,
@@ -39,17 +47,9 @@ from execution_scheduler.contracts import (
     ScheduleResult,
     SchedulingUnavailableError,
 )
-from execution_scheduler.repository import ExecutionRepositoryUnavailableError
-from execution_scheduler.scheduler import ExecutionScheduler
-from integrations.shared_storage import SharedStorageAccessAdapter
-from integrations.standalone import StandaloneProviderAdapter
-from model_service.api import create_app
-from model_service.catalog import ModelCatalog
-from model_service.health import DeploymentHealth
-from model_service.inference import HttpInferenceProxy
-from model_service.runtime import model_resolver
-from model_service.synchronous import SynchronousBuilderService
-from tests.memory_repository import InMemoryExecutionRepository
+from model_service.scheduler.scheduler import ExecutionScheduler
+from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
+from tests.support.memory_repository import InMemoryExecutionRepository
 
 
 if TYPE_CHECKING:
@@ -58,8 +58,12 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
     from starlette.types import Message, Scope
 
-    from builders.contracts import ExecutionContext, Invocation, ModelBinding
-    from execution_scheduler.domain import ExecutionRecord
+    from model_service.builders.contracts import (
+        ExecutionContext,
+        Invocation,
+        ModelBinding,
+    )
+    from model_service.scheduler.domain import ExecutionRecord
 
     type Handler = Callable[
         [str, Invocation, ModelBinding, ExecutionContext], Awaitable[BuilderResult]
