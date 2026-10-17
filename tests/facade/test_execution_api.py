@@ -81,7 +81,6 @@ VIRCHOW = TileEmbeddingModel(
     id="virchow2", tile_size=224, mpp=0.5, summaries=("global", "local_mean")
 )
 CATALOG = ModelCatalog([PROSTATE, VIRCHOW])
-SECRET = "secret-job-token"
 
 
 class FakeDispatch:
@@ -305,6 +304,7 @@ class ScheduleRouteTests(ApiTestCase):
                 "status": "queued",
                 "result": None,
                 "error": None,
+                "provider_pending": False,
             },
         )
         self.assertEqual(cancelled.json()["status"], "cancelled")
@@ -422,47 +422,6 @@ class ScheduleRouteTests(ApiTestCase):
         self.assertEqual(model, PROSTATE)
         self.assertIsNone(invocation.resolved_configuration)
         self.assertIsNotNone(context.processing_attempt_id)
-
-    async def test_empaia_route_maps_job_context_and_model(self) -> None:
-        scheduler = RecordingScheduler()
-        app = create_app(scheduler, catalog=CATALOG)
-        job = {
-            "model_id": PROSTATE.id,
-            "installation_id": "installation-1",
-            "api_url": "https://app-service.example",
-            "job_id": "job-1",
-            "credential": SECRET,
-            "requested_timeout_seconds": 600,
-        }
-        async with self.client(app) as client:
-            admitted = await client.post(
-                "/v1/providers/empaia/builders/heatmap/schedule", json=job
-            )
-            invalid = await client.post(
-                "/v1/providers/empaia/builders/heatmap/schedule",
-                json={**job, "model_id": "", "unexpected": SECRET},
-            )
-
-        self.assertEqual(admitted.status_code, 202, admitted.text)
-        self.assertEqual(
-            scheduler.requests,
-            [
-                ScheduleRequest(
-                    builder_id="heatmap",
-                    model_id=PROSTATE.id,
-                    provider="empaia",
-                    body={
-                        "installation_id": "installation-1",
-                        "api_url": "https://app-service.example",
-                        "job_id": "job-1",
-                        "credential": SECRET,
-                    },
-                    requested_timeout_seconds=600,
-                )
-            ],
-        )
-        self.assert_error(invalid, 422, "invalid_request")
-        self.assertNotIn(SECRET, invalid.text)
 
 
 class RunRouteTests(ApiTestCase):

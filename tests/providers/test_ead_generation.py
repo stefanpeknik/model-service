@@ -20,7 +20,9 @@ if TYPE_CHECKING:
     from model_service.builders.contracts import JsonValue
 
 
-APP_PATH = ROOT / "deploy" / "empaia" / "apps" / "prostate-heatmap.yaml"
+APP_PATH = (
+    ROOT / "deploy" / "helm" / "rayservice" / "empaia-apps" / "prostate-heatmap.yaml"
+)
 
 
 def _with_heatmap_output(**empaia: JsonValue) -> BuilderSpec:

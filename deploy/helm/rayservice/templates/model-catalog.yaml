@@ -1,4 +1,5 @@
-{{- /* The facade's model catalog, rendered from the same files as the Serve config. */}}
+{{- /* The facade's model catalog, rendered from the same files as the Serve config,
+and its EMPAIA apps, rendered from the files that also generate their EADs. */}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -11,3 +12,9 @@ data:
     {{- $models = append $models (tpl (printf "models/%s.yaml" $path | $.Files.Get) $ | fromYaml) }}
     {{- end }}
     {{- toJson $models | nindent 4 }}
+  empaia-apps.json: |
+    {{- $apps := dict }}
+    {{- range $app := .Values.executionScheduler.empaia.apps }}
+    {{- $_ := set $apps $app (printf "empaia-apps/%s.yaml" $app | $.Files.Get | fromYaml) }}
+    {{- end }}
+    {{- toJson $apps | nindent 4 }}

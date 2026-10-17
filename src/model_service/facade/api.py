@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from model_service.facade.inference import InferenceProxy
     from model_service.facade.routes.builders import BuilderRunner
     from model_service.facade.routes.common import Scheduler
+    from model_service.providers.empaia.apps import EmpaiaApps
 
 
 class DeploymentHealth(Protocol):
@@ -40,6 +41,7 @@ def create_app(
     lifespan: Lifespan[FastAPI] | None = None,
     deployment_health: DeploymentHealth | None = None,
     inference_max_request_bytes: int = 2 * 1024 * 1024,
+    empaia_apps: EmpaiaApps | None = None,
 ) -> FastAPI:
     app = FastAPI(title="model-service", lifespan=lifespan)
 
@@ -89,7 +91,8 @@ def create_app(
         models.create_router(scheduler, catalog, inference_max_request_bytes)
     )
     app.include_router(builders.create_router(scheduler, builder_runner))
-    app.include_router(empaia.create_router(scheduler))
+    if empaia_apps is not None:
+        app.include_router(empaia.create_router(scheduler, empaia_apps))
     app.include_router(executions.create_router(scheduler))
     app.include_router(create_inference_router(inference_proxy))
     return app

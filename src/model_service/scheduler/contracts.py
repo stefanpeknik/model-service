@@ -124,6 +124,8 @@ class ExecutionView:
     status: ExecutionStatus
     result: StoredResult | None = None
     error: ExecutionError | None = None
+    # A failure or cancellation not yet reported to the provider (e.g. EMPAIA).
+    provider_pending: bool = False
 
 
 @dataclass(frozen=True, slots=True)

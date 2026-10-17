@@ -32,6 +32,7 @@ from model_service.scheduler.domain import (
     Admission,
     ExecutionRecord,
     SubmissionIdentity,
+    WorkKind,
 )
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
 from model_service.scheduler.worker import ExecutionWorker
@@ -275,4 +276,9 @@ class ExecutionScheduler:
             error=(
                 execution.error if execution.status is ExecutionStatus.FAILED else None
             ),
+            provider_pending=execution.work_kind
+            in {
+                WorkKind.PROVIDER_FAILURE_REPORT,
+                WorkKind.PROVIDER_CANCELLATION_REPORT,
+            },
         )

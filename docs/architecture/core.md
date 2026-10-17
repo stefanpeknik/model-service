@@ -11,7 +11,7 @@ behind one public API that can also run builders durably.
 │  /v1/models   /v1/models/{m}/schedule (tiles)                      │
 │  /v1/builders   /v1/builders/{b}/run|schedule                      │
 │  /v1/executions/{id}[/cancel|/result]   /v1/executions/lookup      │
-│  /v1/providers/empaia/...   /{model} (raw proxy)                   │
+│  /v1/empaia/apps/{app} (JES)   /{model} (raw proxy)                │
 │  model catalog ◄── ConfigMap from deploy/helm/rayservice/models/   │
 │  execution scheduler (model_service/scheduler/) ◄──► PostgreSQL    │
 └───────────────┬───────────────────────────────────┬────────────────┘

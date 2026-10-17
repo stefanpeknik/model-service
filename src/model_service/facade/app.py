@@ -74,9 +74,13 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
             SharedStorageAccessAdapter(config.shared_storage_roots)
         )
     }
+    empaia_apps = None
     if config.empaia_gateway_factory is not None:
+        from model_service.providers.empaia.apps import EmpaiaApps
         from model_service.providers.empaia.gateway import load_gateway_factory
         from model_service.providers.empaia.provider import EmpaiaProviderAdapter
+
+        empaia_apps = EmpaiaApps.from_file(config.empaia_apps_path)
 
         providers["empaia"] = EmpaiaProviderAdapter(
             load_gateway_factory(config.empaia_gateway_factory),
@@ -126,6 +130,7 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
         scheduler,
         catalog=catalog,
         builder_runner=SynchronousBuilderService(catalog, dispatch),
+        empaia_apps=empaia_apps,
         inference_proxy=inference_proxy,
         inference_max_request_bytes=config.inference_max_request_bytes,
         lifespan=lifespan,

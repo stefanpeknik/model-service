@@ -814,17 +814,21 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         await worker.run_once()
         terminal_failure = await scheduler.get(failed.execution.id)
         self.assertEqual(terminal_failure.status, "failed")
+        self.assertTrue(terminal_failure.provider_pending)
         await worker.run_once()
-        self.assertEqual((await scheduler.get(failed.execution.id)).status, "failed")
+        reported_failure = await scheduler.get(failed.execution.id)
+        self.assertEqual(reported_failure.status, "failed")
+        self.assertFalse(reported_failure.provider_pending)
         self.assertIsInstance(provider.outcomes[-1], ProviderFailure)
 
         cancelled = await scheduler.schedule(self._request("cancellation"))
-        await scheduler.cancel(cancelled.execution.id)
-        await worker.run_once()
-        self.assertEqual(
-            (await scheduler.get(cancelled.execution.id)).status,
-            "cancelled",
+        self.assertTrue(
+            (await scheduler.cancel(cancelled.execution.id)).provider_pending
         )
+        await worker.run_once()
+        reported_cancellation = await scheduler.get(cancelled.execution.id)
+        self.assertEqual(reported_cancellation.status, "cancelled")
+        self.assertFalse(reported_cancellation.provider_pending)
         self.assertIsInstance(provider.outcomes[-1], ProviderCancellation)
 
     async def test_terminal_reporting_is_bounded_without_delaying_failure(self) -> None:
