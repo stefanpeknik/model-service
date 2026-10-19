@@ -74,13 +74,9 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
             SharedStorageAccessAdapter(config.shared_storage_roots)
         )
     }
-    empaia_apps = None
     if config.empaia_gateway_factory is not None:
-        from model_service.providers.empaia.apps import EmpaiaApps
         from model_service.providers.empaia.gateway import load_gateway_factory
         from model_service.providers.empaia.provider import EmpaiaProviderAdapter
-
-        empaia_apps = EmpaiaApps.from_file(config.empaia_apps_path)
 
         providers["empaia"] = EmpaiaProviderAdapter(
             load_gateway_factory(config.empaia_gateway_factory),
@@ -98,6 +94,9 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
         },
         timeout=config.inference_timeout.total_seconds(),
     )
+    inference_target = ModelInference(
+        catalog, inference_proxy, max_result_bytes=config.inference_max_result_bytes
+    )
     scheduler = ExecutionScheduler(
         repository=repository,
         dispatch=dispatch,
@@ -108,11 +107,7 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
         lease_duration=config.lease_duration,
         poll_interval=config.poll_interval,
         max_concurrent=config.max_concurrent_executions,
-        inference_target=ModelInference(
-            catalog,
-            inference_proxy,
-            max_result_bytes=config.inference_max_result_bytes,
-        ),
+        inference_target=inference_target,
         max_concurrent_inference=config.max_concurrent_inference,
     )
 
@@ -130,8 +125,8 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
         scheduler,
         catalog=catalog,
         builder_runner=SynchronousBuilderService(catalog, dispatch),
-        empaia_apps=empaia_apps,
-        inference_proxy=inference_proxy,
+        empaia_enabled="empaia" in providers,
+        inference_target=inference_target,
         inference_max_request_bytes=config.inference_max_request_bytes,
         lifespan=lifespan,
         deployment_health=DeploymentHealth(

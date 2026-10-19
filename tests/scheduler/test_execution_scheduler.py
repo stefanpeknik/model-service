@@ -1481,7 +1481,6 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             model_id="prostate-classifier-1",
             provider="standalone",
             body={
-                "model_id": "prostate-classifier-1",
                 "inputs": {
                     "slide": {"kind": "shared_path", "path": "slide.svs"},
                     "region_of_interest": {

@@ -1,10 +1,11 @@
 """`/v1/empaia`: the remote execution protocol of EMPAIA's Job Execution Service.
 
-An EMPAIA app registered as `http::<target>/<app>` reaches `POST /apps/<app>`
-with what an app container would get: the App API URL, the job ID and the job
-token. The app decides the builder and model; the job's inputs, mode and
-configuration are read from the App API like a container would. The response's
-`Location` is then polled with `GET` and cancelled with `DELETE`.
+An EMPAIA app registered as `http::<target>/builders/<builder>/models/<model>`
+reaches `POST /builders/<builder>/models/<model>` with what an app container
+would get: the App API URL, the job ID and the job token. The registration names
+what runs; the job's inputs, mode and configuration are read from the App API
+like a container would. The response's `Location` is then polled with `GET` and
+cancelled with `DELETE`.
 """
 
 from __future__ import annotations
@@ -23,7 +24,6 @@ from model_service.facade.routes.common import (
     submit,
     unavailable,
 )
-from model_service.providers.empaia.apps import UnknownAppError
 from model_service.scheduler.contracts import (
     ExecutionStatus,
     ScheduleRequest,
@@ -33,7 +33,6 @@ from model_service.scheduler.contracts import (
 
 
 if TYPE_CHECKING:
-    from model_service.providers.empaia.apps import EmpaiaApps
     from model_service.scheduler.contracts import ExecutionView
 
 
@@ -55,28 +54,25 @@ class EmpaiaExecutionStatus:
     message: str | None = None
 
 
-def create_router(scheduler: Scheduler, apps: EmpaiaApps) -> APIRouter:
+def create_router(scheduler: Scheduler) -> APIRouter:
     router = APIRouter(prefix="/v1/empaia")
 
     @router.post(
-        "/apps/{app_id}",
+        "/builders/{builder_id}/models/{model_id}",
         status_code=status.HTTP_202_ACCEPTED,
         responses={200: {"model": EmpaiaExecutionStatus}, **ERRORS},
     )
     async def execute(
-        app_id: str, body: EmpaiaExecutionRequest, response: Response
+        builder_id: str,
+        model_id: str,
+        body: EmpaiaExecutionRequest,
+        response: Response,
     ) -> EmpaiaExecutionStatus:
-        try:
-            app = apps.get(app_id)
-        except UnknownAppError as error:
-            raise http_error(
-                404, ApiErrorCode.UNKNOWN_APP, "EMPAIA app is not configured"
-            ) from error
         result = await submit(
             scheduler,
             ScheduleRequest(
-                builder_id=app.builder,
-                model_id=app.model,
+                builder_id=builder_id,
+                model_id=model_id,
                 provider="empaia",
                 body={
                     # Job IDs are unique per installation; its App API URL names it.

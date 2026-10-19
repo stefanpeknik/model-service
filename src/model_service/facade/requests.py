@@ -1,4 +1,7 @@
-"""Public request bodies for running and scheduling builders."""
+"""Public request bodies for running and scheduling builders.
+
+The builder and model are named by the URL, `/v1/builders/{builder}/models/{model}`.
+"""
 
 from __future__ import annotations
 
@@ -11,11 +14,12 @@ from model_service.builders.contracts import (
     Deadline,
     InputAccessContext,
     Invocation,
+    JsonValue,
 )
 
 
 class BuilderRequest(BaseModel):
-    """Inputs and their access, the selected model and an optional output path.
+    """Inputs and their access, and an optional output path.
 
     Processing settings are not part of the request; each attempt uses the
     builder's current defaults.
@@ -23,7 +27,6 @@ class BuilderRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    model_id: Annotated[str, Field(strict=True, min_length=1)]
     inputs: Annotated[dict[str, BuilderInput], Field(strict=True)]
     input_access: InputAccessContext
     output_path: Annotated[str, Field(strict=True, min_length=1)] | None = None
@@ -40,3 +43,15 @@ class BuilderRequest(BaseModel):
 
 class ImmediateBuilderRequest(BuilderRequest):
     deadline_at: Deadline
+
+
+class ScheduledBuilderRequest(BuilderRequest):
+    """A builder request plus what durable admission needs."""
+
+    idempotency_key: Annotated[str, Field(strict=True, min_length=1)]
+    requested_timeout_seconds: Annotated[int, Field(strict=True, gt=0)] | None = None
+
+    def builder_request(self) -> dict[str, JsonValue]:
+        return self.model_dump(
+            mode="json", exclude={"idempotency_key", "requested_timeout_seconds"}
+        )

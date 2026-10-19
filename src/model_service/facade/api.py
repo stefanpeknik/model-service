@@ -12,7 +12,6 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from model_service.facade.health import DeploymentState, DeploymentStatus
-from model_service.facade.inference import create_inference_router
 from model_service.facade.routes import builders, empaia, executions, models
 from model_service.facade.routes.common import ApiErrorCode, http_error
 from model_service.scheduler.contracts import SchedulingUnavailableError
@@ -22,10 +21,9 @@ if TYPE_CHECKING:
     from starlette.types import Lifespan
 
     from model_service.facade.catalog import ModelCatalog
-    from model_service.facade.inference import InferenceProxy
     from model_service.facade.routes.builders import BuilderRunner
     from model_service.facade.routes.common import Scheduler
-    from model_service.providers.empaia.apps import EmpaiaApps
+    from model_service.scheduler.inference import InferenceTarget
 
 
 class DeploymentHealth(Protocol):
@@ -37,11 +35,11 @@ def create_app(
     *,
     catalog: ModelCatalog,
     builder_runner: BuilderRunner | None = None,
-    inference_proxy: InferenceProxy | None = None,
+    inference_target: InferenceTarget | None = None,
     lifespan: Lifespan[FastAPI] | None = None,
     deployment_health: DeploymentHealth | None = None,
     inference_max_request_bytes: int = 2 * 1024 * 1024,
-    empaia_apps: EmpaiaApps | None = None,
+    empaia_enabled: bool = False,
 ) -> FastAPI:
     app = FastAPI(title="model-service", lifespan=lifespan)
 
@@ -88,11 +86,12 @@ def create_app(
         return result
 
     app.include_router(
-        models.create_router(scheduler, catalog, inference_max_request_bytes)
+        models.create_router(
+            scheduler, catalog, inference_target, inference_max_request_bytes
+        )
     )
     app.include_router(builders.create_router(scheduler, builder_runner))
-    if empaia_apps is not None:
-        app.include_router(empaia.create_router(scheduler, empaia_apps))
+    if empaia_enabled:
+        app.include_router(empaia.create_router(scheduler))
     app.include_router(executions.create_router(scheduler))
-    app.include_router(create_inference_router(inference_proxy))
     return app

@@ -352,7 +352,6 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
                                 model_id=SPATIAL_MODEL.id,
                                 provider="standalone",
                                 body={
-                                    "model_id": SPATIAL_MODEL.id,
                                     "inputs": {},
                                     "input_access": {
                                         "kind": "shared_storage",

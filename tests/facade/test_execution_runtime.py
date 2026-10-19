@@ -10,6 +10,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, patch
 
+import lz4.frame
 from httpx import ASGITransport, AsyncClient, MockTransport, Request, Response
 
 from model_service.facade.app import create_app
@@ -151,24 +152,23 @@ class ExecutionRuntimeTests(RuntimeTestCase):
                 transport=ASGITransport(app=app), base_url="http://model-service"
             ) as client:
                 named = await client.post(
-                    "/prostate-classifier-1/predict?variant=probe",
-                    content=b"compressed-image",
+                    "/v1/models/prostate-classifier-1/run",
+                    content=lz4.frame.compress(bytes(512 * 512 * 3)),
                     headers={"x-output-dtype": "float32"},
                 )
                 fallback = await client.post(
-                    "/prostate-classifier-10", content=b"other"
+                    "/v1/models/virchow2/run",
+                    content=lz4.frame.compress(bytes(224 * 224 * 3)),
                 )
 
         self.assertEqual(named.json(), "builder-serve")
         self.assertEqual(fallback.json(), "model-serve")
         self.assertEqual(
-            forwarded[0].url,
-            "http://builder-serve/prostate-classifier-1/predict?variant=probe",
+            forwarded[0].url, "http://builder-serve/prostate-classifier-1/"
         )
-        self.assertEqual(forwarded[0].content, b"compressed-image")
         self.assertEqual(forwarded[0].headers["x-output-dtype"], "float32")
         self.assertEqual(forwarded[0].extensions["timeout"]["read"], 900)
-        self.assertEqual(forwarded[1].url, "http://model-serve/prostate-classifier-10")
+        self.assertEqual(forwarded[1].url, "http://model-serve/virchow2/")
 
 
 if __name__ == "__main__":

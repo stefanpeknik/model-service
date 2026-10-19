@@ -109,14 +109,14 @@ defaults. One Ray application per builder (`builders.serve:app`, route
 | --- | --- |
 | `GET /v1/models` | Catalog: ID, contract, parameters, compatible builders |
 | `GET /v1/builders` | Builders: ID, accepted contract, inputs, outputs |
-| `POST /v1/builders/{builder}/run` | Synchronous run. Body: `model_id`, `inputs`, `input_access`, optional `output_path`, `deadline_at` |
-| `POST /v1/builders/{builder}/schedule` | Durable admission. Body: `provider`, `body` (with `model_id`), `idempotency_key`, `requested_timeout_seconds` |
-| `POST /v1/empaia/apps/{app}`, `GET`/`DELETE /v1/empaia/executions/{id}` | EMPAIA jobs from JES's HTTP execution backend: the app names the builder and model (`deploy/helm/rayservice/empaia-apps/{app}.yaml`); the body is what an app container gets (App API URL, job ID, token); the `Location` is polled and cancelled. A failure or cancellation reads as `running` until EMPAIA has been told |
-| `POST /v1/models/{model}/schedule` | Durable raw inference: the body `POST /{model}/` takes, an `Idempotency-Key` header, optional `timeout_seconds` |
+| `POST /v1/builders/{builder}/models/{model}/run` | Synchronous run. Body: `inputs`, `input_access`, optional `output_path`, `deadline_at` |
+| `POST /v1/builders/{builder}/models/{model}/schedule` | Durable admission with shared-storage inputs. Body: `inputs`, `input_access`, optional `output_path`, `idempotency_key`, optional `requested_timeout_seconds` |
+| `POST /v1/empaia/builders/{builder}/models/{model}`, `GET`/`DELETE /v1/empaia/executions/{id}` | EMPAIA jobs from JES's HTTP execution backend (app registered as `http::<target>/builders/<builder>/models/<model>`): the body is what an app container gets (App API URL, job ID, token); the job's mode, inputs and configuration come from the App API; the `Location` is polled and cancelled. A failure or cancellation reads as `running` until EMPAIA has been told |
+| `POST /v1/models/{model}/run` | Raw inference: one LZ4-compressed RGB tile of the model's `tile_size`, optional `x-output-dtype`/`x-pool-tokens`; checked, then the model's response is returned. Replaces the root `POST /{model}/` proxy |
+| `POST /v1/models/{model}/schedule` | Durable raw inference: the body `run` takes, an `Idempotency-Key` header, optional `timeout_seconds` |
 | `GET /v1/executions/{id}`, `POST …/cancel` | Views carry `operation` (`builder` or `inference`), `builder_id` (null for inference), `model_id`, and `provider_pending` (a failure or cancellation not yet reported to the provider) |
 | `POST /v1/executions/lookup` | Up to 1000 views by ID in one call; unknown IDs are left out |
 | `GET /v1/executions/{id}/result` | A succeeded inference execution's stored model response |
-| `POST /{model_id}/…` | Raw inference proxy, unchanged |
 
 Unknown builder or model: 404 `unknown_builder` / `unknown_model`.
 Incompatible pair: 422 `incompatible_model`. Model temporarily down: durable

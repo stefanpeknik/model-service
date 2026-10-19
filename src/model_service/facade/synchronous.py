@@ -22,10 +22,10 @@ class SynchronousBuilderService:
         self._dispatch = dispatch
 
     async def run(
-        self, builder_id: str, request: ImmediateBuilderRequest
+        self, builder_id: str, model_id: str, request: ImmediateBuilderRequest
     ) -> BuilderResult:
         spec = get_builder(builder_id)
-        model = self._catalog.get(request.model_id)
+        model = self._catalog.get(model_id)
         validate_model(spec, model)
         invocation = request.invocation(request.deadline_at)
         validate_invocation(spec, invocation)

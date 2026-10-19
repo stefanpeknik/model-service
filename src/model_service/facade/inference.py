@@ -1,19 +1,18 @@
-"""Raw model requests: the transient proxy and the target for scheduled requests.
+"""Raw model requests, run directly or scheduled.
 
 Every model takes the same raw input, an LZ4 frame holding one HWC uint8 RGB
-tile of the model's `tile_size`. Scheduled requests are checked against that
-before admission and before each attempt; the proxy forwards unchecked.
+tile of the model's `tile_size`. Requests are checked against that before they
+are sent: a direct run before forwarding, a scheduled one at admission and
+before each attempt.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
 import httpx
 import lz4.frame
-from fastapi import APIRouter, HTTPException, Request, Response
 
 from model_service.scheduler.inference import (
     IncompatibleInputError,
@@ -30,9 +29,7 @@ if TYPE_CHECKING:
     from model_service.facade.catalog import ModelCatalog
 
 
-_REQUEST_HEADERS = frozenset(
-    {"accept", "content-type", "x-output-dtype", "x-pool-tokens"}
-)
+_REQUEST_HEADERS = frozenset({"x-output-dtype", "x-pool-tokens"})
 _RESPONSE_EXCLUDED_HEADERS = frozenset(
     {"connection", "content-length", "keep-alive", "transfer-encoding", "upgrade"}
 )
@@ -59,20 +56,6 @@ class InferenceResponse:
 
 class InferenceProxyUnavailableError(RuntimeError):
     """Signal an upstream request failure without exposing HTTP client internals."""
-
-
-class InferenceErrorCode(StrEnum):
-    """Name the public failure for unavailable raw model inference."""
-
-    MODEL_INFERENCE_UNAVAILABLE = "model_inference_unavailable"
-
-
-class InferenceProxy(Protocol):
-    """Define forwarding of raw model requests independently of the HTTP client implementation."""
-
-    async def forward(self, request: InferenceRequest) -> InferenceResponse:
-        """Send a raw request upstream and return its status, bytes, and permitted headers."""
-        ...
 
 
 class HttpInferenceProxy:
@@ -188,38 +171,6 @@ class ModelInference:
         )
 
 
-def create_inference_router(proxy: InferenceProxy | None) -> APIRouter:
-    """Create a catch-all model POST route for registration after the explicit workflow and execution routes."""
-    router = APIRouter()
-
-    @router.post("/{model_path:path}", include_in_schema=False)
-    async def forward_model_inference(
-        request: Request,
-        model_path: str,
-    ) -> Response:
-        """Read the incoming binary request, forward permitted headers, and return the upstream response or a safe 503."""
-        if proxy is None:
-            raise _unavailable("model inference is unavailable")
-        try:
-            forwarded = await proxy.forward(
-                InferenceRequest(
-                    path=model_path,
-                    query=request.url.query,
-                    body=await request.body(),
-                    headers=inference_headers(request.headers),
-                )
-            )
-        except InferenceProxyUnavailableError as error:
-            raise _unavailable(str(error)) from error
-        return Response(
-            status_code=forwarded.status_code,
-            content=forwarded.content,
-            headers=forwarded.headers,
-        )
-
-    return router
-
-
 def inference_headers(headers: Mapping[str, str]) -> dict[str, str]:
     """Keep only the supported inference request headers, excluding unrelated or credential-bearing headers."""
     return {
@@ -227,15 +178,3 @@ def inference_headers(headers: Mapping[str, str]) -> dict[str, str]:
         for name, value in headers.items()
         if name.lower() in _REQUEST_HEADERS
     }
-
-
-def _unavailable(message: str) -> HTTPException:
-    """Build the safe retryable 503 response for an unavailable inference proxy."""
-    return HTTPException(
-        status_code=503,
-        detail={
-            "code": InferenceErrorCode.MODEL_INFERENCE_UNAVAILABLE,
-            "message": message,
-            "retryable": True,
-        },
-    )

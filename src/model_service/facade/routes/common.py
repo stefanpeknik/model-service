@@ -49,7 +49,7 @@ class ApiErrorCode(StrEnum):
     BUILDER_UNAVAILABLE = "builder_unavailable"
     PAYLOAD_TOO_LARGE = "payload_too_large"
     RESULT_UNAVAILABLE = "result_unavailable"
-    UNKNOWN_APP = "unknown_app"
+    MODEL_UNAVAILABLE = "model_inference_unavailable"
 
 
 @dataclass(frozen=True, slots=True)

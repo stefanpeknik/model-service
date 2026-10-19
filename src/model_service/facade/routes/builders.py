@@ -1,4 +1,8 @@
-"""`/v1/builders`: the builder catalog, synchronous runs and standalone scheduling."""
+"""`/v1/builders`: the builder catalog, and runs of a builder with a model.
+
+`/v1/builders/{builder}/models/{model}/run` waits for the result;
+`.../schedule` admits a durable execution with shared-storage inputs.
+"""
 
 from __future__ import annotations
 
@@ -23,7 +27,12 @@ from model_service.builders.contracts import (
     UnknownModelError,
 )
 from model_service.builders.registry import BUILDERS
-from model_service.facade.requests import BuilderRequest, ImmediateBuilderRequest
+
+# FastAPI reads these annotations at runtime.
+from model_service.facade.requests import (
+    ImmediateBuilderRequest,  # noqa: TC001
+    ScheduledBuilderRequest,  # noqa: TC001
+)
 from model_service.facade.routes.common import (
     ERRORS,
     ApiErrorCode,
@@ -37,16 +46,6 @@ from model_service.scheduler.contracts import ScheduleRequest, ScheduleResult
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
-
-
-@dataclass(frozen=True, slots=True)
-class ScheduleBody:
-    """`body` is provider-specific; for `standalone` it is a builder request."""
-
-    provider: str
-    body: dict[str, JsonValue]
-    requested_timeout_seconds: int | None = None
-    idempotency_key: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,7 +71,7 @@ class BuilderView:
 
 class BuilderRunner(Protocol):
     async def run(
-        self, builder_id: str, request: ImmediateBuilderRequest
+        self, builder_id: str, model_id: str, request: ImmediateBuilderRequest
     ) -> BuilderResult: ...
 
 
@@ -100,9 +99,12 @@ def create_router(
             for spec in BUILDERS.values()
         ]
 
-    @router.post("/{builder_id}/run", responses=ERRORS)
+    @router.post("/{builder_id}/models/{model_id}/run", responses=ERRORS)
     async def run_builder(
-        request: Request, builder_id: str, body: ImmediateBuilderRequest
+        request: Request,
+        builder_id: str,
+        model_id: str,
+        body: ImmediateBuilderRequest,
     ) -> BuilderResult:
         if builder_runner is None:
             raise http_error(
@@ -113,7 +115,7 @@ def create_router(
             )
         try:
             return await _run_while_connected(
-                request, builder_runner.run(builder_id, body)
+                request, builder_runner.run(builder_id, model_id, body)
             )
         except (
             UnknownBuilderError,
@@ -150,33 +152,23 @@ def create_router(
             ) from error
 
     @router.post(
-        "/{builder_id}/schedule",
+        "/{builder_id}/models/{model_id}/schedule",
         status_code=status.HTTP_202_ACCEPTED,
         responses={200: {"model": ScheduleResult}, **ERRORS},
     )
     async def schedule_builder(
-        builder_id: str, body: ScheduleBody, response: Response
+        builder_id: str,
+        model_id: str,
+        body: ScheduledBuilderRequest,
+        response: Response,
     ) -> ScheduleResult:
-        model_id = body.body.get("model_id")
-        if not isinstance(model_id, str) or not model_id:
-            raise http_error(
-                422, ApiErrorCode.INVALID_REQUEST, "body.model_id is required"
-            )
-        if body.provider == "standalone":
-            # Validate the shape here so errors are reported before admission.
-            try:
-                BuilderRequest.model_validate(body.body)
-            except ValueError as error:
-                raise http_error(
-                    422, ApiErrorCode.INVALID_REQUEST, "request body is invalid"
-                ) from error
         return await submit(
             scheduler,
             ScheduleRequest(
                 builder_id=builder_id,
                 model_id=model_id,
-                provider=body.provider,
-                body=body.body,
+                provider="standalone",
+                body=body.builder_request(),
                 requested_timeout_seconds=body.requested_timeout_seconds,
                 idempotency_key=body.idempotency_key,
             ),

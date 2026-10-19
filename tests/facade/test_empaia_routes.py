@@ -1,19 +1,14 @@
-"""The JES remote execution protocol at `/v1/empaia` and the EMPAIA app catalog."""
+"""The JES remote execution protocol at `/v1/empaia`."""
 
 from __future__ import annotations
 
-import json
 import unittest
-from pathlib import Path
-from tempfile import TemporaryDirectory
 
-import yaml
 from httpx import ASGITransport, AsyncClient
 
-from model_service.builders.contracts import SpatialScoresModel
+from model_service.builders.contracts import SpatialScoresModel, UnknownModelError
 from model_service.facade.api import create_app
 from model_service.facade.catalog import ModelCatalog
-from model_service.providers.empaia.apps import EmpaiaApp, EmpaiaApps
 from model_service.scheduler.contracts import (
     ExecutionError,
     ExecutionStatus,
@@ -25,7 +20,6 @@ from model_service.scheduler.contracts import (
 )
 
 
-ROOT = Path(__file__).resolve().parents[2]
 PROSTATE = SpatialScoresModel(
     id="prostate-classifier-1",
     tile_size=512,
@@ -33,9 +27,7 @@ PROSTATE = SpatialScoresModel(
     n_channels=1,
     mpp=0.468,
 )
-APPS = EmpaiaApps(
-    {"prostate-heatmap": EmpaiaApp(builder="heatmap", model="prostate-classifier-1")}
-)
+SUBMIT = "/v1/empaia/builders/heatmap/models/prostate-classifier-1"
 TOKEN = "secret-job-token"
 JOB = {
     "app_api": "https://app-service.example/v3/",
@@ -63,12 +55,15 @@ class ScriptedScheduler:
         self.current = current
         self.created = created
         self.requests: list[ScheduleRequest] = []
+        self.unknown_models: set[str] = set()
         self.cancelled: list[str] = []
 
     async def check_ready(self) -> None:
         return None
 
     async def schedule(self, request: ScheduleRequest) -> ScheduleResult:
+        if request.model_id in self.unknown_models:
+            raise UnknownModelError(request.model_id)
         self.requests.append(request)
         return ScheduleResult(self.current, created=self.created)
 
@@ -82,11 +77,11 @@ class ScriptedScheduler:
         return await self.get(execution_id)
 
 
-def client(scheduler: ScriptedScheduler, apps: EmpaiaApps | None = APPS) -> AsyncClient:
+def client(scheduler: ScriptedScheduler, *, enabled: bool = True) -> AsyncClient:
     app = create_app(
         scheduler,  # type: ignore[arg-type]
         catalog=ModelCatalog([PROSTATE]),
-        empaia_apps=apps,
+        empaia_enabled=enabled,
     )
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://ms")
 
@@ -96,7 +91,7 @@ class EmpaiaRouteTests(unittest.IsolatedAsyncioTestCase):
         scheduler = ScriptedScheduler(view(ExecutionStatus.QUEUED))
         async with client(scheduler) as http:
             response = await http.post(
-                "/v1/empaia/apps/prostate-heatmap",
+                SUBMIT,
                 json=JOB,
                 headers={"Idempotency-Key": "job-1"},
             )
@@ -126,23 +121,24 @@ class EmpaiaRouteTests(unittest.IsolatedAsyncioTestCase):
     async def test_resubmission_returns_the_same_execution(self) -> None:
         scheduler = ScriptedScheduler(view(ExecutionStatus.RUNNING), created=False)
         async with client(scheduler) as http:
-            response = await http.post("/v1/empaia/apps/prostate-heatmap", json=JOB)
+            response = await http.post(SUBMIT, json=JOB)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.headers["location"], "/v1/empaia/executions/execution-1"
         )
 
-    async def test_unknown_app_and_invalid_body_are_rejected_safely(self) -> None:
+    async def test_unknown_model_and_invalid_body_are_rejected_safely(self) -> None:
         scheduler = ScriptedScheduler(view(ExecutionStatus.QUEUED))
+        scheduler.unknown_models.add("other-model")
         async with client(scheduler) as http:
-            unknown = await http.post("/v1/empaia/apps/other-app", json=JOB)
-            invalid = await http.post(
-                "/v1/empaia/apps/prostate-heatmap", json={**JOB, "job_id": ""}
+            unknown = await http.post(
+                "/v1/empaia/builders/heatmap/models/other-model", json=JOB
             )
+            invalid = await http.post(SUBMIT, json={**JOB, "job_id": ""})
 
         self.assertEqual(unknown.status_code, 404)
-        self.assertEqual(unknown.json()["detail"]["code"], "unknown_app")
+        self.assertEqual(unknown.json()["detail"]["code"], "unknown_model")
         self.assertEqual(invalid.status_code, 422)
         self.assertNotIn(TOKEN, invalid.text)
         self.assertEqual(scheduler.requests, [])
@@ -193,51 +189,11 @@ class EmpaiaRouteTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_routes_exist_only_when_empaia_is_configured(self) -> None:
         scheduler = ScriptedScheduler(view(ExecutionStatus.QUEUED))
-        async with client(scheduler, apps=None) as http:
-            response = await http.post("/v1/empaia/apps/prostate-heatmap", json=JOB)
+        async with client(scheduler, enabled=False) as http:
+            response = await http.post(SUBMIT, json=JOB)
 
         self.assertNotEqual(response.status_code, 202)
         self.assertEqual(scheduler.requests, [])
-
-
-class EmpaiaAppsTests(unittest.TestCase):
-    def test_rendered_catalog_is_read_and_unknown_builders_are_rejected(self) -> None:
-        with TemporaryDirectory() as directory:
-            path = Path(directory) / "empaia-apps.json"
-            path.write_text(
-                json.dumps(
-                    {
-                        "prostate-heatmap": {
-                            "builder": "heatmap",
-                            "model": "prostate-classifier-1",
-                            "empaia": {"name": "ignored here"},
-                        }
-                    }
-                ),
-                encoding="utf-8",
-            )
-            apps = EmpaiaApps.from_file(path)
-            path.write_text(
-                json.dumps({"broken": {"builder": "nonexistent", "model": "m"}}),
-                encoding="utf-8",
-            )
-            with self.assertRaises(KeyError):
-                EmpaiaApps.from_file(path)
-            path.write_text(json.dumps([]), encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "keyed by app ID"):
-                EmpaiaApps.from_file(path)
-
-        self.assertEqual(apps.get("prostate-heatmap").model, "prostate-classifier-1")
-
-    def test_repository_app_files_are_valid_apps(self) -> None:
-        directory = ROOT / "deploy" / "helm" / "rayservice" / "empaia-apps"
-        apps = EmpaiaApps(
-            {
-                path.stem: EmpaiaApp.model_validate(yaml.safe_load(path.read_text()))
-                for path in directory.glob("*.yaml")
-            }
-        )
-        self.assertEqual(apps.get("prostate-heatmap").builder, "heatmap")
 
 
 if __name__ == "__main__":

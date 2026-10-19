@@ -165,7 +165,7 @@ It is a property of the model deployment, not a provider setting.
 
 **EMPAIA application definition (EAD)**:
 The EMPAIA declaration generated from an app file (builder, model and EMPAIA
-metadata) under `deploy/helm/rayservice/empaia-apps/`.
+metadata) under `deploy/empaia/apps/`.
 _Avoid_: EAD configuration, model configuration
 
 ## Named clients and JES

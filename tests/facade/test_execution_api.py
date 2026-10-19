@@ -10,6 +10,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
+import lz4.frame
 from httpx import (
     ASGITransport,
     AsyncClient,
@@ -35,7 +36,7 @@ from model_service.facade.api import create_app
 from model_service.facade.app import model_resolver
 from model_service.facade.catalog import ModelCatalog
 from model_service.facade.health import DeploymentHealth
-from model_service.facade.inference import HttpInferenceProxy
+from model_service.facade.inference import HttpInferenceProxy, ModelInference
 from model_service.facade.synchronous import SynchronousBuilderService
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
 from model_service.providers.standalone import StandaloneProviderAdapter
@@ -81,6 +82,8 @@ VIRCHOW = TileEmbeddingModel(
     id="virchow2", tile_size=224, mpp=0.5, summaries=("global", "local_mean")
 )
 CATALOG = ModelCatalog([PROSTATE, VIRCHOW])
+RUN = "/v1/builders/heatmap/models/prostate-classifier-1/run"
+SCHEDULE = "/v1/builders/heatmap/models/prostate-classifier-1/schedule"
 
 
 class FakeDispatch:
@@ -174,9 +177,8 @@ class ApiTestCase(unittest.IsolatedAsyncioTestCase):
         options.update(kwargs)
         return create_app(self.scheduler, **options)  # type: ignore[arg-type]
 
-    def builder_request(self, model_id: str = PROSTATE.id) -> dict[str, object]:
+    def builder_request(self) -> dict[str, object]:
         return {
-            "model_id": model_id,
             "inputs": {
                 "slide": {"kind": "shared_path", "path": "slide.svs"},
                 "region_of_interest": {"kind": "shared_path", "path": "roi.tiff"},
@@ -187,21 +189,15 @@ class ApiTestCase(unittest.IsolatedAsyncioTestCase):
             },
         }
 
-    def run_request(self, model_id: str = PROSTATE.id) -> dict[str, object]:
+    def run_request(self) -> dict[str, object]:
         return {
-            **self.builder_request(model_id),
+            **self.builder_request(),
             "output_path": "outputs/heatmap.tiff",
             "deadline_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
         }
 
-    def schedule_request(
-        self, key: str = "request-1", model_id: str = PROSTATE.id
-    ) -> dict[str, object]:
-        return {
-            "provider": "standalone",
-            "body": self.builder_request(model_id),
-            "idempotency_key": key,
-        }
+    def schedule_request(self, key: str = "request-1") -> dict[str, object]:
+        return {**self.builder_request(), "idempotency_key": key}
 
     def assert_error(
         self,
@@ -278,12 +274,8 @@ class CatalogRouteTests(ApiTestCase):
 class ScheduleRouteTests(ApiTestCase):
     async def test_schedule_replay_poll_and_cancel(self) -> None:
         async with self.client(self.app()) as client:
-            created = await client.post(
-                "/v1/builders/heatmap/schedule", json=self.schedule_request()
-            )
-            replay = await client.post(
-                "/v1/builders/heatmap/schedule", json=self.schedule_request()
-            )
+            created = await client.post(SCHEDULE, json=self.schedule_request())
+            replay = await client.post(SCHEDULE, json=self.schedule_request())
             execution_id = created.json()["execution"]["id"]
             polled = await client.get(f"/v1/executions/{execution_id}")
             cancelled = await client.post(f"/v1/executions/{execution_id}/cancel")
@@ -312,45 +304,38 @@ class ScheduleRouteTests(ApiTestCase):
 
     async def test_lookup_and_validation_errors_are_distinct(self) -> None:
         body = self.schedule_request()
-        request: dict[str, object] = body["body"]  # type: ignore[assignment]
         async with self.client(self.app()) as client:
             unknown_builder = await client.post(
-                "/v1/builders/missing/schedule", json=body
+                "/v1/builders/missing/models/prostate-classifier-1/schedule", json=body
             )
             unknown_model = await client.post(
-                "/v1/builders/heatmap/schedule",
-                json=self.schedule_request(model_id="missing"),
+                "/v1/builders/heatmap/models/missing/schedule", json=body
             )
             incompatible = await client.post(
-                "/v1/builders/heatmap/schedule",
-                json=self.schedule_request(model_id="virchow2"),
+                "/v1/builders/heatmap/models/virchow2/schedule", json=body
             )
-            missing_model = await client.post(
-                "/v1/builders/heatmap/schedule",
-                json={**body, "body": {**request, "model_id": ""}},
+            empty_key = await client.post(
+                SCHEDULE, json={**body, "idempotency_key": ""}
             )
             settings = await client.post(
-                "/v1/builders/heatmap/schedule",
-                json={
-                    **body,
-                    "body": {**request, "configuration": {"stride_fraction": 0.25}},
-                },
+                SCHEDULE, json={**body, "configuration": {"stride_fraction": 0.25}}
             )
-            no_key = await client.post(
-                "/v1/builders/heatmap/schedule",
-                json={**body, "idempotency_key": None},
+            no_key = await client.post(SCHEDULE, json={**body, "idempotency_key": None})
+            bad_timeout = await client.post(
+                SCHEDULE, json={**body, "requested_timeout_seconds": 0}
+            )
+            provider = await client.post(
+                SCHEDULE, json={**body, "provider": "standalone"}
             )
 
         self.assert_error(unknown_builder, 404, "unknown_builder")
         self.assert_error(unknown_model, 404, "unknown_model")
         self.assert_error(incompatible, 422, "incompatible_model")
-        self.assert_error(missing_model, 422, "invalid_request")
-        self.assert_error(settings, 422, "invalid_request")
-        self.assert_error(no_key, 422, "invalid_request")
+        for response in (empty_key, settings, no_key, bad_timeout, provider):
+            self.assert_error(response, 422, "invalid_request")
 
     async def test_admission_checks_inputs_and_allowed_roots(self) -> None:
-        body = self.schedule_request()
-        request: dict[str, object] = body["body"]  # type: ignore[assignment]
+        request = self.schedule_request()
         with TemporaryDirectory() as other:
             cases = [
                 {**request, "inputs": {}},
@@ -369,8 +354,8 @@ class ScheduleRouteTests(ApiTestCase):
             async with self.client(self.app()) as client:
                 responses = [
                     await client.post(
-                        "/v1/builders/heatmap/schedule",
-                        json={**body, "body": case, "idempotency_key": f"case-{i}"},
+                        SCHEDULE,
+                        json={**case, "idempotency_key": f"case-{i}"},
                     )
                     for i, case in enumerate(cases)
                 ]
@@ -380,15 +365,12 @@ class ScheduleRouteTests(ApiTestCase):
         self.assertIn("not allowed", responses[2].json()["detail"]["message"])
 
     async def test_optional_region_of_interest_may_be_omitted(self) -> None:
-        body = self.schedule_request()
         request = {
-            **body["body"],  # type: ignore[dict-item]
+            **self.schedule_request(),
             "inputs": {"slide": {"kind": "shared_path", "path": "slide.svs"}},
         }
         async with self.client(self.app()) as client:
-            response = await client.post(
-                "/v1/builders/heatmap/schedule", json={**body, "body": request}
-            )
+            response = await client.post(SCHEDULE, json=request)
 
         self.assertEqual(response.status_code, 202, response.text)
 
@@ -405,9 +387,7 @@ class ScheduleRouteTests(ApiTestCase):
         self.dispatch = FakeDispatch(produce)
         self.scheduler = self.make_scheduler(self.repository, self.dispatch)
         async with self.client(self.app()) as client:
-            admitted = await client.post(
-                "/v1/builders/heatmap/schedule", json=self.schedule_request()
-            )
+            admitted = await client.post(SCHEDULE, json=self.schedule_request())
             execution_id = admitted.json()["execution"]["id"]
             async with self.scheduler.running(), asyncio.timeout(2):
                 while True:
@@ -427,9 +407,7 @@ class ScheduleRouteTests(ApiTestCase):
 class RunRouteTests(ApiTestCase):
     async def test_run_returns_result_and_dispatches_without_settings(self) -> None:
         async with self.client(self.app()) as client:
-            response = await client.post(
-                "/v1/builders/heatmap/run", json=self.run_request()
-            )
+            response = await client.post(RUN, json=self.run_request())
 
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(
@@ -447,27 +425,27 @@ class RunRouteTests(ApiTestCase):
         async with self.client(self.app()) as client:
             responses = {
                 "unknown builder": await client.post(
-                    "/v1/builders/missing/run", json=request
+                    "/v1/builders/missing/models/prostate-classifier-1/run",
+                    json=request,
                 ),
                 "unknown model": await client.post(
-                    "/v1/builders/heatmap/run", json=self.run_request("missing")
+                    "/v1/builders/heatmap/models/missing/run", json=request
                 ),
                 "incompatible": await client.post(
-                    "/v1/builders/tile-embeddings/run", json=request
+                    "/v1/builders/tile-embeddings/models/prostate-classifier-1/run",
+                    json=request,
                 ),
-                "missing input": await client.post(
-                    "/v1/builders/heatmap/run", json={**request, "inputs": {}}
-                ),
+                "missing input": await client.post(RUN, json={**request, "inputs": {}}),
                 "untagged input": await client.post(
-                    "/v1/builders/heatmap/run",
+                    RUN,
                     json={**request, "inputs": {"slide": {"path": "slide.svs"}}},
                 ),
                 "past deadline": await client.post(
-                    "/v1/builders/heatmap/run",
+                    RUN,
                     json={**request, "deadline_at": "2000-01-01T00:00:00+00:00"},
                 ),
                 "settings": await client.post(
-                    "/v1/builders/heatmap/run",
+                    RUN,
                     json={**request, "stride_fraction": 0.25},
                 ),
             }
@@ -518,18 +496,14 @@ class RunRouteTests(ApiTestCase):
             with self.subTest(code=code):
                 self.dispatch = FakeDispatch(failing(error))
                 async with self.client(self.app()) as client:
-                    response = await client.post(
-                        "/v1/builders/heatmap/run", json=self.run_request()
-                    )
+                    response = await client.post(RUN, json=self.run_request())
                 self.assert_error(response, status_code, code, retryable=retryable)
                 if status_code == 429:
                     self.assertEqual(response.headers["retry-after"], "7")
 
     async def test_run_is_unavailable_without_a_runner(self) -> None:
         async with self.client(self.app(builder_runner=None)) as client:
-            response = await client.post(
-                "/v1/builders/heatmap/run", json=self.run_request()
-            )
+            response = await client.post(RUN, json=self.run_request())
 
         self.assert_error(response, 503, "builder_unavailable", retryable=True)
 
@@ -561,7 +535,7 @@ class RunRouteTests(ApiTestCase):
         async def send(_message: Message) -> None:
             return None
 
-        path = "/v1/builders/heatmap/run"
+        path = RUN
         scope: Scope = {
             "type": "http",
             "asgi": {"version": "3.0"},
@@ -644,9 +618,7 @@ class HealthAndAvailabilityTests(ApiTestCase):
         ):
             ready = await client.get("/readyz")
             deployments = await client.get("/healthz/deployments")
-            admitted = await client.post(
-                "/v1/builders/heatmap/schedule", json=self.schedule_request()
-            )
+            admitted = await client.post(SCHEDULE, json=self.schedule_request())
             execution_id = admitted.json()["execution"]["id"]
             polled = await client.get(f"/v1/executions/{execution_id}")
             cancelled = await client.post(f"/v1/executions/{execution_id}/cancel")
@@ -678,9 +650,7 @@ class HealthAndAvailabilityTests(ApiTestCase):
                 await client.get("/readyz"),
                 await client.get("/v1/executions/execution-1"),
                 await client.post("/v1/executions/execution-1/cancel"),
-                await client.post(
-                    "/v1/builders/heatmap/schedule", json=self.schedule_request()
-                ),
+                await client.post(SCHEDULE, json=self.schedule_request()),
             ]
             live = await client.get("/healthz")
 
@@ -695,57 +665,112 @@ class HealthAndAvailabilityTests(ApiTestCase):
 
         app = create_app(UnavailableScheduler(), catalog=CATALOG)
         async with self.client(app) as client:
-            response = await client.post(
-                "/v1/builders/heatmap/schedule", json=self.schedule_request()
-            )
+            response = await client.post(SCHEDULE, json=self.schedule_request())
 
         self.assert_error(response, 503, "scheduling_unavailable", retryable=True)
 
 
 class RawInferenceTests(ApiTestCase):
+    RUN = "/v1/models/prostate-classifier-1/run"
+
+    def tile(self, size: int = PROSTATE.tile_size) -> bytes:
+        return lz4.frame.compress(bytes(size * size * 3))
+
+    def inference_app(self, handler: Callable[[Request], Response]) -> FastAPI:
+        ray = AsyncClient(transport=MockTransport(handler))
+        self.addAsyncCleanup(ray.aclose)
+        proxy = HttpInferenceProxy(ray, origin="http://ray")
+        target = ModelInference(CATALOG, proxy, max_result_bytes=1024)
+        return self.app(inference_target=target)
+
     async def test_raw_model_calls_are_forwarded_with_allowed_headers(self) -> None:
         forwarded: list[Request] = []
 
         def ray(request: Request) -> Response:
             forwarded.append(request)
-            if request.url.path == "/prostate-classifier-1":
-                return Response(
-                    307, headers={"location": "http://ray/prostate-classifier-1/"}
-                )
             return Response(
                 200,
                 content=b"compressed-result",
-                headers={"x-output-shape": "(1, 2, 2)"},
+                headers={
+                    "content-type": "application/octet-stream",
+                    "x-output-shape": "(1, 2, 2)",
+                    "set-cookie": "session=1",
+                },
             )
 
-        async with AsyncClient(transport=MockTransport(ray)) as ray_client:
-            proxy = HttpInferenceProxy(ray_client, origin="http://ray")
-            async with self.client(self.app(inference_proxy=proxy)) as client:
-                response = await client.post(
-                    "/prostate-classifier-1?variant=probe",
-                    content=b"compressed-image",
-                    headers={
-                        "content-type": "application/octet-stream",
-                        "x-output-dtype": "float32",
-                        "authorization": "Bearer facade-only",
-                    },
-                )
-        async with self.client(self.app()) as client:
-            unavailable = await client.post("/prostate-classifier-1", content=b"x")
+        tile = self.tile()
+        async with self.client(self.inference_app(ray)) as client:
+            response = await client.post(
+                self.RUN,
+                content=tile,
+                headers={
+                    "content-type": "application/octet-stream",
+                    "x-output-dtype": "float32",
+                    "authorization": "Bearer facade-only",
+                },
+            )
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.content, b"compressed-result")
         self.assertEqual(response.headers["x-output-shape"], "(1, 2, 2)")
-        self.assertEqual(
-            forwarded[0].url, "http://ray/prostate-classifier-1?variant=probe"
-        )
-        self.assertEqual(forwarded[0].headers["x-output-dtype"], "float32")
-        self.assertNotIn("authorization", forwarded[0].headers)
-        self.assertEqual(forwarded[1].url, "http://ray/prostate-classifier-1/")
-        self.assertEqual(forwarded[1].content, b"compressed-image")
-        self.assert_error(
-            unavailable, 503, "model_inference_unavailable", retryable=True
-        )
+        self.assertEqual(response.headers["content-type"], "application/octet-stream")
+        self.assertNotIn("set-cookie", response.headers)
+        [request] = forwarded
+        self.assertEqual(request.url, "http://ray/prostate-classifier-1/")
+        self.assertEqual(request.content, tile)
+        self.assertEqual(request.headers["x-output-dtype"], "float32")
+        self.assertNotIn("authorization", request.headers)
+
+    async def test_upstream_status_is_preserved(self) -> None:
+        def ray(_request: Request) -> Response:
+            return Response(500, content=b"model failed")
+
+        async with self.client(self.inference_app(ray)) as client:
+            response = await client.post(self.RUN, content=self.tile())
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.content, b"model failed")
+
+    async def test_transport_failure_is_retryable(self) -> None:
+        def ray(request: Request) -> Response:
+            raise ConnectError("Ray is unavailable", request=request)
+
+        async with self.client(self.inference_app(ray)) as client:
+            response = await client.post(self.RUN, content=self.tile())
+
+        self.assert_error(response, 503, "model_inference_unavailable", retryable=True)
+
+    async def test_unavailable_without_an_inference_target(self) -> None:
+        async with self.client(self.app()) as client:
+            response = await client.post(self.RUN, content=self.tile())
+
+        self.assert_error(response, 503, "model_inference_unavailable", retryable=True)
+
+    async def test_requests_are_checked_before_forwarding(self) -> None:
+        forwarded: list[Request] = []
+
+        def ray(request: Request) -> Response:
+            forwarded.append(request)
+            return Response(200)
+
+        async with self.client(self.inference_app(ray)) as client:
+            unknown = await client.post("/v1/models/missing/run", content=self.tile())
+            wrong_size = await client.post(self.RUN, content=self.tile(size=224))
+            not_lz4 = await client.post(self.RUN, content=b"raw")
+
+        self.assert_error(unknown, 404, "unknown_model")
+        self.assert_error(wrong_size, 422, "invalid_request")
+        self.assert_error(not_lz4, 422, "invalid_request")
+        self.assertEqual(forwarded, [])
+
+    async def test_the_root_proxy_route_is_gone(self) -> None:
+        def ray(_request: Request) -> Response:
+            return Response(200)
+
+        async with self.client(self.inference_app(ray)) as client:
+            response = await client.post("/prostate-classifier-1", content=b"x")
+
+        self.assertEqual(response.status_code, 404)
 
 
 if __name__ == "__main__":

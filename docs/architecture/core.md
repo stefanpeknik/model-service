@@ -8,14 +8,14 @@ behind one public API that can also run builders durably.
                                   │ HTTP
 ┌─────────────────────────────────▼──────────────────────────────────┐
 │ facade (model_service/facade/, one Deployment, outside Ray)        │
-│  /v1/models   /v1/models/{m}/schedule (tiles)                      │
-│  /v1/builders   /v1/builders/{b}/run|schedule                      │
+│  /v1/models   /v1/models/{m}/run|schedule (raw tiles)              │
+│  /v1/builders   /v1/builders/{b}/models/{m}/run|schedule           │
 │  /v1/executions/{id}[/cancel|/result]   /v1/executions/lookup      │
-│  /v1/empaia/apps/{app} (JES)   /{model} (raw proxy)                │
+│  /v1/empaia/builders/{b}/models/{m}  (JES HTTP execution backend)  │
 │  model catalog ◄── ConfigMap from deploy/helm/rayservice/models/   │
 │  execution scheduler (model_service/scheduler/) ◄──► PostgreSQL    │
 └───────────────┬───────────────────────────────────┬────────────────┘
-   builder call │ POST /builders/{b}/               │ raw proxy, scheduled tiles
+   builder call │ POST /builders/{b}/               │ raw tiles: POST /{m}/
 ┌───────────────▼───────────────────────────────────▼────────────────┐
 │ Ray Serve (RayService)                                             │
 │  builder-heatmap, builder-tile-embeddings (builders/serve.py)      │
@@ -53,8 +53,8 @@ behind one public API that can also run builders durably.
 
 A scheduled tile (`POST /v1/models/{m}/schedule`) is the same lifecycle with a
 different payload: the facade checks the tile against the model's `tile_size`,
-stores its bytes with the execution, and an attempt sends them to
-`POST /{m}/` exactly as the raw proxy would. The response is stored for a
+stores its bytes with the execution, and an attempt sends them to the
+model's Ray route exactly as `POST /v1/models/{m}/run` would. The response is stored for a
 day and served by `GET /v1/executions/{id}/result`. There is no provider
 finish. `POST /v1/executions/lookup` polls many executions at once.
 

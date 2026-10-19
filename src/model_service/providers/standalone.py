@@ -50,6 +50,7 @@ class StandaloneProviderAdapter:
             canonical = json.dumps(
                 {
                     "builder_id": request.builder_id,
+                    "model_id": request.model_id,
                     "body": request.body,
                     "requested_timeout_seconds": request.requested_timeout_seconds,
                 },
@@ -77,8 +78,6 @@ class StandaloneProviderAdapter:
             raise InvalidScheduleRequestError(
                 "schedule request body is invalid"
             ) from error
-        if body.model_id != request.model_id:
-            raise InvalidScheduleRequestError("model_id does not match the request")
         invocation = body.invocation(deadline_at)
         try:
             validate_invocation(

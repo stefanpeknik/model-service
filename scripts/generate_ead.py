@@ -1,6 +1,6 @@
 """Generate an EMPAIA EAD from an app file binding a builder to a model.
 
-An app file (`deploy/helm/rayservice/empaia-apps/<app>.yaml`) names the builder, the model deployment and
+An app file (`deploy/empaia/apps/<app>.yaml`) names the builder, the model deployment and
 the EMPAIA metadata. Input and output types come from the builder's EMPAIA
 mappings in `src/model_service/builders/registry.py`.
 """

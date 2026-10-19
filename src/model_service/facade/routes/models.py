@@ -1,4 +1,9 @@
-"""`/v1/models`: the model catalog and scheduled raw inference."""
+"""`/v1/models`: the model catalog and raw inference, run directly or scheduled.
+
+A raw request is one LZ4-compressed RGB tile of the model's `tile_size`, with
+optional `x-output-dtype` and `x-pool-tokens` headers. The model's response is
+returned (or, when scheduled, stored) as the model produced it.
+"""
 
 from __future__ import annotations
 
@@ -23,10 +28,16 @@ from model_service.facade.routes.common import (
     submit,
 )
 from model_service.scheduler.contracts import InferenceScheduleRequest, ScheduleResult
+from model_service.scheduler.inference import (
+    IncompatibleInputError,
+    ModelUnavailableError,
+    ResultTooLargeError,
+)
 
 
 if TYPE_CHECKING:
     from model_service.facade.catalog import ModelCatalog
+    from model_service.scheduler.inference import InferenceTarget
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,8 +59,21 @@ def model_view(model: ModelBinding) -> ModelView:
     )
 
 
+_BINARY_BODY = {
+    "requestBody": {
+        "required": True,
+        "content": {
+            "application/octet-stream": {"schema": {"type": "string", "format": "binary"}}
+        },
+    }
+}
+
+
 def create_router(
-    scheduler: Scheduler, catalog: ModelCatalog, max_request_bytes: int
+    scheduler: Scheduler,
+    catalog: ModelCatalog,
+    inference: InferenceTarget | None,
+    max_request_bytes: int,
 ) -> APIRouter:
     router = APIRouter(prefix="/v1/models")
 
@@ -65,19 +89,54 @@ def create_router(
             raise lookup_error(error) from error
 
     @router.post(
+        "/{model_id}/run",
+        responses={200: {"content": {"application/octet-stream": {}}}, **ERRORS},
+        openapi_extra=_BINARY_BODY,
+    )
+    async def run_inference(model_id: str, request: Request) -> Response:
+        """Send one raw request to the model and return its response."""
+        if inference is None:
+            raise http_error(
+                503,
+                ApiErrorCode.MODEL_UNAVAILABLE,
+                "model inference is unavailable",
+                retryable=True,
+            )
+        payload = await _read_body(request, max_request_bytes)
+        try:
+            inference.check(model_id, payload)
+            response = await inference.call(
+                model_id, payload, inference_headers(request.headers)
+            )
+        except UnknownModelError as error:
+            raise lookup_error(error) from error
+        except IncompatibleInputError as error:
+            raise http_error(422, ApiErrorCode.INVALID_REQUEST, str(error)) from error
+        except ModelUnavailableError as error:
+            raise http_error(
+                503, ApiErrorCode.MODEL_UNAVAILABLE, str(error), retryable=True
+            ) from error
+        except ResultTooLargeError as error:
+            raise http_error(
+                502,
+                ApiErrorCode.MODEL_UNAVAILABLE,
+                "model response exceeds the result limit",
+            ) from error
+        return Response(
+            status_code=response.status_code,
+            content=response.content,
+            headers={
+                name: value
+                for name, value in response.headers.items()
+                if name == "content-type" or name.startswith("x-")
+            },
+        )
+
+    @router.post(
         "/{model_id}/schedule",
         status_code=status.HTTP_202_ACCEPTED,
         responses={200: {"model": ScheduleResult}, **ERRORS},
-        openapi_extra={
-            "requestBody": {
-                "required": True,
-                "content": {
-                    "application/octet-stream": {
-                        "schema": {"type": "string", "format": "binary"}
-                    }
-                },
-            }
-        },
+        openapi_extra=_BINARY_BODY,
     )
     async def schedule_inference(
         model_id: str,
@@ -86,7 +145,7 @@ def create_router(
         idempotency_key: Annotated[str | None, Header(min_length=1)] = None,
         timeout_seconds: int | None = None,
     ) -> ScheduleResult:
-        """Durably queue one raw model request (the body `POST /{model_id}/` takes)."""
+        """Durably queue one raw model request (the body `run` takes)."""
         if idempotency_key is None:
             raise http_error(
                 422, ApiErrorCode.INVALID_REQUEST, "Idempotency-Key header is required"

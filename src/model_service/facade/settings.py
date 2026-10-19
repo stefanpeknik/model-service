@@ -141,10 +141,6 @@ class SchedulerSettings(BaseSettings):
     empaia_workspace_root: Path | None = Field(
         default=None, validation_alias="EMPAIA_WORKSPACE_ROOT"
     )
-    empaia_apps_path: Path = Field(
-        default=Path("/etc/model-service/empaia-apps.json"),
-        validation_alias="EMPAIA_APPS_PATH",
-    )
     empaia_gateway_factory: str | None = Field(
         default=None, validation_alias="EMPAIA_GATEWAY_FACTORY"
     )

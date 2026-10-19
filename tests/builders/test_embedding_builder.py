@@ -158,7 +158,6 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
         if mask:
             inputs["region_of_interest"] = {"kind": "shared_path", "path": "mask.tiff"}
         body: dict[str, object] = {
-            "model_id": "encoder",
             "inputs": inputs,
             "input_access": {
                 "kind": "shared_storage",
@@ -176,7 +175,7 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
         client = await self.client(("tile",))
 
         response = await client.post(
-            "/v1/builders/tile-embeddings/run", json=self.body()
+            "/v1/builders/tile-embeddings/models/encoder/run", json=self.body()
         )
 
         self.assertEqual(response.status_code, 200, response.text)
@@ -198,7 +197,8 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
         client = await self.client(("tile",))
 
         response = await client.post(
-            "/v1/builders/tile-embeddings/run", json=self.body(mask=False)
+            "/v1/builders/tile-embeddings/models/encoder/run",
+            json=self.body(mask=False),
         )
 
         self.assertEqual(response.status_code, 200, response.text)
@@ -208,7 +208,7 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
         client = await self.client(("global", "local_mean"))
 
         response = await client.post(
-            "/v1/builders/tile-embeddings/run", json=self.body()
+            "/v1/builders/tile-embeddings/models/encoder/run", json=self.body()
         )
 
         path = response.json()["outputs"]["embeddings"]["path"]
@@ -224,12 +224,8 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
 
         async with self.scheduler.running():
             admitted = await client.post(
-                "/v1/builders/tile-embeddings/schedule",
-                json={
-                    "provider": "standalone",
-                    "body": self.body(scheduled=True),
-                    "idempotency_key": "key-1",
-                },
+                "/v1/builders/tile-embeddings/models/encoder/schedule",
+                json={**self.body(scheduled=True), "idempotency_key": "key-1"},
             )
             self.assertEqual(admitted.status_code, 202, admitted.text)
             execution_id = admitted.json()["execution"]["id"]
@@ -250,7 +246,7 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
         self.model.failure = RuntimeError("CUDA out of memory")
 
         response = await client.post(
-            "/v1/builders/tile-embeddings/run", json=self.body()
+            "/v1/builders/tile-embeddings/models/encoder/run", json=self.body()
         )
 
         self.assertEqual(response.status_code, 503)
@@ -263,7 +259,7 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
         self.model.dimension = 0
 
         response = await client.post(
-            "/v1/builders/tile-embeddings/run", json=self.body()
+            "/v1/builders/tile-embeddings/models/encoder/run", json=self.body()
         )
 
         self.assertEqual(response.status_code, 422)
@@ -275,7 +271,7 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
         self.model.tile_size = 64
 
         response = await client.post(
-            "/v1/builders/tile-embeddings/run", json=self.body()
+            "/v1/builders/tile-embeddings/models/encoder/run", json=self.body()
         )
 
         self.assertEqual(response.status_code, 422)
@@ -284,10 +280,9 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_heatmap_model_is_rejected_for_embeddings(self) -> None:
         client = await self.client(("tile",))
-        body = self.body()
-        body["model_id"] = "unknown"
-
-        response = await client.post("/v1/builders/tile-embeddings/run", json=body)
+        response = await client.post(
+            "/v1/builders/tile-embeddings/models/unknown/run", json=self.body()
+        )
 
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()["detail"]["code"], "unknown_model")
