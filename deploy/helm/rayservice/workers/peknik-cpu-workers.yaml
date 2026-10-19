@@ -31,6 +31,12 @@ template:
             value: /mnt/scratch
           - name: VIPS_DISC_THRESHOLD
             value: "268435456"
+{{- if .Values.executionScheduler.empaia.enabled }}
+          - name: EMPAIA_GATEWAY_FACTORY
+            value: {{ .Values.executionScheduler.empaia.gatewayFactory | quote }}
+          - name: EMPAIA_WORKSPACE_ROOT
+            value: {{ .Values.executionScheduler.empaia.workspaceRoot | quote }}
+{{- end }}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:

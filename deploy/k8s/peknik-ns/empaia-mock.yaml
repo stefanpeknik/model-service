@@ -1,0 +1,146 @@
+# EMPAIA stand-ins for testing JES's HTTP execution backend against
+# model-service in peknik-ns: JES (our build) with MongoDB, the marketplace mock
+# and model-service's AppService mock. The Workbench Daemon's role (POST
+# /v1/executions to JES) is played by hand. Disposable; nothing persists.
+#
+# Images are set with `kubectl set image` or by editing the tags below.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: empaia-mock-mongo
+  labels: {app: empaia-mock-mongo}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: empaia-mock-mongo}}
+  template:
+    metadata: {labels: {app: empaia-mock-mongo}}
+    spec:
+      containers:
+        - name: mongo
+          image: docker.io/library/mongo:7.0
+          ports: [{containerPort: 27017}]
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+          volumeMounts: [{name: data, mountPath: /data/db}]
+      volumes: [{name: data, emptyDir: {}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: empaia-mock-mongo}
+spec:
+  selector: {app: empaia-mock-mongo}
+  ports: [{port: 27017}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: empaia-mock-marketplace
+  labels: {app: empaia-mock-marketplace}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: empaia-mock-marketplace}}
+  template:
+    metadata: {labels: {app: empaia-mock-marketplace}}
+    spec:
+      containers:
+        - name: marketplace
+          image: registry.gitlab.com/empaia/service-mocks/marketplace-service-mock:0.2.42
+          command: [uvicorn, --workers=1, --host=0.0.0.0, --port=8000, "marketplace_service_mock.app:app"]
+          env:
+            - {name: MPSM_API_INTEGRATION, value: "marketplace_service_mock.api.integrations.disable_auth:DisableAuth"}
+            - {name: MPSM_DISABLE_OPENAPI, value: "false"}
+          ports: [{containerPort: 8000}]
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+          volumeMounts: [{name: data, mountPath: /data}]
+      volumes: [{name: data, emptyDir: {}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: empaia-mock-marketplace}
+spec:
+  selector: {app: empaia-mock-marketplace}
+  ports: [{port: 8000}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: empaia-mock-app-service
+  labels: {app: empaia-mock-app-service}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: empaia-mock-app-service}}
+  template:
+    metadata: {labels: {app: empaia-mock-app-service}}
+    spec:
+      containers:
+        - name: app-service
+          image: cerit.io/stefanpeknik/model-service-scheduler:mock-appservice
+          command: [uvicorn, "testing.empaia_app_service:app", --host, 0.0.0.0, --port, "8000"]
+          env:
+            - {name: MOCK_INPUT_ROOT, value: /mnt/shared/empaia-mock}
+            - {name: MOCK_FILE_SLIDE, value: ""}
+            - {name: MOCK_FILE_ROI, value: ""}
+            - {name: MOCK_FILE_SLIDE_METADATA, value: "{}"}
+          ports: [{containerPort: 8000}]
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: "1", memory: 512Mi}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: empaia-mock-app-service}
+spec:
+  selector: {app: empaia-mock-app-service}
+  ports: [{port: 8000}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: empaia-mock-jes
+  labels: {app: empaia-mock-jes}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: empaia-mock-jes}}
+  template:
+    metadata: {labels: {app: empaia-mock-jes}}
+    spec:
+      containers:
+        - name: jes
+          image: cerit.io/stefanpeknik/empaia-jes:http
+          env:
+            - {name: JES_DATABASE_URL, value: "mongodb://empaia-mock-mongo:27017"}
+            - {name: JES_WORKER_STANDALONE_GPU, value: ""}
+            - {name: JES_WORKER_STANDALONE_CPU, value: ";x4"}
+            - {name: JES_WORKER_STANDALONE_PROXY, value: ""}
+            - {name: JES_WORKER_PREPROCESSING_GPU, value: ""}
+            - {name: JES_WORKER_PREPROCESSING_CPU, value: ";x2"}
+            - {name: JES_WORKER_PREPROCESSING_PROXY, value: ""}
+            # No identity provider: requests to the marketplace mock go without a token.
+            - {name: JES_IDP_URL, value: ""}
+            - {name: JES_OPENAPI_TOKEN_URL, value: ""}
+            - {name: JES_CLIENT_ID, value: ""}
+            - {name: JES_CLIENT_SECRET, value: ""}
+            - {name: JES_AUDIENCE, value: ""}
+            - {name: JES_MPS_URL, value: "http://empaia-mock-marketplace:8000"}
+            # No Docker daemon or Kubernetes namespace: only http:: apps can run.
+            - {name: JES_HTTP_TARGETS, value: '{"model-service": "http://model-service-validation-execution-scheduler:8080/v1/empaia"}'}
+            - {name: JES_HTTP_POLL_INTERVAL, value: "2"}
+          ports: [{containerPort: 8000}]
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "1", memory: 512Mi}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: empaia-mock-jes}
+spec:
+  selector: {app: empaia-mock-jes}
+  ports: [{port: 8000}]

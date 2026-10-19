@@ -3,11 +3,20 @@
 Job ID prefixes select deterministic behavior for deployment tests. This mock checks
 bearer-header presence only and does not establish real EMPAIA authentication or
 interoperability.
+
+Environment:
+    MOCK_INPUT_ROOT: directory holding the synthetic fixtures (default
+        `/mnt/validation/input`).
+    MOCK_FILE_SLIDE, MOCK_FILE_ROI, MOCK_FILE_SLIDE_METADATA: for `file-` jobs,
+        the paths of a real slide and region mask and the slide's metadata as
+        JSON (`extent`, `pixel_size_nm`, `levels`), as the App API returns it.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 import struct
 from dataclasses import dataclass
 from enum import StrEnum
@@ -35,6 +44,7 @@ class ValidationScenario(StrEnum):
     SCHEDULER_RESTART = "scheduler-restart"
     SERVICE_UNAVAILABLE = "service-unavailable"
     WORKFLOW_FAILURE = "workflow-failure"
+    FILE = "file"
 
 
 class PixelmapRequest(BaseModel):
@@ -280,15 +290,24 @@ async def direct_access(
         or _is_scenario(job_id, ValidationScenario.NATIVE_RECTANGLE)
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    filename = "slide.dat" if name == "slide" else "roi.dat"
-    if _is_native(job_id):
-        filename = "slide.tiff" if name == "slide" else "roi.tiff"
-    if name == "slide" and _is_scenario(job_id, ValidationScenario.WORKFLOW_FAILURE):
-        filename = "missing-slide.dat"
+    if _is_scenario(job_id, ValidationScenario.FILE):
+        storage_path = os.environ[
+            "MOCK_FILE_SLIDE" if name == "slide" else "MOCK_FILE_ROI"
+        ]
+    else:
+        filename = "slide.dat" if name == "slide" else "roi.dat"
+        if _is_native(job_id):
+            filename = "slide.tiff" if name == "slide" else "roi.tiff"
+        if name == "slide" and _is_scenario(
+            job_id, ValidationScenario.WORKFLOW_FAILURE
+        ):
+            filename = "missing-slide.dat"
+        root = os.environ.get("MOCK_INPUT_ROOT", "/mnt/validation/input")
+        storage_path = f"{root}/{filename}"
     return {
         "direct_access_supported": True,
         "slide_id": f"{job_id}-slide",
-        "storage_path": f"/mnt/validation/input/{filename}",
+        "storage_path": storage_path,
     }
 
 
@@ -315,6 +334,11 @@ async def slide(
                 if _job(job_id).metadata_released:
                     break
             await asyncio.sleep(0.1)
+    if _is_scenario(job_id, ValidationScenario.FILE):
+        return {
+            "id": f"{job_id}-slide",
+            **json.loads(os.environ["MOCK_FILE_SLIDE_METADATA"]),
+        }
     native = _is_native(job_id)
     extent = 256 if native else 8
     pixel_size_nm = 500 if native else 250

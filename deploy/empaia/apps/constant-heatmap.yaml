@@ -1,0 +1,12 @@
+# Validation only: the heatmap builder with the CPU constant-score model, for
+# exercising the EMPAIA path without a GPU. Its output says nothing about tissue.
+builder: heatmap
+model: constant-classifier
+empaia:
+  name: Constant Heatmap
+  name_short: ConstHM
+  namespace: org.empaia.rationai.constant_heatmap.v3.0
+  description: Validation app producing a constant heatmap
+  mode: standalone
+  permissions:
+    data_transmission_to_external_service_provider: true
