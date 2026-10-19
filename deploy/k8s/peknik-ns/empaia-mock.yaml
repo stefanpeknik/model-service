@@ -3,7 +3,6 @@
 # and model-service's AppService mock. The Workbench Daemon's role (POST
 # /v1/executions to JES) is played by hand. Disposable; nothing persists.
 #
-# Images are set with `kubectl set image` or by editing the tags below.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -15,10 +14,12 @@ spec:
   template:
     metadata: {labels: {app: empaia-mock-mongo}}
     spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 999, runAsGroup: 999, fsGroup: 999, seccompProfile: {type: RuntimeDefault}}
       containers:
         - name: mongo
           image: docker.io/library/mongo:7.0
           ports: [{containerPort: 27017}]
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
           resources:
             requests: {cpu: 100m, memory: 256Mi}
             limits: {cpu: 500m, memory: 512Mi}
@@ -43,6 +44,7 @@ spec:
   template:
     metadata: {labels: {app: empaia-mock-marketplace}}
     spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
       containers:
         - name: marketplace
           image: registry.gitlab.com/empaia/service-mocks/marketplace-service-mock:0.2.42
@@ -51,6 +53,7 @@ spec:
             - {name: MPSM_API_INTEGRATION, value: "marketplace_service_mock.api.integrations.disable_auth:DisableAuth"}
             - {name: MPSM_DISABLE_OPENAPI, value: "false"}
           ports: [{containerPort: 8000}]
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
           resources:
             requests: {cpu: 50m, memory: 128Mi}
             limits: {cpu: 500m, memory: 512Mi}
@@ -75,24 +78,23 @@ spec:
   template:
     metadata: {labels: {app: empaia-mock-app-service}}
     spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
       containers:
         - name: app-service
-          image: cerit.io/stefanpeknik/model-service-scheduler:mock-appservice
+          image: cerit.io/stefanpeknik/model-service-scheduler:mock-appservice-6e9b376
           command: [uvicorn, "testing.empaia_app_service:app", --host, 0.0.0.0, --port, "8000"]
           env:
             - {name: MOCK_INPUT_ROOT, value: /mnt/shared/empaia-mock}
-            - {name: MOCK_FILE_SLIDE, value: ""}
-            - {name: MOCK_FILE_ROI, value: ""}
-            - {name: MOCK_FILE_SLIDE_METADATA, value: "{}"}
+            # The prostate slide used for model-service acceptance (see its README).
+            - {name: MOCK_FILE_SLIDE, value: /mnt/shared/inputs/prostate-wsi/67df0411-395d-5d73-9c2f-3e0ffef45491.mrxs}
+            - {name: MOCK_FILE_ROI, value: /mnt/shared/inputs/prostate-wsi/tissue-mask-open-slide.tiff}
+            - name: MOCK_FILE_SLIDE_METADATA
+              value: '{"extent":{"x":89262,"y":204744},"pixel_size_nm":{"x":242.797397769517,"y":242.797397769517},"levels":[{"extent":{"x":89262,"y":204744}},{"extent":{"x":44631,"y":102372}},{"extent":{"x":22315,"y":51186}},{"extent":{"x":11157,"y":25593}},{"extent":{"x":5578,"y":12796}},{"extent":{"x":2789,"y":6398}},{"extent":{"x":1394,"y":3199}},{"extent":{"x":697,"y":1599}},{"extent":{"x":348,"y":799}}]}'
           ports: [{containerPort: 8000}]
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
           resources:
             requests: {cpu: 100m, memory: 128Mi}
             limits: {cpu: "1", memory: 512Mi}
-          securityContext:
-            runAsNonRoot: true
-            runAsUser: 10001
-            allowPrivilegeEscalation: false
-            capabilities: {drop: [ALL]}
 ---
 apiVersion: v1
 kind: Service
@@ -112,9 +114,10 @@ spec:
   template:
     metadata: {labels: {app: empaia-mock-jes}}
     spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
       containers:
         - name: jes
-          image: cerit.io/stefanpeknik/empaia-jes:http
+          image: cerit.io/stefanpeknik/empaia-jes:http-8d01143
           env:
             - {name: JES_DATABASE_URL, value: "mongodb://empaia-mock-mongo:27017"}
             - {name: JES_WORKER_STANDALONE_GPU, value: ""}
@@ -134,6 +137,7 @@ spec:
             - {name: JES_HTTP_TARGETS, value: '{"model-service": "http://model-service-validation-execution-scheduler:8080/v1/empaia"}'}
             - {name: JES_HTTP_POLL_INTERVAL, value: "2"}
           ports: [{containerPort: 8000}]
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
           resources:
             requests: {cpu: 100m, memory: 256Mi}
             limits: {cpu: "1", memory: 512Mi}
