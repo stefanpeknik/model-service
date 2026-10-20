@@ -15,25 +15,30 @@ import argparse
 import json
 import sys
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
-from uuid import NAMESPACE_URL, uuid5
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from generate_ead import generate_ead, load_yaml
+
+
+def stable_id(kind: str, namespace: str) -> str:
+    """A UUID derived from the namespace, shaped as version 4 as the marketplace requires."""
+    return str(UUID(bytes=uuid5(NAMESPACE_URL, f"{kind}:{namespace}").bytes, version=4))
 
 
 def portal_app(
     ead: dict[str, Any], image: str, organization_id: str
 ) -> dict[str, Any]:
     namespace = ead["namespace"]
-    portal_app_id = str(uuid5(NAMESPACE_URL, f"empaia-portal-app:{namespace}"))
-    app_id = str(uuid5(NAMESPACE_URL, f"empaia-app:{namespace}"))
+    portal_app_id = stable_id("empaia-portal-app", namespace)
+    app_id = stable_id("empaia-app", namespace)
     version = namespace[namespace.rfind(".") - 2 :]
     now = int(time.time())
     common = {
         "portal_app_id": portal_app_id,
-        "organization_id": organization_id,
         "creator_id": organization_id,
         "created_at": now,
     }
@@ -47,7 +52,8 @@ def portal_app(
         "active_app_views": {
             "v3": {
                 **common,
-                "id": str(uuid5(NAMESPACE_URL, f"empaia-app-view:{namespace}")),
+                "organization_id": organization_id,
+                "id": stable_id("empaia-app-view", namespace),
                 "version": version,
                 "api_version": "v3",
                 "status": "APPROVED",
@@ -91,7 +97,7 @@ def main() -> None:
     parser.add_argument("--marketplace-url", required=True)
     parser.add_argument("--target", default="model-service")
     parser.add_argument(
-        "--organization-id", default="00000000-0000-0000-0000-000000000000"
+        "--organization-id", default="2c7c2b5e-8d4a-4f5e-9b1a-0d2f6c3e7a10"
     )
     args = parser.parse_args()
     app = load_yaml(args.app)
@@ -104,9 +110,10 @@ def main() -> None:
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
-        if response.status >= 300:
-            sys.exit(f"registration failed: HTTP {response.status}")
+    try:
+        urllib.request.urlopen(request, timeout=30).close()
+    except urllib.error.HTTPError as error:
+        sys.exit(f"registration failed: HTTP {error.code}: {error.read().decode()}")
     print(body["active_app_views"]["v3"]["app"]["id"])
 
 

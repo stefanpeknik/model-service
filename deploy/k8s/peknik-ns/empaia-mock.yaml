@@ -44,7 +44,7 @@ spec:
   template:
     metadata: {labels: {app: empaia-mock-marketplace}}
     spec:
-      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      securityContext: {runAsNonRoot: true, runAsUser: 1001, runAsGroup: 1001, fsGroup: 1001, seccompProfile: {type: RuntimeDefault}}
       containers:
         - name: marketplace
           image: registry.gitlab.com/empaia/service-mocks/marketplace-service-mock:0.2.42
@@ -114,7 +114,7 @@ spec:
   template:
     metadata: {labels: {app: empaia-mock-jes}}
     spec:
-      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      securityContext: {runAsNonRoot: true, runAsUser: 1001, runAsGroup: 1001, fsGroup: 1001, seccompProfile: {type: RuntimeDefault}}
       containers:
         - name: jes
           image: cerit.io/stefanpeknik/empaia-jes:http-8d01143

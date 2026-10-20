@@ -153,6 +153,8 @@ class JobRecord:
 
 app = FastAPI()
 _jobs: dict[str, JobRecord] = {}
+# Scenarios declared for job IDs without a prefix, e.g. UUIDs required by JES.
+_scenarios: dict[str, ValidationScenario] = {}
 _lock = Lock()
 
 
@@ -198,7 +200,7 @@ def _is_scenario(job_id: str, scenario: ValidationScenario) -> bool:
     Returns:
         bool: True when the job ID begins with the selected scenario prefix.
     """
-    return job_id.startswith(f"{scenario.value}-")
+    return job_id.startswith(f"{scenario.value}-") or _scenarios.get(job_id) is scenario
 
 
 def _is_native(job_id: str) -> bool:
@@ -568,6 +570,12 @@ def inspect_job(job_id: str) -> JobView:
             failure=record.failure,
             failure_reports=record.failure_reports,
         )
+
+
+@app.put("/validation/jobs/{job_id}/scenario/{scenario}", status_code=204)
+def declare_scenario(job_id: str, scenario: ValidationScenario) -> None:
+    """Select a scenario for a job whose ID cannot carry a prefix."""
+    _scenarios[job_id] = scenario
 
 
 @app.post("/validation/jobs/{job_id}/release-metadata", status_code=204)
