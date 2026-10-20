@@ -218,7 +218,7 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
         closed = asyncio.Event()
 
         class Gateway:
-            async def materialize_input(self, _name: str, _destination: str) -> None:
+            async def materialize_input(self, _name: str, _directory: str) -> str:
                 started.set()
                 await asyncio.Event().wait()
 

@@ -432,8 +432,10 @@ class BuilderHTTPTests(unittest.IsolatedAsyncioTestCase):
         seen_requests: list[RunRequest] = []
 
         class Gateway:
-            async def materialize_input(self, _name: str, destination: str) -> None:
-                Path(destination).write_bytes(b"slide")
+            async def materialize_input(self, _name: str, directory: str) -> str:
+                path = Path(directory) / "slide.svs"
+                path.write_bytes(b"slide")
+                return str(path)
 
             async def close(self) -> None:
                 closed.append(True)

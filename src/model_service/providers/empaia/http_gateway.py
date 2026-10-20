@@ -142,16 +142,16 @@ class HttpEmpaiaGateway:
         value = await self._call(self._client.get_configuration())
         return ConfigurationResponse.parse(value).merged()
 
-    async def materialize_input(self, name: str, destination: str) -> None:
+    async def materialize_input(self, name: str, directory: str) -> str:
         """Link a directly accessible shared input or fetch slide/rectangle metadata and write a local mask."""
-        target = Path(destination)
         direct = await self._direct_access(name)
         if direct is not None:
-            link_direct_input(direct, target)
-            return
+            return str(link_direct_input(direct, Path(directory)))
+        target = Path(directory) / "mask.tiff"
         slide = await self._slide_metadata()
         rectangle = _rectangle(await self._call(self._client.get_input_data(name)))
         write_rectangle_input(self._rectangle_writer, target, slide, rectangle)
+        return str(target)
 
     async def publish_output(self, name: str, output: BuilderOutput) -> None:
         """POST a supported inline primitive or delegate shared artifact publication to the image adapter."""

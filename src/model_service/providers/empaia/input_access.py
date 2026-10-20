@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import logging
 import shutil
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
@@ -27,8 +28,6 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from model_service.builders.contracts import Invocation
     from model_service.providers.empaia.gateway import (
         EmpaiaGateway,
@@ -131,10 +130,10 @@ class EmpaiaInputAccessAdapter:
                     raise InvalidInvocation(
                         "EMPAIA input access requires provider inputs"
                     )
-                path = root / "inputs" / name
-                path.parent.mkdir(parents=True, exist_ok=True)
-                await gateway.materialize_input(value.name, str(path))
-                if not path.is_file():
+                directory = root / "inputs" / name
+                directory.mkdir(parents=True, exist_ok=True)
+                path = Path(await gateway.materialize_input(value.name, str(directory)))
+                if not path.is_relative_to(directory) or not path.is_file():
                     raise InvalidInvocation(
                         f"EMPAIA input {name!r} was not materialized"
                     )

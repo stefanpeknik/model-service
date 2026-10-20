@@ -18,19 +18,30 @@ if TYPE_CHECKING:
     )
 
 
-def link_direct_input(direct: DirectAccess, destination: Path) -> None:
-    """Require supported direct access and an available file, then create a destination symlink; translate filesystem failures into retryable gateway errors."""
+def link_direct_input(direct: DirectAccess, directory: Path) -> Path:
+    """Link the shared file into `directory` under its own name and return the link.
+
+    The name is kept because slide readers pick the format by extension, and a
+    MIRAX `.mrxs` file is linked together with its same-named data directory.
+    Filesystem failures become retryable gateway errors.
+    """
     if not direct.supported:
         raise EmpaiaGatewayError(
             "EMPAIA input does not support direct access", retryable=False
         )
+    source = direct.storage_path
     try:
-        if not direct.storage_path.is_file():
+        if not source.is_file():
             raise EmpaiaGatewayError(
                 "EMPAIA input is unavailable on shared storage", retryable=True
             )
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.symlink_to(direct.storage_path)
+        directory.mkdir(parents=True, exist_ok=True)
+        link = directory / source.name
+        link.symlink_to(source)
+        companion = source.with_suffix("")
+        if source.suffix.lower() == ".mrxs" and companion.is_dir():
+            (directory / companion.name).symlink_to(companion, target_is_directory=True)
+        return link
     except OSError as error:
         raise EmpaiaGatewayError(
             "EMPAIA input could not be linked from shared storage", retryable=True

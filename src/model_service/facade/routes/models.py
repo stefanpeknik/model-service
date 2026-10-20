@@ -63,7 +63,9 @@ _BINARY_BODY = {
     "requestBody": {
         "required": True,
         "content": {
-            "application/octet-stream": {"schema": {"type": "string", "format": "binary"}}
+            "application/octet-stream": {
+                "schema": {"type": "string", "format": "binary"}
+            }
         },
     }
 }

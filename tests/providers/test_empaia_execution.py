@@ -181,10 +181,12 @@ class FakeGateway:
         self._service.configuration_reads += 1
         return dict(self._service.configuration)
 
-    async def materialize_input(self, name: str, destination: str) -> None:
-        """Record the input name and write identifiable fixture bytes to the destination."""
+    async def materialize_input(self, name: str, directory: str) -> str:
+        """Record the input name and write identifiable fixture bytes into the directory."""
         self._service.materialized.append(name)
-        Path(destination).write_bytes(f"{name}-from-empaia".encode())
+        path = Path(directory) / f"{name}.bin"
+        path.write_bytes(f"{name}-from-empaia".encode())
+        return str(path)
 
     async def publish_output(self, name: str, output: BuilderOutput) -> None:
         """Await the mutation guard, inject any queued failure, and record a still-existing artifact or inline output."""

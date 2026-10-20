@@ -244,8 +244,6 @@ def configuration(
     customer: dict[str, object] = {}
     if _is_scenario(job_id, ValidationScenario.INVALID_CONFIGURATION):
         customer["unexpected"] = True
-    if _is_scenario(job_id, ValidationScenario.CANCELLATION):
-        customer["output_path"] = "cancellation/heatmap.tiff"
     return {"global": {}, "customer": customer}
 
 

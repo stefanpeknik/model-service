@@ -71,8 +71,8 @@ class EmpaiaGateway(Protocol):
         """Fetch the job's resolved provider configuration as JSON values."""
         ...
 
-    async def materialize_input(self, name: str, destination: str) -> None:
-        """Make a named job input available at the requested local destination."""
+    async def materialize_input(self, name: str, directory: str) -> str:
+        """Make a named job input available inside `directory`; return its file path."""
         ...
 
     async def publish_output(self, name: str, output: BuilderOutput) -> None:

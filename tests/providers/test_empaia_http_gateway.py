@@ -190,9 +190,7 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
                 )
                 try:
                     with self.assertRaises(EmpaiaGatewayError) as raised:
-                        await gateway.materialize_input(
-                            "roi", str(Path(directory) / "roi.tiff")
-                        )
+                        await gateway.materialize_input("roi", directory)
                     self.assertFalse(raised.exception.retryable)
                     self.assertEqual(writer.calls, [])
                 finally:
@@ -280,12 +278,13 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
                 "credential",
                 client=client,
             )
-            destination = Path(directory) / "workspace" / "slide.tiff"
+            workspace = Path(directory) / "workspace"
 
             configuration = await gateway.get_configuration()
-            await gateway.materialize_input("slide", str(destination))
+            destination = Path(await gateway.materialize_input("slide", str(workspace)))
 
             self.assertEqual(configuration, {"stride": 0.5, "tiles": 8})
+            self.assertEqual(destination, workspace / source.name)
             self.assertTrue(destination.is_symlink())
             self.assertEqual(destination.read_bytes(), b"slide")
             await gateway.close()
@@ -363,7 +362,6 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             raise AssertionError(request.url.path)
 
         with TemporaryDirectory() as directory:
-            destination = Path(directory) / "roi.tiff"
             gateway = HttpEmpaiaGateway(
                 "https://empaia.example",
                 "job-1",
@@ -372,11 +370,11 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
                 rectangle_writer=writer,
             )
 
-            await gateway.materialize_input(
-                "region_of_interest",
-                str(destination),
+            destination = Path(
+                await gateway.materialize_input("region_of_interest", directory)
             )
 
+            self.assertEqual(destination, Path(directory) / "mask.tiff")
             self.assertTrue(destination.is_file())
             self.assertEqual(len(writer.calls), 1)
             _, slide, rectangle = writer.calls[0]
