@@ -11,6 +11,7 @@ from pydantic import Field
 from model_service.facade.routes.common import (
     ERRORS,
     ApiErrorCode,
+    Capacity,
     Scheduler,
     http_error,
     unavailable,
@@ -31,25 +32,27 @@ class ExecutionLookup:
     ids: Annotated[list[str], Field(max_length=MAX_LOOKUP_IDS)]
 
 
-def create_router(scheduler: Scheduler) -> APIRouter:
+def create_router(scheduler: Scheduler, capacity: Capacity) -> APIRouter:
     router = APIRouter(prefix="/v1/executions")
 
     @router.get("/{execution_id}", responses=ERRORS)
     async def get_execution(execution_id: str) -> ExecutionView:
         try:
-            return await scheduler.get(execution_id)
+            execution = await scheduler.get(execution_id)
         except SchedulingUnavailableError as error:
             raise unavailable(error) from error
         except UnknownExecutionError as error:
             raise _unknown_execution() from error
+        return await capacity.explain(execution)
 
     @router.post("/lookup", responses=ERRORS)
     async def lookup_executions(body: ExecutionLookup) -> list[ExecutionView]:
         """Views of the listed executions that exist; unknown IDs are left out."""
         try:
-            return await scheduler.get_many(body.ids)
+            executions = await scheduler.get_many(body.ids)
         except SchedulingUnavailableError as error:
             raise unavailable(error) from error
+        return [await capacity.explain(execution) for execution in executions]
 
     @router.get(
         "/{execution_id}/result",

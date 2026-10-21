@@ -19,6 +19,7 @@ from pydantic import Field
 from model_service.facade.routes.common import (
     ERRORS,
     ApiErrorCode,
+    Capacity,
     Scheduler,
     http_error,
     submit,
@@ -54,7 +55,7 @@ class EmpaiaExecutionStatus:
     message: str | None = None
 
 
-def create_router(scheduler: Scheduler) -> APIRouter:
+def create_router(scheduler: Scheduler, capacity: Capacity) -> APIRouter:
     router = APIRouter(prefix="/v1/empaia")
 
     @router.post(
@@ -90,11 +91,12 @@ def create_router(scheduler: Scheduler) -> APIRouter:
     @router.get("/executions/{execution_id}", responses=ERRORS)
     async def get_status(execution_id: str) -> EmpaiaExecutionStatus:
         try:
-            return remote_status(await scheduler.get(execution_id))
+            execution = await scheduler.get(execution_id)
         except SchedulingUnavailableError as error:
             raise unavailable(error) from error
         except UnknownExecutionError as error:
             raise _unknown_execution() from error
+        return remote_status(await capacity.explain(execution))
 
     @router.delete("/executions/{execution_id}", responses=ERRORS)
     async def cancel(execution_id: str) -> EmpaiaExecutionStatus:
@@ -119,7 +121,7 @@ def remote_status(execution: ExecutionView) -> EmpaiaExecutionStatus:
     if execution.status is ExecutionStatus.FAILED:
         message = execution.error.message if execution.error is not None else None
         return EmpaiaExecutionStatus("failed", message)
-    return EmpaiaExecutionStatus(_REMOTE[execution.status])
+    return EmpaiaExecutionStatus(_REMOTE[execution.status], execution.message)
 
 
 _REMOTE: dict[ExecutionStatus, RemoteStatus] = {

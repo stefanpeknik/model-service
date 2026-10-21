@@ -11,6 +11,7 @@ from model_service.builders.application import validate_model
 from model_service.builders.client import HTTPBuilderDispatch
 from model_service.builders.registry import BUILDERS, get_builder
 from model_service.facade.api import create_app as create_api
+from model_service.facade.capacity import ServeCapacity
 from model_service.facade.catalog import ModelCatalog
 from model_service.facade.health import DeploymentHealth
 from model_service.facade.inference import HttpInferenceProxy, ModelInference
@@ -129,6 +130,15 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
         inference_target=inference_target,
         inference_max_request_bytes=config.inference_max_request_bytes,
         lifespan=lifespan,
+        capacity=(
+            ServeCapacity(
+                client,
+                origin=config.ray_dashboard_origin,
+                grace_seconds=config.capacity_grace.total_seconds(),
+            )
+            if config.ray_dashboard_origin is not None
+            else None
+        ),
         deployment_health=DeploymentHealth(
             client,
             origin=config.ray_serve_origin,

@@ -73,6 +73,8 @@ executionScheduler:
     existingClaim: ""
     mountPath: /mnt/data
   rayServeOrigin: ""
+  # Ray dashboard, read to explain executions waiting for cluster capacity.
+  rayDashboardOrigin: ""
   inferenceModelOrigins: {}
   leaseSeconds: 60
   workerPollSeconds: 0.5

@@ -115,6 +115,11 @@ Lesson: a model whose GPU replica cannot be scheduled keeps the request open
 until someone resets the app. When the cluster is short of GPUs, check `ray
 status` for pending demands after cancelling GPU work.
 
+Follow-up: this is Ray Serve 2.58.0's intended behaviour (its default
+autoscaling policy counts only running replicas), not a bug. Running
+executions now carry a "waiting for capacity" message while their replica is
+unplaced; the JES draft adds the last such message to its timeout message.
+
 ## Notes for next time
 
 - Port-forwards die whenever their pod is replaced, and a new forward fails

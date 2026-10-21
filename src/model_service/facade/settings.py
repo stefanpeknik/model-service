@@ -61,6 +61,14 @@ class SchedulerSettings(BaseSettings):
         validation_alias="PROVIDER_CONTEXT_KEY", repr=False
     )
     ray_serve_origin: _RequiredString = Field(validation_alias="RAY_SERVE_ORIGIN")
+    ray_dashboard_origin: str | None = Field(
+        default=None, validation_alias="RAY_DASHBOARD_ORIGIN"
+    )
+    capacity_grace: _SecondsDuration = Field(
+        default=timedelta(seconds=60),
+        ge=timedelta(0),
+        validation_alias="CAPACITY_GRACE_SECONDS",
+    )
     model_catalog_path: Path = Field(
         default=Path("/etc/model-service/model-catalog.json"),
         validation_alias="MODEL_CATALOG_PATH",
@@ -168,7 +176,12 @@ class SchedulerSettings(BaseSettings):
             source.env_vars = dict(environment)
         return cls(**source())
 
-    @field_validator("inference_serve_origin", "empaia_gateway_factory", mode="before")
+    @field_validator(
+        "inference_serve_origin",
+        "ray_dashboard_origin",
+        "empaia_gateway_factory",
+        mode="before",
+    )
     @classmethod
     def _empty_optional_setting(cls, value: object) -> object:
         """Treat blank optional origins and factory settings as absent."""

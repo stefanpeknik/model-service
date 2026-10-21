@@ -126,6 +126,8 @@ class ExecutionView:
     error: ExecutionError | None = None
     # A failure or cancellation not yet reported to the provider (e.g. EMPAIA).
     provider_pending: bool = False
+    # Why a running execution makes no progress, when known.
+    message: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

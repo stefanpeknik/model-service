@@ -89,6 +89,15 @@ class Scheduler(Protocol):
     async def cancel(self, execution_id: str) -> ExecutionView: ...
 
 
+class Capacity(Protocol):
+    async def explain(self, execution: ExecutionView) -> ExecutionView: ...
+
+
+class NoCapacityInfo:
+    async def explain(self, execution: ExecutionView) -> ExecutionView:
+        return execution
+
+
 async def submit(
     scheduler: Scheduler,
     request: ScheduleRequest | InferenceScheduleRequest,

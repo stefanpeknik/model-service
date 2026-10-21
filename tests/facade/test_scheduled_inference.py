@@ -159,6 +159,7 @@ class ScheduledInferenceTests(unittest.IsolatedAsyncioTestCase):
                 "result": None,
                 "error": None,
                 "provider_pending": False,
+                "message": None,
             },
         )
 

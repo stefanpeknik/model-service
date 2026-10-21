@@ -13,7 +13,11 @@ from fastapi.responses import JSONResponse
 
 from model_service.facade.health import DeploymentState, DeploymentStatus
 from model_service.facade.routes import builders, empaia, executions, models
-from model_service.facade.routes.common import ApiErrorCode, http_error
+from model_service.facade.routes.common import (
+    ApiErrorCode,
+    NoCapacityInfo,
+    http_error,
+)
 from model_service.scheduler.contracts import SchedulingUnavailableError
 
 
@@ -22,7 +26,7 @@ if TYPE_CHECKING:
 
     from model_service.facade.catalog import ModelCatalog
     from model_service.facade.routes.builders import BuilderRunner
-    from model_service.facade.routes.common import Scheduler
+    from model_service.facade.routes.common import Capacity, Scheduler
     from model_service.scheduler.inference import InferenceTarget
 
 
@@ -40,7 +44,9 @@ def create_app(
     deployment_health: DeploymentHealth | None = None,
     inference_max_request_bytes: int = 2 * 1024 * 1024,
     empaia_enabled: bool = False,
+    capacity: Capacity | None = None,
 ) -> FastAPI:
+    capacity = capacity or NoCapacityInfo()
     app = FastAPI(title="model-service", lifespan=lifespan)
 
     @app.exception_handler(RequestValidationError)
@@ -92,6 +98,6 @@ def create_app(
     )
     app.include_router(builders.create_router(scheduler, builder_runner))
     if empaia_enabled:
-        app.include_router(empaia.create_router(scheduler))
-    app.include_router(executions.create_router(scheduler))
+        app.include_router(empaia.create_router(scheduler, capacity))
+    app.include_router(executions.create_router(scheduler, capacity))
     return app

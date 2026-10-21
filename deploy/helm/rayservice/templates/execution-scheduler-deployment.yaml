@@ -57,6 +57,8 @@ spec:
                   key: {{ .Values.executionScheduler.encryption.keyKey }}
             - name: RAY_SERVE_ORIGIN
               value: {{ default (printf "http://%s-serve-svc.%s.svc.cluster.local:8000" .Release.Name (.Release.Namespace | default "rationai-jobs-ns")) .Values.executionScheduler.rayServeOrigin | quote }}
+            - name: RAY_DASHBOARD_ORIGIN
+              value: {{ default (printf "http://%s-head-svc.%s.svc.cluster.local:8265" .Release.Name (.Release.Namespace | default "rationai-jobs-ns")) .Values.executionScheduler.rayDashboardOrigin | quote }}
             - name: MODEL_CATALOG_PATH
               value: /etc/model-service/model-catalog.json
             - name: BUILDER_IDS
