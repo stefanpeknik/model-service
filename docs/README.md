@@ -9,6 +9,7 @@
 | [peknik-ns test deployment](operations/peknik-ns.md) | Building images, upgrading, the GPU and quota rules |
 | [Core acceptance, 2026-10-14](operations/core-acceptance-2026-10-14.md) | Live evidence for the current core |
 | [Scheduled raw inference acceptance, 2026-10-15](operations/raw-inference-acceptance-2026-10-15.md) | Live evidence and throughput for scheduled tiles |
+| [EMPAIA jobs through JES, 2026-10-21](operations/empaia-jes-mock-2026-10-21.md) | Postmortem of the JES HTTP backend + model-service run against EMPAIA stand-ins in peknik-ns |
 | [ADR 0001](adr/0001-run-scheduler-outside-ray-serve.md) | Why the scheduler runs outside Ray Serve |
 | [Available models](available-models.md) | Raw model routes and payloads |
 | [Ray-layer architecture](architecture/overview.md), [batching](architecture/batching.md), [queues](architecture/queues-and-backpressure.md) | Ray Serve internals |
