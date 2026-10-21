@@ -436,11 +436,11 @@ async def put_tile(
     """
     _authorize(authorization)
     data = await request.body()
+    # A real slide's heatmap spans many tiles on the level matching the model.
+    single_tile = not _is_scenario(job_id, ValidationScenario.FILE)
     if (
         pixelmap_id != f"{job_id}-heatmap"
-        or level != 0
-        or tile_x != 0
-        or tile_y != 0
+        or (single_tile and (level != 0 or tile_x != 0 or tile_y != 0))
         or not data
     ):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT)
