@@ -76,7 +76,9 @@ class FixedAccessAdapter:
         self._root = root
         self._access = access
 
-    def create(self, _invocation: object, _context: object) -> FixedAccess:
+    def create(
+        self, _invocation: object, _context: object, _model: object
+    ) -> FixedAccess:
         return self._access(self._root)
 
 
@@ -94,7 +96,9 @@ class RaisingAdapter:
     def __init__(self, error: Exception) -> None:
         self._error = error
 
-    def create(self, _invocation: object, _context: object) -> FixedAccess:
+    def create(
+        self, _invocation: object, _context: object, _model: object
+    ) -> FixedAccess:
         raise self._error
 
 
@@ -432,7 +436,9 @@ class BuilderHTTPTests(unittest.IsolatedAsyncioTestCase):
         seen_requests: list[RunRequest] = []
 
         class Gateway:
-            async def materialize_input(self, _name: str, directory: str) -> str:
+            async def materialize_input(
+                self, _name: str, directory: str, *, mpp: float | None = None
+            ) -> str:
                 path = Path(directory) / "slide.svs"
                 path.write_bytes(b"slide")
                 return str(path)

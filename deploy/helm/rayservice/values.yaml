@@ -102,6 +102,10 @@ executionScheduler:
     apiUrls: []
     workspaceRoot: /mnt/model-service-executions
     workspaceClaim: ""
+    # How slide inputs reach builders: "direct" links the file named by the
+    # RationAI direct-access route; "http" downloads the needed level through
+    # the App API, for installations whose slide storage model-service can't mount.
+    slideAccess: direct
   resources:
     requests:
       cpu: 100m

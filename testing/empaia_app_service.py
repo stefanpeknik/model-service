@@ -10,11 +10,18 @@ Environment:
     MOCK_FILE_SLIDE, MOCK_FILE_ROI, MOCK_FILE_SLIDE_METADATA: for `file-` jobs,
         the paths of a real slide and region mask and the slide's metadata as
         JSON (`extent`, `pixel_size_nm`, `levels`), as the App API returns it.
+        `file-` jobs also serve the slide through the region route, for
+        model-service's `EMPAIA_SLIDE_ACCESS=http`.
+    MOCK_FILE_RECTANGLE: for `file-` jobs, the region of interest returned as a
+        rectangle input (`upper_left`, `width`, `height`); defaults to the whole
+        slide.
 """
 
 from __future__ import annotations
 
 import asyncio
+import functools
+import io
 import json
 import os
 import struct
@@ -22,7 +29,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from threading import Lock
 
-from fastapi import FastAPI, Header, HTTPException, Request, status
+from fastapi import FastAPI, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel
 
 
@@ -75,6 +82,7 @@ class JobView(BaseModel):
         configuration_reads: Number of provider configuration GETs observed.
         direct_access_reads: Number of direct-access input probes observed.
         rectangle_reads: Number of region rectangle GETs observed.
+        region_reads: Number of slide region image GETs observed.
         slide_metadata_reads: Number of slide geometry GETs observed.
         output_create_attempts: Number of attempted external pixelmap registrations.
         tile_attempts: Number of attempted tile uploads, including failures.
@@ -93,6 +101,7 @@ class JobView(BaseModel):
     configuration_reads: int = 0
     direct_access_reads: int = 0
     rectangle_reads: int = 0
+    region_reads: int = 0
     slide_metadata_reads: int = 0
     output_create_attempts: int = 0
     tile_attempts: int = 0
@@ -114,6 +123,7 @@ class JobRecord:
         configuration_reads: Number of provider configuration GETs observed.
         direct_access_reads: Number of direct-access input probes observed.
         rectangle_reads: Number of region rectangle GETs observed.
+        region_reads: Number of slide region image GETs observed.
         slide_metadata_reads: Number of slide geometry GETs observed.
         output_create_attempts: Number of attempted external pixelmap registrations.
         tile_attempts: Number of attempted tile uploads, including failures.
@@ -135,6 +145,7 @@ class JobRecord:
     configuration_reads: int = 0
     direct_access_reads: int = 0
     rectangle_reads: int = 0
+    region_reads: int = 0
     slide_metadata_reads: int = 0
     output_create_attempts: int = 0
     tile_attempts: int = 0
@@ -367,7 +378,58 @@ def rectangle(
     _authorize(authorization)
     with _lock:
         _job(job_id).rectangle_reads += 1
+    if _is_scenario(job_id, ValidationScenario.FILE):
+        if "MOCK_FILE_RECTANGLE" in os.environ:
+            return json.loads(os.environ["MOCK_FILE_RECTANGLE"])
+        extent = json.loads(os.environ["MOCK_FILE_SLIDE_METADATA"])["extent"]
+        return {"upper_left": [0, 0], "width": extent["x"], "height": extent["y"]}
     return {"upper_left": [1, 1], "width": 6, "height": 6}
+
+
+@app.get(
+    "/v3/{job_id}/regions/{wsi_id}/level/{level}/start/{start_x}/{start_y}"
+    "/size/{size_x}/{size_y}"
+)
+async def region(
+    job_id: str,
+    wsi_id: str,
+    level: int,
+    start_x: int,
+    start_y: int,
+    size_x: int,
+    size_y: int,
+    authorization: str | None = Header(default=None),
+) -> Response:
+    """Serve a PNG region of the `file-` job's slide; level coordinates as in the App API."""
+    _authorize(authorization)
+    with _lock:
+        _job(job_id).region_reads += 1
+    if not _is_scenario(job_id, ValidationScenario.FILE) or wsi_id != f"{job_id}-slide":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    data = await asyncio.to_thread(
+        _read_region, level, start_x, start_y, size_x, size_y
+    )
+    return Response(content=data, media_type="image/png")
+
+
+@functools.cache
+def _file_slide() -> object:
+    import openslide
+
+    return openslide.OpenSlide(os.environ["MOCK_FILE_SLIDE"])
+
+
+def _read_region(level: int, x: int, y: int, width: int, height: int) -> bytes:
+    slide = _file_slide()
+    if not 0 <= level < slide.level_count:  # type: ignore[attr-defined]
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    downsample = slide.level_downsamples[level]  # type: ignore[attr-defined]
+    image = slide.read_region(  # type: ignore[attr-defined]
+        (round(x * downsample), round(y * downsample)), level, (width, height)
+    )
+    buffer = io.BytesIO()
+    image.convert("RGB").save(buffer, format="PNG")
+    return buffer.getvalue()
 
 
 @app.post("/v3/{job_id}/outputs/{name}")
@@ -556,6 +618,7 @@ def inspect_job(job_id: str) -> JobView:
             configuration_reads=record.configuration_reads,
             direct_access_reads=record.direct_access_reads,
             rectangle_reads=record.rectangle_reads,
+            region_reads=record.region_reads,
             slide_metadata_reads=record.slide_metadata_reads,
             output_create_attempts=record.output_create_attempts,
             tile_attempts=record.tile_attempts,

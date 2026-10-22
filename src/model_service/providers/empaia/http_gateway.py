@@ -1,7 +1,9 @@
 """Implement AppService HTTP access and classify safe integration failures.
 
 Input acquisition uses direct shared access when available or rectangle-mask
-materialization. Output publication invokes a durable guard before writes and tracks
+materialization. Where the slide storage is not visible to model-service,
+`EMPAIA_SLIDE_ACCESS=http` downloads slides through the App API's region route
+instead. Output publication invokes a durable guard before writes and tracks
 uncertain mutation outcomes.
 """
 
@@ -9,7 +11,9 @@ from __future__ import annotations
 
 import asyncio
 import math
+import os
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
@@ -36,6 +40,13 @@ if TYPE_CHECKING:
 
     from model_service.builders.contracts import BuilderOutput, JsonValue
     from model_service.providers.empaia.gateway import MutationGuard
+
+
+class SlideAccess(StrEnum):
+    """How slide inputs reach the builder."""
+
+    DIRECT = "direct"  # link the file named by the RationAI direct-access route
+    HTTP = "http"  # download the needed level through the App API's region route
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +114,20 @@ class RectangleMaskWriter(Protocol):
         ...
 
 
+class SlideDownloader(Protocol):
+    """Define download of one slide level into a local TIFF readable by OpenSlide."""
+
+    async def download(
+        self,
+        gateway: HttpEmpaiaGateway,
+        slide: SlideMetadata,
+        mpp: float,
+        destination: Path,
+    ) -> None:
+        """Write the slide level closest to `mpp`, read through the gateway, to `destination`."""
+        ...
+
+
 class HttpEmpaiaGateway:
     """Access one EMPAIA job through authenticated HTTP and pluggable image adapters."""
 
@@ -115,6 +140,8 @@ class HttpEmpaiaGateway:
         client: AppServiceClient | None = None,
         artifact_publisher: ArtifactPublisher | None = None,
         rectangle_writer: RectangleMaskWriter | None = None,
+        slide_access: SlideAccess = SlideAccess.DIRECT,
+        slide_downloader: SlideDownloader | None = None,
     ) -> None:
         """Require complete connection settings and select the SDK client, TIFF publisher, and rectangle writer. close() closes even an injected client."""
         if not api_url or not job_id or not credential:
@@ -124,14 +151,21 @@ class HttpEmpaiaGateway:
             )
         self._job_id = job_id
         self._client = client or AppServiceClient(api_url, job_id, credential)
-        if artifact_publisher is None or rectangle_writer is None:
+        if (
+            artifact_publisher is None
+            or rectangle_writer is None
+            or slide_downloader is None
+        ):
             from model_service.providers.empaia.image_io import (
                 TiffPixelmapPublisher,
+                TiffSlideDownloader,
                 VipsRectangleMaskWriter,
             )
 
         self._artifact_publisher = artifact_publisher or TiffPixelmapPublisher()
         self._rectangle_writer = rectangle_writer or VipsRectangleMaskWriter()
+        self._slide_access = slide_access
+        self._slide_downloader = slide_downloader or TiffSlideDownloader()
 
     def set_before_mutation(self, callback: MutationGuard) -> None:
         """Install the async durable-claim guard used immediately before each external mutation."""
@@ -142,15 +176,26 @@ class HttpEmpaiaGateway:
         value = await self._call(self._client.get_configuration())
         return ConfigurationResponse.parse(value).merged()
 
-    async def materialize_input(self, name: str, directory: str) -> str:
-        """Link a directly accessible shared input or fetch slide/rectangle metadata and write a local mask."""
-        direct = await self._direct_access(name)
-        if direct is not None:
-            return str(link_direct_input(direct, Path(directory)))
+    async def materialize_input(
+        self, name: str, directory: str, *, mpp: float | None = None
+    ) -> str:
+        """Link or download a slide input, or fetch rectangle metadata and write a local mask."""
+        if self._slide_access is SlideAccess.DIRECT:
+            direct = await self._direct_access(name)
+            if direct is not None:
+                return str(link_direct_input(direct, Path(directory)))
+        value = await self._call(self._client.get_input_data(name))
+        if self._slide_access is SlideAccess.HTTP and _is_slide(value):
+            if mpp is None:
+                raise _invalid("EMPAIA slide download needs the model resolution")
+            target = Path(directory) / "slide.tiff"
+            await self._slide_downloader.download(
+                self, _slide_metadata(value), mpp, target
+            )
+            return str(target)
         target = Path(directory) / "mask.tiff"
         slide = await self._slide_metadata()
-        rectangle = _rectangle(await self._call(self._client.get_input_data(name)))
-        write_rectangle_input(self._rectangle_writer, target, slide, rectangle)
+        write_rectangle_input(self._rectangle_writer, target, slide, _rectangle(value))
         return str(target)
 
     async def publish_output(self, name: str, output: BuilderOutput) -> None:
@@ -226,6 +271,27 @@ class HttpEmpaiaGateway:
                     raise
                 await asyncio.sleep(_TILE_RETRY_SECONDS * 2**attempt)
 
+    async def read_region(
+        self,
+        slide_id: str,
+        level: int,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+    ) -> bytes:
+        """Read one slide region as an encoded image; transient failures retry."""
+        for attempt in range(_READ_ATTEMPTS):
+            try:
+                return await self._call(
+                    self._client.get_region_data(slide_id, level, x, y, width, height)
+                )
+            except EmpaiaGatewayError as error:
+                if not error.retryable or attempt + 1 == _READ_ATTEMPTS:
+                    raise
+                await asyncio.sleep(_READ_RETRY_SECONDS * 2**attempt)
+        raise AssertionError("unreachable")
+
     async def _direct_access(self, name: str) -> DirectAccess | None:
         """Query the extension endpoint; only a 404 permits rectangle fallback, while other failures remain errors."""
         value = await self._call(self._client.get_direct_access(name))
@@ -272,15 +338,23 @@ class HttpEmpaiaGateway:
 
 _TILE_ATTEMPTS = 4
 _TILE_RETRY_SECONDS = 1.0
+_READ_ATTEMPTS = 4
+_READ_RETRY_SECONDS = 1.0
 
 
 def create_http_gateway(context: EmpaiaJobContext) -> HttpEmpaiaGateway:
-    """Construct the default HTTP gateway from protected job settings."""
+    """Construct the default HTTP gateway from protected job settings and `EMPAIA_SLIDE_ACCESS`."""
     return HttpEmpaiaGateway(
         context.api_url,
         context.job_id,
         context.credential,
+        slide_access=SlideAccess(os.environ.get("EMPAIA_SLIDE_ACCESS", "direct")),
     )
+
+
+def _is_slide(value: object) -> bool:
+    """Slide inputs carry pyramid levels; rectangles do not."""
+    return isinstance(value, dict) and "levels" in value
 
 
 def _primitive_output(name: str, job_id: str, value: JsonValue) -> dict[str, object]:

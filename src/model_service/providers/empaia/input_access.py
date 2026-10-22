@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
-    from model_service.builders.contracts import Invocation
+    from model_service.builders.contracts import Invocation, ModelBinding
     from model_service.providers.empaia.gateway import (
         EmpaiaGateway,
         EmpaiaGatewayFactory,
@@ -103,6 +103,7 @@ class EmpaiaInputAccessAdapter:
         self,
         invocation: Invocation,
         execution_context: ExecutionContext,
+        model: ModelBinding | None = None,
     ) -> EmpaiaInputAccess:
         """Validate matching job contexts and an attempt ID, hash the workspace identity, and materialize every provider input. Close acquired resources if creation fails."""
         try:
@@ -132,7 +133,13 @@ class EmpaiaInputAccessAdapter:
                     )
                 directory = root / "inputs" / name
                 directory.mkdir(parents=True, exist_ok=True)
-                path = Path(await gateway.materialize_input(value.name, str(directory)))
+                path = Path(
+                    await gateway.materialize_input(
+                        value.name,
+                        str(directory),
+                        mpp=model.mpp if model is not None else None,
+                    )
+                )
                 if not path.is_relative_to(directory) or not path.is_file():
                     raise InvalidInvocation(
                         f"EMPAIA input {name!r} was not materialized"

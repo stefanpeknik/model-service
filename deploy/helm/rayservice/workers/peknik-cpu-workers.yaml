@@ -36,6 +36,8 @@ template:
             value: {{ .Values.executionScheduler.empaia.gatewayFactory | quote }}
           - name: EMPAIA_WORKSPACE_ROOT
             value: {{ .Values.executionScheduler.empaia.workspaceRoot | quote }}
+          - name: EMPAIA_SLIDE_ACCESS
+            value: {{ .Values.executionScheduler.empaia.slideAccess | default "direct" | quote }}
 {{- end }}
         securityContext:
           allowPrivilegeEscalation: false

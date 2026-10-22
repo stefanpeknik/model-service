@@ -19,6 +19,7 @@ from model_service.providers.empaia.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.http_gateway import (
     HttpEmpaiaGateway,
     Rectangle,
+    SlideAccess,
     SlideMetadata,
 )
 
@@ -381,6 +382,95 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(slide.identifier, "slide-1")
             self.assertEqual(rectangle, Rectangle(10, 20, 100, 50))
             await gateway.close()
+
+    async def test_http_slide_access_downloads_slides_and_still_writes_masks(
+        self,
+    ) -> None:
+        """Verify HTTP slide access skips direct access, downloads slides, and keeps masks."""
+        requested: list[str] = []
+        downloads: list[tuple[SlideMetadata, float, Path]] = []
+        slide = {
+            "id": "slide-1",
+            "extent": {"x": 1200, "y": 600, "z": 1},
+            "pixel_size_nm": {"x": 250.0, "y": 250.0},
+            "levels": [{"extent": {"x": 1200, "y": 600, "z": 1}}],
+        }
+
+        class RecordingDownloader:
+            async def download(
+                self,
+                gateway: HttpEmpaiaGateway,
+                metadata: SlideMetadata,
+                mpp: float,
+                destination: Path,
+            ) -> None:
+                del gateway
+                downloads.append((metadata, mpp, destination))
+                destination.touch()
+
+        def handle(request: httpx.Request) -> httpx.Response:
+            requested.append(request.url.path)
+            if request.url.path.endswith("/inputs/slide"):
+                return httpx.Response(200, json=slide)
+            if request.url.path.endswith("/inputs/region_of_interest"):
+                return httpx.Response(
+                    200, json={"upper_left": [10, 20], "width": 100, "height": 50}
+                )
+            raise AssertionError(request.url.path)
+
+        writer = RecordingRectangleWriter()
+        with TemporaryDirectory() as directory:
+            gateway = HttpEmpaiaGateway(
+                "https://empaia.example",
+                "job-1",
+                "credential",
+                client=await self.appservice(httpx.MockTransport(handle)),
+                rectangle_writer=writer,
+                slide_access=SlideAccess.HTTP,
+                slide_downloader=RecordingDownloader(),
+            )
+            slide_path = await gateway.materialize_input("slide", directory, mpp=0.5)
+            mask_path = await gateway.materialize_input(
+                "region_of_interest", directory, mpp=0.5
+            )
+            with self.assertRaises(EmpaiaGatewayError) as raised:
+                await gateway.materialize_input("slide", directory)
+            await gateway.close()
+
+        self.assertEqual(slide_path, f"{directory}/slide.tiff")
+        self.assertEqual(mask_path, f"{directory}/mask.tiff")
+        self.assertEqual(len(downloads), 1)
+        self.assertEqual(downloads[0][0].identifier, "slide-1")
+        self.assertEqual(downloads[0][1], 0.5)
+        self.assertEqual(len(writer.calls), 1)
+        self.assertFalse(raised.exception.retryable)
+        self.assertFalse(any(path.endswith("/direct-access") for path in requested))
+
+    async def test_region_reads_retry_transient_failures(self) -> None:
+        """Verify a region read retries a transient AppService failure."""
+        answers = [httpx.Response(503), httpx.Response(200, content=b"png")]
+
+        def handle(request: httpx.Request) -> httpx.Response:
+            self.assertEqual(
+                request.url.path,
+                "/v3/job-1/regions/slide-1/level/1/start/512/0/size/256/128",
+            )
+            return answers.pop(0)
+
+        gateway = HttpEmpaiaGateway(
+            "https://empaia.example",
+            "job-1",
+            "credential",
+            client=await self.appservice(httpx.MockTransport(handle)),
+        )
+        with patch(
+            "model_service.providers.empaia.http_gateway._READ_RETRY_SECONDS", 0
+        ):
+            data = await gateway.read_region("slide-1", 1, 512, 0, 256, 128)
+        await gateway.close()
+
+        self.assertEqual(data, b"png")
+        self.assertEqual(answers, [])
 
     async def test_shared_artifact_uses_packaged_publisher(self) -> None:
         """Verify shared artifact uses packaged publisher."""

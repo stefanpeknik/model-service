@@ -122,6 +122,20 @@ Unknown builder or model: 404 `unknown_builder` / `unknown_model`.
 Incompatible pair: 422 `incompatible_model`. Model temporarily down: durable
 requests queue; synchronous requests get 503.
 
+EMPAIA slide inputs reach builders one of two ways, chosen by
+`EMPAIA_SLIDE_ACCESS` on the Ray workers (Helm
+`executionScheduler.empaia.slideAccess`):
+
+- `direct` (default): link the file named by the RationAI direct-access route.
+- `http`: download the slide through the App API's region route into the
+  attempt workspace, for installations whose slide storage model-service cannot
+  mount (the EMPAIA test instance's slides sit on a volume in another
+  namespace). Only the level closest to the model's `mpp` is fetched, tile by
+  tile and streamed into a tiled JPEG TIFF that records that level's
+  resolution, so the builder reads it unchanged as level 0. Region-of-interest
+  rectangles still become a local mask. The model's `mpp` reaches the input
+  adapter with the invocation.
+
 A running execution whose model or builder has no running Serve replica, only
 one Ray has not placed on a node for `CAPACITY_GRACE_SECONDS` (default 60),
 keeps `running` with `message: "waiting for capacity: no replica of model <id>

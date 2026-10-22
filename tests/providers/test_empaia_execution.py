@@ -181,7 +181,9 @@ class FakeGateway:
         self._service.configuration_reads += 1
         return dict(self._service.configuration)
 
-    async def materialize_input(self, name: str, directory: str) -> str:
+    async def materialize_input(
+        self, name: str, directory: str, *, mpp: float | None = None
+    ) -> str:
         """Record the input name and write identifiable fixture bytes into the directory."""
         self._service.materialized.append(name)
         path = Path(directory) / f"{name}.bin"

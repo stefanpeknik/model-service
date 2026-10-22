@@ -58,7 +58,7 @@ class Adapter:
     def __init__(self, access: Any) -> None:
         self._access = access
 
-    def create(self, _invocation: object, _context: object) -> Any:
+    def create(self, _invocation: object, _context: object, _model: object) -> Any:
         return self._access
 
 
@@ -67,7 +67,9 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
         cancelled = asyncio.Event()
 
         class BlockingAdapter:
-            async def create(self, _invocation: object, _context: object) -> Any:
+            async def create(
+                self, _invocation: object, _context: object, _model: object
+            ) -> Any:
                 try:
                     await asyncio.Event().wait()
                 finally:
@@ -218,7 +220,9 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
         closed = asyncio.Event()
 
         class Gateway:
-            async def materialize_input(self, _name: str, _directory: str) -> str:
+            async def materialize_input(
+                self, _name: str, _directory: str, *, mpp: float | None = None
+            ) -> str:
                 started.set()
                 await asyncio.Event().wait()
 

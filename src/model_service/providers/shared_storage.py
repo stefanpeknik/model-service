@@ -23,6 +23,7 @@ if TYPE_CHECKING:
         BuilderInput,
         ExecutionContext,
         Invocation,
+        ModelBinding,
     )
 
 
@@ -123,8 +124,12 @@ class SharedStorageAccessAdapter:
         raise InvalidInvocation("shared-storage root is not allowed on this server")
 
     def create(
-        self, invocation: Invocation, execution_context: ExecutionContext
+        self,
+        invocation: Invocation,
+        execution_context: ExecutionContext,
+        model: ModelBinding | None = None,
     ) -> SharedStorageAccess:
+        del model
         return SharedStorageAccess(
             self.root(invocation.input_access.state),
             invocation.inputs,

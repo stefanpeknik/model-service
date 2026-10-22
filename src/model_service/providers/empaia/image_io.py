@@ -1,19 +1,35 @@
 """Convert local TIFF artifacts and rectangle inputs at the EMPAIA image boundary.
 
 libvips is loaded lazily. TIFF heatmaps become float32 pixelmap tiles; rectangle masks
-retain slide geometry and physical pixel resolution.
+retain slide geometry and physical pixel resolution; downloaded slides become tiled
+TIFFs of one level.
 """
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import io
+import itertools
+import logging
 import math
+import queue
+from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
 
 
+logger = logging.getLogger(__name__)
+
+
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    import numpy as np
+    from numpy.typing import NDArray
+
     from model_service.builders.contracts import SharedArtifact
     from model_service.providers.empaia.http_gateway import (
         HttpEmpaiaGateway,
@@ -158,6 +174,179 @@ class VipsRectangleMaskWriter:
             raise _unavailable(
                 "EMPAIA rectangle input could not be materialized"
             ) from error
+
+
+class TiffSlideDownloader:
+    """Download the slide level a builder reads into a tiled JPEG TIFF.
+
+    Regions are fetched tile by tile, a few at a time and in order, and streamed
+    into the file, so memory stays bounded whatever the slide size. The TIFF
+    records the level's resolution, so OpenSlide reports its mpp and the builder
+    reads it as level 0.
+    """
+
+    def __init__(
+        self, tile_size: int = 512, concurrency: int = 8, quality: int = 90
+    ) -> None:
+        self._tile_size = tile_size
+        self._concurrency = concurrency
+        self._quality = quality
+
+    async def download(
+        self,
+        gateway: HttpEmpaiaGateway,
+        slide: SlideMetadata,
+        mpp: float,
+        destination: Path,
+    ) -> None:
+        """Fetch every tile of the level closest to `mpp` and write it to `destination`."""
+        level = closest_level(slide, mpp)
+        size = self._tile_size
+        positions = [
+            (x, y)
+            for y in range(0, level.height, size)
+            for x in range(0, level.width, size)
+        ]
+        logger.info(
+            "downloading slide %s level %d (%dx%d px, %d tiles)",
+            slide.identifier,
+            level.index,
+            level.width,
+            level.height,
+            len(positions),
+        )
+
+        async def fetch(x: int, y: int) -> bytes:
+            return await gateway.read_region(
+                slide.identifier,
+                level.index,
+                x,
+                y,
+                min(size, level.width - x),
+                min(size, level.height - y),
+            )
+
+        tiles: queue.Queue[object] = queue.Queue(maxsize=2 * self._concurrency)
+        writer = asyncio.ensure_future(
+            asyncio.to_thread(self._write, destination, slide, level, tiles)
+        )
+        pending: deque[tuple[int, int, asyncio.Task[bytes]]] = deque()
+        remaining = iter(positions)
+        try:
+            for x, y in itertools.islice(remaining, self._concurrency):
+                pending.append((x, y, asyncio.ensure_future(fetch(x, y))))
+            while pending:
+                x, y, task = pending.popleft()
+                data = await task
+                for nx, ny in itertools.islice(remaining, 1):
+                    pending.append((nx, ny, asyncio.ensure_future(fetch(nx, ny))))
+                tile = await asyncio.to_thread(
+                    _decode_tile,
+                    data,
+                    min(size, level.width - x),
+                    min(size, level.height - y),
+                    size,
+                )
+                await _hand_over(tiles, tile, writer)
+            await writer
+        except BaseException:
+            for _, _, task in pending:
+                task.cancel()
+            if not writer.done():
+                await _hand_over(tiles, _ABORT, writer)
+            with contextlib.suppress(BaseException):
+                await writer
+            destination.unlink(missing_ok=True)
+            raise
+
+    def _write(
+        self,
+        destination: Path,
+        slide: SlideMetadata,
+        level: SlideLevel,
+        tiles: queue.Queue[object],
+    ) -> None:
+        import tifffile
+
+        def received() -> Iterator[NDArray[np.uint8]]:
+            while True:
+                tile = tiles.get()
+                if tile is _ABORT:
+                    raise _unavailable("EMPAIA slide download was interrupted")
+                yield tile  # type: ignore[misc]
+
+        # OpenSlide derives mpp from the resolution in pixels per centimetre.
+        mpp_x = slide.pixel_size_nm_x / 1000 * slide.width / level.width
+        mpp_y = slide.pixel_size_nm_y / 1000 * slide.height / level.height
+        try:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            tifffile.imwrite(
+                destination,
+                data=received(),
+                shape=(level.height, level.width, 3),
+                dtype="uint8",
+                tile=(self._tile_size, self._tile_size),
+                photometric="rgb",
+                compression="jpeg",
+                compressionargs={"level": self._quality},
+                resolution=(10_000 / mpp_x, 10_000 / mpp_y),
+                resolutionunit="CENTIMETER",
+                bigtiff=True,
+            )
+        except EmpaiaGatewayError:
+            raise
+        except Exception as error:
+            raise _unavailable("EMPAIA slide could not be written") from error
+
+
+_ABORT = object()
+
+
+async def _hand_over(
+    tiles: queue.Queue[object], item: object, writer: asyncio.Future[None]
+) -> None:
+    """Queue an item for the writer thread without blocking forever if it stopped."""
+    while True:
+        if writer.done():
+            writer.result()
+            return
+        try:
+            tiles.put_nowait(item)
+            return
+        except queue.Full:
+            await asyncio.sleep(0.05)
+
+
+def _decode_tile(
+    data: bytes, width: int, height: int, tile_size: int
+) -> NDArray[np.uint8]:
+    """Decode a region image to an RGB tile, padded to the full tile size."""
+    import numpy as np
+    from PIL import Image
+
+    try:
+        with Image.open(io.BytesIO(data)) as image:
+            pixels = np.asarray(image.convert("RGB"))
+    except Exception as error:
+        raise _invalid("EMPAIA slide region is not a readable image") from error
+    if pixels.shape[:2] != (height, width):
+        raise _invalid("EMPAIA slide region has unexpected dimensions")
+    tile = np.zeros((tile_size, tile_size, 3), dtype=np.uint8)
+    tile[:height, :width] = pixels
+    return tile
+
+
+def closest_level(slide: SlideMetadata, mpp: float) -> SlideLevel:
+    """Choose the level OpenSlide's `closest_level` would choose on the original slide."""
+    scale = (
+        mpp / (slide.pixel_size_nm_x / 1000) + mpp / (slide.pixel_size_nm_y / 1000)
+    ) / 2
+    return min(
+        slide.levels,
+        key=lambda level: abs(
+            (slide.width / level.width + slide.height / level.height) / 2 - scale
+        ),
+    )
 
 
 def _matching_level(

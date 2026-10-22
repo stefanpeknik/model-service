@@ -52,8 +52,12 @@ class InputAccess(Protocol):
 
 
 class AccessAdapter(Protocol):
+    # The model tells an adapter that fetches slides which resolution the builder reads.
     def create(
-        self, invocation: Invocation, execution_context: ExecutionContext
+        self,
+        invocation: Invocation,
+        execution_context: ExecutionContext,
+        model: ModelBinding,
     ) -> InputAccess | Awaitable[InputAccess]: ...
 
 
@@ -147,7 +151,7 @@ class BuilderApplication:
             try:
                 async with timeout:
                     access = await self._create_access(
-                        invocation, execution_context or ExecutionContext()
+                        invocation, execution_context or ExecutionContext(), model
                     )
                     result = await self._builder.run(
                         BuilderContext(
@@ -201,12 +205,15 @@ class BuilderApplication:
         return paths
 
     async def _create_access(
-        self, invocation: Invocation, execution_context: ExecutionContext
+        self,
+        invocation: Invocation,
+        execution_context: ExecutionContext,
+        model: ModelBinding,
     ) -> InputAccess:
         adapter = self._access_adapters.get(invocation.input_access.kind)
         if adapter is None:
             raise InvalidInvocation("unsupported input access kind")
-        access = adapter.create(invocation, execution_context)
+        access = adapter.create(invocation, execution_context, model)
         if inspect.isawaitable(access):
             return await access
         return access

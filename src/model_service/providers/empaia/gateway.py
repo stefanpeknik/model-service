@@ -71,8 +71,13 @@ class EmpaiaGateway(Protocol):
         """Fetch the job's resolved provider configuration as JSON values."""
         ...
 
-    async def materialize_input(self, name: str, directory: str) -> str:
-        """Make a named job input available inside `directory`; return its file path."""
+    async def materialize_input(
+        self, name: str, directory: str, *, mpp: float | None = None
+    ) -> str:
+        """Make a named job input available inside `directory`; return its file path.
+
+        `mpp` is the resolution the builder reads, for gateways that fetch slides.
+        """
         ...
 
     async def publish_output(self, name: str, output: BuilderOutput) -> None:
