@@ -53,7 +53,7 @@ rayImage:
   # Thin code layer over the October GPU image (same Harbor repository, so
   # its large base layers are not uploaded again).
   repository: cerit.io/stefanpeknik/model-service-workflow-gpu
-  tag: empaia-2
+  tag: empaia-3
   pullPolicy: IfNotPresent
 
 storage:
@@ -70,7 +70,7 @@ executionScheduler:
   replicas: 1
   image:
     repository: cerit.io/stefanpeknik/model-service-scheduler
-    tag: empaia-2
+    tag: empaia-3
     pullPolicy: IfNotPresent
   database:
     existingSecret: model-service-validation-db
@@ -93,3 +93,5 @@ executionScheduler:
     # The scratch volume, which the peknik workers already mount at /mnt/scratch.
     workspaceRoot: /mnt/scratch
     workspaceClaim: model-service-validation-full-wsi-scratch
+    # Read the mock's slide through the App API, as in the EMPAIA test instance.
+    slideAccess: http

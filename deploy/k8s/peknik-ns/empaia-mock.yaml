@@ -81,20 +81,28 @@ spec:
       securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
       containers:
         - name: app-service
-          image: cerit.io/stefanpeknik/model-service-scheduler:mock-appservice-2
+          image: cerit.io/stefanpeknik/model-service-scheduler:mock-appservice-5
           command: [uvicorn, "testing.empaia_app_service:app", --host, 0.0.0.0, --port, "8000"]
           env:
             - {name: MOCK_INPUT_ROOT, value: /mnt/shared/empaia-mock}
             # The prostate slide used for model-service acceptance (see its README).
             - {name: MOCK_FILE_SLIDE, value: /mnt/shared/inputs/prostate-wsi/67df0411-395d-5d73-9c2f-3e0ffef45491.mrxs}
             - {name: MOCK_FILE_ROI, value: /mnt/shared/inputs/prostate-wsi/tissue-mask-open-slide.tiff}
+            # Region of interest when model-service reads the slide over HTTP (level-0 px).
+            - name: MOCK_FILE_RECTANGLE
+              value: '{"upper_left":[25000,70000],"width":30000,"height":50000}'
             - name: MOCK_FILE_SLIDE_METADATA
               value: '{"extent":{"x":89262,"y":204744},"pixel_size_nm":{"x":242.797397769517,"y":242.797397769517},"levels":[{"extent":{"x":89262,"y":204744}},{"extent":{"x":44631,"y":102372}},{"extent":{"x":22315,"y":51186}},{"extent":{"x":11157,"y":25593}},{"extent":{"x":5578,"y":12796}},{"extent":{"x":2789,"y":6398}},{"extent":{"x":1394,"y":3199}},{"extent":{"x":697,"y":1599}},{"extent":{"x":348,"y":799}}]}'
           ports: [{containerPort: 8000}]
           securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
           resources:
             requests: {cpu: 100m, memory: 128Mi}
-            limits: {cpu: "1", memory: 512Mi}
+            limits: {cpu: "2", memory: 2Gi}
+          # The region route reads MOCK_FILE_SLIDE itself.
+          volumeMounts: [{name: shared, mountPath: /mnt/shared, readOnly: true}]
+      volumes:
+        - name: shared
+          persistentVolumeClaim: {claimName: model-service-validation-full-wsi-outputs, readOnly: true}
 ---
 apiVersion: v1
 kind: Service
