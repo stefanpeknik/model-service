@@ -9,7 +9,8 @@ The portal app's IDs are derived from the EAD namespace, so registering the
 same app again replaces it. Prints the app ID that jobs are created for.
 
 A marketplace that requires authentication takes the bearer token from the
-`EMPAIA_TOKEN` environment variable (e.g. copied from the Workbench).
+`EMPAIA_TOKEN` environment variable, or from the file named by
+`EMPAIA_TOKEN_FILE` (e.g. a token copied from the Workbench).
 """
 
 from __future__ import annotations
@@ -109,7 +110,10 @@ def main() -> None:
     image = f"http::{args.target}/builders/{app['builder']}/models/{app['model']}"
     body = portal_app(ead, image, args.organization_id)
     headers = {"Content-Type": "application/json"}
-    if token := os.environ.get("EMPAIA_TOKEN"):
+    token = os.environ.get("EMPAIA_TOKEN")
+    if token is None and (token_file := os.environ.get("EMPAIA_TOKEN_FILE")):
+        token = Path(token_file).expanduser().read_text().strip()
+    if token:
         headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(
         f"{args.marketplace_url.rstrip('/')}/v1/custom-mock/portal-apps",
