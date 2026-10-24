@@ -7,12 +7,16 @@ model-service configured as `<target>` in `JES_HTTP_TARGETS`.
 
 The portal app's IDs are derived from the EAD namespace, so registering the
 same app again replaces it. Prints the app ID that jobs are created for.
+
+A marketplace that requires authentication takes the bearer token from the
+`EMPAIA_TOKEN` environment variable (e.g. copied from the Workbench).
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -104,10 +108,13 @@ def main() -> None:
     ead = generate_ead(app)
     image = f"http::{args.target}/builders/{app['builder']}/models/{app['model']}"
     body = portal_app(ead, image, args.organization_id)
+    headers = {"Content-Type": "application/json"}
+    if token := os.environ.get("EMPAIA_TOKEN"):
+        headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(
         f"{args.marketplace_url.rstrip('/')}/v1/custom-mock/portal-apps",
         data=json.dumps(body).encode(),
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         method="POST",
     )
     try:
