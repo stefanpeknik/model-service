@@ -28,6 +28,10 @@ spec:
         app.kubernetes.io/name: model-service-execution-scheduler
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+{{- with .Values.executionScheduler.empaia.dnsSearches }}
+      dnsConfig:
+        searches: {{ toJson . }}
+{{- end }}
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true

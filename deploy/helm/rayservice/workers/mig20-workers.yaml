@@ -6,6 +6,10 @@ rayStartParams:
   num-gpus: "1"
 template:
   spec:
+{{- with .Values.executionScheduler.empaia.dnsSearches }}
+    dnsConfig:
+      searches: {{ toJson . }}
+{{- end }}
     securityContext:
       fsGroup: 1000
       fsGroupChangePolicy: OnRootMismatch
