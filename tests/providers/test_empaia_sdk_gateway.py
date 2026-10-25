@@ -4,16 +4,53 @@ from __future__ import annotations
 
 import asyncio
 import unittest
+from unittest.mock import patch
 
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 from rationai.empaia.app_service import AppServiceClient
 
-from model_service.providers.empaia.gateway import EmpaiaGatewayError
-from model_service.providers.empaia.http_gateway import HttpEmpaiaGateway
+from model_service.providers.empaia.gateway import (
+    EmpaiaGatewayError,
+    EmpaiaJobContext,
+)
+from model_service.providers.empaia.http_gateway import (
+    HttpEmpaiaGateway,
+    create_http_gateway,
+)
 
 
 class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
+    async def test_app_service_timeout_comes_from_the_environment(self) -> None:
+        async def slow_pixelmap(_request: web.Request) -> web.Response:
+            await asyncio.sleep(0.3)
+            return web.json_response({"id": "pixelmap-1"})
+
+        app = web.Application()
+        app.router.add_post("/v3/job/outputs/heatmap", slow_pixelmap)
+        async with TestServer(app) as server:
+            context = EmpaiaJobContext(
+                api_url=str(server.make_url("/")), job_id="job", credential="token"
+            )
+            for seconds, succeeds in (("0.05", False), ("5", True)):
+                with (
+                    self.subTest(timeout=seconds),
+                    patch.dict(
+                        "os.environ", {"EMPAIA_APP_SERVICE_TIMEOUT_SECONDS": seconds}
+                    ),
+                ):
+                    gateway = create_http_gateway(context)
+                    try:
+                        if succeeds:
+                            pixelmap = await gateway.create_pixelmap("heatmap", {})
+                            self.assertEqual(pixelmap, "pixelmap-1")
+                        else:
+                            with self.assertRaises(EmpaiaGatewayError) as raised:
+                                await gateway.create_pixelmap("heatmap", {})
+                            self.assertTrue(raised.exception.outcome_unknown)
+                    finally:
+                        await gateway.close()
+
     async def test_disconnect_after_accepted_put_is_unknown_without_resend(self):
         requests = []
 

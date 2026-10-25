@@ -78,7 +78,10 @@ Status on 2026-10-25, after the first test-instance job
   bypass the scheduler's durable mutation guard.
 - 2 (failure messages): fixed for input preparation; App Service failures now
   carry their own message (`input_unavailable`).
-- 3 (AppService read timeout): kept at the SDK defaults; 17,600 region reads
+- 3 (AppService timeout): now `EMPAIA_APP_SERVICE_TIMEOUT_SECONDS`, default 60 s.
+  The SDK default of 5 s failed a Prostate Heatmap job on 2026-10-25: creating
+  the pixelmap took 10 s (it was created anyway, so an empty pixelmap remains).
+  Earlier, 17,600 region reads
   through the real App Service passed.
 - 5 (queues): the test instance runs remote apps in the default CPU queue.
 - 6 (GPU): the prostate model got a MIG slice in peknik-ns (warm-up); no

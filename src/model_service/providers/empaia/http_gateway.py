@@ -354,11 +354,17 @@ _READ_RETRY_SECONDS = 1.0
 
 
 def create_http_gateway(context: EmpaiaJobContext) -> HttpEmpaiaGateway:
-    """Construct the default HTTP gateway from protected job settings and `EMPAIA_SLIDE_ACCESS`."""
+    """Construct the default HTTP gateway from protected job settings, `EMPAIA_SLIDE_ACCESS` and `EMPAIA_APP_SERVICE_TIMEOUT_SECONDS`."""
+    # Creating a pixelmap took 10 s on the EMPAIA test instance; the SDK's 5 s
+    # default turned that into a failed job with an orphaned pixelmap.
+    timeout = float(os.environ.get("EMPAIA_APP_SERVICE_TIMEOUT_SECONDS", "60"))
     return HttpEmpaiaGateway(
         context.api_url,
         context.job_id,
         context.credential,
+        client=AppServiceClient(
+            context.api_url, context.job_id, context.credential, timeout=timeout
+        ),
         slide_access=SlideAccess(os.environ.get("EMPAIA_SLIDE_ACCESS", "direct")),
     )
 
