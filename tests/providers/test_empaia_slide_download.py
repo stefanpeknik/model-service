@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -21,10 +22,10 @@ WIDTH, HEIGHT = 1200, 700
 
 
 def pyramid() -> list[np.ndarray]:
-    """Two levels of a smooth RGB image; level 1 is level 0 halved."""
+    """Three levels of a smooth RGB image: level 0, halved, and an eighth."""
     y, x = np.mgrid[0:HEIGHT, 0:WIDTH]
     base = np.stack([x % 256, y % 256, (x + y) // 8 % 256], axis=-1).astype(np.uint8)
-    return [base, base[::2, ::2]]
+    return [base, base[::2, ::2], base[::8, ::8]]
 
 
 SLIDE = SlideMetadata(
@@ -86,6 +87,34 @@ class SlideDownloadTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(("slide-1", 1, 512, 256, 88, 94), server.requests)
         difference = np.abs(pixels.astype(int) - pyramid()[1].astype(int))
         self.assertLess(difference.mean(), 3)
+
+    async def test_a_coarse_level_is_appended_for_finding_tissue(self) -> None:
+        server = RegionServer()
+        slide = replace(
+            SLIDE,
+            levels=(
+                *SLIDE.levels,
+                SlideLevel(index=2, width=WIDTH // 8, height=-(-HEIGHT // 8)),
+            ),
+        )
+        with TemporaryDirectory() as directory:
+            target = Path(directory) / "slide.tiff"
+
+            await TiffSlideDownloader(tile_size=256).download(
+                server,  # type: ignore[arg-type]
+                slide,
+                0.48,
+                target,
+            )
+
+            with OpenSlide(str(target)) as downloaded:
+                self.assertEqual(downloaded.level_dimensions, ((600, 350), (150, 88)))
+                self.assertEqual(downloaded.closest_level(0.48), 0)
+                self.assertEqual(downloaded.closest_level(8.0), 1)
+                overview = np.asarray(downloaded.read_region((0, 0), 1, (150, 88)))
+        difference = np.abs(overview[..., :3].astype(int) - pyramid()[2].astype(int))
+        self.assertLess(difference.mean(), 4)
+        self.assertEqual({request[1] for request in server.requests}, {1, 2})
 
     async def test_failed_region_leaves_no_partial_slide(self) -> None:
         server = RegionServer(fail_at=(256, 256))

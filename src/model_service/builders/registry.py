@@ -78,6 +78,8 @@ class HeatmapConfiguration(BaseModel):
     output_tile_height: Annotated[int, Field(strict=True, gt=0)] = 256
     output_tile_width: Annotated[int, Field(strict=True, gt=0)] = 256
     encoding: ScoreEncoding = ScoreEncoding.UINT8
+    # Skip tiles without tissue; they score 0.
+    skip_background: bool = True
 
 
 class EmbeddingConfiguration(BaseModel):

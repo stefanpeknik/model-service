@@ -36,6 +36,7 @@ class HeatmapRequest:
     output_tile_height: int
     output_tile_width: int
     encoding: ScoreEncoding = ScoreEncoding.UINT8
+    skip_background: bool = False
 
 
 class TilePredictor(Protocol):
@@ -70,7 +71,12 @@ class SlideHeatmapProcessor:
         tasks: set[asyncio.Task[None]] = set()
         with (
             open_slide(request.slide_path, "slide") as slide,
-            TileReader.open(slide, request.mask_path, model.mpp) as reader,
+            TileReader.open(
+                slide,
+                request.mask_path,
+                model.mpp,
+                skip_background=request.skip_background,
+            ) as reader,
             ThreadPoolExecutor(max_workers=self._num_threads) as executor,
         ):
             extent_x, extent_y = slide.level_dimensions[reader.level]
@@ -84,13 +90,16 @@ class SlideHeatmapProcessor:
                 storage="memmap",
             )
             logger.info(
-                "heatmap of %s: level %d (%dx%d px), %d-px tiles, stride %d",
+                "heatmap of %s: level %d (%dx%d px), %d-px tiles, stride %d, %s",
                 model.id,
                 reader.level,
                 extent_x,
                 extent_y,
                 tile_size,
                 stride,
+                "no background filter"
+                if reader.tissue is None
+                else f"tissue on {reader.tissue.fraction:.0%} of the slide",
             )
             started = last_report = time.monotonic()
             submitted = 0

@@ -101,7 +101,12 @@ defaults. One Ray application per builder (`builders.serve:app`, route
   setting.
 - `tile-embeddings` reads tiles at the slide level closest to the model's
   `mpp`, and records level, downsample and both resolutions in the HDF5.
-- Without a mask, every grid tile is processed.
+- The heatmap builder skips tiles without tissue (`skip_background`, on by
+  default): a tissue mask from the slide level closest to 8 µm/px, by colour
+  saturation with an Otsu threshold, so white glass and transparent (black)
+  regions are not sent to the model; skipped tiles score 0. It combines with a
+  region-of-interest mask. Slides downloaded over the App API carry that coarse
+  level as a second page. The tile-embeddings builder still processes every tile.
 
 ### Public HTTP
 

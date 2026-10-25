@@ -78,13 +78,14 @@ class SlideOverHttpTests(unittest.IsolatedAsyncioTestCase):
                         observed = (await http.get(f"/validation/jobs/{JOB}")).json()
 
             with OpenSlide(slide_path) as slide:
-                self.assertEqual(slide.level_dimensions, ((650, 450),))
+                self.assertEqual(slide.level_dimensions[0], (650, 450))
+                self.assertEqual(slide.level_count, 2)
                 self.assertAlmostEqual(float(slide.properties["openslide.mpp-x"]), 0.5)
             with OpenSlide(mask_path) as mask:
                 self.assertEqual(mask.level_dimensions[0], (1300, 900))
         self.assertEqual(observed["direct_access_reads"], 0)
-        # 650x450 in 512-px tiles: 2 columns, 1 row.
-        self.assertEqual(observed["region_reads"], 2)
+        # 650x450 in 512-px tiles (2 columns, 1 row), plus one coarse-level read.
+        self.assertEqual(observed["region_reads"], 3)
 
 
 class serve:

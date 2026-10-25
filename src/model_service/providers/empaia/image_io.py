@@ -15,6 +15,7 @@ import logging
 import math
 import queue
 from collections import deque
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -249,6 +250,7 @@ class TiffSlideDownloader:
                 )
                 await _hand_over(tiles, tile, writer)
             await writer
+            await self._append_overview(gateway, slide, level, destination)
         except BaseException:
             for _, _, task in pending:
                 task.cancel()
@@ -258,6 +260,75 @@ class TiffSlideDownloader:
                 await writer
             destination.unlink(missing_ok=True)
             raise
+
+    async def _append_overview(
+        self,
+        gateway: HttpEmpaiaGateway,
+        slide: SlideMetadata,
+        level: SlideLevel,
+        destination: Path,
+    ) -> None:
+        """Append a coarse level, so builders find tissue without reading the full level."""
+        import numpy as np
+
+        from model_service.builders.tissue import MAX_PIXELS, TISSUE_MPP
+
+        coarser = tuple(other for other in slide.levels if other.width < level.width)
+        if not coarser:
+            return
+        overview = closest_level(replace(slide, levels=coarser), TISSUE_MPP)
+        if overview.width * overview.height > MAX_PIXELS:
+            return
+        size = self._tile_size
+        pixels = np.zeros((overview.height, overview.width, 3), dtype=np.uint8)
+        limit = asyncio.Semaphore(self._concurrency)
+
+        async def fetch(x: int, y: int) -> None:
+            width = min(size, overview.width - x)
+            height = min(size, overview.height - y)
+            async with limit:
+                data = await gateway.read_region(
+                    slide.identifier, overview.index, x, y, width, height
+                )
+            tile = await asyncio.to_thread(_decode_tile, data, width, height, size)
+            pixels[y : y + height, x : x + width] = tile[:height, :width]
+
+        await asyncio.gather(
+            *(
+                fetch(x, y)
+                for y in range(0, overview.height, size)
+                for x in range(0, overview.width, size)
+            )
+        )
+        await asyncio.to_thread(self._write_page, destination, slide, overview, pixels)
+
+    def _write_page(
+        self,
+        destination: Path,
+        slide: SlideMetadata,
+        level: SlideLevel,
+        pixels: NDArray[np.uint8],
+    ) -> None:
+        import tifffile
+
+        mpp_x = slide.pixel_size_nm_x / 1000 * slide.width / level.width
+        mpp_y = slide.pixel_size_nm_y / 1000 * slide.height / level.height
+        try:
+            tifffile.imwrite(
+                destination,
+                pixels,
+                append=True,
+                subfiletype=1,  # reduced resolution: OpenSlide reads it as a level
+                tile=(256, 256),
+                photometric="rgb",
+                compression="jpeg",
+                compressionargs={"level": self._quality},
+                resolution=(10_000 / mpp_x, 10_000 / mpp_y),
+                resolutionunit="CENTIMETER",
+                bigtiff=True,
+            )
+        except Exception as error:
+            raise _unavailable("EMPAIA slide could not be written") from error
 
     def _write(
         self,

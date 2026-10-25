@@ -54,6 +54,7 @@ class HeatmapBuilder:
                     output_tile_height=config.output_tile_height,
                     output_tile_width=config.output_tile_width,
                     encoding=config.encoding,
+                    skip_background=config.skip_background,
                 ),
             )
         return BuilderResult(

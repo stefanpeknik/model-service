@@ -59,6 +59,7 @@ DEFAULT_CONFIGURATION: dict[str, JsonValue] = {
     "output_tile_height": 256,
     "output_tile_width": 256,
     "encoding": "uint8",
+    "skip_background": True,
 }
 
 

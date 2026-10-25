@@ -68,10 +68,13 @@ class FakeSlide:
 
 class FakeTileReader:
     level = 0
+    tissue = None
 
     @classmethod
     @contextmanager
-    def open(cls, _slide: object, _mask: object, _mpp: float) -> Iterator[Self]:
+    def open(
+        cls, _slide: object, _mask: object, _mpp: float, *, skip_background: bool
+    ) -> Iterator[Self]:
         yield cls()
 
     def read(self, _x: int, _y: int, tile_size: int) -> np.ndarray:
@@ -326,7 +329,9 @@ class HeatmapBuilderTests(unittest.IsolatedAsyncioTestCase):
         self._directory = TemporaryDirectory()
         self.addCleanup(self._directory.cleanup)
         self.root = Path(self._directory.name)
-        pixels = np.full((64, 96, 3), 80, dtype=np.uint8)
+        # H&E-like pink everywhere, so the background filter sees tissue.
+        pixels = np.empty((64, 96, 3), dtype=np.uint8)
+        pixels[...] = (200, 120, 160)
         write_slide(self.root / "slide.tiff", pixels)
         write_slide(self.root / "mask.tiff", np.full_like(pixels, 255))
         self.model = spatial(tile_size=32, output_tile_size=32)
@@ -403,6 +408,30 @@ class HeatmapBuilderTests(unittest.IsolatedAsyncioTestCase):
         np.testing.assert_allclose(values, 0.375)
         # 96x64 at tile 32 and stride 16: 5 x 3 grid positions.
         self.assertEqual(handle.predict.remote.await_count, 15)
+
+    async def test_background_tiles_are_skipped_unless_disabled(self) -> None:
+        pixels = np.full((64, 96, 3), 245, dtype=np.uint8)  # white glass
+        pixels[:, :48] = (200, 120, 160)  # tissue on the left half
+        write_slide(self.root / "slide.tiff", pixels)
+        cases = {
+            # Columns x = 0, 16, 32 touch the left half, in 3 rows.
+            "default": ({"encoding": "float32"}, 9),
+            "disabled": ({"encoding": "float32", "skip_background": False}, 15),
+        }
+        for case, (configuration, calls) in cases.items():
+            with self.subTest(case):
+                handle = fake_handle(
+                    self.config, np.full((32, 32), 0.375, dtype=np.float32)
+                )
+                artifact = await self.run_builder(
+                    handle, configuration=configuration, mask=False
+                )
+                _format, values = self.pixels(artifact)
+                self.assertEqual(handle.predict.remote.await_count, calls)
+                scores = values.reshape(64, 96)
+                np.testing.assert_allclose(scores[:, :48], 0.375)
+                if case == "default":
+                    np.testing.assert_array_equal(scores[:, 64:], 0)
 
     async def test_contract_mismatch_fails_before_writing(self) -> None:
         handle = fake_handle(self.config | {"tile_size": 64})
