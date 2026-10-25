@@ -148,6 +148,7 @@ class ControlledEmpaiaService:
         self.publish_failures: list[EmpaiaGatewayError] = []
         self.finalize_failures: list[EmpaiaGatewayError] = []
         self.close_failures: list[EmpaiaGatewayError] = []
+        self.absent_inputs: set[str] = set()
         self.finalized = False
         self.failures: list[str] = []
 
@@ -180,6 +181,10 @@ class FakeGateway:
         """Count configuration reads and return a copy of the configured values."""
         self._service.configuration_reads += 1
         return dict(self._service.configuration)
+
+    async def has_input(self, name: str) -> bool:
+        """Report the job's inputs; all of them unless a test removes one."""
+        return name not in self._service.absent_inputs
 
     async def materialize_input(
         self, name: str, directory: str, *, mpp: float | None = None
@@ -258,6 +263,19 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(execution.builder_id, "heatmap")
         self.assertEqual(execution.model_id, MODEL.id)
+
+    async def test_optional_inputs_the_job_lacks_are_left_out(self) -> None:
+        now = datetime.now(UTC)
+        service = ControlledEmpaiaService()
+        service.absent_inputs = {"region_of_interest"}
+        repository = InMemoryExecutionRepository(clock=lambda: now)
+        provider = EmpaiaProviderAdapter(service.gateway, allowed_api_urls=(API_URL,))
+        scheduler = scheduler_for(repository, provider, now)
+
+        scheduled = await scheduler.schedule(self._request(now, "credential"))
+        execution = await repository.get(scheduled.execution.id)
+
+        self.assertEqual(list(execution.invocation.inputs), ["slide"])
 
     async def test_gateway_factory_failure_is_classified_during_prepare(self) -> None:
         """Verify gateway factory failure is classified during prepare."""

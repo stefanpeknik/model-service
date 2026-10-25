@@ -122,6 +122,12 @@ Unknown builder or model: 404 `unknown_builder` / `unknown_model`.
 Incompatible pair: 422 `incompatible_model`. Model temporarily down: durable
 requests queue; synchronous requests get 503.
 
+EMPAIA admission asks AppService for each optional builder input and leaves out
+those the job does not have (AppService answers 404). A preprocessing app, which
+EMPAIA starts with only a slide, thus runs the heatmap builder over the whole
+slide. An app file may list the inputs it takes (`inputs: [slide]`, see
+`deploy/empaia/apps/constant-heatmap-preprocessing.yaml`).
+
 EMPAIA slide inputs reach builders one of two ways, chosen by
 `EMPAIA_SLIDE_ACCESS` on the Ray workers (Helm
 `executionScheduler.empaia.slideAccess`):

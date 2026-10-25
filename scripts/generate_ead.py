@@ -1,6 +1,7 @@
 """Generate an EMPAIA EAD from an app file binding a builder to a model.
 
-An app file (`deploy/empaia/apps/<app>.yaml`) names the builder, the model deployment and
+An app file (`deploy/empaia/apps/<app>.yaml`) names the builder, the model deployment,
+optionally the subset of the builder's inputs it takes (`inputs`), and
 the EMPAIA metadata. Input and output types come from the builder's EMPAIA
 mappings in `src/model_service/builders/registry.py`.
 """
@@ -47,6 +48,17 @@ def generate_ead(
         raise ValueError("app must name a model deployment")
     empaia = app["empaia"]
     inputs = {name: item.empaia for name, item in spec.inputs.items() if item.empaia}
+    # An app may leave out optional inputs, e.g. a preprocessing app takes only a slide.
+    if "inputs" in app:
+        selected = list(app["inputs"])
+        if unknown := set(selected) - set(inputs):
+            raise ValueError(f"app lists unknown inputs: {', '.join(sorted(unknown))}")
+        required = {name for name, item in spec.inputs.items() if item.required}
+        if missing := required & set(inputs) - set(selected):
+            raise ValueError(
+                f"app leaves out required inputs: {', '.join(sorted(missing))}"
+            )
+        inputs = {name: inputs[name] for name in selected}
     outputs = {name: item.empaia for name, item in spec.outputs.items()}
     for name, mapping in outputs.items():
         if not mapping:

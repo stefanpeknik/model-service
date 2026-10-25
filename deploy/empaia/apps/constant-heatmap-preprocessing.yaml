@@ -1,0 +1,14 @@
+# Validation only: constant-heatmap as a preprocessing app, which takes only the
+# slide, for installations that start apps from a slide (e.g. the case browser's
+# slide jobs) rather than with a drawn region. The whole slide is processed.
+builder: heatmap
+model: constant-classifier
+inputs: [slide]
+empaia:
+  name: Constant Heatmap Preprocessing
+  name_short: ConstHMPre
+  namespace: org.empaia.rationai.constant_heatmap_preprocessing.v3.0
+  description: Validation app producing a constant heatmap over the whole slide
+  mode: preprocessing
+  permissions:
+    data_transmission_to_external_service_provider: true

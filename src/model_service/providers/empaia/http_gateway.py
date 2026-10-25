@@ -176,6 +176,17 @@ class HttpEmpaiaGateway:
         value = await self._call(self._client.get_configuration())
         return ConfigurationResponse.parse(value).merged()
 
+    async def has_input(self, name: str) -> bool:
+        """AppService answers 404 for an input key the job does not have."""
+        try:
+            await self._call(self._client.get_input_data(name))
+        except EmpaiaGatewayError as error:
+            cause = error.__cause__
+            if isinstance(cause, ClientResponseError) and cause.status == 404:
+                return False
+            raise
+        return True
+
     async def materialize_input(
         self, name: str, directory: str, *, mpp: float | None = None
     ) -> str:

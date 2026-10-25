@@ -21,6 +21,9 @@ if TYPE_CHECKING:
 
 
 APP_PATH = ROOT / "deploy" / "empaia" / "apps" / "prostate-heatmap.yaml"
+PREPROCESSING_APP_PATH = (
+    ROOT / "deploy" / "empaia" / "apps" / "constant-heatmap-preprocessing.yaml"
+)
 
 
 def _with_heatmap_output(**empaia: JsonValue) -> BuilderSpec:
@@ -54,6 +57,28 @@ class EadGenerationTests(unittest.TestCase):
                 check=True,
             )
         )
+
+    def test_preprocessing_app_takes_only_the_slide(self) -> None:
+        app = load_yaml(PREPROCESSING_APP_PATH)
+
+        ead = generate_ead(app)
+
+        self.assertEqual(
+            ead["modes"],
+            {"preprocessing": {"inputs": ["slide"], "outputs": ["heatmap"]}},
+        )
+        self.assertEqual(set(ead["io"]), {"slide", "heatmap"})
+
+    def test_app_inputs_must_be_known_and_keep_required_ones(self) -> None:
+        for inputs, message in (
+            (["slide", "mask"], "unknown inputs: mask"),
+            (["region_of_interest"], "required inputs: slide"),
+        ):
+            with (
+                self.subTest(inputs=inputs),
+                self.assertRaisesRegex(ValueError, message),
+            ):
+                generate_ead({**deepcopy(self.app), "inputs": inputs})
 
     def test_app_must_name_a_model(self) -> None:
         app = deepcopy(self.app)

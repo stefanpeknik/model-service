@@ -151,9 +151,17 @@ class EmpaiaProviderAdapter:
                 )
             except InvalidInvocation as error:
                 raise InvalidScheduleRequestError(str(error)) from error
+            # A preprocessing app, for example, gets only a slide.
+            names = []
+            for name, input_spec in spec.inputs.items():
+                try:
+                    if input_spec.required or await gateway.has_input(name):
+                        names.append(name)
+                except EmpaiaGatewayError as error:
+                    _raise_preparation_error(error)
         effective_deadline = min(deadline_at, credential_expires_at)
         invocation = Invocation(
-            inputs={name: ProviderInput(name=name) for name in spec.inputs},
+            inputs={name: ProviderInput(name=name) for name in names},
             resolved_configuration=deepcopy(configuration),
             input_access=InputAccessContext(
                 kind="empaia",

@@ -71,6 +71,10 @@ class EmpaiaGateway(Protocol):
         """Fetch the job's resolved provider configuration as JSON values."""
         ...
 
+    async def has_input(self, name: str) -> bool:
+        """Whether the job has the named input; optional builder inputs depend on the app's mode."""
+        ...
+
     async def materialize_input(
         self, name: str, directory: str, *, mpp: float | None = None
     ) -> str:

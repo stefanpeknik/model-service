@@ -335,6 +335,31 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
+    async def test_input_presence_comes_from_appservice_404(self) -> None:
+        """Verify a 404 means the job lacks the input, while other failures stay errors."""
+
+        def handle(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/inputs/slide"):
+                return httpx.Response(200, json={"id": "slide-1"})
+            if request.url.path.endswith("/inputs/region_of_interest"):
+                return httpx.Response(404, json={"detail": "No such input"})
+            return httpx.Response(503)
+
+        gateway = HttpEmpaiaGateway(
+            "https://empaia.example",
+            "job-1",
+            "credential",
+            client=await self.appservice(httpx.MockTransport(handle)),
+        )
+        try:
+            self.assertTrue(await gateway.has_input("slide"))
+            self.assertFalse(await gateway.has_input("region_of_interest"))
+            with self.assertRaises(EmpaiaGatewayError) as raised:
+                await gateway.has_input("other")
+            self.assertTrue(raised.exception.retryable)
+        finally:
+            await gateway.close()
+
     async def test_rectangle_input_is_materialized_when_direct_access_is_absent(
         self,
     ) -> None:
