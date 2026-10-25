@@ -24,8 +24,8 @@ real EMPAIA installation rather than stand-ins.
 | Admission | Configuration read; `region_of_interest` probed, `404`, left out |
 | Slide download | Level 1 of a slide the size of the acceptance prostate slide (44.6k × 102k px), about 17,600 region reads through the real App Service (App Service → MDS → CDS OpenSlide plugin), about 5 minutes; 142 MB tiled TIFF |
 | Inference | About 1.12 million constant-model calls (128-px tiles, stride 0.5, whole level, no mask), about 350/s, about 57 minutes |
-| Publication | Pixelmap created, 17,600 tiles on slide level 1 (`204` each), `finalize` `200` |
-| JES | `TERMINATED` 0, about 65 minutes after start |
+| Publication | Pixelmap created, 17,600 tiles on slide level 1 (`204` each), `finalize` `200`; about 13 minutes |
+| JES | `TERMINATED` 0, about 76 minutes after start |
 
 ## Found on the way
 
