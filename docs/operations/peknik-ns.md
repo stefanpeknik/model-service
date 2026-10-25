@@ -32,7 +32,7 @@ REV=$(git rev-parse --short HEAD)
 podman build -f deploy/images/Dockerfile.code-refresh \
   --build-arg BASE=cerit.io/stefanpeknik/model-service-workflow-gpu:checkpoint-20261008-bc6a23b \
   --build-arg PYTHON=/home/ray/anaconda3/bin/python \
-  --build-arg 'EXTRA_PACKAGES=h5py>=3.11,<4 timm>=1.0,<2' \
+  --build-arg 'EXTRA_PACKAGES=h5py>=3.11,<4 timm>=1.0,<2 pydantic-settings>=2.10.0,<3' \
   --build-arg SOURCE_REVISION=$REV \
   -t cerit.io/stefanpeknik/model-service-workflow-gpu:core-$REV .
 podman build -f deploy/images/Dockerfile.code-refresh \
@@ -78,7 +78,7 @@ curl -s localhost:18080/v1/executions/<id>/result
 
 ## EMPAIA (state on 2026-10-25)
 
-- Images `empaia-6`. `executionScheduler.empaia` sets `slideAccess: http`
+- Images `empaia-7`. `executionScheduler.empaia` sets `slideAccess: http`
   (slides are downloaded through the App API) and
   `dnsSearches: [rationai-infra-test-ns.svc.cluster.local]`, so the short App
   Service name `test-jobs-app-api` that the EMPAIA test instance's Workbench

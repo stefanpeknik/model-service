@@ -7,8 +7,6 @@ from __future__ import annotations
 
 import importlib
 import logging
-import os
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, Request, status
@@ -27,6 +25,7 @@ from model_service.builders.http import (
 )
 from model_service.builders.registry import get_builder
 from model_service.builders.settings import DeploymentSettings, WorkerSettings
+from model_service.providers.empaia.settings import EmpaiaSettings
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
 
 
@@ -62,16 +61,13 @@ def build_application(config: DeploymentSettings) -> BuilderApplication:
     adapters: dict[str, AccessAdapter] = {
         "shared_storage": SharedStorageAccessAdapter(settings.shared_storage_roots)
     }
-    gateway_factory = os.environ.get("EMPAIA_GATEWAY_FACTORY")
-    if gateway_factory:
+    empaia = EmpaiaSettings()
+    if empaia.gateway_factory:
         from model_service.providers.empaia.gateway import load_gateway_factory
         from model_service.providers.empaia.input_access import EmpaiaInputAccessAdapter
 
         adapters["empaia"] = EmpaiaInputAccessAdapter(
-            load_gateway_factory(gateway_factory),
-            Path(
-                os.environ.get("EMPAIA_WORKSPACE_ROOT", "/mnt/model-service-executions")
-            ),
+            load_gateway_factory(empaia.gateway_factory), empaia.workspace_root
         )
     return BuilderApplication(spec, implementation(settings), adapters)
 

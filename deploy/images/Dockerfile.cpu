@@ -57,7 +57,7 @@ RUN sudo apt-get remove -y --purge systemd systemd-sysv && sudo apt-get autoremo
 
 RUN uv pip install --python /home/ray/anaconda3/bin/python --no-cache \
     onnxruntime lz4 ratiopath pyvips "mlflow<3.0" "h5py>=3.11,<4" \
-    "httpx>=0.27.0" "pydantic>=2.10.0" "pyyaml>=6.0.2"
+    "httpx>=0.27.0" "pydantic>=2.10.0" "pydantic-settings>=2.10.0,<3" "pyyaml>=6.0.2"
 
 WORKDIR /app
 ENV PYTHONPATH=/app

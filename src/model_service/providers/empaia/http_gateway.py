@@ -11,9 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import math
-import os
 from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
@@ -33,6 +31,7 @@ from model_service.providers.empaia.responses import (
     RectangleResponse,
     SlideResponse,
 )
+from model_service.providers.empaia.settings import EmpaiaSettings, SlideAccess
 
 
 if TYPE_CHECKING:
@@ -40,13 +39,6 @@ if TYPE_CHECKING:
 
     from model_service.builders.contracts import BuilderOutput, JsonValue
     from model_service.providers.empaia.gateway import MutationGuard
-
-
-class SlideAccess(StrEnum):
-    """How slide inputs reach the builder."""
-
-    DIRECT = "direct"  # link the file named by the RationAI direct-access route
-    HTTP = "http"  # download the needed level through the App API's region route
 
 
 @dataclass(frozen=True, slots=True)
@@ -354,18 +346,19 @@ _READ_RETRY_SECONDS = 1.0
 
 
 def create_http_gateway(context: EmpaiaJobContext) -> HttpEmpaiaGateway:
-    """Construct the default HTTP gateway from protected job settings, `EMPAIA_SLIDE_ACCESS` and `EMPAIA_APP_SERVICE_TIMEOUT_SECONDS`."""
-    # Creating a pixelmap took 10 s on the EMPAIA test instance; the SDK's 5 s
-    # default turned that into a failed job with an orphaned pixelmap.
-    timeout = float(os.environ.get("EMPAIA_APP_SERVICE_TIMEOUT_SECONDS", "60"))
+    """Construct the default HTTP gateway from protected job settings and `EmpaiaSettings`."""
+    settings = EmpaiaSettings()
     return HttpEmpaiaGateway(
         context.api_url,
         context.job_id,
         context.credential,
         client=AppServiceClient(
-            context.api_url, context.job_id, context.credential, timeout=timeout
+            context.api_url,
+            context.job_id,
+            context.credential,
+            timeout=settings.app_service_timeout_seconds,
         ),
-        slide_access=SlideAccess(os.environ.get("EMPAIA_SLIDE_ACCESS", "direct")),
+        slide_access=settings.slide_access,
     )
 
 

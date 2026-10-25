@@ -61,7 +61,7 @@ RUN uv pip install --python /home/ray/anaconda3/bin/python --no-cache \
     onnxruntime-gpu tensorrt lz4 ratiopath "mlflow<3.0" torch torchvision \
     "timm>=1.0.0" \
     "huggingface-hub>=0.23.0" "h5py>=3.11,<4" \
-    "httpx>=0.27.0" "pydantic>=2.10.0" "pyyaml>=6.0.2"
+    "httpx>=0.27.0" "pydantic>=2.10.0" "pydantic-settings>=2.10.0,<3" "pyyaml>=6.0.2"
 
 WORKDIR /app
 ENV PYTHONPATH=/app
