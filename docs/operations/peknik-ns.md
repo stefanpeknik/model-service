@@ -78,7 +78,7 @@ curl -s localhost:18080/v1/executions/<id>/result
 
 ## EMPAIA (state on 2026-10-25)
 
-- Images `empaia-5`. `executionScheduler.empaia` sets `slideAccess: http`
+- Images `empaia-6`. `executionScheduler.empaia` sets `slideAccess: http`
   (slides are downloaded through the App API) and
   `dnsSearches: [rationai-infra-test-ns.svc.cluster.local]`, so the short App
   Service name `test-jobs-app-api` that the EMPAIA test instance's Workbench

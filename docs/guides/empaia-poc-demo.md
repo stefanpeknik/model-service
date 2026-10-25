@@ -24,7 +24,7 @@ JES polls the execution (GET Location); cancel and timeout send DELETE
 | --- | --- |
 | `rationai-infra-test-ns` | JES `0.6.15-1` with `JES_HTTP_TARGETS={"model-service": "http://model-service-validation-execution-scheduler.peknik-ns.svc.cluster.local:8080/v1/empaia"}` (patched on the Deployment; restore from the deployment repo afterwards) |
 | test marketplace | **Prostate Heatmap** (`ProstHM`, preprocessing, slide only), image `http::model-service/builders/heatmap/models/prostate-classifier-1` |
-| `peknik-ns` | model-service, Helm release `model-service-validation`, images `empaia-5`, `slideAccess: http`, `dnsSearches: [rationai-infra-test-ns.svc.cluster.local]` |
+| `peknik-ns` | model-service, Helm release `model-service-validation`, images `empaia-6`, `slideAccess: http`, `dnsSearches: [rationai-infra-test-ns.svc.cluster.local]` |
 
 ## Before the demo (30 minutes ahead)
 
