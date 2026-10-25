@@ -75,3 +75,25 @@ curl -s -XPOST localhost:18080/v1/models/constant-classifier/schedule \
   -H 'Idempotency-Key: try-1' --data-binary @tile.lz4
 curl -s localhost:18080/v1/executions/<id>/result
 ```
+
+## EMPAIA (state on 2026-10-25)
+
+- Images `empaia-5`. `executionScheduler.empaia` sets `slideAccess: http`
+  (slides are downloaded through the App API) and
+  `dnsSearches: [rationai-infra-test-ns.svc.cluster.local]`, so the short App
+  Service name `test-jobs-app-api` that the EMPAIA test instance's Workbench
+  Daemon hands to JES resolves here. Allowed App Services: the peknik mock and
+  `http://test-jobs-app-api:10009`.
+- The EMPAIA test instance (`rationai-infra-test-ns`) sends jobs here through
+  its JES (`0.6.15-1`, `JES_HTTP_TARGETS` pointing at the facade). Apps are
+  registered in its marketplace with a token for JES's service client, run
+  from inside the JES pod; see `docs/guides/empaia-poc-demo.md`.
+- The stand-ins in `deploy/k8s/peknik-ns/empaia-mock.yaml` (JES, marketplace
+  mock, AppService mock, MongoDB) are scaled to zero. Scale them back for
+  tests that must not touch the test instance:
+  `kubectl -n peknik-ns scale deploy empaia-mock-mongo empaia-mock-marketplace empaia-mock-app-service empaia-mock-jes --replicas=1`.
+- Logs: builder progress and errors are in the builder replica's log
+  (`/tmp/ray/session_latest/logs/serve/replica_builder-heatmap_*.log` on the CPU
+  worker, or the Ray dashboard's Serve page); model calls in the model
+  replica's log; Python tracebacks also in `/tmp/ray/session_latest/logs/worker-*.err`.
+- Warm a GPU model before a demo with `scripts/warm_model.py`.
