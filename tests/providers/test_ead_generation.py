@@ -69,6 +69,11 @@ class EadGenerationTests(unittest.TestCase):
         )
         self.assertEqual(set(ead["io"]), {"slide", "heatmap"})
 
+    def test_every_app_file_yields_a_valid_ead(self) -> None:
+        for path in sorted((ROOT / "deploy" / "empaia" / "apps").glob("*.yaml")):
+            with self.subTest(app=path.name):
+                generate_ead(load_yaml(path))
+
     def test_app_inputs_must_be_known_and_keep_required_ones(self) -> None:
         for inputs, message in (
             (["slide", "mask"], "unknown inputs: mask"),
