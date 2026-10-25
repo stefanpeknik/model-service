@@ -99,7 +99,12 @@ def portal_app(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("app", type=Path)
-    parser.add_argument("--marketplace-url", required=True)
+    parser.add_argument("--marketplace-url")
+    parser.add_argument(
+        "--body-only",
+        action="store_true",
+        help="print the portal app JSON instead of registering it",
+    )
     parser.add_argument("--target", default="model-service")
     parser.add_argument(
         "--organization-id", default="2c7c2b5e-8d4a-4f5e-9b1a-0d2f6c3e7a10"
@@ -109,6 +114,11 @@ def main() -> None:
     ead = generate_ead(app)
     image = f"http::{args.target}/builders/{app['builder']}/models/{app['model']}"
     body = portal_app(ead, image, args.organization_id)
+    if args.body_only:
+        print(json.dumps(body, indent=2))
+        return
+    if not args.marketplace_url:
+        parser.error("--marketplace-url is required unless --body-only is given")
     headers = {"Content-Type": "application/json"}
     token = os.environ.get("EMPAIA_TOKEN")
     if token is None and (token_file := os.environ.get("EMPAIA_TOKEN_FILE")):
