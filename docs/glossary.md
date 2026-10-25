@@ -168,6 +168,27 @@ The EMPAIA declaration generated from an app file (builder, model and EMPAIA
 metadata) under `deploy/empaia/apps/`.
 _Avoid_: EAD configuration, model configuration
 
+## Quality control
+
+**QC (quality control)**:
+RationAI's quality-control service: a Ray Serve application that runs QC checks
+on a whole-slide image read from a path and writes their masks next to it.
+_Avoid_: Preprocessing, when meaning QC
+
+**QC check**:
+One detector of the QC service: residual artifacts, folding or blur, optionally
+after white-balance correction.
+
+**Artifact mask**:
+A downsampled QC output marking where a QC check found artifacts; any non-zero
+value means an artifact. The residual check's "coverage mask" is one.
+_Avoid_: Coverage mask, when meaning tissue; tissue mask
+
+**Tissue mask**:
+A mask separating tissue from background, so a builder can skip empty glass.
+QC computes one internally to filter its tiles but does not publish it.
+_Avoid_: Coverage mask
+
 ## Named clients and JES
 
 **RationAI SDK**:
