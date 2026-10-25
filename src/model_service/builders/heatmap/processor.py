@@ -8,6 +8,8 @@ writes a pyramidal TIFF at the selected slide level's resolution.
 from __future__ import annotations
 
 import asyncio
+import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
@@ -19,6 +21,10 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from model_service.builders.contracts import SpatialScoresModel
+
+
+logger = logging.getLogger(__name__)
+_PROGRESS_SECONDS = 60
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +83,17 @@ class SlideHeatmapProcessor:
                 n_channels=n_channels,
                 storage="memmap",
             )
+            logger.info(
+                "heatmap of %s: level %d (%dx%d px), %d-px tiles, stride %d",
+                model.id,
+                reader.level,
+                extent_x,
+                extent_y,
+                tile_size,
+                stride,
+            )
+            started = last_report = time.monotonic()
+            submitted = 0
             try:
 
                 async def process_tile(x: int, y: int) -> None:
@@ -104,8 +121,25 @@ class SlideHeatmapProcessor:
                         )
                         await asyncio.gather(*done)
                     tasks.add(asyncio.create_task(process_tile(x, y)))
+                    submitted += 1
+                    if time.monotonic() - last_report >= _PROGRESS_SECONDS:
+                        last_report = time.monotonic()
+                        logger.info(
+                            "heatmap of %s: %d grid positions after %.0f s, at y=%d of %d",
+                            model.id,
+                            submitted,
+                            last_report - started,
+                            y,
+                            extent_y,
+                        )
                 if tasks:
                     await asyncio.gather(*tasks)
+                logger.info(
+                    "heatmap of %s: %d grid positions in %.0f s, writing the TIFF",
+                    model.id,
+                    submitted,
+                    time.monotonic() - started,
+                )
                 result = np.asarray(mask_builder.finalize()["mask"])
                 image = pyvips.Image.new_from_array(result.transpose(1, 2, 0))
                 # Resize the padded grid before cropping; resizing to the unpadded

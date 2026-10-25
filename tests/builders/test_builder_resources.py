@@ -18,12 +18,14 @@ from model_service.builders.contracts import (
     BuilderFailure,
     BuilderResult,
     ExecutionContext,
+    FailureCode,
     InputAccessContext,
     InvalidInvocation,
     ProviderInput,
     SharedArtifact,
 )
 from model_service.builders.registry import BUILDERS, get_builder
+from model_service.providers.empaia.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.input_access import EmpaiaInputAccessAdapter
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
 from model_service.providers.standalone import StandaloneProviderAdapter
@@ -255,6 +257,58 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(asyncio.CancelledError):
                 await asyncio.wait_for(task, timeout=1)
             self.assertTrue(closed.is_set())
+
+    async def test_empaia_input_failures_keep_the_gateways_reason(self) -> None:
+        cases = [
+            EmpaiaGatewayError(
+                "EMPAIA AppService is temporarily unavailable", retryable=True
+            ),
+            EmpaiaGatewayError(
+                "EMPAIA slide region is not a readable image", retryable=False
+            ),
+        ]
+        for failure in cases:
+
+            class Gateway:
+                async def materialize_input(
+                    self,
+                    _name: str,
+                    _directory: str,
+                    *,
+                    mpp: float | None = None,
+                    failure: EmpaiaGatewayError = failure,
+                ) -> str:
+                    raise failure
+
+                async def close(self) -> None:
+                    return None
+
+            with (
+                self.subTest(message=failure.safe_message),
+                TemporaryDirectory() as directory,
+            ):
+                adapter = EmpaiaInputAccessAdapter(
+                    lambda _c: Gateway(), Path(directory)
+                )
+                with self.assertRaises(BuilderFailure) as raised:
+                    await adapter.create(
+                        invocation(
+                            "empaia",
+                            {"api_url": "https://example.invalid", "job_id": "job"},
+                            inputs={"slide": ProviderInput("slide")},
+                        ),
+                        ExecutionContext(
+                            processing_attempt_id="attempt",
+                            protected_context={
+                                "api_url": "https://example.invalid",
+                                "job_id": "job",
+                                "credential": "secret",
+                            },
+                        ),
+                    )
+                self.assertEqual(raised.exception.code, FailureCode.INPUT_UNAVAILABLE)
+                self.assertEqual(raised.exception.safe_message, failure.safe_message)
+                self.assertEqual(raised.exception.retryable, failure.retryable)
 
     async def test_empaia_access_validates_contexts_before_opening_a_gateway(
         self,

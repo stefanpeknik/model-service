@@ -6,6 +6,7 @@ Every builder application uses this module; only its user_config differs.
 from __future__ import annotations
 
 import importlib
+import logging
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -80,6 +81,12 @@ def build_application(config: DeploymentSettings) -> BuilderApplication:
 class BuilderDeployment:
     def __init__(self) -> None:
         self._application: BuilderApplication | None = None
+        # Serve only sets up its own logger; without this, model-service INFO logs
+        # never reach the replica log or the dashboard.
+        package_logger = logging.getLogger("model_service")
+        package_logger.handlers = logging.getLogger("ray.serve").handlers
+        package_logger.setLevel(logging.INFO)
+        package_logger.propagate = False
 
     def reconfigure(self, values: dict[str, object]) -> None:
         self._application = build_application(DeploymentSettings.model_validate(values))

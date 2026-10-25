@@ -17,11 +17,17 @@ from pydantic import ValidationError
 
 from model_service.builders.cleanup import close_resource
 from model_service.builders.contracts import (
+    BuilderFailure,
     ExecutionContext,
+    FailureCode,
     InvalidInvocation,
     ProviderInput,
 )
-from model_service.providers.empaia.gateway import EmpaiaInputState, EmpaiaJobContext
+from model_service.providers.empaia.gateway import (
+    EmpaiaGatewayError,
+    EmpaiaInputState,
+    EmpaiaJobContext,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -145,10 +151,19 @@ class EmpaiaInputAccessAdapter:
                         f"EMPAIA input {name!r} was not materialized"
                     )
                 paths[name] = path
-        except BaseException:
+        except BaseException as error:
             try:
                 await close_resource(gateway.close)
-            except Exception as error:
-                logger.warning("EMPAIA input cleanup failed: %s", type(error).__name__)
+            except Exception as cleanup_error:
+                logger.warning(
+                    "EMPAIA input cleanup failed: %s", type(cleanup_error).__name__
+                )
+            if isinstance(error, EmpaiaGatewayError):
+                # Keep the gateway's safe reason instead of "builder failed unexpectedly".
+                raise BuilderFailure(
+                    code=FailureCode.INPUT_UNAVAILABLE,
+                    safe_message=error.safe_message,
+                    retryable=error.retryable,
+                ) from error
             raise
         return EmpaiaInputAccess(root, gateway, paths)
