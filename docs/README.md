@@ -11,6 +11,7 @@
 | [Scheduled raw inference acceptance, 2026-10-15](operations/raw-inference-acceptance-2026-10-15.md) | Live evidence and throughput for scheduled tiles |
 | [EMPAIA jobs through JES, 2026-10-21](operations/empaia-jes-mock-2026-10-21.md) | Postmortem of the JES HTTP backend + model-service run against EMPAIA stand-ins in peknik-ns |
 | [EMPAIA slide over the App API, 2026-10-23](operations/empaia-slide-over-http-2026-10-23.md) | `EMPAIA_SLIDE_ACCESS=http` run on the prostate MIRAX slide in peknik-ns |
+| [First EMPAIA test-instance job, 2026-10-25](operations/empaia-test-instance-2026-10-25.md) | A preprocessing job from the EMPAIA test instance run end to end on model-service in peknik-ns |
 | [ADR 0001](adr/0001-run-scheduler-outside-ray-serve.md) | Why the scheduler runs outside Ray Serve |
 | [Available models](available-models.md) | Raw model routes and payloads |
 | [Ray-layer architecture](architecture/overview.md), [batching](architecture/batching.md), [queues](architecture/queues-and-backpressure.md) | Ray Serve internals |
