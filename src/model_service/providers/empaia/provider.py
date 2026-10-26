@@ -122,7 +122,7 @@ class EmpaiaProviderAdapter:
         request: ScheduleRequest,
         deadline_at: datetime,
     ) -> PreparedInvocation:
-        """Fetch and resolve configuration, create provider input references, and separate public job state from protected credentials. Cap deadlines at credential expiry."""
+        """Fetch and resolve configuration, record the job's mode, create provider input references, and separate public job state from protected credentials. Cap deadlines at credential expiry."""
         context = _schedule_payload(request.body)
         if not _allowed(context.api_url, self._allowed_api_urls):
             raise InvalidScheduleRequestError(
@@ -143,6 +143,10 @@ class EmpaiaProviderAdapter:
                 raise InvalidScheduleRequestError(
                     "EMPAIA configuration must contain only JSON-compatible values"
                 )
+            try:
+                mode = await gateway.get_mode()
+            except EmpaiaGatewayError as error:
+                _raise_preparation_error(error)
             spec = get_builder(request.builder_id)
             try:
                 configuration = spec.resolve_configuration(configuration).model_dump(
@@ -165,7 +169,7 @@ class EmpaiaProviderAdapter:
             input_access=InputAccessContext(
                 kind=InputAccessKind.EMPAIA,
                 state=EmpaiaInputState(
-                    api_url=context.api_url, job_id=context.job_id
+                    api_url=context.api_url, job_id=context.job_id, mode=mode
                 ).model_dump(mode="json"),
             ),
             deadline_at=effective_deadline,

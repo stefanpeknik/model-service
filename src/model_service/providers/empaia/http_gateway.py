@@ -19,7 +19,11 @@ from aiohttp import ClientError, ClientResponseError
 from rationai.empaia.app_service import AppServiceClient, AppServiceDecodeError
 
 from model_service.builders.contracts import InlineOutput, SharedArtifact
-from model_service.providers.empaia.gateway import EmpaiaGatewayError, EmpaiaJobContext
+from model_service.providers.empaia.gateway import (
+    EmpaiaGatewayError,
+    EmpaiaJobContext,
+    EmpaiaJobMode,
+)
 from model_service.providers.empaia.materialization import (
     link_direct_input,
     write_rectangle_input,
@@ -167,6 +171,13 @@ class HttpEmpaiaGateway:
         """GET and validate job configuration, rejecting overlapping global/customer keys."""
         value = await self._call(self._client.get_configuration())
         return ConfigurationResponse.parse(value).merged()
+
+    async def get_mode(self) -> EmpaiaJobMode:
+        value = await self._call(self._client.get_mode())
+        try:
+            return EmpaiaJobMode(value)
+        except ValueError as error:
+            raise EmpaiaGatewayError.invalid("EMPAIA job mode is unknown") from error
 
     async def has_input(self, name: str) -> bool:
         """AppService answers 404 for an input key the job does not have."""

@@ -258,6 +258,15 @@ def configuration(
     return {"global": {}, "customer": customer}
 
 
+@app.get("/v3/{job_id}/mode")
+def mode(
+    job_id: str, authorization: str | None = Header(default=None)
+) -> dict[str, object]:
+    """Report every mock job as a standalone one."""
+    _authorize(authorization)
+    return {"mode": "STANDALONE"}
+
+
 @app.get("/v3/rationai/{job_id}/inputs/{name}/direct-access")
 async def direct_access(
     job_id: str,
@@ -309,9 +318,7 @@ async def direct_access(
         filename = "slide.dat" if name == "slide" else "roi.dat"
         if _is_native(job_id):
             filename = "slide.tiff" if name == "slide" else "roi.tiff"
-        if name == "slide" and _is_scenario(
-            job_id, ValidationScenario.BUILDER_FAILURE
-        ):
+        if name == "slide" and _is_scenario(job_id, ValidationScenario.BUILDER_FAILURE):
             filename = "missing-slide.dat"
         root = os.environ.get("MOCK_INPUT_ROOT", "/mnt/validation/input")
         storage_path = f"{root}/{filename}"

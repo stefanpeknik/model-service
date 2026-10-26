@@ -131,10 +131,10 @@ requests queue; synchronous requests get 503.
 
 EMPAIA admission asks AppService for each optional builder input and leaves out
 those the job does not have (AppService answers 404). That is all the job's mode
-(standalone, preprocessing, …) changes for a builder, so model-service does not
-read the mode itself. A preprocessing app, which
-EMPAIA starts with only a slide, thus runs the heatmap builder over the whole
-slide. An app file may list the inputs it takes (`inputs: [slide]`, see
+(standalone, preprocessing, …) changes for a builder. Admission still reads the
+mode and records it in the invocation's EMPAIA input state, but nothing acts on
+it yet. A preprocessing app, which EMPAIA starts with only a slide, thus runs
+the heatmap builder over the whole slide. An app file may list the inputs it takes (`inputs: [slide]`, see
 `deploy/empaia/apps/constant-heatmap-preprocessing.yaml`).
 
 EMPAIA slide inputs reach builders one of two ways, chosen by

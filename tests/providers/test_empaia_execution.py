@@ -20,7 +20,12 @@ from model_service.builders.contracts import (
     SpatialScoresModel,
 )
 from model_service.builders.registry import get_builder
-from model_service.providers.empaia.gateway import EmpaiaGatewayError, EmpaiaJobContext
+from model_service.providers.empaia.gateway import (
+    EmpaiaGatewayError,
+    EmpaiaInputState,
+    EmpaiaJobContext,
+    EmpaiaJobMode,
+)
 from model_service.providers.empaia.input_access import EmpaiaInputAccessAdapter
 from model_service.providers.empaia.provider import EmpaiaProviderAdapter
 from model_service.scheduler.active_work import ActiveWorkRegistry
@@ -150,6 +155,7 @@ class ControlledEmpaiaService:
         self.finalize_failures: list[EmpaiaGatewayError] = []
         self.close_failures: list[EmpaiaGatewayError] = []
         self.absent_inputs: set[str] = set()
+        self.mode = EmpaiaJobMode.STANDALONE
         self.finalized = False
         self.failures: list[str] = []
 
@@ -182,6 +188,9 @@ class FakeGateway:
         """Count configuration reads and return a copy of the configured values."""
         self._service.configuration_reads += 1
         return dict(self._service.configuration)
+
+    async def get_mode(self) -> EmpaiaJobMode:
+        return self._service.mode
 
     async def has_input(self, name: str) -> bool:
         """Report the job's inputs; all of them unless a test removes one."""
@@ -277,6 +286,20 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         execution = await repository.get(scheduled.execution.id)
 
         self.assertEqual(list(execution.invocation.inputs), ["slide"])
+
+    async def test_the_jobs_mode_is_recorded(self) -> None:
+        now = datetime.now(UTC)
+        service = ControlledEmpaiaService()
+        service.mode = EmpaiaJobMode.PREPROCESSING
+        repository = InMemoryExecutionRepository(clock=lambda: now)
+        provider = EmpaiaProviderAdapter(service.gateway, allowed_api_urls=(API_URL,))
+        scheduler = scheduler_for(repository, provider, now)
+
+        scheduled = await scheduler.schedule(self._request(now, "credential"))
+        execution = await repository.get(scheduled.execution.id)
+
+        state = EmpaiaInputState.model_validate(execution.invocation.input_access.state)
+        self.assertEqual(state.mode, EmpaiaJobMode.PREPROCESSING)
 
     async def test_gateway_factory_failure_is_classified_during_prepare(self) -> None:
         """Verify gateway factory failure is classified during prepare."""

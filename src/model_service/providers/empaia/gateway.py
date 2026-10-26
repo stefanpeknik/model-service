@@ -7,6 +7,7 @@ uses it in the builder process.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -46,6 +47,15 @@ class EmpaiaGatewayError(RuntimeError):
         return cls(safe_message, retryable=True)
 
 
+class EmpaiaJobMode(StrEnum):
+    """How the EMPAIA job was started, as AppService reports it."""
+
+    STANDALONE = "STANDALONE"
+    PREPROCESSING = "PREPROCESSING"
+    POSTPROCESSING = "POSTPROCESSING"
+    REPORT = "REPORT"
+
+
 class EmpaiaInputState(BaseModel):
     """Carry the non-secret API origin and job ID used to select provider input access."""
 
@@ -53,6 +63,9 @@ class EmpaiaInputState(BaseModel):
 
     api_url: Annotated[str, Field(min_length=1)]
     job_id: Annotated[str, Field(min_length=1)]
+    # Recorded at admission; nothing depends on it yet. Executions admitted
+    # before it was recorded have none.
+    mode: Annotated[EmpaiaJobMode | None, Field(strict=False)] = None
 
 
 class EmpaiaJobContext(EmpaiaInputState):
@@ -78,6 +91,10 @@ class EmpaiaGateway(Protocol):
 
     async def get_configuration(self) -> dict[str, JsonValue]:
         """Fetch the job's resolved provider configuration as JSON values."""
+        ...
+
+    async def get_mode(self) -> EmpaiaJobMode:
+        """Fetch how the job was started."""
         ...
 
     async def has_input(self, name: str) -> bool:
