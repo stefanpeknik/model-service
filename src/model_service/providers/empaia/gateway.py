@@ -35,6 +35,16 @@ class EmpaiaGatewayError(RuntimeError):
         self.retryable = retryable
         self.outcome_unknown = outcome_unknown
 
+    @classmethod
+    def invalid(cls, safe_message: str) -> EmpaiaGatewayError:
+        """Rejected or malformed integration data: retrying will not help."""
+        return cls(safe_message, retryable=False)
+
+    @classmethod
+    def unavailable(cls, safe_message: str) -> EmpaiaGatewayError:
+        """A transient failure: the attempt may be retried."""
+        return cls(safe_message, retryable=True)
+
 
 class EmpaiaInputState(BaseModel):
     """Carry the non-secret API origin and job ID used to select provider input access."""

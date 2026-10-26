@@ -3,17 +3,19 @@
 An EMPAIA app registered as `http::<target>/builders/<builder>/models/<model>`
 reaches `POST /builders/<builder>/models/<model>` with what an app container
 would get: the App API URL, the job ID and the job token. The registration names
-what runs; the job's inputs, mode and configuration are read from the App API
-like a container would. The response's `Location` is then polled with `GET` and
-cancelled with `DELETE`.
+what runs; the job's inputs and configuration are read from the App API like a
+container would. Submission is idempotent per job: JES's `Idempotency-Key` is the
+job ID, so a different key is rejected. The response's `Location` is then polled
+with `GET` and cancelled with `DELETE`. Remote statuses are `ExecutionStatus`
+values.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import TYPE_CHECKING, Annotated
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, Header, Response, status
 from pydantic import Field
 
 from model_service.facade.routes.common import (
@@ -38,9 +40,6 @@ if TYPE_CHECKING:
     from model_service.scheduler.contracts import ExecutionView
 
 
-type RemoteStatus = Literal["queued", "running", "succeeded", "failed", "cancelled"]
-
-
 @dataclass(frozen=True, slots=True)
 class EmpaiaExecutionRequest:
     app_api: Annotated[str, Field(min_length=1)]
@@ -52,7 +51,7 @@ class EmpaiaExecutionRequest:
 
 @dataclass(frozen=True, slots=True)
 class EmpaiaExecutionStatus:
-    status: RemoteStatus
+    status: ExecutionStatus
     message: str | None = None
 
 
@@ -69,7 +68,14 @@ def create_router(scheduler: Scheduler, capacity: Capacity) -> APIRouter:
         model_id: str,
         body: EmpaiaExecutionRequest,
         response: Response,
+        idempotency_key: Annotated[str | None, Header()] = None,
     ) -> EmpaiaExecutionStatus:
+        if idempotency_key is not None and idempotency_key != body.job_id:
+            raise http_error(
+                422,
+                ApiErrorCode.INVALID_REQUEST,
+                "Idempotency-Key must be the job ID",
+            )
         result = await submit(
             scheduler,
             ScheduleRequest(
@@ -118,20 +124,11 @@ def remote_status(execution: ExecutionView) -> EmpaiaExecutionStatus:
     not received the failure report yet, the job would end without its reason.
     """
     if execution.provider_pending:
-        return EmpaiaExecutionStatus("running")
+        return EmpaiaExecutionStatus(ExecutionStatus.RUNNING)
     if execution.status is ExecutionStatus.FAILED:
         message = execution.error.message if execution.error is not None else None
-        return EmpaiaExecutionStatus("failed", message)
-    return EmpaiaExecutionStatus(_REMOTE[execution.status], execution.message)
-
-
-_REMOTE: dict[ExecutionStatus, RemoteStatus] = {
-    ExecutionStatus.QUEUED: "queued",
-    ExecutionStatus.RUNNING: "running",
-    ExecutionStatus.SUCCEEDED: "succeeded",
-    ExecutionStatus.FAILED: "failed",
-    ExecutionStatus.CANCELLED: "cancelled",
-}
+        return EmpaiaExecutionStatus(ExecutionStatus.FAILED, message)
+    return EmpaiaExecutionStatus(execution.status, execution.message)
 
 
 def _unknown_execution() -> Exception:

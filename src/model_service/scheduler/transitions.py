@@ -178,11 +178,6 @@ class ExecutionTransitions:
         )
         assert claimed.work_kind is not None
         assert claimed.fencing_token is not None
-        attempt = (
-            claimed.processing_attempts
-            if claimed.work_kind is WorkKind.PROCESSING
-            else claimed.finish_attempts
-        )
         return ClaimDecision(
             execution=claimed,
             claim=WorkClaim(
@@ -193,7 +188,7 @@ class ExecutionTransitions:
                 kind=claimed.work_kind,
                 invocation=claimed.invocation,
                 protected_context=claimed.protected_context,
-                attempt=attempt,
+                attempt=claimed.current_attempt,
                 fencing_token=claimed.fencing_token,
                 result=claimed.result,
                 error=claimed.error,
@@ -443,25 +438,13 @@ class ExecutionTransitions:
                     report=True,
                 )
             return self._clear_work(execution, now)
-        attempts = (
-            execution.processing_attempts
-            if execution.work_kind is WorkKind.PROCESSING
-            else execution.finish_attempts
-        )
-        policy = (
-            self._processing_policy
-            if execution.work_kind is WorkKind.PROCESSING
-            else self._finish_policy
-        )
+        processing = execution.work_kind is WorkKind.PROCESSING
+        policy = self._processing_policy if processing else self._finish_policy
         return self._retry(
             execution,
             now,
-            policy.backoff(attempts),
-            status=(
-                ExecutionStatus.QUEUED
-                if execution.work_kind is WorkKind.PROCESSING
-                else execution.status
-            ),
+            policy.backoff(execution.current_attempt),
+            status=ExecutionStatus.QUEUED if processing else execution.status,
         )
 
     def deadline(self, execution: ExecutionRecord, now: datetime) -> ExecutionRecord:

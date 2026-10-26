@@ -190,7 +190,9 @@ class HttpEmpaiaGateway:
         value = await self._call(self._client.get_input_data(name))
         if self._slide_access is SlideAccess.HTTP and _is_slide(value):
             if mpp is None:
-                raise _invalid("EMPAIA slide download needs the model resolution")
+                raise EmpaiaGatewayError.invalid(
+                    "EMPAIA slide download needs the model resolution"
+                )
             target = Path(directory) / "slide.tiff"
             await self._slide_downloader.download(
                 self, _slide_metadata(value), mpp, target
@@ -214,7 +216,7 @@ class HttpEmpaiaGateway:
         if isinstance(output, SharedArtifact):
             await self._artifact_publisher.publish(self, name, output)
             return
-        raise _invalid("EMPAIA output type is unsupported")
+        raise EmpaiaGatewayError.invalid("EMPAIA output type is unsupported")
 
     async def finalize(self) -> None:
         """PUT the guarded successful job-finalization request."""
@@ -323,8 +325,12 @@ class HttpEmpaiaGateway:
                     outcome_unknown=mutation,
                 ) from error
             if error.status in {401, 403}:
-                raise _invalid("EMPAIA rejected the job credential") from error
-            raise _invalid("EMPAIA rejected the application request") from error
+                raise EmpaiaGatewayError.invalid(
+                    "EMPAIA rejected the job credential"
+                ) from error
+            raise EmpaiaGatewayError.invalid(
+                "EMPAIA rejected the application request"
+            ) from error
         except (ClientError, TimeoutError) as error:
             raise EmpaiaGatewayError(
                 "EMPAIA AppService is temporarily unavailable",
@@ -379,7 +385,9 @@ def _primitive_output(name: str, job_id: str, value: JsonValue) -> dict[str, obj
     elif isinstance(value, str) and value:
         output_type = "string"
     else:
-        raise _invalid("EMPAIA inline output must be a non-empty primitive value")
+        raise EmpaiaGatewayError.invalid(
+            "EMPAIA inline output must be a non-empty primitive value"
+        )
     return {
         "name": name,
         "type": output_type,
@@ -414,8 +422,3 @@ def _rectangle(value: object) -> Rectangle:
         width=math.ceil(rectangle.width),
         height=math.ceil(rectangle.height),
     )
-
-
-def _invalid(message: str) -> EmpaiaGatewayError:
-    """Construct a safe nonretryable gateway error for rejected or malformed integration data."""
-    return EmpaiaGatewayError(message, retryable=False)

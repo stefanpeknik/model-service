@@ -146,6 +146,13 @@ class ExecutionRecord:
     updated_at: datetime
     operation: Operation = Operation.BUILDER
 
+    @property
+    def current_attempt(self) -> int:
+        """Attempts made at the work now due: processing or provider finish."""
+        if self.work_kind is WorkKind.PROCESSING:
+            return self.processing_attempts
+        return self.finish_attempts
+
 
 @dataclass(frozen=True, slots=True)
 class AdmissionResult:

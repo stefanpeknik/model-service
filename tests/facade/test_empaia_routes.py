@@ -128,6 +128,17 @@ class EmpaiaRouteTests(unittest.IsolatedAsyncioTestCase):
             response.headers["location"], "/v1/empaia/executions/execution-1"
         )
 
+    async def test_idempotency_key_must_be_the_job_id(self) -> None:
+        scheduler = ScriptedScheduler(view(ExecutionStatus.QUEUED))
+        async with client(scheduler) as http:
+            response = await http.post(
+                SUBMIT, json=JOB, headers={"Idempotency-Key": "another-job"}
+            )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["detail"]["code"], "invalid_request")
+        self.assertEqual(scheduler.requests, [])
+
     async def test_unknown_model_and_invalid_body_are_rejected_safely(self) -> None:
         scheduler = ScriptedScheduler(view(ExecutionStatus.QUEUED))
         scheduler.unknown_models.add("other-model")

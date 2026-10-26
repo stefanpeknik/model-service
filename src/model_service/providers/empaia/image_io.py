@@ -61,18 +61,24 @@ class TiffPixelmapPublisher:
     ) -> None:
         """Validate and read the TIFF, choose the nearest slide level, create a pixelmap, and upload padded float32 tiles sequentially."""
         if artifact.media_type != "image/tiff":
-            raise _invalid("EMPAIA shared output must be an image/tiff artifact")
+            raise EmpaiaGatewayError.invalid(
+                "EMPAIA shared output must be an image/tiff artifact"
+            )
         path = Path(artifact.path)
         if not path.is_file():
-            raise _invalid("EMPAIA output artifact is unavailable")
+            raise EmpaiaGatewayError.invalid("EMPAIA output artifact is unavailable")
         try:
             import pyvips
 
             image = pyvips.Image.new_from_file(str(path), access="sequential")
         except Exception as error:
-            raise _invalid("EMPAIA output artifact is not a readable TIFF") from error
+            raise EmpaiaGatewayError.invalid(
+                "EMPAIA output artifact is not a readable TIFF"
+            ) from error
         if image.format not in {"uchar", "float"}:
-            raise _invalid("EMPAIA score TIFF must contain uint8 or float32 values")
+            raise EmpaiaGatewayError.invalid(
+                "EMPAIA score TIFF must contain uint8 or float32 values"
+            )
         scale = 255.0 if image.format == "uchar" else 1.0
         slide = await gateway.slide_metadata()
         level = _matching_level(slide.levels, image.width, image.height)
@@ -154,7 +160,9 @@ class VipsRectangleMaskWriter:
             width = min(rectangle.width, slide.width - x)
             height = min(rectangle.height, slide.height - y)
             if width <= 0 or height <= 0:
-                raise _invalid("EMPAIA rectangle input does not overlap the slide")
+                raise EmpaiaGatewayError.invalid(
+                    "EMPAIA rectangle input does not overlap the slide"
+                )
             mask = pyvips.Image.black(slide.width, slide.height)
             selected = pyvips.Image.black(width, height).new_from_image(255)
             mask = mask.insert(selected, x, y)
@@ -172,7 +180,7 @@ class VipsRectangleMaskWriter:
         except EmpaiaGatewayError:
             raise
         except Exception as error:
-            raise _unavailable(
+            raise EmpaiaGatewayError.unavailable(
                 "EMPAIA rectangle input could not be materialized"
             ) from error
 
@@ -328,7 +336,9 @@ class TiffSlideDownloader:
                 bigtiff=True,
             )
         except Exception as error:
-            raise _unavailable("EMPAIA slide could not be written") from error
+            raise EmpaiaGatewayError.unavailable(
+                "EMPAIA slide could not be written"
+            ) from error
 
     def _write(
         self,
@@ -343,7 +353,9 @@ class TiffSlideDownloader:
             while True:
                 tile = tiles.get()
                 if tile is _ABORT:
-                    raise _unavailable("EMPAIA slide download was interrupted")
+                    raise EmpaiaGatewayError.unavailable(
+                        "EMPAIA slide download was interrupted"
+                    )
                 yield tile  # type: ignore[misc]
 
         # OpenSlide derives mpp from the resolution in pixels per centimetre.
@@ -367,7 +379,9 @@ class TiffSlideDownloader:
         except EmpaiaGatewayError:
             raise
         except Exception as error:
-            raise _unavailable("EMPAIA slide could not be written") from error
+            raise EmpaiaGatewayError.unavailable(
+                "EMPAIA slide could not be written"
+            ) from error
 
 
 _ABORT = object()
@@ -399,9 +413,13 @@ def _decode_tile(
         with Image.open(io.BytesIO(data)) as image:
             pixels = np.asarray(image.convert("RGB"))
     except Exception as error:
-        raise _invalid("EMPAIA slide region is not a readable image") from error
+        raise EmpaiaGatewayError.invalid(
+            "EMPAIA slide region is not a readable image"
+        ) from error
     if pixels.shape[:2] != (height, width):
-        raise _invalid("EMPAIA slide region has unexpected dimensions")
+        raise EmpaiaGatewayError.invalid(
+            "EMPAIA slide region has unexpected dimensions"
+        )
     tile = np.zeros((tile_size, tile_size, 3), dtype=np.uint8)
     tile[:height, :width] = pixels
     return tile
@@ -430,13 +448,3 @@ def _matching_level(
         levels,
         key=lambda level: abs(level.width - width) + abs(level.height - height),
     )
-
-
-def _invalid(message: str) -> EmpaiaGatewayError:
-    """Construct a nonretryable error for unsupported artifacts or invalid image geometry."""
-    return EmpaiaGatewayError(message, retryable=False)
-
-
-def _unavailable(message: str) -> EmpaiaGatewayError:
-    """Construct a retryable error for image materialization failures."""
-    return EmpaiaGatewayError(message, retryable=True)
