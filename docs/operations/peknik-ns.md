@@ -78,7 +78,7 @@ curl -s localhost:18080/v1/executions/<id>/result
 
 ## EMPAIA (state on 2026-10-25)
 
-- Images `empaia-10` (Ray image `model-service-ray`; its base layers come from the older `model-service-workflow-gpu` checkpoint). The `empaia` values set `slideAccess: http`
+- Images `empaia-12` (Ray image `model-service-ray`; its base layers come from the older `model-service-workflow-gpu` checkpoint). The `empaia` values set `slideAccess: http`
   (slides are downloaded through the App API) and
   `dnsSearches: [rationai-infra-test-ns.svc.cluster.local]`, so the short App
   Service name `test-jobs-app-api` that the EMPAIA test instance's Workbench
