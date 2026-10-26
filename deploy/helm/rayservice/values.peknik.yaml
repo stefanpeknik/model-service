@@ -86,17 +86,18 @@ executionScheduler:
   maximumDeadlineSeconds: 86400
   processingAttempts: 2
   maxConcurrentExecutions: 4
-  empaia:
-    enabled: true
-    # The mock AppService in deploy/k8s/peknik-ns/empaia-mock.yaml, and the
-    # EMPAIA test instance's AppService under the short name its Workbench
-    # Daemon hands to JES; the search domain makes that name resolve here.
-    apiUrls:
-      - "http://empaia-mock-app-service.peknik-ns.svc:8000"
-      - "http://test-jobs-app-api:10009"
-    dnsSearches: ["rationai-infra-test-ns.svc.cluster.local"]
-    # The scratch volume, which the peknik workers already mount at /mnt/scratch.
-    workspaceRoot: /mnt/scratch
-    workspaceClaim: model-service-validation-full-wsi-scratch
-    # Read the mock's slide through the App API, as in the EMPAIA test instance.
-    slideAccess: http
+
+empaia:
+  enabled: true
+  # The mock AppService in deploy/k8s/peknik-ns/empaia-mock.yaml, and the
+  # EMPAIA test instance's AppService under the short name its Workbench
+  # Daemon hands to JES; the search domain makes that name resolve here.
+  apiUrls:
+    - "http://empaia-mock-app-service.peknik-ns.svc:8000"
+    - "http://test-jobs-app-api:10009"
+  dnsSearches: ["rationai-infra-test-ns.svc.cluster.local"]
+  # The scratch volume, which the peknik workers already mount at /mnt/scratch.
+  workspaceRoot: /mnt/scratch
+  workspaceClaim: model-service-validation-full-wsi-scratch
+  # Read the mock's slide through the App API, as in the EMPAIA test instance.
+  slideAccess: http

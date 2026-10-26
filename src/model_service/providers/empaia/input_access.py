@@ -1,6 +1,6 @@
-"""Materialize provider inputs in an isolated workflow workspace for one processing attempt.
+"""Materialize provider inputs in an isolated workspace for one processing attempt.
 
-The public job identity must match protected dispatch context. The workflow receives
+The public job identity must match protected dispatch context. The builder receives
 local paths while the gateway owns provider communication.
 """
 
@@ -50,7 +50,7 @@ class EmpaiaInputAccess:
         gateway: EmpaiaGateway,
         paths: dict[str, Path],
     ) -> None:
-        """Retain the workspace, materialized input mapping, and gateway to close after workflow execution."""
+        """Retain the workspace, materialized input mapping, and gateway to close after the builder ran."""
         self._gateway = gateway
         self._paths = paths
         self._root = root
@@ -71,7 +71,9 @@ class EmpaiaInputAccess:
         try:
             path.resolve().relative_to(self._root.resolve())
         except ValueError as error:
-            raise InvalidInvocation("output path escapes workflow storage") from error
+            raise InvalidInvocation(
+                "output path escapes the attempt workspace"
+            ) from error
         return path
 
     def is_visible_artifact(self, path: Path) -> bool:

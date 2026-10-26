@@ -1,12 +1,11 @@
 """Specify the EMPAIA job boundary, protected credentials, and configurable gateway factory.
 
 Provider admission and finish use this boundary in the scheduler process; input access
-uses it in the workflow process.
+uses it in the builder process.
 """
 
 from __future__ import annotations
 
-import importlib
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Annotated, Protocol
 
@@ -107,15 +106,3 @@ class EmpaiaGatewayFactory(Protocol):
     def __call__(self, context: EmpaiaJobContext) -> EmpaiaGateway:
         """Create a gateway for one external job using its origin, ID, and private credential."""
         ...
-
-
-def load_gateway_factory(import_path: str) -> EmpaiaGatewayFactory:
-    """Import a callable configured as module:attribute, rejecting invalid syntax or a noncallable target."""
-    module_name, separator, attribute_name = import_path.partition(":")
-    if not separator or not module_name or not attribute_name:
-        raise ValueError("EMPAIA gateway factory must use module:attribute syntax")
-    module = importlib.import_module(module_name)
-    factory = getattr(module, attribute_name, None)
-    if not callable(factory):
-        raise TypeError("EMPAIA gateway factory is not callable")
-    return factory

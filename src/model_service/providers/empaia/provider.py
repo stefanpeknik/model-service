@@ -27,6 +27,7 @@ from model_service.builders.application import validate_invocation
 from model_service.builders.contracts import (
     BuilderResult,
     InputAccessContext,
+    InputAccessKind,
     InvalidInvocation,
     Invocation,
     ProviderInput,
@@ -43,6 +44,7 @@ from model_service.providers.empaia.gateway import (
 )
 from model_service.scheduler.contracts import (
     InvalidScheduleRequestError,
+    ProviderName,
     ScheduleRequest,
     SchedulingUnavailableError,
 )
@@ -81,7 +83,7 @@ logger = logging.getLogger(__name__)
 class EmpaiaProviderAdapter:
     """Implement provider-scoped admission and terminal publication for EMPAIA jobs."""
 
-    name = "empaia"
+    name = ProviderName.EMPAIA
 
     def __init__(
         self,
@@ -164,7 +166,7 @@ class EmpaiaProviderAdapter:
             inputs={name: ProviderInput(name=name) for name in names},
             resolved_configuration=deepcopy(configuration),
             input_access=InputAccessContext(
-                kind="empaia",
+                kind=InputAccessKind.EMPAIA,
                 state=EmpaiaInputState(
                     api_url=context.api_url, job_id=context.job_id
                 ).model_dump(mode="json"),

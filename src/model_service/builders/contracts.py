@@ -119,11 +119,18 @@ type BuilderInput = Annotated[
 ]
 
 
+class InputAccessKind(StrEnum):
+    """Which access adapter resolves an invocation's inputs and outputs."""
+
+    SHARED_STORAGE = "shared_storage"
+    EMPAIA = "empaia"
+
+
 @dataclass(frozen=True, slots=True)
 class InputAccessContext:
-    """Selects an access adapter (`shared_storage`, `empaia`) and its public state."""
+    """Selects an access adapter and its public state."""
 
-    kind: _NonEmptyString
+    kind: InputAccessKind
     state: _JsonObject
 
 

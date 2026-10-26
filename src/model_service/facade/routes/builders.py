@@ -41,7 +41,11 @@ from model_service.facade.routes.common import (
     lookup_error,
     submit,
 )
-from model_service.scheduler.contracts import ScheduleRequest, ScheduleResult
+from model_service.scheduler.contracts import (
+    ProviderName,
+    ScheduleRequest,
+    ScheduleResult,
+)
 
 
 if TYPE_CHECKING:
@@ -167,7 +171,7 @@ def create_router(
             ScheduleRequest(
                 builder_id=builder_id,
                 model_id=model_id,
-                provider="standalone",
+                provider=ProviderName.STANDALONE,
                 body=body.builder_request(),
                 requested_timeout_seconds=body.requested_timeout_seconds,
                 idempotency_key=body.idempotency_key,

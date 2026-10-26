@@ -143,15 +143,6 @@ class SchedulerSettings(BaseSettings):
         gt=timedelta(0),
         validation_alias="INFERENCE_RETENTION_SECONDS",
     )
-    empaia_api_urls: tuple[str, ...] = Field(
-        default=(), validation_alias="EMPAIA_API_URLS"
-    )
-    empaia_workspace_root: Path | None = Field(
-        default=None, validation_alias="EMPAIA_WORKSPACE_ROOT"
-    )
-    empaia_gateway_factory: str | None = Field(
-        default=None, validation_alias="EMPAIA_GATEWAY_FACTORY"
-    )
 
     @classmethod
     def settings_customise_sources(
@@ -179,12 +170,11 @@ class SchedulerSettings(BaseSettings):
     @field_validator(
         "inference_serve_origin",
         "ray_dashboard_origin",
-        "empaia_gateway_factory",
         mode="before",
     )
     @classmethod
     def _empty_optional_setting(cls, value: object) -> object:
-        """Treat blank optional origins and factory settings as absent."""
+        """Treat blank optional origins as absent."""
         if isinstance(value, str):
             return value.strip() or None
         return value

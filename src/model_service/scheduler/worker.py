@@ -57,7 +57,7 @@ if TYPE_CHECKING:
 
     from model_service.builders.client import BuilderDispatch
     from model_service.scheduler.active_work import ActiveWorkRegistry
-    from model_service.scheduler.contracts import ModelResolver
+    from model_service.scheduler.contracts import ModelResolver, ProviderName
     from model_service.scheduler.domain import Settlement
     from model_service.scheduler.inference import InferenceTarget
     from model_service.scheduler.providers import ProviderAdapter
@@ -76,7 +76,7 @@ class ExecutionWorker:
         self,
         *,
         repository: ExecutionRepository,
-        providers: Mapping[str, ProviderAdapter],
+        providers: Mapping[ProviderName, ProviderAdapter],
         dispatch: BuilderDispatch,
         resolve_model: ModelResolver,
         owner: str,

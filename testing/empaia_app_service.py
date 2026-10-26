@@ -50,7 +50,7 @@ class ValidationScenario(StrEnum):
     RECTANGLE = "rectangle"
     SCHEDULER_RESTART = "scheduler-restart"
     SERVICE_UNAVAILABLE = "service-unavailable"
-    WORKFLOW_FAILURE = "workflow-failure"
+    BUILDER_FAILURE = "builder-failure"
     FILE = "file"
 
 
@@ -310,7 +310,7 @@ async def direct_access(
         if _is_native(job_id):
             filename = "slide.tiff" if name == "slide" else "roi.tiff"
         if name == "slide" and _is_scenario(
-            job_id, ValidationScenario.WORKFLOW_FAILURE
+            job_id, ValidationScenario.BUILDER_FAILURE
         ):
             filename = "missing-slide.dat"
         root = os.environ.get("MOCK_INPUT_ROOT", "/mnt/validation/input")

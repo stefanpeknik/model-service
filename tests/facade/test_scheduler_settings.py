@@ -60,7 +60,6 @@ class SchedulerSettingsTests(unittest.TestCase):
         self.assertEqual(settings.shared_storage_roots, ())
         self.assertIsNone(settings.builder_ids)
         self.assertIsNone(settings.inference_serve_origin)
-        self.assertIsNone(settings.empaia_gateway_factory)
 
     def test_explicit_mapping_never_falls_back_to_process_environment(self) -> None:
         with patch.dict(os.environ, self.environment, clear=True):

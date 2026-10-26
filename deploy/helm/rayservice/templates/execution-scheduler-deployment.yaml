@@ -2,9 +2,8 @@
 {{- $imageTag := required "executionScheduler.image.tag is required" .Values.executionScheduler.image.tag }}
 {{- $databaseSecret := required "executionScheduler.database.existingSecret is required" .Values.executionScheduler.database.existingSecret }}
 {{- $encryptionSecret := required "executionScheduler.encryption.existingSecret is required" .Values.executionScheduler.encryption.existingSecret }}
-{{- if .Values.executionScheduler.empaia.enabled }}
-{{- $gatewayFactory := required "executionScheduler.empaia.gatewayFactory is required" .Values.executionScheduler.empaia.gatewayFactory }}
-{{- $workspaceClaim := required "executionScheduler.empaia.workspaceClaim is required" .Values.executionScheduler.empaia.workspaceClaim }}
+{{- if .Values.empaia.enabled }}
+{{- $workspaceClaim := required "empaia.workspaceClaim is required" .Values.empaia.workspaceClaim }}
 {{- end }}
 apiVersion: apps/v1
 kind: Deployment
@@ -28,10 +27,7 @@ spec:
         app.kubernetes.io/name: model-service-execution-scheduler
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
-{{- with .Values.executionScheduler.empaia.dnsSearches }}
-      dnsConfig:
-        searches: {{ toJson . }}
-{{- end }}
+{{- include "model-service.empaiaDns" . | nindent 6 }}
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
@@ -111,14 +107,7 @@ spec:
             - name: INFERENCE_RETENTION_SECONDS
               value: {{ .retentionSeconds | int64 | quote }}
             {{- end }}
-            {{- if .Values.executionScheduler.empaia.enabled }}
-            - name: EMPAIA_GATEWAY_FACTORY
-              value: {{ .Values.executionScheduler.empaia.gatewayFactory | quote }}
-            - name: EMPAIA_API_URLS
-              value: {{ required "executionScheduler.empaia.apiUrls is required" .Values.executionScheduler.empaia.apiUrls | toJson | quote }}
-            - name: EMPAIA_WORKSPACE_ROOT
-              value: {{ .Values.executionScheduler.empaia.workspaceRoot | quote }}
-            {{- end }}
+{{- include "model-service.empaiaEnv" . | nindent 12 }}
           readinessProbe:
             httpGet:
               path: /readyz
@@ -150,9 +139,9 @@ spec:
             - name: shared-storage
               mountPath: {{ .Values.executionScheduler.sharedStorage.mountPath | quote }}
             {{- end }}
-            {{- if .Values.executionScheduler.empaia.enabled }}
+            {{- if .Values.empaia.enabled }}
             - name: empaia-workspace
-              mountPath: {{ .Values.executionScheduler.empaia.workspaceRoot | quote }}
+              mountPath: {{ .Values.empaia.workspaceRoot | quote }}
             {{- end }}
       volumes:
         - name: tmp
@@ -165,9 +154,9 @@ spec:
           persistentVolumeClaim:
             claimName: {{ .Values.executionScheduler.sharedStorage.existingClaim | quote }}
         {{- end }}
-        {{- if .Values.executionScheduler.empaia.enabled }}
+        {{- if .Values.empaia.enabled }}
         - name: empaia-workspace
           persistentVolumeClaim:
-            claimName: {{ .Values.executionScheduler.empaia.workspaceClaim | quote }}
+            claimName: {{ .Values.empaia.workspaceClaim | quote }}
         {{- end }}
 {{- end }}

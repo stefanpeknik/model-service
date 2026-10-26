@@ -95,20 +95,6 @@ executionScheduler:
     maxRequestBytes: 2097152
     maxResultBytes: 4194304
     retentionSeconds: 86400
-  empaia:
-    enabled: false
-    gatewayFactory: model_service.providers.empaia.http_gateway:create_http_gateway
-    # AppService URLs that may receive EMPAIA job credentials.
-    apiUrls: []
-    workspaceRoot: /mnt/model-service-executions
-    workspaceClaim: ""
-    # How slide inputs reach builders: "direct" links the file named by the
-    # RationAI direct-access route; "http" downloads the needed level through
-    # the App API, for installations whose slide storage model-service can't mount.
-    slideAccess: direct
-    # Extra DNS search domains for pods that call AppService, when the
-    # installation hands out short host names from another namespace.
-    dnsSearches: []
   resources:
     requests:
       cpu: 100m
@@ -116,3 +102,17 @@ executionScheduler:
     limits:
       cpu: 1
       memory: 512Mi
+
+empaia:
+  enabled: false
+  # AppService URLs that may receive EMPAIA job credentials.
+  apiUrls: []
+  workspaceRoot: /mnt/model-service-executions
+  workspaceClaim: ""
+  # How slide inputs reach builders: "direct" links the file named by the
+  # RationAI direct-access route; "http" downloads the needed level through
+  # the App API, for installations whose slide storage model-service can't mount.
+  slideAccess: direct
+  # Extra DNS search domains for pods that call AppService, when the
+  # installation hands out short host names from another namespace.
+  dnsSearches: []

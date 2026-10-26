@@ -24,6 +24,7 @@ from model_service.scheduler.contracts import (
     ExecutionError,
     ExecutionStatus,
     Operation,
+    ProviderName,
     ResultUnavailableError,
     ScheduleConflictError,
     UnknownExecutionError,
@@ -677,7 +678,7 @@ class PostgresExecutionRepository:
         return ExecutionRecord(
             id=row.id,
             identity=SubmissionIdentity(
-                provider=row.provider,
+                provider=ProviderName(row.provider),
                 key=row.submission_key,
                 fingerprint=row.request_fingerprint,
             ),

@@ -1,7 +1,7 @@
-"""Specify provider preparation and completion around a shared workflow execution.
+"""Specify provider preparation and completion around a shared builder execution.
 
 Providers translate caller-specific identity, data access, and external job lifecycle
-into the scheduler model. Actual workflow input reading belongs to access adapters.
+into the scheduler model. Reading builder inputs belongs to access adapters.
 """
 
 from __future__ import annotations
@@ -15,13 +15,17 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from model_service.builders.contracts import BuilderResult, JsonValue
-    from model_service.scheduler.contracts import ExecutionError, ScheduleRequest
+    from model_service.scheduler.contracts import (
+        ExecutionError,
+        ProviderName,
+        ScheduleRequest,
+    )
     from model_service.scheduler.domain import PreparedInvocation, SubmissionIdentity
 
 
 @dataclass(frozen=True, slots=True)
 class ProviderSuccess:
-    """Give provider finish the durable workflow result to publish."""
+    """Give provider finish the durable builder result to publish."""
 
     result: BuilderResult
 
@@ -64,7 +68,7 @@ class ProviderFinishFailureError(RuntimeError):
 class ProviderAdapter(Protocol):
     """Translate one integration's replay identity, prepared invocation, and terminal reporting behavior."""
 
-    name: str
+    name: ProviderName
 
     def identify(self, request: ScheduleRequest) -> SubmissionIdentity:
         """Compute submission identity locally without I/O or external side effects."""

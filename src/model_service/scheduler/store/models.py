@@ -1,4 +1,4 @@
-"""Map durable execution records and workflow JSON values to PostgreSQL columns.
+"""Map durable execution records and their JSON values to PostgreSQL columns.
 
 Constraints enforce replay uniqueness and valid lease/error combinations. ORM rows stay
 inside persistence; the scheduler and worker receive domain records.

@@ -29,7 +29,7 @@ class ExecutionRepository(Protocol):
     """Provide replay-safe admission, leased claims, settlement, and maintenance of durable executions."""
 
     async def check_ready(self) -> None:
-        """Check that storage is accessible without requiring the workflow compute service."""
+        """Check that storage is accessible without requiring Ray."""
         ...
 
     async def maintain(self) -> None:

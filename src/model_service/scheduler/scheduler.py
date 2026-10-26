@@ -42,7 +42,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Mapping
 
     from model_service.builders.client import BuilderDispatch
-    from model_service.scheduler.contracts import ModelResolver
+    from model_service.scheduler.contracts import ModelResolver, ProviderName
     from model_service.scheduler.inference import InferenceTarget
     from model_service.scheduler.providers import ProviderAdapter
     from model_service.scheduler.store.repository import ExecutionRepository
@@ -56,7 +56,7 @@ class ExecutionScheduler:
         *,
         repository: ExecutionRepository,
         dispatch: BuilderDispatch,
-        providers: Mapping[str, ProviderAdapter],
+        providers: Mapping[ProviderName, ProviderAdapter],
         resolve_model: ModelResolver,
         default_timeout: timedelta,
         maximum_timeout: timedelta,

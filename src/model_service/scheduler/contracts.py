@@ -58,13 +58,22 @@ class ExecutionErrorCode(StrEnum):
     RESULT_TOO_LARGE = "inference_result_too_large"
 
 
+class ProviderName(StrEnum):
+    """The integration a scheduled execution belongs to."""
+
+    STANDALONE = "standalone"
+    EMPAIA = "empaia"
+    # Scheduled raw inference; it has no provider adapter.
+    INFERENCE = "inference"
+
+
 @dataclass(frozen=True, slots=True)
 class ScheduleRequest:
     """`body` is provider-specific; standalone bodies are a `BuilderRequest`."""
 
     builder_id: str
     model_id: str
-    provider: str
+    provider: ProviderName
     body: dict[str, JsonValue]
     requested_timeout_seconds: int | None = None
     idempotency_key: str | None = None

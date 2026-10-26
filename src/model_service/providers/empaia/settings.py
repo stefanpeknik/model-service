@@ -1,7 +1,7 @@
 """EMPAIA wiring for the processes that talk to App Service, from `EMPAIA_*` variables.
 
-Builder replicas read the gateway factory and workspace root; every process that
-builds a gateway reads slide access and the App Service timeout.
+The facade and the builder replicas read the same settings: the facade admits
+jobs and publishes results, builders read job inputs.
 """
 
 from __future__ import annotations
@@ -23,7 +23,9 @@ class SlideAccess(StrEnum):
 class EmpaiaSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="EMPAIA_", frozen=True, extra="ignore")
 
-    gateway_factory: str | None = None
+    enabled: bool = False
+    # AppService URLs that may receive EMPAIA job credentials.
+    api_urls: tuple[str, ...] = ()
     workspace_root: Path = Path("/mnt/model-service-executions")
     slide_access: SlideAccess = SlideAccess.DIRECT
     # Creating a pixelmap took 10 s on the EMPAIA test instance; the SDK's 5 s

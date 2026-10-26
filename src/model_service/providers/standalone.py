@@ -2,7 +2,7 @@
 
 The caller's idempotency key identifies a submission. Finish is a no-op because
 outputs already sit in shared storage, but it still runs through the common
-provider-finish phase.
+provider finish.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from model_service.builders.application import validate_invocation
 from model_service.builders.contracts import (
     ExecutionContext,
+    InputAccessKind,
     InvalidInvocation,
     SharedPathInput,
 )
@@ -24,6 +25,7 @@ from model_service.builders.registry import get_builder
 from model_service.facade.requests import BuilderRequest
 from model_service.scheduler.contracts import (
     InvalidScheduleRequestError,
+    ProviderName,
     ScheduleRequest,
 )
 from model_service.scheduler.domain import PreparedInvocation, SubmissionIdentity
@@ -36,7 +38,7 @@ if TYPE_CHECKING:
 
 
 class StandaloneProviderAdapter:
-    name = "standalone"
+    name = ProviderName.STANDALONE
 
     def __init__(self, shared_storage: SharedStorageAccessAdapter) -> None:
         self._shared_storage = shared_storage
@@ -85,7 +87,7 @@ class StandaloneProviderAdapter:
                 invocation,
                 now=deadline_at - timedelta(microseconds=1),
             )
-            if invocation.input_access.kind != "shared_storage":
+            if invocation.input_access.kind is not InputAccessKind.SHARED_STORAGE:
                 raise InvalidInvocation("standalone scheduling requires shared storage")
             access = self._shared_storage.create(invocation, ExecutionContext())
             for name, value in invocation.inputs.items():

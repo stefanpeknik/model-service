@@ -17,6 +17,7 @@ from model_service.scheduler.contracts import (
     ExecutionError,
     ExecutionErrorCode,
     InferenceResult,
+    ProviderName,
 )
 from model_service.scheduler.domain import (
     InferenceSucceeded,
@@ -31,9 +32,6 @@ if TYPE_CHECKING:
 
     from model_service.scheduler.contracts import InferenceScheduleRequest
     from model_service.scheduler.domain import Settlement
-
-
-PROVIDER = "inference"
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,7 +76,7 @@ def identify(request: InferenceScheduleRequest) -> SubmissionIdentity:
         separators=(",", ":"),
     ).encode()
     return SubmissionIdentity(
-        provider=PROVIDER,
+        provider=ProviderName.INFERENCE,
         key=request.idempotency_key,
         fingerprint=hashlib.sha256(canonical).hexdigest(),
     )

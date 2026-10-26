@@ -11,7 +11,7 @@ from datetime import timedelta
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from model_service.scheduler.contracts import Operation
+from model_service.scheduler.contracts import Operation, ProviderName
 
 
 if TYPE_CHECKING:
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
 
 class WorkKind(StrEnum):
-    """Distinguish workflow computation from result publication and terminal status reporting."""
+    """Distinguish builder processing from result publication and terminal status reporting."""
 
     PROCESSING = "processing"
     PROVIDER_FINISH = "provider_finish"
@@ -88,7 +88,7 @@ class RetryPolicy:
 class SubmissionIdentity:
     """Scope a replay key to its provider and distinguish identical requests from conflicting ones."""
 
-    provider: str
+    provider: ProviderName
     key: str
     fingerprint: str
 
@@ -162,7 +162,7 @@ class WorkClaim:
     execution_id: str
     builder_id: str | None
     model_id: str
-    provider: str
+    provider: ProviderName
     kind: WorkKind
     invocation: StoredInvocation
     protected_context: dict[str, JsonValue]

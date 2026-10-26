@@ -6,10 +6,7 @@ rayStartParams:
   num-gpus: "1"
 template:
   spec:
-{{- with .Values.executionScheduler.empaia.dnsSearches }}
-    dnsConfig:
-      searches: {{ toJson . }}
-{{- end }}
+{{- include "model-service.empaiaDns" . | nindent 4 }}
     securityContext:
       fsGroup: 1000
       fsGroupChangePolicy: OnRootMismatch
@@ -37,14 +34,7 @@ template:
               secretKeyRef:
                 name: huggingface-secret
                 key: token
-{{- if .Values.executionScheduler.empaia.enabled }}
-          - name: EMPAIA_GATEWAY_FACTORY
-            value: {{ .Values.executionScheduler.empaia.gatewayFactory | quote }}
-          - name: EMPAIA_WORKSPACE_ROOT
-            value: {{ .Values.executionScheduler.empaia.workspaceRoot | quote }}
-          - name: EMPAIA_SLIDE_ACCESS
-            value: {{ .Values.executionScheduler.empaia.slideAccess | default "direct" | quote }}
-{{- end }}
+{{- include "model-service.empaiaEnv" . | nindent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -67,9 +57,9 @@ template:
             mountPath: /mnt/cache
           - name: huggingface-cache
             mountPath: /mnt/huggingface_cache
-{{- if .Values.executionScheduler.empaia.enabled }}
+{{- if .Values.empaia.enabled }}
           - name: empaia-workspace
-            mountPath: {{ .Values.executionScheduler.empaia.workspaceRoot | quote }}
+            mountPath: {{ .Values.empaia.workspaceRoot | quote }}
 {{- end }}
     volumes:
       - name: data
@@ -90,8 +80,8 @@ template:
       - name: huggingface-cache
         persistentVolumeClaim:
           claimName: huggingface-cache-pvc
-{{- if .Values.executionScheduler.empaia.enabled }}
+{{- if .Values.empaia.enabled }}
       - name: empaia-workspace
         persistentVolumeClaim:
-          claimName: {{ .Values.executionScheduler.empaia.workspaceClaim | quote }}
+          claimName: {{ .Values.empaia.workspaceClaim | quote }}
 {{- end }}

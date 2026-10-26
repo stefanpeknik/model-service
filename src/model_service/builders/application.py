@@ -34,7 +34,11 @@ if TYPE_CHECKING:
 
     from pydantic import BaseModel
 
-    from model_service.builders.contracts import Invocation, ModelBinding
+    from model_service.builders.contracts import (
+        InputAccessKind,
+        Invocation,
+        ModelBinding,
+    )
     from model_service.builders.registry import BuilderSpec
 
 
@@ -126,7 +130,7 @@ class BuilderApplication:
         self,
         spec: BuilderSpec,
         builder: Builder,
-        access_adapters: Mapping[str, AccessAdapter],
+        access_adapters: Mapping[InputAccessKind, AccessAdapter],
         *,
         cleanup_timeout_seconds: float = 10,
     ) -> None:

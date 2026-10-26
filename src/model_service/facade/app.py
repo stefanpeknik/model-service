@@ -17,8 +17,10 @@ from model_service.facade.health import DeploymentHealth
 from model_service.facade.inference import HttpInferenceProxy, ModelInference
 from model_service.facade.settings import SchedulerSettings
 from model_service.facade.synchronous import SynchronousBuilderService
+from model_service.providers.empaia.settings import EmpaiaSettings
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
 from model_service.providers.standalone import StandaloneProviderAdapter
+from model_service.scheduler.contracts import ProviderName
 from model_service.scheduler.domain import RetryPolicy
 from model_service.scheduler.scheduler import ExecutionScheduler
 from model_service.scheduler.store.postgres import PostgresExecutionRepository
@@ -45,7 +47,10 @@ def model_resolver(catalog: ModelCatalog) -> ModelResolver:
     return resolve
 
 
-def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
+def create_app(
+    settings: SchedulerSettings | None = None,
+    empaia_settings: EmpaiaSettings | None = None,
+) -> FastAPI:
     config = settings or SchedulerSettings.from_environment()
     catalog = ModelCatalog.from_file(config.model_catalog_path)
     builder_ids = config.builder_ids or frozenset(BUILDERS)
@@ -70,19 +75,20 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
             maximum_backoff=config.maximum_backoff,
         ),
     )
-    providers: dict[str, ProviderAdapter] = {
-        "standalone": StandaloneProviderAdapter(
+    providers: dict[ProviderName, ProviderAdapter] = {
+        ProviderName.STANDALONE: StandaloneProviderAdapter(
             SharedStorageAccessAdapter(config.shared_storage_roots)
         )
     }
-    if config.empaia_gateway_factory is not None:
-        from model_service.providers.empaia.gateway import load_gateway_factory
+    empaia = empaia_settings or EmpaiaSettings()
+    if empaia.enabled:
+        from model_service.providers.empaia.http_gateway import create_http_gateway
         from model_service.providers.empaia.provider import EmpaiaProviderAdapter
 
-        providers["empaia"] = EmpaiaProviderAdapter(
-            load_gateway_factory(config.empaia_gateway_factory),
-            allowed_api_urls=config.empaia_api_urls,
-            workspace_root=config.empaia_workspace_root,
+        providers[ProviderName.EMPAIA] = EmpaiaProviderAdapter(
+            create_http_gateway,
+            allowed_api_urls=empaia.api_urls,
+            workspace_root=empaia.workspace_root,
         )
     client = httpx.AsyncClient()
     dispatch = HTTPBuilderDispatch(client, origin=config.ray_serve_origin)
@@ -126,7 +132,7 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
         scheduler,
         catalog=catalog,
         builder_runner=SynchronousBuilderService(catalog, dispatch),
-        empaia_enabled="empaia" in providers,
+        empaia_enabled=ProviderName.EMPAIA in providers,
         inference_target=inference_target,
         inference_max_request_bytes=config.inference_max_request_bytes,
         lifespan=lifespan,

@@ -1,7 +1,7 @@
 """Validate the AppService response fields consumed by the gateway.
 
 Unknown fields are ignored, but required fields, numeric bounds, and finite values are
-checked before data reaches workflow preparation or image publication.
+checked before data reaches input preparation or image publication.
 """
 
 from __future__ import annotations

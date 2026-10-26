@@ -423,7 +423,7 @@ class ExecutionTransitions:
                 ExecutionError(
                     code=ExecutionErrorCode.PROCESSING_ATTEMPTS_EXHAUSTED,
                     message=(
-                        "workflow processing did not complete within its retry policy"
+                        "builder processing did not complete within its retry policy"
                     ),
                 ),
                 now,
@@ -523,7 +523,7 @@ class ExecutionTransitions:
 
     @staticmethod
     def _require_kind(execution: ExecutionRecord, expected: WorkKind) -> None:
-        """Reject settlement applied to a work kind different from the expected processing or provider phase."""
+        """Reject settlement applied to a work kind different from the expected processing or provider-finish work."""
         if execution.work_kind is not expected:
             raise StaleWorkClaimError(f"claim is not {expected.value}")
 
