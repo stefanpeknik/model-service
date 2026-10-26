@@ -77,11 +77,10 @@ class ScriptedScheduler:
         return await self.get(execution_id)
 
 
-def client(scheduler: ScriptedScheduler, *, enabled: bool = True) -> AsyncClient:
+def client(scheduler: ScriptedScheduler) -> AsyncClient:
     app = create_app(
         scheduler,  # type: ignore[arg-type]
         catalog=ModelCatalog([PROSTATE]),
-        empaia_enabled=enabled,
     )
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://ms")
 
@@ -197,14 +196,6 @@ class EmpaiaRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(scheduler.cancelled, ["execution-1", "other"])
         self.assertEqual(unknown_get.status_code, 404)
         self.assertEqual(unknown_delete.status_code, 404)
-
-    async def test_routes_exist_only_when_empaia_is_configured(self) -> None:
-        scheduler = ScriptedScheduler(view(ExecutionStatus.QUEUED))
-        async with client(scheduler, enabled=False) as http:
-            response = await http.post(SUBMIT, json=JOB)
-
-        self.assertNotEqual(response.status_code, 202)
-        self.assertEqual(scheduler.requests, [])
 
 
 if __name__ == "__main__":

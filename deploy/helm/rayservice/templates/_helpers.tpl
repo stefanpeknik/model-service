@@ -10,16 +10,12 @@
 
 {{/* EMPAIA settings (EmpaiaSettings) for every process that talks to App Service. */}}
 {{- define "model-service.empaiaEnv" -}}
-{{- if .Values.empaia.enabled }}
-- name: EMPAIA_ENABLED
-  value: "true"
 - name: EMPAIA_API_URLS
-  value: {{ required "empaia.apiUrls is required" .Values.empaia.apiUrls | toJson | quote }}
+  value: {{ .Values.empaia.apiUrls | toJson | quote }}
 - name: EMPAIA_WORKSPACE_ROOT
   value: {{ .Values.empaia.workspaceRoot | quote }}
 - name: EMPAIA_SLIDE_ACCESS
   value: {{ .Values.empaia.slideAccess | quote }}
-{{- end }}
 {{- end }}
 
 {{/* Extra DNS search domains, for installations that hand out short App Service names. */}}

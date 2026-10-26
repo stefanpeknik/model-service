@@ -43,7 +43,6 @@ def create_app(
     lifespan: Lifespan[FastAPI] | None = None,
     deployment_health: DeploymentHealth | None = None,
     inference_max_request_bytes: int = 2 * 1024 * 1024,
-    empaia_enabled: bool = False,
     capacity: Capacity | None = None,
 ) -> FastAPI:
     capacity = capacity or NoCapacityInfo()
@@ -97,7 +96,6 @@ def create_app(
         )
     )
     app.include_router(builders.create_router(scheduler, builder_runner))
-    if empaia_enabled:
-        app.include_router(empaia.create_router(scheduler, capacity))
+    app.include_router(empaia.create_router(scheduler, capacity))
     app.include_router(executions.create_router(scheduler, capacity))
     return app

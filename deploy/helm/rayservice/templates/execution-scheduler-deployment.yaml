@@ -2,9 +2,7 @@
 {{- $imageTag := required "executionScheduler.image.tag is required" .Values.executionScheduler.image.tag }}
 {{- $databaseSecret := required "executionScheduler.database.existingSecret is required" .Values.executionScheduler.database.existingSecret }}
 {{- $encryptionSecret := required "executionScheduler.encryption.existingSecret is required" .Values.executionScheduler.encryption.existingSecret }}
-{{- if .Values.empaia.enabled }}
-{{- $workspaceClaim := required "empaia.workspaceClaim is required" .Values.empaia.workspaceClaim }}
-{{- end }}
+{{- $workspaceClaim := required "empaia.workspaceClaim is required: the facade publishes EMPAIA results the builders wrote there" .Values.empaia.workspaceClaim }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -139,10 +137,8 @@ spec:
             - name: shared-storage
               mountPath: {{ .Values.executionScheduler.sharedStorage.mountPath | quote }}
             {{- end }}
-            {{- if .Values.empaia.enabled }}
             - name: empaia-workspace
               mountPath: {{ .Values.empaia.workspaceRoot | quote }}
-            {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
@@ -154,9 +150,7 @@ spec:
           persistentVolumeClaim:
             claimName: {{ .Values.executionScheduler.sharedStorage.existingClaim | quote }}
         {{- end }}
-        {{- if .Values.empaia.enabled }}
         - name: empaia-workspace
           persistentVolumeClaim:
-            claimName: {{ .Values.empaia.workspaceClaim | quote }}
-        {{- end }}
+            claimName: {{ $workspaceClaim | quote }}
 {{- end }}

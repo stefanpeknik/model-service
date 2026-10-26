@@ -57,7 +57,7 @@ template:
             mountPath: /mnt/cache
           - name: huggingface-cache
             mountPath: /mnt/huggingface_cache
-{{- if .Values.empaia.enabled }}
+{{- if .Values.empaia.workspaceClaim }}
           - name: empaia-workspace
             mountPath: {{ .Values.empaia.workspaceRoot | quote }}
 {{- end }}
@@ -80,7 +80,7 @@ template:
       - name: huggingface-cache
         persistentVolumeClaim:
           claimName: huggingface-cache-pvc
-{{- if .Values.empaia.enabled }}
+{{- if .Values.empaia.workspaceClaim }}
       - name: empaia-workspace
         persistentVolumeClaim:
           claimName: {{ .Values.empaia.workspaceClaim | quote }}

@@ -26,6 +26,7 @@ from model_service.providers.empaia.provider import EmpaiaProviderAdapter
 from model_service.scheduler.contracts import (
     ExecutionError,
     InvalidScheduleRequestError,
+    ProviderName,
     ScheduleRequest,
 )
 from model_service.scheduler.providers import (
@@ -236,9 +237,24 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
                     datetime.now(UTC) + timedelta(hours=1),
                 )
 
-    def test_an_allowlist_is_required(self) -> None:
-        with self.assertRaises(ValueError):
-            EmpaiaProviderAdapter(unused_gateway_factory, allowed_api_urls=())  # type: ignore[arg-type]
+    async def test_an_empty_allowlist_refuses_every_job(self) -> None:
+        provider = EmpaiaProviderAdapter(unused_gateway_factory, allowed_api_urls=())  # type: ignore[arg-type]
+
+        with self.assertRaises(InvalidScheduleRequestError):
+            await provider.prepare(
+                ScheduleRequest(
+                    builder_id="heatmap",
+                    model_id="prostate-classifier-1",
+                    provider=ProviderName.EMPAIA,
+                    body={
+                        "installation_id": "https://empaia.example/app-api",
+                        "api_url": "https://empaia.example/app-api",
+                        "job_id": "job-1",
+                        "credential": "token",
+                    },
+                ),
+                datetime.now(UTC) + timedelta(hours=1),
+            )
 
     def job_workspaces(self, root: Path) -> tuple[Path, Path, Path]:
         """Two attempts of job "j" (one with a heatmap) and another job's workspace."""

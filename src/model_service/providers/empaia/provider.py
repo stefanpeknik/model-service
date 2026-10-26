@@ -91,9 +91,7 @@ class EmpaiaProviderAdapter:
         allowed_api_urls: tuple[str, ...],
         workspace_root: Path | None = None,
     ) -> None:
-        """Only `allowed_api_urls` origins or path prefixes receive job credentials."""
-        if not allowed_api_urls:
-            raise ValueError("EMPAIA needs at least one allowed AppService URL")
+        """Only `allowed_api_urls` origins or path prefixes receive job credentials; none, no job."""
         self._gateway_factory = gateway_factory
         self._allowed_api_urls = tuple(url.rstrip("/") for url in allowed_api_urls)
         self._workspace_root = workspace_root

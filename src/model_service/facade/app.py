@@ -17,6 +17,8 @@ from model_service.facade.health import DeploymentHealth
 from model_service.facade.inference import HttpInferenceProxy, ModelInference
 from model_service.facade.settings import SchedulerSettings
 from model_service.facade.synchronous import SynchronousBuilderService
+from model_service.providers.empaia.http_gateway import create_http_gateway
+from model_service.providers.empaia.provider import EmpaiaProviderAdapter
 from model_service.providers.empaia.settings import EmpaiaSettings
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
 from model_service.providers.standalone import StandaloneProviderAdapter
@@ -81,15 +83,11 @@ def create_app(
         )
     }
     empaia = empaia_settings or EmpaiaSettings()
-    if empaia.enabled:
-        from model_service.providers.empaia.http_gateway import create_http_gateway
-        from model_service.providers.empaia.provider import EmpaiaProviderAdapter
-
-        providers[ProviderName.EMPAIA] = EmpaiaProviderAdapter(
-            create_http_gateway,
-            allowed_api_urls=empaia.api_urls,
-            workspace_root=empaia.workspace_root,
-        )
+    providers[ProviderName.EMPAIA] = EmpaiaProviderAdapter(
+        create_http_gateway,
+        allowed_api_urls=empaia.api_urls,
+        workspace_root=empaia.workspace_root,
+    )
     client = httpx.AsyncClient()
     dispatch = HTTPBuilderDispatch(client, origin=config.ray_serve_origin)
     inference_proxy = HttpInferenceProxy(
@@ -132,7 +130,6 @@ def create_app(
         scheduler,
         catalog=catalog,
         builder_runner=SynchronousBuilderService(catalog, dispatch),
-        empaia_enabled=ProviderName.EMPAIA in providers,
         inference_target=inference_target,
         inference_max_request_bytes=config.inference_max_request_bytes,
         lifespan=lifespan,

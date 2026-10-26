@@ -59,7 +59,6 @@ class CapacityMessageTests(unittest.IsolatedAsyncioTestCase):
             app = create_app(
                 ScriptedScheduler(view(status)),  # type: ignore[arg-type]
                 catalog=ModelCatalog([PROSTATE]),
-                empaia_enabled=True,
                 capacity=capacity,
             )
             async with AsyncClient(

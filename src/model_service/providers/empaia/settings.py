@@ -23,8 +23,7 @@ class SlideAccess(StrEnum):
 class EmpaiaSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="EMPAIA_", frozen=True, extra="ignore")
 
-    enabled: bool = False
-    # AppService URLs that may receive EMPAIA job credentials.
+    # AppService URLs that may receive EMPAIA job credentials; empty refuses all.
     api_urls: tuple[str, ...] = ()
     workspace_root: Path = Path("/mnt/model-service-executions")
     slide_access: SlideAccess = SlideAccess.DIRECT

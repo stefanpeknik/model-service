@@ -88,7 +88,6 @@ executionScheduler:
   maxConcurrentExecutions: 4
 
 empaia:
-  enabled: true
   # The mock AppService in deploy/k8s/peknik-ns/empaia-mock.yaml, and the
   # EMPAIA test instance's AppService under the short name its Workbench
   # Daemon hands to JES; the search domain makes that name resolve here.

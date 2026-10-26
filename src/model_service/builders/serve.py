@@ -25,6 +25,8 @@ from model_service.builders.http import (
 )
 from model_service.builders.registry import get_builder
 from model_service.builders.settings import DeploymentSettings, WorkerSettings
+from model_service.providers.empaia.http_gateway import create_http_gateway
+from model_service.providers.empaia.input_access import EmpaiaInputAccessAdapter
 from model_service.providers.empaia.settings import EmpaiaSettings
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
 
@@ -61,16 +63,11 @@ def build_application(config: DeploymentSettings) -> BuilderApplication:
     adapters: dict[InputAccessKind, AccessAdapter] = {
         InputAccessKind.SHARED_STORAGE: SharedStorageAccessAdapter(
             settings.shared_storage_roots
-        )
+        ),
+        InputAccessKind.EMPAIA: EmpaiaInputAccessAdapter(
+            create_http_gateway, EmpaiaSettings().workspace_root
+        ),
     }
-    empaia = EmpaiaSettings()
-    if empaia.enabled:
-        from model_service.providers.empaia.http_gateway import create_http_gateway
-        from model_service.providers.empaia.input_access import EmpaiaInputAccessAdapter
-
-        adapters[InputAccessKind.EMPAIA] = EmpaiaInputAccessAdapter(
-            create_http_gateway, empaia.workspace_root
-        )
     return BuilderApplication(spec, implementation(settings), adapters)
 
 

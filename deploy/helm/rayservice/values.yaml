@@ -104,10 +104,12 @@ executionScheduler:
       memory: 512Mi
 
 empaia:
-  enabled: false
-  # AppService URLs that may receive EMPAIA job credentials.
+  # AppService URLs that may receive EMPAIA job credentials; empty refuses
+  # every EMPAIA job.
   apiUrls: []
   workspaceRoot: /mnt/model-service-executions
+  # Shared by the facade and the builder workers: builders write job outputs
+  # there and the facade publishes them. Required by the facade.
   workspaceClaim: ""
   # How slide inputs reach builders: "direct" links the file named by the
   # RationAI direct-access route; "http" downloads the needed level through
