@@ -17,7 +17,6 @@ from contextlib import asynccontextmanager
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Never
 
 import jwt
@@ -25,13 +24,11 @@ from pydantic import Field, ValidationError
 
 from model_service.builders.application import validate_invocation
 from model_service.builders.contracts import (
-    BuilderResult,
     InputAccessContext,
     InputAccessKind,
     InvalidInvocation,
     Invocation,
     ProviderInput,
-    SharedArtifact,
     is_json_value,
 )
 from model_service.builders.registry import get_builder
@@ -42,6 +39,7 @@ from model_service.providers.empaia.gateway import (
     EmpaiaInputState,
     EmpaiaJobContext,
 )
+from model_service.providers.empaia.input_access import job_workspace
 from model_service.scheduler.contracts import (
     InvalidScheduleRequestError,
     ProviderName,
@@ -60,6 +58,7 @@ from model_service.scheduler.providers import (
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+    from pathlib import Path
 
     from model_service.builders.contracts import JsonValue
     from model_service.scheduler.providers import BeforeMutation
@@ -197,6 +196,9 @@ class EmpaiaProviderAdapter:
     ) -> None:
         """Publish stored outputs and finalize, or report failure/cancellation."""
         context = _job_context(protected_context)
+        if not isinstance(outcome, ProviderSuccess):
+            # A failure or cancellation report needs nothing from the workspace.
+            await self._remove_workspace(context)
         async with _finish_gateway(
             self._gateway_factory,
             context,
@@ -210,7 +212,6 @@ class EmpaiaProviderAdapter:
                         await gateway.publish_output(name, output)
                         mutation_completed = True
                     await gateway.finalize()
-                    await self._remove_workspaces(outcome.result)
                 elif isinstance(outcome, ProviderFailure):
                     await gateway.report_failure(outcome.error.message)
                 elif isinstance(outcome, ProviderCancellation):
@@ -222,13 +223,16 @@ class EmpaiaProviderAdapter:
                     retryable=error.retryable,
                     outcome_unknown=error.outcome_unknown or mutation_completed,
                 ) from error
+        if isinstance(outcome, ProviderSuccess):
+            # Only after publication: a failed one still needs the outputs to retry.
+            await self._remove_workspace(context)
 
-    async def _remove_workspaces(self, result: BuilderResult) -> None:
+    async def _remove_workspace(self, context: EmpaiaJobContext) -> None:
+        """Remove every attempt's inputs and outputs of the job."""
         if self._workspace_root is None:
             return
-        for directory in _workspace_dirs(self._workspace_root, result):
-            # Best effort: publication already succeeded.
-            await asyncio.to_thread(shutil.rmtree, directory, True)
+        directory = job_workspace(self._workspace_root, context.api_url, context.job_id)
+        await asyncio.to_thread(shutil.rmtree, directory, True)
 
 
 @asynccontextmanager
@@ -310,21 +314,6 @@ def _finish_failure(error: EmpaiaGatewayError) -> ProviderFinishFailureError:
         retryable=error.retryable,
         outcome_unknown=error.outcome_unknown,
     )
-
-
-def _workspace_dirs(root: Path, result: BuilderResult) -> set[Path]:
-    """Per-attempt workspace directories (direct children of root) holding outputs."""
-    resolved_root = root.resolve()
-    directories = set()
-    for output in result.outputs.values():
-        if isinstance(output, SharedArtifact):
-            try:
-                relative = Path(output.path).resolve().relative_to(resolved_root)
-            except ValueError:
-                continue
-            if len(relative.parts) > 1:
-                directories.add(resolved_root / relative.parts[0])
-    return directories
 
 
 def _allowed(api_url: str, allowed: tuple[str, ...]) -> bool:

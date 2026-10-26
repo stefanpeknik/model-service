@@ -95,6 +95,11 @@ class EmpaiaInputAccess:
             await asyncio.to_thread(shutil.rmtree, self._root / "inputs", True)
 
 
+def job_workspace(root: Path, api_url: str, job_id: str) -> Path:
+    """All attempt workspaces of one EMPAIA job; provider finish removes it."""
+    return root / hashlib.sha256(f"{api_url}\0{job_id}".encode()).hexdigest()
+
+
 class EmpaiaInputAccessAdapter:
     """Create per-attempt local access by resolving inputs through an EMPAIA gateway."""
 
@@ -127,10 +132,10 @@ class EmpaiaInputAccessAdapter:
         if processing_attempt_id is None:
             raise InvalidInvocation("EMPAIA input access requires a processing attempt")
         gateway = self._gateway_factory(context)
-        execution_key = hashlib.sha256(
-            f"{context.api_url}\0{context.job_id}\0{processing_attempt_id}".encode()
-        ).hexdigest()
-        root = self._workspace_root / execution_key
+        root = (
+            job_workspace(self._workspace_root, context.api_url, context.job_id)
+            / hashlib.sha256(processing_attempt_id.encode()).hexdigest()
+        )
         paths: dict[str, Path] = {}
         try:
             root.mkdir(parents=True, exist_ok=True)
@@ -160,6 +165,7 @@ class EmpaiaInputAccessAdapter:
                 logger.warning(
                     "EMPAIA input cleanup failed: %s", type(cleanup_error).__name__
                 )
+            await asyncio.to_thread(shutil.rmtree, root, True)
             if isinstance(error, EmpaiaGatewayError):
                 # Keep the gateway's safe reason instead of "builder failed unexpectedly".
                 raise BuilderFailure(

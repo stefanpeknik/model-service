@@ -307,6 +307,7 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
                         ),
                     )
                 self.assertEqual(raised.exception.code, FailureCode.INPUT_UNAVAILABLE)
+                self.assertEqual(list(Path(directory).rglob("inputs")), [])
                 self.assertEqual(raised.exception.safe_message, failure.safe_message)
                 self.assertEqual(raised.exception.retryable, failure.retryable)
 
