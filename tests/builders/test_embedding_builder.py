@@ -225,7 +225,8 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
         async with self.scheduler.running():
             admitted = await client.post(
                 "/v1/builders/tile-embeddings/models/encoder/schedule",
-                json={**self.body(scheduled=True), "idempotency_key": "key-1"},
+                json=self.body(scheduled=True),
+                headers={"Idempotency-Key": "key-1"},
             )
             self.assertEqual(admitted.status_code, 202, admitted.text)
             execution_id = admitted.json()["execution"]["id"]

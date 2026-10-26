@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Annotated, Protocol
 
-from fastapi import APIRouter, Request, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 
 from model_service.builders.client import (
     ConfirmedRejectionError,
@@ -39,6 +39,7 @@ from model_service.facade.routes.common import (
     Scheduler,
     http_error,
     lookup_error,
+    require_idempotency_key,
     submit,
 )
 from model_service.scheduler.contracts import (
@@ -165,6 +166,7 @@ def create_router(
         model_id: str,
         body: ScheduledBuilderRequest,
         response: Response,
+        idempotency_key: Annotated[str, Depends(require_idempotency_key)],
     ) -> ScheduleResult:
         return await submit(
             scheduler,
@@ -174,7 +176,7 @@ def create_router(
                 provider=ProviderName.STANDALONE,
                 body=body.builder_request(),
                 requested_timeout_seconds=body.requested_timeout_seconds,
-                idempotency_key=body.idempotency_key,
+                idempotency_key=idempotency_key,
             ),
             response,
         )

@@ -46,12 +46,9 @@ class ImmediateBuilderRequest(BuilderRequest):
 
 
 class ScheduledBuilderRequest(BuilderRequest):
-    """A builder request plus what durable admission needs."""
+    """A builder request plus a timeout; the `Idempotency-Key` header names it."""
 
-    idempotency_key: Annotated[str, Field(strict=True, min_length=1)]
     requested_timeout_seconds: Annotated[int, Field(strict=True, gt=0)] | None = None
 
     def builder_request(self) -> dict[str, JsonValue]:
-        return self.model_dump(
-            mode="json", exclude={"idempotency_key", "requested_timeout_seconds"}
-        )
+        return self.model_dump(mode="json", exclude={"requested_timeout_seconds"})

@@ -196,8 +196,22 @@ class ApiTestCase(unittest.IsolatedAsyncioTestCase):
             "deadline_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
         }
 
-    def schedule_request(self, key: str = "request-1") -> dict[str, object]:
-        return {**self.builder_request(), "idempotency_key": key}
+    def schedule_request(self) -> dict[str, object]:
+        return self.builder_request()
+
+    async def schedule(
+        self,
+        client: AsyncClient,
+        body: dict[str, object] | None = None,
+        *,
+        key: str | None = "request-1",
+        url: str = SCHEDULE,
+    ) -> Response:
+        return await client.post(
+            url,
+            json=self.schedule_request() if body is None else body,
+            headers={} if key is None else {"Idempotency-Key": key},
+        )
 
     def assert_error(
         self,
@@ -274,8 +288,8 @@ class CatalogRouteTests(ApiTestCase):
 class ScheduleRouteTests(ApiTestCase):
     async def test_schedule_replay_poll_and_cancel(self) -> None:
         async with self.client(self.app()) as client:
-            created = await client.post(SCHEDULE, json=self.schedule_request())
-            replay = await client.post(SCHEDULE, json=self.schedule_request())
+            created = await self.schedule(client)
+            replay = await self.schedule(client)
             execution_id = created.json()["execution"]["id"]
             polled = await client.get(f"/v1/executions/{execution_id}")
             cancelled = await client.post(f"/v1/executions/{execution_id}/cancel")
@@ -306,33 +320,39 @@ class ScheduleRouteTests(ApiTestCase):
     async def test_lookup_and_validation_errors_are_distinct(self) -> None:
         body = self.schedule_request()
         async with self.client(self.app()) as client:
-            unknown_builder = await client.post(
-                "/v1/builders/missing/models/prostate-classifier-1/schedule", json=body
+            unknown_builder = await self.schedule(
+                client, url="/v1/builders/missing/models/prostate-classifier-1/schedule"
             )
-            unknown_model = await client.post(
-                "/v1/builders/heatmap/models/missing/schedule", json=body
+            unknown_model = await self.schedule(
+                client, url="/v1/builders/heatmap/models/missing/schedule"
             )
-            incompatible = await client.post(
-                "/v1/builders/heatmap/models/virchow2/schedule", json=body
+            incompatible = await self.schedule(
+                client, url="/v1/builders/heatmap/models/virchow2/schedule"
             )
-            empty_key = await client.post(
-                SCHEDULE, json={**body, "idempotency_key": ""}
+            empty_key = await self.schedule(client, key="")
+            no_key = await self.schedule(client, key=None)
+            key_in_body = await self.schedule(
+                client, {**body, "idempotency_key": "request-1"}, key=None
             )
-            settings = await client.post(
-                SCHEDULE, json={**body, "configuration": {"stride_fraction": 0.25}}
+            settings = await self.schedule(
+                client, {**body, "configuration": {"stride_fraction": 0.25}}
             )
-            no_key = await client.post(SCHEDULE, json={**body, "idempotency_key": None})
-            bad_timeout = await client.post(
-                SCHEDULE, json={**body, "requested_timeout_seconds": 0}
+            bad_timeout = await self.schedule(
+                client, {**body, "requested_timeout_seconds": 0}
             )
-            provider = await client.post(
-                SCHEDULE, json={**body, "provider": "standalone"}
-            )
+            provider = await self.schedule(client, {**body, "provider": "standalone"})
 
         self.assert_error(unknown_builder, 404, "unknown_builder")
         self.assert_error(unknown_model, 404, "unknown_model")
         self.assert_error(incompatible, 422, "incompatible_model")
-        for response in (empty_key, settings, no_key, bad_timeout, provider):
+        for response in (
+            empty_key,
+            no_key,
+            key_in_body,
+            settings,
+            bad_timeout,
+            provider,
+        ):
             self.assert_error(response, 422, "invalid_request")
 
     async def test_admission_checks_inputs_and_allowed_roots(self) -> None:
@@ -354,10 +374,7 @@ class ScheduleRouteTests(ApiTestCase):
             ]
             async with self.client(self.app()) as client:
                 responses = [
-                    await client.post(
-                        SCHEDULE,
-                        json={**case, "idempotency_key": f"case-{i}"},
-                    )
+                    await self.schedule(client, case, key=f"case-{i}")
                     for i, case in enumerate(cases)
                 ]
 
@@ -371,7 +388,7 @@ class ScheduleRouteTests(ApiTestCase):
             "inputs": {"slide": {"kind": "shared_path", "path": "slide.svs"}},
         }
         async with self.client(self.app()) as client:
-            response = await client.post(SCHEDULE, json=request)
+            response = await self.schedule(client, request)
 
         self.assertEqual(response.status_code, 202, response.text)
 
@@ -388,7 +405,7 @@ class ScheduleRouteTests(ApiTestCase):
         self.dispatch = FakeDispatch(produce)
         self.scheduler = self.make_scheduler(self.repository, self.dispatch)
         async with self.client(self.app()) as client:
-            admitted = await client.post(SCHEDULE, json=self.schedule_request())
+            admitted = await self.schedule(client)
             execution_id = admitted.json()["execution"]["id"]
             async with self.scheduler.running(), asyncio.timeout(2):
                 while True:
@@ -619,7 +636,7 @@ class HealthAndAvailabilityTests(ApiTestCase):
         ):
             ready = await client.get("/readyz")
             deployments = await client.get("/healthz/deployments")
-            admitted = await client.post(SCHEDULE, json=self.schedule_request())
+            admitted = await self.schedule(client)
             execution_id = admitted.json()["execution"]["id"]
             polled = await client.get(f"/v1/executions/{execution_id}")
             cancelled = await client.post(f"/v1/executions/{execution_id}/cancel")
@@ -651,7 +668,7 @@ class HealthAndAvailabilityTests(ApiTestCase):
                 await client.get("/readyz"),
                 await client.get("/v1/executions/execution-1"),
                 await client.post("/v1/executions/execution-1/cancel"),
-                await client.post(SCHEDULE, json=self.schedule_request()),
+                await self.schedule(client),
             ]
             live = await client.get("/healthz")
 
@@ -666,7 +683,7 @@ class HealthAndAvailabilityTests(ApiTestCase):
 
         app = create_app(UnavailableScheduler(), catalog=CATALOG)
         async with self.client(app) as client:
-            response = await client.post(SCHEDULE, json=self.schedule_request())
+            response = await self.schedule(client)
 
         self.assert_error(response, 503, "scheduling_unavailable", retryable=True)
 

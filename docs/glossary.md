@@ -62,8 +62,9 @@ _Avoid_: Batch request, job submission
 
 **Submission identity**:
 The provider-scoped identity used to recognize repeated schedule requests.
-Standalone schedule requests use an idempotency key; EMPAIA schedule requests
-use the EMPAIA job identity.
+Standalone and raw-inference schedule requests name it with the
+`Idempotency-Key` header; EMPAIA schedule requests use the EMPAIA job
+identity, and JES's `Idempotency-Key`, when sent, must equal the job ID.
 
 **Scheduled execution**:
 The durable model-service lifecycle created by one schedule request, including

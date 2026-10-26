@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Annotated, Any, Protocol
 
-from fastapi import HTTPException
+from fastapi import Header, HTTPException
 
 from model_service.builders.contracts import (
     IncompatibleModelError,
@@ -96,6 +96,17 @@ class Capacity(Protocol):
 class NoCapacityInfo:
     async def explain(self, execution: ExecutionView) -> ExecutionView:
         return execution
+
+
+def require_idempotency_key(
+    idempotency_key: Annotated[str | None, Header(min_length=1)] = None,
+) -> str:
+    """Require the `Idempotency-Key` header that names a durable submission."""
+    if idempotency_key is None:
+        raise http_error(
+            422, ApiErrorCode.INVALID_REQUEST, "Idempotency-Key header is required"
+        )
+    return idempotency_key
 
 
 async def submit(

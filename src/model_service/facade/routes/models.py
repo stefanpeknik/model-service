@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 
-from fastapi import APIRouter, Header, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from model_service.builders.contracts import (
     InferenceContract,
@@ -25,6 +25,7 @@ from model_service.facade.routes.common import (
     Scheduler,
     http_error,
     lookup_error,
+    require_idempotency_key,
     submit,
 )
 from model_service.scheduler.contracts import InferenceScheduleRequest, ScheduleResult
@@ -144,14 +145,10 @@ def create_router(
         model_id: str,
         request: Request,
         response: Response,
-        idempotency_key: Annotated[str | None, Header(min_length=1)] = None,
+        idempotency_key: Annotated[str, Depends(require_idempotency_key)],
         timeout_seconds: int | None = None,
     ) -> ScheduleResult:
         """Durably queue one raw model request (the body `run` takes)."""
-        if idempotency_key is None:
-            raise http_error(
-                422, ApiErrorCode.INVALID_REQUEST, "Idempotency-Key header is required"
-            )
         payload = await _read_body(request, max_request_bytes)
         return await submit(
             scheduler,
