@@ -49,9 +49,9 @@ class TiffPixelmapPublisher:
     TIFFs are published unchanged. Tiles are sent channel-major.
 
     The heatmap builder upsamples its score grid to the slide level it read, and
-    records how many pixels one score spans. The pixelmap goes to the coarsest
-    slide level that still keeps `MIN_PIXELS_PER_SCORE` pixels per score, so no
-    score is lost while far fewer tiles are uploaded.
+    records how many pixels one score spans in a pyramidal TIFF. The pixelmap
+    goes to the coarsest slide level that still keeps `MIN_PIXELS_PER_SCORE`
+    pixels per score, so no score is lost while far fewer tiles are uploaded.
     """
 
     def __init__(self, tile_size: int = 512) -> None:
@@ -93,8 +93,10 @@ class TiffPixelmapPublisher:
         if spacing is not None:
             target = _coarsest_level(slide.levels, level, spacing)
             if target != level:
-                image = image.thumbnail_image(
-                    target.width, height=target.height, size="force"
+                # Loading by file starts from the builder's nearest pyramid page
+                # instead of shrinking the full-resolution page.
+                image = pyvips.Image.thumbnail(
+                    str(path), target.width, height=target.height, size="force"
                 )
                 level = target
         tiles_x = math.ceil(image.width / self._tile_size)
