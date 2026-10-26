@@ -8,12 +8,14 @@ writes a pyramidal TIFF at the selected slide level's resolution.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
+from model_service.builders.contracts import SCORE_SPACING_KEY
 from model_service.builders.registry import ScoreEncoding
 
 
@@ -161,6 +163,15 @@ class SlideHeatmapProcessor:
                     image = (image * 255).cast(pyvips.BandFormat.UCHAR)
                 else:
                     image = image.cast(pyvips.BandFormat.FLOAT)
+                # Pixels of this level per score: the image is upsampled from the
+                # score grid, so readers may store it this much coarser losslessly.
+                image.set_type(
+                    pyvips.GValue.gstr_type,
+                    "image-description",
+                    json.dumps(
+                        {SCORE_SPACING_KEY: float(min(scale_x, scale_y))},
+                    ),
+                )
                 image.tiffsave(
                     str(request.output_path),
                     bigtiff=True,

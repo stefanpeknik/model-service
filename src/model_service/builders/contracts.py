@@ -119,6 +119,11 @@ type BuilderInput = Annotated[
 ]
 
 
+# ImageDescription key of a score TIFF: its pixels per model score, so readers
+# know how much coarser they may store it without losing a score.
+SCORE_SPACING_KEY = "score_spacing_px"
+
+
 class InputAccessKind(StrEnum):
     """Which access adapter resolves an invocation's inputs and outputs."""
 

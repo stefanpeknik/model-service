@@ -98,6 +98,9 @@ class FakeVipsImage:
         self.recorded["format"] = band_format
         return self
 
+    def set_type(self, _gtype: object, name: str, value: str) -> None:
+        self.recorded[name] = value
+
     def tiffsave(self, path: str, **options: object) -> None:
         self.recorded["tiff_options"] = options
         Path(path).write_bytes(b"tiff")
@@ -145,6 +148,7 @@ class HeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
                     new_from_array=lambda _value: FakeVipsImage(recorded)
                 ),
                 BandFormat=SimpleNamespace(UCHAR="uchar", FLOAT="float"),
+                GValue=SimpleNamespace(gstr_type="gchararray"),
                 enums=SimpleNamespace(
                     ForeignTiffCompression=SimpleNamespace(DEFLATE="deflate")
                 ),

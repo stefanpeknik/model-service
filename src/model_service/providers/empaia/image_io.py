@@ -11,6 +11,7 @@ import asyncio
 import contextlib
 import io
 import itertools
+import json
 import logging
 import math
 import queue
@@ -19,6 +20,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from model_service.builders.contracts import SCORE_SPACING_KEY
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
 
 
@@ -45,6 +47,11 @@ class TiffPixelmapPublisher:
 
     8-bit TIFFs (the heatmap builder's default) are scaled from 0-255; float32
     TIFFs are published unchanged. Tiles are sent channel-major.
+
+    The heatmap builder upsamples its score grid to the slide level it read, and
+    records how many pixels one score spans. The pixelmap goes to the coarsest
+    slide level that still keeps `MIN_PIXELS_PER_SCORE` pixels per score, so no
+    score is lost while far fewer tiles are uploaded.
     """
 
     def __init__(self, tile_size: int = 512) -> None:
@@ -82,6 +89,14 @@ class TiffPixelmapPublisher:
         scale = 255.0 if image.format == "uchar" else 1.0
         slide = await gateway.slide_metadata()
         level = _matching_level(slide.levels, image.width, image.height)
+        spacing = _score_spacing(image)
+        if spacing is not None:
+            target = _coarsest_level(slide.levels, level, spacing)
+            if target != level:
+                image = image.thumbnail_image(
+                    target.width, height=target.height, size="force"
+                )
+                level = target
         tiles_x = math.ceil(image.width / self._tile_size)
         tiles_y = math.ceil(image.height / self._tile_size)
         pixelmap_id = await gateway.create_pixelmap(
@@ -436,6 +451,34 @@ def closest_level(slide: SlideMetadata, mpp: float) -> SlideLevel:
             (slide.width / level.width + slide.height / level.height) / 2 - scale
         ),
     )
+
+
+MIN_PIXELS_PER_SCORE = 4
+
+
+def _score_spacing(image: object) -> float | None:
+    """Pixels per score recorded by the heatmap builder, if any."""
+    try:
+        description = json.loads(image.get("image-description"))  # type: ignore[attr-defined]
+        spacing = float(description[SCORE_SPACING_KEY])
+    except Exception:
+        return None
+    return spacing if math.isfinite(spacing) and spacing > 0 else None
+
+
+def _coarsest_level(
+    levels: tuple[SlideLevel, ...], level: SlideLevel, spacing: float
+) -> SlideLevel:
+    """The coarsest level at least `MIN_PIXELS_PER_SCORE` pixels per score."""
+    best = level
+    for candidate in levels:
+        downsample = max(level.width / candidate.width, level.height / candidate.height)
+        if (
+            candidate.width < best.width
+            and spacing / downsample >= MIN_PIXELS_PER_SCORE
+        ):
+            best = candidate
+    return best
 
 
 def _matching_level(

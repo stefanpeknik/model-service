@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import struct
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -10,7 +11,13 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from model_service.builders.contracts import BuilderResult, SharedArtifact
+import numpy as np
+
+from model_service.builders.contracts import (
+    SCORE_SPACING_KEY,
+    BuilderResult,
+    SharedArtifact,
+)
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.http_gateway import HttpEmpaiaGateway
 from model_service.providers.empaia.image_io import TiffPixelmapPublisher
@@ -39,11 +46,19 @@ else:
 class RecordingGateway:
     job_id = "job-1"
 
-    def __init__(self, width: int, height: int) -> None:
+    def __init__(self, width: int, height: int, levels: int = 1) -> None:
         self.created: list[dict[str, object]] = []
         self.tiles: list[bytes] = []
-        level = SimpleNamespace(index=0, width=width, height=height)
-        self._slide = SimpleNamespace(identifier="slide-1", levels=(level,))
+        self.positions: list[tuple[int, int, int]] = []
+        self._slide = SimpleNamespace(
+            identifier="slide-1",
+            levels=tuple(
+                SimpleNamespace(
+                    index=index, width=width >> index, height=height >> index
+                )
+                for index in range(levels)
+            ),
+        )
 
     async def slide_metadata(self) -> object:
         return self._slide
@@ -52,9 +67,10 @@ class RecordingGateway:
         self.created.append(body)
         return "pixelmap-1"
 
-    async def put_pixelmap_tile(self, *args: object) -> None:
-        data = args[-1]
-        assert isinstance(data, bytes)
+    async def put_pixelmap_tile(
+        self, _pixelmap: str, level: int, tile_x: int, tile_y: int, data: bytes
+    ) -> None:
+        self.positions.append((level, tile_x, tile_y))
         self.tiles.append(data)
 
 
@@ -75,6 +91,42 @@ class PixelmapEncodingTests(unittest.IsolatedAsyncioTestCase):
                 SharedArtifact(path=str(path), media_type="image/tiff"),
             )
         return gateway
+
+    async def test_heatmap_goes_to_the_coarsest_level_that_keeps_every_score(
+        self,
+    ) -> None:
+        # A 4x6 grid of distinct scores, upsampled 64x like the heatmap builder does.
+        scores = np.arange(24, dtype=np.float32).reshape(4, 6) / 24 + 0.01
+        image = pyvips.Image.new_from_array(scores).resize(64)
+        image = (image * 255).cast("uchar")
+        image.set_type(
+            pyvips.GValue.gstr_type,
+            "image-description",
+            json.dumps({SCORE_SPACING_KEY: 64.0}),
+        )
+        # Slide levels 384x256 down to 24x16 (16x): 4 pixels per score there.
+        gateway = RecordingGateway(image.width, image.height, levels=6)
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "scores.tiff"
+            image.tiffsave(str(path), tile=True, pyramid=True)
+            await TiffPixelmapPublisher(tile_size=256).publish(
+                gateway,  # type: ignore[arg-type]
+                "heatmap",
+                SharedArtifact(path=str(path), media_type="image/tiff"),
+            )
+
+        level = gateway.created[0]["levels"][0]  # type: ignore[index]
+        self.assertEqual(level["slide_level"], 4)
+        self.assertEqual(gateway.positions, [(4, 0, 0)])
+        published = np.asarray(floats(gateway.tiles[0])).reshape(256, 256)[:16, :24]
+        # Each published pixel is the full-resolution heatmap averaged over its area.
+        full = (
+            np.ndarray(buffer=image.write_to_memory(), dtype=np.uint8, shape=(256, 384))
+            / 255
+        )
+        np.testing.assert_allclose(
+            published, full.reshape(16, 16, 24, 16).mean(axis=(1, 3)), atol=0.01
+        )
 
     async def test_uint8_scores_are_scaled_to_unit_range(self) -> None:
         gateway = await self.publish(pyvips.Image.black(4, 4).new_from_image(51))
