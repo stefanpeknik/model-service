@@ -3,8 +3,10 @@
 Status: implemented and accepted live on 2026-10-14
 ([evidence](operations/core-acceptance-2026-10-14.md)); scheduled raw inference
 added and accepted on 2026-10-15
-([evidence](operations/raw-inference-acceptance-2026-10-15.md)). Branch
-`claude/model-service-core`.
+([evidence](operations/raw-inference-acceptance-2026-10-15.md)); the EMPAIA
+bridge ran end to end against the EMPAIA test instance on 2026-10-25
+([evidence](operations/empaia-test-instance-2026-10-25.md)). Branch
+`claude/empaia-http-protocol`.
 
 This is the specification for finishing model-service so that EMPAIA (or any
 other caller) can treat it as a black-box service. It keeps the decisions the
@@ -116,7 +118,7 @@ defaults. One Ray application per builder (`builders.serve:app`, route
 | `GET /v1/builders` | Builders: ID, accepted contract, inputs, outputs |
 | `POST /v1/builders/{builder}/models/{model}/run` | Synchronous run. Body: `inputs`, `input_access`, optional `output_path`, `deadline_at` |
 | `POST /v1/builders/{builder}/models/{model}/schedule` | Durable admission with shared-storage inputs. Body: `inputs`, `input_access`, optional `output_path`, `idempotency_key`, optional `requested_timeout_seconds` |
-| `POST /v1/empaia/builders/{builder}/models/{model}`, `GET`/`DELETE /v1/empaia/executions/{id}` | EMPAIA jobs from JES's HTTP execution backend (app registered as `http::<target>/builders/<builder>/models/<model>`): the body is what an app container gets (App API URL, job ID, token); the job's mode, inputs and configuration come from the App API; the `Location` is polled and cancelled. A failure or cancellation reads as `running` until EMPAIA has been told; a running job's `message` explains a wait for capacity |
+| `POST /v1/empaia/builders/{builder}/models/{model}`, `GET`/`DELETE /v1/empaia/executions/{id}` | EMPAIA jobs from JES's HTTP execution backend (app registered as `http::<target>/builders/<builder>/models/<model>`): the body is what an app container gets (App API URL, job ID, token); the job's inputs and configuration come from the App API; submission is idempotent per job, and an `Idempotency-Key` header, when sent, must be the job ID (422 otherwise); the `Location` is polled and cancelled. A failure or cancellation reads as `running` until EMPAIA has been told; a running job's `message` explains a wait for capacity |
 | `POST /v1/models/{model}/run` | Raw inference: one LZ4-compressed RGB tile of the model's `tile_size`, optional `x-output-dtype`/`x-pool-tokens`; checked, then the model's response is returned. Replaces the root `POST /{model}/` proxy |
 | `POST /v1/models/{model}/schedule` | Durable raw inference: the body `run` takes, an `Idempotency-Key` header, optional `timeout_seconds` |
 | `GET /v1/executions/{id}`, `POST …/cancel` | Views carry `operation` (`builder` or `inference`), `builder_id` (null for inference), `model_id`, `provider_pending` (a failure or cancellation not yet reported to the provider) and `message` (see below) |
@@ -128,14 +130,15 @@ Incompatible pair: 422 `incompatible_model`. Model temporarily down: durable
 requests queue; synchronous requests get 503.
 
 EMPAIA admission asks AppService for each optional builder input and leaves out
-those the job does not have (AppService answers 404). A preprocessing app, which
+those the job does not have (AppService answers 404). That is all the job's mode
+(standalone, preprocessing, …) changes for a builder, so model-service does not
+read the mode itself. A preprocessing app, which
 EMPAIA starts with only a slide, thus runs the heatmap builder over the whole
 slide. An app file may list the inputs it takes (`inputs: [slide]`, see
 `deploy/empaia/apps/constant-heatmap-preprocessing.yaml`).
 
 EMPAIA slide inputs reach builders one of two ways, chosen by
-`EMPAIA_SLIDE_ACCESS` on the Ray workers (Helm
-`executionScheduler.empaia.slideAccess`):
+`EMPAIA_SLIDE_ACCESS` (Helm `empaia.slideAccess`):
 
 - `direct` (default): link the file named by the RationAI direct-access route.
 - `http`: download the slide through the App API's region route into the
@@ -150,7 +153,7 @@ EMPAIA slide inputs reach builders one of two ways, chosen by
 A running execution whose model or builder has no running Serve replica, only
 one Ray has not placed on a node for `CAPACITY_GRACE_SECONDS` (default 60),
 keeps `running` with `message: "waiting for capacity: no replica of model <id>
-could be scheduled for <N>s"`. Ray Serve keeps such a replica indefinitely and
+could be scheduled for <N>s"` (or `builder <id>`). Ray Serve keeps such a replica indefinitely and
 calls to it wait, so the message is the only sign; the execution's deadline
 still applies. The scheduler reads the Ray dashboard's
 `/api/serve/applications/` (`RAY_DASHBOARD_ORIGIN`, set by Helm), cached for
@@ -208,13 +211,34 @@ request the raw route takes and returns an execution.
   replica. Replicas scale it: leases and the per-model locks already
   coordinate them.
 
+EMPAIA wiring is one settings class, `EmpaiaSettings` (`EMPAIA_*`), read by
+the facade and by builder replicas: `EMPAIA_ENABLED`, `EMPAIA_API_URLS`,
+`EMPAIA_WORKSPACE_ROOT`, `EMPAIA_SLIDE_ACCESS`, and
+`EMPAIA_APP_SERVICE_TIMEOUT_SECONDS` (default 60; creating a pixelmap took 10 s
+on the test instance, and the SDK's 5 s default failed that job). Helm renders
+them from the top-level `empaia` values for the facade and every worker group;
+`empaia.dnsSearches` adds DNS search domains where an installation hands JES a
+short App Service name from another namespace.
+
+Attempt workspaces live under one directory per EMPAIA job
+(`<workspace root>/<job key>/<attempt key>/`). Provider finish removes the
+job's directory on every outcome: before a failure or cancellation report, and
+after a successful publication (a failed publication keeps the outputs for its
+retry). A failed input preparation removes its attempt directory at once.
+
+The heatmap TIFF records how many of its pixels one model score spans
+(ImageDescription `score_spacing_px`; 256 for the prostate model). The EMPAIA
+publisher writes the pixelmap to the coarsest slide level that still keeps four
+pixels per score, each pixel the area average of the full-resolution heatmap, so
+no score is lost: 8 tiles instead of 17,600 on the prostate slide.
+
 ### Safety and correctness fixes
 
 - Shared-storage `root` must be one of the configured `SHARED_STORAGE_ROOTS`.
 - EMPAIA `api_url` must match a configured `EMPAIA_API_URLS` prefix.
 - A failed EMPAIA publication reports failure to EMPAIA instead of leaving the
   job open; idempotent pixelmap tile writes are retried.
-- EMPAIA attempt workspaces are removed when the attempt ends.
+- EMPAIA workspaces are removed once the job's outcome is reported, whatever it is.
 - All Ray applications run the code baked into the image; no `working_dir`
   download from GitHub.
 
@@ -240,8 +264,26 @@ the unsafe legacy `src/model_service/builders/heatmap_builder.py` endpoint, and
    exists complete after it starts, without the client staying connected;
    results equal direct calls; a facade restart loses no tile.
 
+## Operator tooling
+
+Not part of the service, used to deploy and validate it:
+
+- `scripts/register_empaia_app.py` and `scripts/generate_ead.py`: an EAD and
+  marketplace registration from an app file in `deploy/empaia/apps/`.
+- `scripts/warm_model.py`: one scheduled tile, to start a GPU replica before a
+  demo or a job.
+- `scripts/prepare_tissue_mask.py`: a tissue mask TIFF for standalone runs.
+- `deploy/images/Dockerfile.code-refresh`: swaps the code layer of an existing
+  image for test deployments; release images build from source.
+- `testing/` doubles, `deploy/helm/rayservice/templates/validation-appservice-*`
+  and `deploy/k8s/peknik-ns/empaia-mock.yaml`: the mock AppService and EMPAIA
+  stand-ins for peknik-ns.
+
 ## Out of scope
 
-EMPAIA job runs, JES integration, app registration, annotation outputs and
-PREPROCESSING mode. Those start once this core is accepted. EMPAIA code keeps
-working against its mock AppService tests.
+The EMPAIA bridge (JES's HTTP backend, registration, standalone and
+preprocessing apps) is now in scope and implemented. Still out of scope:
+annotation outputs, tile embeddings as EMPAIA outputs (EAD v3 has no type for
+them), quality control (QC) masks, authentication between JES and
+model-service, automatic preprocessing triggers, and batching tiles per model
+call.
