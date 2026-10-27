@@ -135,6 +135,7 @@ class PostgresExecutionRepository:
 
     async def aclose(self) -> None:
         await self._engine.dispose()
+        self._payloads.close()
 
     async def initialize(self) -> None:
         """Apply pending Yoyo migrations under a schema-specific initialization lock."""

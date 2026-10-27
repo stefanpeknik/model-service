@@ -12,7 +12,9 @@ import asyncio
 import os
 import shutil
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
@@ -33,8 +35,14 @@ class PayloadMissingError(RuntimeError):
 
 
 class PayloadStore:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, io_threads: int = 32) -> None:
         self._root = root
+        # Network file systems answer each create, rename or unlink in tens of
+        # milliseconds; the default executor (CPUs + 4 threads) caps tiles/s.
+        self._io = ThreadPoolExecutor(io_threads, thread_name_prefix="payload-io")
+
+    def close(self) -> None:
+        self._io.shutdown(wait=False)
 
     async def write_request(self, execution_id: str, content: bytes) -> StoredPayload:
         return await self._write(f"{execution_id}/request", content)
@@ -46,7 +54,7 @@ class PayloadStore:
 
     async def read(self, payload: StoredPayload) -> bytes:
         try:
-            content = await asyncio.to_thread(self._resolve(payload.path).read_bytes)
+            content = await self._run(self._resolve(payload.path).read_bytes)
         except FileNotFoundError as error:
             raise PayloadMissingError(payload.path) from error
         if len(content) != payload.size:
@@ -56,7 +64,7 @@ class PayloadStore:
     async def delete(self, paths: Collection[str]) -> None:
         """Remove files or whole execution directories; missing ones are ignored."""
         if paths:
-            await asyncio.to_thread(self._delete, [self._resolve(p) for p in paths])
+            await self._run(self._delete, [self._resolve(p) for p in paths])
 
     async def sweep_orphans(
         self,
@@ -68,21 +76,29 @@ class PayloadStore:
         `existing` reports which candidate IDs still have rows. Such directories
         are left by a crash between writing a request and inserting its row.
         """
-        candidates = await asyncio.to_thread(self._old_directories, older_than)
+        candidates = await self._run(self._old_directories, older_than)
         if not candidates:
             return
         known = set(await existing(candidates))
         await self.delete([name for name in candidates if name not in known])
 
     async def _write(self, relative: str, content: bytes) -> StoredPayload:
-        await asyncio.to_thread(self._write_file, self._resolve(relative), content)
+        await self._run(self._write_file, self._resolve(relative), content)
         return StoredPayload(relative, len(content))
 
+    async def _run[**P, T](
+        self, function: Callable[P, T], *args: P.args, **kwargs: P.kwargs
+    ) -> T:
+        return await asyncio.get_running_loop().run_in_executor(
+            self._io, lambda: function(*args, **kwargs)
+        )
+
     def _resolve(self, relative: str) -> Path:
-        path = (self._root / relative).resolve()
-        if not path.is_relative_to(self._root.resolve()):
+        # Lexical only: resolving would stat every component on the event loop.
+        parts = PurePosixPath(relative).parts
+        if not parts or PurePosixPath(relative).is_absolute() or ".." in parts:
             raise ValueError("payload path escapes the payload root")
-        return path
+        return self._root.joinpath(*parts)
 
     @staticmethod
     def _write_file(path: Path, content: bytes) -> None:
