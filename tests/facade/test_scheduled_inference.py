@@ -275,7 +275,8 @@ class ScheduledInferenceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_a_lost_request_file_fails_the_tile(self) -> None:
         execution_id = (await self.schedule()).json()["execution"]["id"]
-        (self.repository.payload_root / execution_id / "request").unlink()
+        root = self.repository.payload_root
+        (root / execution_id[:2] / f"{execution_id}.request").unlink()
 
         await self.run_attempt()
 
@@ -293,7 +294,11 @@ class ScheduledInferenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await self.scheduler._worker.run_once())
         self.assertEqual(self.model_requests, [])
         self.assertFalse(
-            (self.repository.payload_root / execution_id / "request").exists()
+            (
+                self.repository.payload_root
+                / execution_id[:2]
+                / f"{execution_id}.request"
+            ).exists()
         )
 
     async def test_lookup_and_result_errors(self) -> None:

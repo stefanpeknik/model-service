@@ -619,29 +619,34 @@ class PostgresExecutionRepositoryTests(
             {
                 "request_path": None,
                 "request_size": None,
-                "response_path": f"{execution_id}/response-{claim.fencing_token}",
+                "response_path": (
+                    f"{execution_id[:2]}/{execution_id}.response-{claim.fencing_token}"
+                ),
                 "response_size": 8,
             },
         )
 
-    async def test_orphaned_payload_directories_are_swept(self) -> None:
+    async def test_orphaned_payload_files_are_swept(self) -> None:
         kept_id = await self._admit_inference("kept")
-        orphan = self.payload_root / str(uuid4())
-        (orphan / "request").parent.mkdir()
-        (orphan / "request").write_bytes(b"lost")
-        fresh = self.payload_root / str(uuid4())
-        fresh.mkdir()
-        other = self.payload_root / "lost+found"
-        other.mkdir()
+        kept = self.payload_root / kept_id[:2] / f"{kept_id}.request"
+        orphan_id, fresh_id = str(uuid4()), str(uuid4())
+        orphan = self.payload_root / orphan_id[:2] / f"{orphan_id}.request"
+        fresh = self.payload_root / fresh_id[:2] / f"{fresh_id}.response-x"
+        other = self.payload_root / "lost+found" / "file"
+        for path in (orphan, fresh, other):
+            path.parent.mkdir(exist_ok=True)
+            path.write_bytes(b"lost")
         old = (datetime.now(UTC) - timedelta(hours=2)).timestamp()
-        for path in (orphan, self.payload_root / kept_id, other):
+        for path in (orphan, kept, other):
             os.utime(path, (old, old))
 
         await self.repository.maintain()
 
         self.assertEqual(
-            sorted(path.name for path in self.payload_root.iterdir()),
-            sorted([kept_id, fresh.name, "lost+found"]),
+            sorted(
+                p.relative_to(self.payload_root) for p in self.payload_root.glob("*/*")
+            ),
+            sorted(p.relative_to(self.payload_root) for p in (kept, fresh, other)),
         )
 
     async def test_malformed_execution_id_is_unknown(self) -> None:

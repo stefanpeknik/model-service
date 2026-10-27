@@ -1,16 +1,20 @@
 """Keep raw-inference request and response bytes as files outside the database.
 
-Each execution owns one directory named by its ID: `request`, written before the
-row is inserted, and `response-<fencing token>`, written before settlement so a
-stale attempt never overwrites the accepted response. Rows store the relative
-path and size; a file only becomes visible under its final name once complete.
+An execution's files sit in one of 256 shard directories named by the first two
+characters of its ID: `<id>.request`, written before the row is inserted, and
+`<id>.response-<fencing token>`, written before settlement so a stale attempt
+never overwrites the accepted response. Rows store the relative path and size.
+A file is written under a temporary name and renamed into place.
+
+Creating, renaming or deleting a file locks its directory, and on a network file
+system each such operation takes tens of milliseconds; shards keep concurrent
+tiles from queueing on one directory.
 """
 
 from __future__ import annotations
 
 import asyncio
 import os
-import shutil
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -37,20 +41,21 @@ class PayloadMissingError(RuntimeError):
 class PayloadStore:
     def __init__(self, root: Path, *, io_threads: int = 32) -> None:
         self._root = root
-        # Network file systems answer each create, rename or unlink in tens of
-        # milliseconds; the default executor (CPUs + 4 threads) caps tiles/s.
+        # The default executor (CPUs + 4 threads) would queue slow file operations.
         self._io = ThreadPoolExecutor(io_threads, thread_name_prefix="payload-io")
 
     def close(self) -> None:
         self._io.shutdown(wait=False)
 
     async def write_request(self, execution_id: str, content: bytes) -> StoredPayload:
-        return await self._write(f"{execution_id}/request", content)
+        return await self._write(_name(execution_id, "request"), content)
 
     async def write_response(
         self, execution_id: str, fencing_token: str, content: bytes
     ) -> StoredPayload:
-        return await self._write(f"{execution_id}/response-{fencing_token}", content)
+        return await self._write(
+            _name(execution_id, f"response-{fencing_token}"), content
+        )
 
     async def read(self, payload: StoredPayload) -> bytes:
         try:
@@ -62,80 +67,98 @@ class PayloadStore:
         return content
 
     async def delete(self, paths: Collection[str]) -> None:
-        """Remove files or whole execution directories; missing ones are ignored."""
-        if paths:
-            await self._run(self._delete, [self._resolve(p) for p in paths])
+        """Remove files; missing ones are ignored."""
+        resolved = [self._resolve(path) for path in paths]
+        await asyncio.gather(*(self._run(_unlink, path) for path in resolved))
 
     async def sweep_orphans(
         self,
         existing: Callable[[list[str]], Awaitable[Collection[str]]],
         older_than: float,
     ) -> None:
-        """Remove old execution directories that have no execution.
+        """Remove files older than `older_than` seconds that belong to no execution.
 
-        `existing` reports which candidate IDs still have rows. Such directories
-        are left by a crash between writing a request and inserting its row.
+        `existing` reports which of the given IDs still have rows. Such files are
+        left by a crash between writing a file and recording it.
         """
-        candidates = await self._run(self._old_directories, older_than)
-        if not candidates:
-            return
-        known = set(await existing(candidates))
-        await self.delete([name for name in candidates if name not in known])
+        shards = [f"{value:02x}" for value in range(256)]
+        listings = await asyncio.gather(*(self._run(self._list, s) for s in shards))
+        files: dict[str, list[str]] = {}
+        for listing in listings:
+            for path in listing:
+                files.setdefault(PurePosixPath(path).name[:36], []).append(path)
+        ids = list(files)
+        known: set[str] = set()
+        for start in range(0, len(ids), 1000):
+            known.update(await existing(ids[start : start + 1000]))
+        unowned = [path for value in ids if value not in known for path in files[value]]
+        cutoff = time.time() - older_than
+        modified = await asyncio.gather(
+            *(self._run(self._modified, path) for path in unowned)
+        )
+        await self.delete(
+            [
+                path
+                for path, at in zip(unowned, modified, strict=True)
+                if at is not None and at < cutoff
+            ]
+        )
 
     async def _write(self, relative: str, content: bytes) -> StoredPayload:
-        await self._run(self._write_file, self._resolve(relative), content)
+        await self._run(_write_file, self._resolve(relative), content)
         return StoredPayload(relative, len(content))
 
-    async def _run[**P, T](
-        self, function: Callable[P, T], *args: P.args, **kwargs: P.kwargs
-    ) -> T:
+    async def _run[*Ts, T](self, function: Callable[[*Ts], T], *args: *Ts) -> T:
         return await asyncio.get_running_loop().run_in_executor(
-            self._io, lambda: function(*args, **kwargs)
+            self._io, function, *args
         )
 
     def _resolve(self, relative: str) -> Path:
         # Lexical only: resolving would stat every component on the event loop.
-        parts = PurePosixPath(relative).parts
-        if not parts or PurePosixPath(relative).is_absolute() or ".." in parts:
+        path = PurePosixPath(relative)
+        if not path.parts or path.is_absolute() or ".." in path.parts:
             raise ValueError("payload path escapes the payload root")
-        return self._root.joinpath(*parts)
+        return self._root.joinpath(*path.parts)
 
-    @staticmethod
-    def _write_file(path: Path, content: bytes) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+    def _list(self, shard: str) -> list[str]:
         try:
-            with temporary.open("wb") as file:
-                file.write(content)
-                file.flush()
-                os.fsync(file.fileno())
-            temporary.replace(path)
-        except BaseException:
-            temporary.unlink(missing_ok=True)
-            raise
-
-    @staticmethod
-    def _delete(paths: list[Path]) -> None:
-        for path in paths:
-            if path.is_dir():
-                shutil.rmtree(path, ignore_errors=True)
-            else:
-                path.unlink(missing_ok=True)
-
-    def _old_directories(self, older_than: float) -> list[str]:
-        cutoff = time.time() - older_than
-        try:
-            entries = list(os.scandir(self._root))
+            names = os.listdir(self._root / shard)
         except FileNotFoundError:
             return []
-        # Only execution directories: a volume may hold others, e.g. lost+found.
-        return [
-            entry.name
-            for entry in entries
-            if _is_uuid(entry.name)
-            and entry.is_dir(follow_symlinks=False)
-            and entry.stat(follow_symlinks=False).st_mtime < cutoff
-        ]
+        # Only execution files: a volume may hold others, e.g. lost+found.
+        return [f"{shard}/{name}" for name in names if _is_uuid(name[:36])]
+
+    def _modified(self, relative: str) -> float | None:
+        try:
+            return self._resolve(relative).stat().st_mtime
+        except FileNotFoundError:
+            return None
+
+
+def _write_file(path: Path, content: bytes) -> None:
+    temporary = path.with_name(f"{path.name}.{uuid4().hex}.tmp")
+    try:
+        file = temporary.open("wb")
+    except FileNotFoundError:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        file = temporary.open("wb")
+    try:
+        with file:
+            file.write(content)
+            file.flush()
+            os.fsync(file.fileno())
+        temporary.replace(path)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+def _unlink(path: Path) -> None:
+    path.unlink(missing_ok=True)
+
+
+def _name(execution_id: str, kind: str) -> str:
+    return f"{execution_id[:2]}/{execution_id}.{kind}"
 
 
 def _is_uuid(value: str) -> bool:

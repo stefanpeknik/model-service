@@ -376,10 +376,18 @@ class ExecutionRepositoryContract:
         # The replay key is free again once the execution is gone.
         assert await self._admit_inference("finished") != finished_id
 
+    def _payload_files(self, execution_id: str) -> list[str]:
+        shard = self.payload_root / execution_id[:2]
+        if not shard.exists():
+            return []
+        return sorted(
+            path.name.removeprefix(f"{execution_id}.")
+            for path in shard.glob(f"{execution_id}.*")
+        )
+
     async def test_inference_files_follow_the_execution(self) -> None:
         execution_id = await self._admit_inference("tile", payload=b"request")
-        directory = self.payload_root / execution_id
-        assert (directory / "request").read_bytes() == b"request"
+        assert self._payload_files(execution_id) == ["request"]
         claim = await self.repository.claim_due("worker", timedelta(seconds=30))
         assert claim is not None
         await self.repository.settle(
@@ -389,12 +397,11 @@ class ExecutionRepositoryContract:
         )
 
         # Only the response outlives the attempt.
-        assert [path.name for path in directory.iterdir()] == [
-            f"response-{claim.fencing_token}"
-        ]
+        assert self._payload_files(execution_id) == [f"response-{claim.fencing_token}"]
+        assert await self.repository.inference_content(execution_id) == b"response"
         await self._advance_time(INFERENCE_RETENTION * 2)
         await self.repository.maintain()
-        assert not directory.exists()
+        assert self._payload_files(execution_id) == []
 
     async def test_a_rejected_response_leaves_no_file(self) -> None:
         execution_id = await self._admit_inference("tile")
@@ -413,8 +420,7 @@ class ExecutionRepositoryContract:
         else:
             raise AssertionError("a cancelled claim recorded its response")
 
-        directory = self.payload_root / execution_id
-        assert not directory.exists() or not any(directory.iterdir())
+        assert self._payload_files(execution_id) == []
 
     async def test_missing_files_read_as_unavailable(self) -> None:
         answered_id = await self._admit_inference("answered")
@@ -425,10 +431,10 @@ class ExecutionRepositoryContract:
             claim.fencing_token,
             InferenceSucceeded(InferenceResult(None, {}, 3), b"out"),
         )
-        for path in (self.payload_root / answered_id).iterdir():
+        for path in (self.payload_root / answered_id[:2]).glob(f"{answered_id}.*"):
             path.unlink()
         queued_id = await self._admit_inference("queued")
-        (self.payload_root / queued_id / "request").unlink()
+        (self.payload_root / queued_id[:2] / f"{queued_id}.request").unlink()
 
         try:
             await self.repository.inference_content(answered_id)
@@ -444,7 +450,9 @@ class ExecutionRepositoryContract:
         execution_id = await self._admit_inference("tile", payload=b"first")
         assert await self._admit_inference("tile", payload=b"first") == execution_id
 
-        assert [path.name for path in self.payload_root.iterdir()] == [execution_id]
+        assert [path.name for path in self.payload_root.glob("*/*")] == [
+            f"{execution_id}.request"
+        ]
 
     async def test_get_many_keeps_order_and_skips_unknown_ids(self) -> None:
         first = await self._admit_inference("first")

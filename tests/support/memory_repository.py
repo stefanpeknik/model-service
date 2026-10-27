@@ -146,9 +146,10 @@ class InMemoryExecutionRepository:
                     del self._submissions[
                         (execution.identity.provider, execution.identity.key)
                     ]
-                    self._requests.pop(execution.id, None)
-                    self._responses.pop(execution.id, None)
-                    self._released.append(execution.id)
+                    for payloads in (self._requests, self._responses):
+                        stored = payloads.pop(execution.id, None)
+                        if stored is not None:
+                            self._released.append(stored.path)
 
     async def find_submission(
         self,

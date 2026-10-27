@@ -199,7 +199,7 @@ class PostgresExecutionRepository:
             created = result.created
         finally:
             if request is not None and not created:
-                await self._delete_payloads([execution_id])
+                await self._delete_payloads([request.path])
         return result
 
     async def _insert(
@@ -628,12 +628,14 @@ class PostgresExecutionRepository:
             .limit(1000)
             .with_for_update(skip_locked=True)
         )
-        deleted = await session.scalars(
+        deleted = await session.execute(
             delete(ExecutionRow)
             .where(ExecutionRow.id.in_(expired))
-            .returning(ExecutionRow.id)
+            .returning(ExecutionRow.request_path, ExecutionRow.response_path)
         )
-        _delete_after_commit(session, deleted.all())
+        _delete_after_commit(
+            session, [path for row in deleted for path in row if path is not None]
+        )
 
     async def _persist_state(
         self,
