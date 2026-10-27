@@ -13,7 +13,7 @@ worker claims due work and moves it through processing and provider finish.
 | `domain.py`, `contracts.py` | Internal records and public request/view types |
 | `store/repository.py` | The persistence interface |
 | `store/postgres.py` | PostgreSQL implementation; an advisory lock per operation and model serializes capacity checks |
-| `store/payloads.py` | Tile request and response files on the inference storage volume; rows keep their paths and sizes |
+| `store/payloads.py` | Tile request and response files on the inference storage volume (256 shards); rows keep their paths and sizes |
 | `store/migrations/` | Yoyo migrations, applied at startup ([guide](store/migrations/README.md)) |
 | `store/protected_context.py` | AES-GCM encryption of provider secrets at rest |
 | `providers.py` | Provider interface: identify, prepare, finish |

@@ -53,7 +53,7 @@ rayImage:
   # Thin code layer over the October GPU image (same Harbor repository, so
   # its large base layers are not uploaded again).
   repository: cerit.io/stefanpeknik/model-service-ray
-  tag: empaia-12
+  tag: empaia-15
   pullPolicy: IfNotPresent
 
 storage:
@@ -70,7 +70,7 @@ executionScheduler:
   replicas: 1
   image:
     repository: cerit.io/stefanpeknik/model-service-scheduler
-    tag: empaia-12
+    tag: empaia-15
     pullPolicy: IfNotPresent
   database:
     existingSecret: model-service-validation-db

@@ -193,24 +193,26 @@ request the raw route takes and returns an execution.
   `INFERENCE_STORAGE_PATH` (Helm `executionScheduler.inferenceStorage`: a
   ReadWriteMany claim mounted by every facade replica and nothing else, apart
   from the EMPAIA workspace so a burst of tiles cannot fill the volume
-  publication needs). Each execution has a directory named by its ID; the row
-  keeps each file's relative path and size, and a file whose size differs
-  reads as missing.
+  publication needs). Files sit in 256 shard directories named by the first
+  two characters of the execution ID, as `<id>.request` and
+  `<id>.response-<fencing token>`; creating or deleting a file locks its
+  directory, which on NFS serialized every tile when each execution had its
+  own directory under one root. The row keeps each file's relative path and
+  size, and a file whose size differs reads as missing. File I/O runs on its
+  own 32-thread pool.
   - The request is written (temporary name, then rename) before the admission
     insert, so an acknowledged tile survives a restart. A replay or conflict
     removes the unused file. It is deleted once the execution finishes; a tile
     whose request file is gone fails with `inference_request_unavailable`.
-  - Each attempt writes its response to `response-<fencing token>` before
-    settling, and settlement records it only if the claim is still current;
-    otherwise the file is removed, so a stale attempt never replaces the
-    accepted response. A response that is gone reads as `409
-    result_unavailable`.
+  - Each attempt writes its response file before settling, and settlement
+    records it only if the claim is still current; otherwise the file is
+    removed, so a stale attempt never replaces the accepted response. A
+    response that is gone reads as `409 result_unavailable`.
   - The response is kept for `INFERENCE_RETENTION_SECONDS` (24 h) after
-    finishing; then the execution is deleted, and its directory once that
-    commits. `x-` response headers (e.g. `x-output-shape`) are kept in the row.
-  - Every 10 minutes, maintenance removes execution directories older than an
-    hour that have no row, left by a crash between writing a request and
-    inserting its row.
+    finishing; then the execution is deleted, and its files once that commits.
+    `x-` response headers (e.g. `x-output-shape`) are kept in the row.
+  - Every 10 minutes, maintenance removes execution files older than an hour
+    that no row owns, left by a crash between writing a file and recording it.
   - Migration `0004` replaces the old `inference_payloads` table and removes
     existing inference executions, whose bytes cannot move to files; drain
     scheduled raw inference before upgrading.
