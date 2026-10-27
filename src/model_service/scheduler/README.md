@@ -11,10 +11,11 @@ worker claims due work and moves it through processing and provider finish.
 | `inference.py` | Raw-request target interface, replay identity and HTTP status classification |
 | `transitions.py` | Every state change: admit, claim, renew, settle, cancel, lease recovery, deadlines |
 | `domain.py`, `contracts.py` | Internal records and public request/view types |
-| `repository.py` | The persistence interface |
-| `persistence/postgres.py` | PostgreSQL implementation; an advisory lock per operation and model serializes capacity checks; tile bytes live in `inference_payloads` |
-| `persistence/migrations/` | Yoyo migrations, applied at startup ([guide](persistence/migrations/README.md)) |
-| `persistence/protected_context.py` | AES-GCM encryption of provider secrets at rest |
+| `store/repository.py` | The persistence interface |
+| `store/postgres.py` | PostgreSQL implementation; an advisory lock per operation and model serializes capacity checks |
+| `store/payloads.py` | Tile request and response files on the inference storage volume; rows keep their paths and sizes |
+| `store/migrations/` | Yoyo migrations, applied at startup ([guide](store/migrations/README.md)) |
+| `store/protected_context.py` | AES-GCM encryption of provider secrets at rest |
 | `providers.py` | Provider interface: identify, prepare, finish |
 
 ## Lifecycle

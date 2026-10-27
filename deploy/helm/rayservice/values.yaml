@@ -95,6 +95,14 @@ executionScheduler:
     maxRequestBytes: 2097152
     maxResultBytes: 4194304
     retentionSeconds: 86400
+  # Request and response files of scheduled raw inference. A ReadWriteMany
+  # claim mounted by every facade replica and nothing else, separate from the
+  # EMPAIA workspace so a burst of tiles cannot fill the volume publication
+  # needs. Size it for the tiles kept: up to 4 MiB per response for
+  # retentionSeconds, plus requests still queued.
+  inferenceStorage:
+    existingClaim: ""
+    mountPath: /mnt/model-service-inference
   resources:
     requests:
       cpu: 100m

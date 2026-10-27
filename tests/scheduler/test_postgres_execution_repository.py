@@ -50,6 +50,7 @@ from model_service.scheduler.domain import (
     WorkKind,
 )
 from model_service.scheduler.store.models import ExecutionRow
+from model_service.scheduler.store.payloads import PayloadStore
 from model_service.scheduler.store.postgres import PostgresExecutionRepository
 from model_service.scheduler.store.protected_context import ProtectedContextCipher
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
@@ -79,6 +80,9 @@ class PostgresExecutionRepositoryTests(
             self.skipTest("TEST_POSTGRES_DSN is not configured")
         self.dsn = dsn
         self.schema = f"test_execution_{uuid4().hex}"
+        payload_directory = TemporaryDirectory()
+        self.addCleanup(payload_directory.cleanup)
+        self.payload_root = Path(payload_directory.name)
         self._repositories: list[PostgresExecutionRepository] = []
         key = base64.urlsafe_b64encode(bytes(range(32))).decode()
         self.cipher = ProtectedContextCipher.from_base64(key)
@@ -163,7 +167,6 @@ class PostgresExecutionRepositoryTests(
                 "executions_report_deadline_idx",
                 "executions_lease_idx",
                 "executions_finished_idx",
-                "inference_payloads_pkey",
             }
             <= index_names
         )
@@ -313,6 +316,67 @@ class PostgresExecutionRepositoryTests(
         )
         self.assertEqual(await self._applied_migrations(), ALL_MIGRATIONS)
 
+    async def test_payload_file_migration_keeps_builders_and_drops_inference(
+        self,
+    ) -> None:
+        await self._drop_schema(self.schema)
+        with TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            for path in MIGRATIONS_DIRECTORY.glob("000[123]-*.sql"):
+                shutil.copy(path, directory)
+            with patch(
+                "model_service.scheduler.store.schema.MIGRATIONS_DIRECTORY", directory
+            ):
+                await self.repository.initialize()
+        deadline = datetime.now(UTC) + timedelta(minutes=5)
+        builder_id, inference_id = str(uuid4()), str(uuid4())
+        builder_invocation = {
+            "inputs": {"slide": {"kind": "shared_path", "path": "slide.mrxs"}},
+            "resolved_configuration": None,
+            "input_access": {"kind": "shared_storage", "state": {"root": "/s"}},
+            "deadline_at": deadline.isoformat(),
+            "output_path": None,
+        }
+        inference_invocation = {"headers": {}, "deadline_at": deadline.isoformat()}
+        async with await AsyncConnection.connect(self.dsn) as connection:
+            for execution_id, operation, builder, invocation in (
+                (builder_id, "builder", "heatmap", builder_invocation),
+                (inference_id, "inference", None, inference_invocation),
+            ):
+                await connection.execute(
+                    sql.SQL(
+                        "INSERT INTO {} (id, provider, submission_key, "
+                        "request_fingerprint, operation, builder_id, model_id, "
+                        "status, invocation, protected_context, deadline_at, "
+                        "work_kind, next_attempt_at) VALUES (%s, %s, %s, 'f', %s, "
+                        "%s, 'model', 'queued', %s, %s, %s, 'processing', "
+                        "clock_timestamp())"
+                    ).format(sql.Identifier(self.schema, "executions")),
+                    (
+                        execution_id,
+                        "standalone" if builder else "inference",
+                        execution_id,
+                        operation,
+                        builder,
+                        Jsonb(invocation),
+                        self.cipher.encrypt({}),
+                        deadline,
+                    ),
+                )
+            await connection.execute(
+                sql.SQL(
+                    "INSERT INTO {} (execution_id, request) VALUES (%s, %s)"
+                ).format(sql.Identifier(self.schema, "inference_payloads")),
+                (inference_id, b"tile"),
+            )
+
+        await self.repository.initialize()
+
+        self.assertEqual((await self.repository.get(builder_id)).builder_id, "heatmap")
+        with self.assertRaises(UnknownExecutionError):
+            await self.repository.get(inference_id)
+        self.assertEqual(await self._applied_migrations(), ALL_MIGRATIONS)
+
     async def test_empty_migration_directory_fails_initialization(self) -> None:
         admitted = await self.repository.admit(self._admission("missing-migrations"))
         with (
@@ -341,6 +405,7 @@ class PostgresExecutionRepositoryTests(
         repository = PostgresExecutionRepository(
             make_conninfo(**conninfo_to_dict(self.dsn)),
             cipher=self.cipher,
+            payloads=PayloadStore(self.payload_root),
             schema=self.schema,
         )
         self._repositories.append(repository)
@@ -540,15 +605,44 @@ class PostgresExecutionRepositoryTests(
             InferenceSucceeded(InferenceResult(None, {}, 8), b"response"),
         )
 
-        async with await AsyncConnection.connect(self.dsn) as connection:
-            cursor = await connection.execute(
-                sql.SQL(
-                    "SELECT request, response FROM {} WHERE execution_id = %s"
-                ).format(sql.Identifier(self.schema, "inference_payloads")),
-                (execution_id,),
-            )
-            row = await cursor.fetchone()
-        self.assertEqual(row, (None, b"response"))
+        stored = await self._stored_record(execution_id)
+        self.assertEqual(
+            {
+                key: stored[key]
+                for key in (
+                    "request_path",
+                    "request_size",
+                    "response_path",
+                    "response_size",
+                )
+            },
+            {
+                "request_path": None,
+                "request_size": None,
+                "response_path": f"{execution_id}/response-{claim.fencing_token}",
+                "response_size": 8,
+            },
+        )
+
+    async def test_orphaned_payload_directories_are_swept(self) -> None:
+        kept_id = await self._admit_inference("kept")
+        orphan = self.payload_root / str(uuid4())
+        (orphan / "request").parent.mkdir()
+        (orphan / "request").write_bytes(b"lost")
+        fresh = self.payload_root / str(uuid4())
+        fresh.mkdir()
+        other = self.payload_root / "lost+found"
+        other.mkdir()
+        old = (datetime.now(UTC) - timedelta(hours=2)).timestamp()
+        for path in (orphan, self.payload_root / kept_id, other):
+            os.utime(path, (old, old))
+
+        await self.repository.maintain()
+
+        self.assertEqual(
+            sorted(path.name for path in self.payload_root.iterdir()),
+            sorted([kept_id, fresh.name, "lost+found"]),
+        )
 
     async def test_malformed_execution_id_is_unknown(self) -> None:
         with self.assertRaises(UnknownExecutionError):
@@ -910,6 +1004,7 @@ class PostgresExecutionRepositoryTests(
         repository = PostgresExecutionRepository(
             self.dsn,
             cipher=self.cipher,
+            payloads=PayloadStore(self.payload_root),
             schema=schema or self.schema,
             per_model_limit=per_model_limit,
             per_model_inference_limit=INFERENCE_LIMIT,

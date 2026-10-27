@@ -273,6 +273,17 @@ class ScheduledInferenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(view["error"]["code"], "incompatible_input")
         self.assertEqual(self.model_requests, [])
 
+    async def test_a_lost_request_file_fails_the_tile(self) -> None:
+        execution_id = (await self.schedule()).json()["execution"]["id"]
+        (self.repository.payload_root / execution_id / "request").unlink()
+
+        await self.run_attempt()
+
+        view = await self.execution(execution_id)
+        self.assertEqual(view["status"], "failed")
+        self.assertEqual(view["error"]["code"], "inference_request_unavailable")
+        self.assertEqual(self.model_requests, [])
+
     async def test_cancelled_tile_is_never_sent(self) -> None:
         execution_id = (await self.schedule()).json()["execution"]["id"]
 
@@ -281,7 +292,9 @@ class ScheduledInferenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cancelled.json()["status"], "cancelled")
         self.assertFalse(await self.scheduler._worker.run_once())
         self.assertEqual(self.model_requests, [])
-        self.assertNotIn(execution_id, self.repository.requests)
+        self.assertFalse(
+            (self.repository.payload_root / execution_id / "request").exists()
+        )
 
     async def test_lookup_and_result_errors(self) -> None:
         first = (await self.schedule("first")).json()["execution"]["id"]

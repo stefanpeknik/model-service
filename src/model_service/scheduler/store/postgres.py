@@ -7,6 +7,9 @@ governs leases.
 
 from __future__ import annotations
 
+import asyncio
+import logging
+import time
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from datetime import datetime, timedelta
@@ -15,7 +18,7 @@ from uuid import UUID, uuid4
 
 from psycopg import AsyncConnection
 from psycopg import Error as PsycopgError
-from sqlalchemy import and_, delete, func, or_, select, update
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -41,20 +44,27 @@ from model_service.scheduler.domain import (
     WorkClaim,
     WorkKind,
 )
-from model_service.scheduler.store.models import (
-    DEFAULT_SCHEMA,
-    ExecutionRow,
-    InferencePayloadRow,
-)
+from model_service.scheduler.store.models import DEFAULT_SCHEMA, ExecutionRow
+from model_service.scheduler.store.payloads import PayloadMissingError, StoredPayload
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
 from model_service.scheduler.store.schema import initialize_execution_schema
 from model_service.scheduler.transitions import ExecutionTransitions
 
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Collection
+    from collections.abc import AsyncIterator, Awaitable, Collection
 
+    from model_service.scheduler.store.payloads import PayloadStore
     from model_service.scheduler.store.protected_context import ProtectedContextCipher
+
+
+logger = logging.getLogger(__name__)
+
+# Session info key for payload files to remove once the transaction commits.
+_DELETE_AFTER_COMMIT = "delete_after_commit"
+# An execution directory this old without a row was left by a crashed admission.
+ORPHAN_AGE = timedelta(hours=1)
+_ORPHAN_SWEEP_SECONDS = 600.0
 
 
 class PostgresExecutionRepository:
@@ -65,6 +75,7 @@ class PostgresExecutionRepository:
         dsn: str,
         *,
         cipher: ProtectedContextCipher,
+        payloads: PayloadStore,
         schema: str = DEFAULT_SCHEMA,
         per_model_limit: int = 1,
         per_model_inference_limit: int = 32,
@@ -79,6 +90,8 @@ class PostgresExecutionRepository:
         if per_model_limit <= 0 or per_model_inference_limit <= 0:
             raise ValueError("per-model limits must be positive")
         self._cipher = cipher
+        self._payloads = payloads
+        self._next_orphan_sweep = 0.0
         self._schema = schema
         self._dsn = dsn
 
@@ -133,12 +146,23 @@ class PostgresExecutionRepository:
             await session.execute(select(ExecutionRow.id).limit(1))
 
     async def maintain(self) -> None:
-        """Expire deadlines, recover abandoned claims and delete expired inference results."""
+        """Expire deadlines, recover abandoned claims and delete expired inference results.
+
+        Every few minutes it also removes payload files no execution owns.
+        """
         async with self._transaction() as session:
             now = await self._database_now(session)
             await self._expire_deadlines(session, now)
             await self._recover_expired_leases(session, now)
             await self._delete_expired_inference(session, now)
+        if time.monotonic() >= self._next_orphan_sweep:
+            self._next_orphan_sweep = time.monotonic() + _ORPHAN_SWEEP_SECONDS
+            try:
+                await self._payloads.sweep_orphans(
+                    self._existing_ids, ORPHAN_AGE.total_seconds()
+                )
+            except OSError as error:
+                logger.warning("payload sweep failed: %s", type(error).__name__)
 
     async def find_submission(
         self,
@@ -154,11 +178,39 @@ class PostgresExecutionRepository:
             return execution
 
     async def admit(self, admission: Admission) -> AdmissionResult:
-        """Encrypt protected context and atomically insert a queued record or return an identical concurrent replay."""
+        """Encrypt protected context and atomically insert a queued record or return an identical concurrent replay.
+
+        An inference request is written to its file first; a replay, conflict or
+        failed insert removes the unused file.
+        """
         encrypted_context = self._cipher.encrypt(admission.protected_context)
+        execution_id = str(uuid4())
+        request = None
+        if admission.payload is not None:
+            request = await self._write_payload(
+                self._payloads.write_request(execution_id, admission.payload)
+            )
+        created = False
+        try:
+            result = await self._insert(
+                admission, execution_id, encrypted_context, request
+            )
+            created = result.created
+        finally:
+            if request is not None and not created:
+                await self._delete_payloads([execution_id])
+        return result
+
+    async def _insert(
+        self,
+        admission: Admission,
+        execution_id: str,
+        encrypted_context: bytes,
+        request: StoredPayload | None,
+    ) -> AdmissionResult:
         async with self._transaction() as session:
             execution = self._transitions.admit(
-                admission, str(uuid4()), await self._database_now(session)
+                admission, execution_id, await self._database_now(session)
             )
             row = await session.scalar(
                 insert(ExecutionRow)
@@ -181,6 +233,8 @@ class PostgresExecutionRepository:
                     processing_rejections=execution.processing_rejections,
                     finish_attempts=execution.finish_attempts,
                     finish_mutation_started=execution.finish_mutation_started,
+                    request_path=request.path if request is not None else None,
+                    request_size=request.size if request is not None else None,
                     created_at=execution.created_at,
                     updated_at=execution.updated_at,
                 )
@@ -190,13 +244,6 @@ class PostgresExecutionRepository:
                 .returning(ExecutionRow)
             )
             if row is not None:
-                if admission.payload is not None:
-                    session.add(
-                        InferencePayloadRow(
-                            execution_id=execution.id, request=admission.payload
-                        )
-                    )
-                    await session.flush()
                 return AdmissionResult(self._record(row), created=True)
             existing = await self._find_submission(session, admission.identity)
             if existing is None:
@@ -262,16 +309,10 @@ class PostgresExecutionRepository:
                 now=now,
             )
             await self._persist_state(session, row, claimed.execution)
-            if claimed.claim.operation is not Operation.INFERENCE:
-                return claimed.claim
-            payload = await session.scalar(
-                select(InferencePayloadRow.request).where(
-                    InferencePayloadRow.execution_id == row.id
-                )
-            )
-            if payload is None:
-                raise RuntimeError("inference execution has no stored request")
-            return replace(claimed.claim, payload=payload)
+            request = _stored_request(row)
+        if claimed.claim.operation is not Operation.INFERENCE:
+            return claimed.claim
+        return await self._with_request(claimed.claim, request)
 
     async def claim_inference(
         self, owner: str, lease_duration: timedelta, limit: int
@@ -296,41 +337,35 @@ class PostgresExecutionRepository:
                     now=now,
                 )
                 self._apply_state(row, claimed.execution)
-                claims.append(claimed.claim)
+                claims.append((claimed.claim, _stored_request(row)))
             if not claims:
                 return []
             await session.flush()
-            requests = await session.execute(
-                select(
-                    InferencePayloadRow.execution_id, InferencePayloadRow.request
-                ).where(
-                    InferencePayloadRow.execution_id.in_(
-                        [claim.execution_id for claim in claims]
-                    )
-                )
+        # Read the files after commit, not while holding the rows' locks.
+        return list(
+            await asyncio.gather(
+                *(self._with_request(claim, request) for claim, request in claims)
             )
-            payloads = dict(requests.tuples().all())
-            return [
-                replace(claim, payload=payloads[claim.execution_id]) for claim in claims
-            ]
+        )
 
     async def inference_content(self, execution_id: str) -> bytes:
         """Return the stored response of a succeeded inference execution."""
         async with self._transaction() as session:
             row = await self._fetch(session, execution_id)
-            content = None
+            response = None
             if (
                 row.operation is Operation.INFERENCE
                 and row.status is ExecutionStatus.SUCCEEDED
+                and row.response_path is not None
+                and row.response_size is not None
             ):
-                content = await session.scalar(
-                    select(InferencePayloadRow.response).where(
-                        InferencePayloadRow.execution_id == execution_id
-                    )
-                )
-            if content is None:
-                raise ResultUnavailableError("execution has no inference response")
-            return content
+                response = StoredPayload(row.response_path, row.response_size)
+        if response is None:
+            raise ResultUnavailableError("execution has no inference response")
+        try:
+            return await self._payloads.read(response)
+        except (PayloadMissingError, OSError) as error:
+            raise ResultUnavailableError("inference response is unavailable") from error
 
     async def renew(
         self,
@@ -357,27 +392,40 @@ class PostgresExecutionRepository:
         fencing_token: str,
         settlement: Settlement,
     ) -> ExecutionRecord:
-        """Lock and validate an attempt's outcome, committing deadline changes before raising a stale-claim rejection."""
-        async with self._transaction() as session:
-            row = await self._fetch(session, execution_id, for_update=True)
-            decision = self._transitions.decide_settlement(
-                self._record(row),
-                fencing_token,
-                settlement,
-                await self._database_now(session),
-            )
-            if decision.execution is not None:
-                await self._persist_state(
-                    session,
-                    row,
-                    decision.execution,
-                    response=(
-                        settlement.content
-                        if decision.rejection is None
-                        and isinstance(settlement, InferenceSucceeded)
-                        else None
-                    ),
+        """Lock and validate an attempt's outcome, committing deadline changes before raising a stale-claim rejection.
+
+        A raw model response is written to its own file first and kept only if
+        the settlement that records it commits; otherwise the file is removed.
+        """
+        response = None
+        if isinstance(settlement, InferenceSucceeded):
+            response = await self._write_payload(
+                self._payloads.write_response(
+                    execution_id, fencing_token, settlement.content
                 )
+            )
+        recorded = False
+        try:
+            async with self._transaction() as session:
+                row = await self._fetch(session, execution_id, for_update=True)
+                decision = self._transitions.decide_settlement(
+                    self._record(row),
+                    fencing_token,
+                    settlement,
+                    await self._database_now(session),
+                )
+                accepted = decision.rejection is None and response is not None
+                if decision.execution is not None:
+                    await self._persist_state(
+                        session,
+                        row,
+                        decision.execution,
+                        response=response if accepted else None,
+                    )
+            recorded = accepted and decision.execution is not None
+        finally:
+            if response is not None and not recorded:
+                await self._delete_payloads([response.path])
         return decision.accepted_execution()
 
     async def mark_finish_mutation_started(
@@ -565,7 +613,10 @@ class PostgresExecutionRepository:
     async def _delete_expired_inference(
         self, session: AsyncSession, now: datetime
     ) -> None:
-        """Delete finished inference executions (and their bytes) after retention."""
+        """Delete finished inference executions after retention.
+
+        Their files are removed once the deletion commits.
+        """
         expired = (
             select(ExecutionRow.id)
             .where(
@@ -576,7 +627,12 @@ class PostgresExecutionRepository:
             .limit(1000)
             .with_for_update(skip_locked=True)
         )
-        await session.execute(delete(ExecutionRow).where(ExecutionRow.id.in_(expired)))
+        deleted = await session.scalars(
+            delete(ExecutionRow)
+            .where(ExecutionRow.id.in_(expired))
+            .returning(ExecutionRow.id)
+        )
+        _delete_after_commit(session, deleted.all())
 
     async def _persist_state(
         self,
@@ -584,27 +640,26 @@ class PostgresExecutionRepository:
         row: ExecutionRow,
         execution: ExecutionRecord,
         *,
-        response: bytes | None = None,
+        response: StoredPayload | None = None,
     ) -> ExecutionRecord:
         """Flush the new state within the caller's transaction; return a decoded snapshot.
 
-        A finished inference keeps only its response bytes.
+        A finished inference keeps only its response; its request file is removed
+        once the transaction commits.
         """
         self._apply_state(row, execution)
+        if (
+            execution.operation is Operation.INFERENCE
+            and execution.status in _TERMINAL
+            and row.request_path is not None
+        ):
+            _delete_after_commit(session, [row.request_path])
+            row.request_path = None
+            row.request_size = None
+        if response is not None:
+            row.response_path = response.path
+            row.response_size = response.size
         await session.flush()
-        if execution.operation is Operation.INFERENCE and execution.status in {
-            ExecutionStatus.SUCCEEDED,
-            ExecutionStatus.FAILED,
-            ExecutionStatus.CANCELLED,
-        }:
-            values: dict[str, bytes | None] = {"request": None}
-            if response is not None:
-                values["response"] = response
-            await session.execute(
-                update(InferencePayloadRow)
-                .where(InferencePayloadRow.execution_id == row.id)
-                .values(**values)
-            )
         return self._record(row)
 
     @staticmethod
@@ -660,14 +715,56 @@ class PostgresExecutionRepository:
 
     @asynccontextmanager
     async def _transaction(self) -> AsyncIterator[AsyncSession]:
-        """Own one session and transaction, committing on success and translating database errors into availability failures."""
+        """Own one session and transaction, committing on success and translating database errors into availability failures.
+
+        Payload files the transaction released are removed only after it commits.
+        """
         try:
             async with self._sessions.begin() as session:
                 yield session
+                released = session.info.pop(_DELETE_AFTER_COMMIT, [])
         except (SQLAlchemyError, PsycopgError) as error:
             raise ExecutionRepositoryUnavailableError(
                 "execution repository is unavailable"
             ) from error
+        await self._delete_payloads(released)
+
+    async def _write_payload(self, write: Awaitable[StoredPayload]) -> StoredPayload:
+        try:
+            return await write
+        except OSError as error:
+            raise ExecutionRepositoryUnavailableError(
+                "inference payload storage is unavailable"
+            ) from error
+
+    async def _delete_payloads(self, paths: Collection[str]) -> None:
+        # Leftovers are harmless: retention or the orphan sweep removes them.
+        try:
+            await self._payloads.delete(paths)
+        except OSError as error:
+            logger.warning("payload cleanup failed: %s", type(error).__name__)
+
+    async def _with_request(
+        self, claim: WorkClaim, request: StoredPayload | None
+    ) -> WorkClaim:
+        """Attach the request bytes.
+
+        A missing file leaves the payload empty, and the worker fails the execution.
+        """
+        if request is None:
+            return claim
+        try:
+            return replace(claim, payload=await self._payloads.read(request))
+        except (PayloadMissingError, OSError):
+            logger.warning("inference request of %s is unavailable", claim.execution_id)
+            return claim
+
+    async def _existing_ids(self, execution_ids: list[str]) -> list[str]:
+        async with self._transaction() as session:
+            found = await session.scalars(
+                select(ExecutionRow.id).where(ExecutionRow.id.in_(execution_ids))
+            )
+            return list(found)
 
     def _record(self, row: ExecutionRow) -> ExecutionRecord:
         """Convert an ORM row to an immutable domain record and decrypt private provider context."""
@@ -722,3 +819,18 @@ def _is_uuid(value: str) -> bool:
         return str(UUID(value)) == value
     except ValueError:
         return False
+
+
+_TERMINAL = frozenset(
+    {ExecutionStatus.SUCCEEDED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED}
+)
+
+
+def _stored_request(row: ExecutionRow) -> StoredPayload | None:
+    if row.request_path is None or row.request_size is None:
+        return None
+    return StoredPayload(row.request_path, row.request_size)
+
+
+def _delete_after_commit(session: AsyncSession, paths: Collection[str]) -> None:
+    session.info.setdefault(_DELETE_AFTER_COMMIT, []).extend(paths)

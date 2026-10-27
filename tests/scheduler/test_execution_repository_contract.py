@@ -27,6 +27,7 @@ class InMemoryRepositoryContractTests(
             processing_policy=policy,
             finish_policy=policy,
         )
+        self.payload_root = self.repository.payload_root
 
     async def _advance_time(self, duration: timedelta) -> None:
         self.now += duration

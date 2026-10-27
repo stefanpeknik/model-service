@@ -8,8 +8,12 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import tempfile
+import weakref
+from contextlib import asynccontextmanager
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -42,11 +46,16 @@ from model_service.scheduler.domain import (
     WorkClaim,
     WorkKind,
 )
+from model_service.scheduler.store.payloads import (
+    PayloadMissingError,
+    PayloadStore,
+    StoredPayload,
+)
 from model_service.scheduler.transitions import ExecutionTransitions
 
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Collection, Mapping
+    from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Mapping
 
 
 _TERMINAL = frozenset(
@@ -71,8 +80,13 @@ class InMemoryExecutionRepository:
         inference_retention: timedelta = timedelta(hours=24),
         processing_policy: RetryPolicy | None = None,
         finish_policy: RetryPolicy | None = None,
+        payload_root: Path | None = None,
     ) -> None:
-        """Set capacity and retry policies, create the state machine, and start with empty records under one async lock."""
+        """Set capacity and retry policies, create the state machine, and start with empty records under one async lock.
+
+        Inference bytes go to files under `payload_root`, a temporary directory
+        removed with the repository when none is given.
+        """
         if per_model_limit <= 0 or per_model_inference_limit <= 0:
             raise ValueError("per-model limits must be positive")
         self._clock = clock
@@ -95,9 +109,16 @@ class InMemoryExecutionRepository:
             self._processing_policy,
             self._finish_policy,
         )
+        if payload_root is None:
+            directory = tempfile.TemporaryDirectory()
+            weakref.finalize(self, directory.cleanup)
+            payload_root = Path(directory.name)
+        self.payload_root = payload_root
+        self._payloads = PayloadStore(payload_root)
         self._executions: dict[str, ExecutionRecord] = {}
-        self.requests: dict[str, bytes] = {}
-        self._responses: dict[str, bytes] = {}
+        self._requests: dict[str, StoredPayload] = {}
+        self._responses: dict[str, StoredPayload] = {}
+        self._released: list[str] = []
         self._submissions: dict[tuple[str, str], str] = {}
         self._lock = asyncio.Lock()
 
@@ -106,12 +127,12 @@ class InMemoryExecutionRepository:
 
     async def check_ready(self) -> None:
         """Acquire the repository lock to confirm this in-process adapter is available."""
-        async with self._lock:
+        async with self._operation():
             return
 
     async def maintain(self) -> None:
         """Expire deadlines and recover abandoned claims under the repository lock."""
-        async with self._lock:
+        async with self._operation():
             now = self._clock()
             self._expire_deadlines(now)
             self._recover_expired_leases(now)
@@ -125,15 +146,16 @@ class InMemoryExecutionRepository:
                     del self._submissions[
                         (execution.identity.provider, execution.identity.key)
                     ]
-                    self.requests.pop(execution.id, None)
+                    self._requests.pop(execution.id, None)
                     self._responses.pop(execution.id, None)
+                    self._released.append(execution.id)
 
     async def find_submission(
         self,
         identity: SubmissionIdentity,
     ) -> ExecutionRecord | None:
         """Look up the provider/key pair and reject a replay with a changed fingerprint."""
-        async with self._lock:
+        async with self._operation():
             execution_id = self._submissions.get((identity.provider, identity.key))
             if execution_id is None:
                 return None
@@ -143,7 +165,7 @@ class InMemoryExecutionRepository:
 
     async def admit(self, admission: Admission) -> AdmissionResult:
         """Create one execution per provider/key pair or return its identical replay while holding the lock."""
-        async with self._lock:
+        async with self._operation():
             key = (admission.identity.provider, admission.identity.key)
             existing_id = self._submissions.get(key)
             if existing_id is not None:
@@ -156,19 +178,21 @@ class InMemoryExecutionRepository:
                 str(uuid4()),
                 now,
             )
+            if admission.payload is not None:
+                self._requests[execution.id] = await self._payloads.write_request(
+                    execution.id, admission.payload
+                )
             self._executions[execution.id] = execution
             self._submissions[key] = execution.id
-            if admission.payload is not None:
-                self.requests[execution.id] = admission.payload
             return AdmissionResult(execution, created=True)
 
     async def get(self, execution_id: str) -> ExecutionRecord:
         """Return a record under the lock, raising UnknownExecutionError if absent."""
-        async with self._lock:
+        async with self._operation():
             return self._get(execution_id)
 
     async def get_many(self, execution_ids: Collection[str]) -> list[ExecutionRecord]:
-        async with self._lock:
+        async with self._operation():
             return [
                 self._executions[value]
                 for value in execution_ids
@@ -177,7 +201,7 @@ class InMemoryExecutionRepository:
 
     async def request_cancel(self, execution_id: str) -> ExecutionRecord:
         """Apply cancellation atomically and store the record with its previous claim invalidated."""
-        async with self._lock:
+        async with self._operation():
             execution = self._get(execution_id)
             cancelled = self._transitions.cancel(execution, self._clock())
             self._store(cancelled)
@@ -191,7 +215,7 @@ class InMemoryExecutionRepository:
     ) -> WorkClaim | None:
         """Run maintenance and lease the highest-priority due work within per-model processing capacity."""
         allowed = frozenset(Operation if operations is None else operations)
-        async with self._lock:
+        async with self._operation():
             now = self._clock()
             self._expire_deadlines(now)
             self._recover_expired_leases(now)
@@ -242,7 +266,13 @@ class InMemoryExecutionRepository:
                 )
                 self._executions[execution.id] = claimed.execution
                 if claimed.claim.operation is Operation.INFERENCE:
-                    return replace(claimed.claim, payload=self.requests[execution.id])
+                    try:
+                        payload = await self._payloads.read(
+                            self._requests[execution.id]
+                        )
+                    except PayloadMissingError:
+                        return claimed.claim
+                    return replace(claimed.claim, payload=payload)
                 return claimed.claim
             return None
 
@@ -257,12 +287,15 @@ class InMemoryExecutionRepository:
         return claims
 
     async def inference_content(self, execution_id: str) -> bytes:
-        async with self._lock:
+        async with self._operation():
             execution = self._get(execution_id)
-            content = self._responses.get(execution_id)
-            if content is None or execution.status is not ExecutionStatus.SUCCEEDED:
+            response = self._responses.get(execution_id)
+            if response is None or execution.status is not ExecutionStatus.SUCCEEDED:
                 raise ResultUnavailableError("execution has no inference response")
-            return content
+        try:
+            return await self._payloads.read(response)
+        except PayloadMissingError as error:
+            raise ResultUnavailableError("inference response is unavailable") from error
 
     async def renew(
         self,
@@ -271,7 +304,7 @@ class InMemoryExecutionRepository:
         lease_duration: timedelta,
     ) -> RenewDirective:
         """Apply the shared renewal decision and persist any state change before returning its directive."""
-        async with self._lock:
+        async with self._operation():
             execution = self._get(execution_id)
             now = self._clock()
             decision = self._transitions.decide_renewal(
@@ -291,7 +324,7 @@ class InMemoryExecutionRepository:
         settlement: Settlement,
     ) -> ExecutionRecord:
         """Apply a token-checked settlement; persist deadline changes before raising a rejection."""
-        async with self._lock:
+        async with self._operation():
             execution = self._get(execution_id)
             now = self._clock()
             decision = self._transitions.decide_settlement(
@@ -302,10 +335,14 @@ class InMemoryExecutionRepository:
             )
             if decision.execution is not None:
                 self._store(decision.execution)
-            if decision.rejection is None and isinstance(
-                settlement, InferenceSucceeded
-            ):
-                self._responses[execution_id] = settlement.content
+            if isinstance(settlement, InferenceSucceeded):
+                response = await self._payloads.write_response(
+                    execution_id, fencing_token, settlement.content
+                )
+                if decision.rejection is None:
+                    self._responses[execution_id] = response
+                else:
+                    self._released.append(response.path)
             return decision.accepted_execution()
 
     async def mark_finish_mutation_started(
@@ -314,7 +351,7 @@ class InMemoryExecutionRepository:
         fencing_token: str,
     ) -> None:
         """Atomically validate and mark the boundary before a provider's external mutation."""
-        async with self._lock:
+        async with self._operation():
             execution = self._get(execution_id)
             self._executions[execution_id] = (
                 self._transitions.mark_finish_mutation_started(
@@ -335,10 +372,25 @@ class InMemoryExecutionRepository:
                 continue
             self._store(self._transitions.recover_expired(execution, now))
 
+    @asynccontextmanager
+    async def _operation(self) -> AsyncIterator[None]:
+        """Hold the lock, then remove the files the operation released."""
+        released: list[str] = []
+        try:
+            async with self._lock:
+                try:
+                    yield
+                finally:
+                    released, self._released = self._released, []
+        finally:
+            await self._payloads.delete(released)
+
     def _store(self, execution: ExecutionRecord) -> None:
         self._executions[execution.id] = execution
         if execution.status in _TERMINAL:
-            self.requests.pop(execution.id, None)
+            request = self._requests.pop(execution.id, None)
+            if request is not None:
+                self._released.append(request.path)
 
     def _active_processing(self, now: datetime) -> dict[tuple[Operation, str], int]:
         """Count only processing claims with an unexpired lease per operation and model."""

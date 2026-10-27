@@ -143,6 +143,12 @@ class SchedulerSettings(BaseSettings):
         gt=timedelta(0),
         validation_alias="INFERENCE_RETENTION_SECONDS",
     )
+    # Request and response files of scheduled raw inference; every facade
+    # replica must see the same directory.
+    inference_storage_path: Path = Field(
+        default=Path("/mnt/model-service-inference"),
+        validation_alias="INFERENCE_STORAGE_PATH",
+    )
 
     @classmethod
     def settings_customise_sources(

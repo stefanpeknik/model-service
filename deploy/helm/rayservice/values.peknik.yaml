@@ -81,6 +81,10 @@ executionScheduler:
   sharedStorage:
     existingClaim: model-service-validation-full-wsi-outputs
     mountPath: /mnt/shared
+  # deploy/k8s/peknik-ns/validation-inference-storage.yaml
+  inferenceStorage:
+    existingClaim: model-service-validation-inference
+    mountPath: /mnt/model-service-inference
   inferenceTimeoutSeconds: 900
   defaultDeadlineSeconds: 21600
   maximumDeadlineSeconds: 86400

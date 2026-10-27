@@ -189,11 +189,31 @@ request the raw route takes and returns an execution.
   attempt, decompressing at most one byte past the expected size. A model whose
   tile size changed while a tile waited fails it with `incompatible_input`
   instead of sending reinterpreted data.
-- The request bytes are stored in `inference_payloads` in the admission
-  transaction, so an acknowledged tile survives a restart. They are deleted
-  when the execution finishes. The response is kept for
-  `INFERENCE_RETENTION_SECONDS` (24 h) after finishing, then the execution is
-  deleted. `x-` response headers (e.g. `x-output-shape`) are kept with it.
+- Request and response bytes are files, not database values, under
+  `INFERENCE_STORAGE_PATH` (Helm `executionScheduler.inferenceStorage`: a
+  ReadWriteMany claim mounted by every facade replica and nothing else, apart
+  from the EMPAIA workspace so a burst of tiles cannot fill the volume
+  publication needs). Each execution has a directory named by its ID; the row
+  keeps each file's relative path and size, and a file whose size differs
+  reads as missing.
+  - The request is written (temporary name, then rename) before the admission
+    insert, so an acknowledged tile survives a restart. A replay or conflict
+    removes the unused file. It is deleted once the execution finishes; a tile
+    whose request file is gone fails with `inference_request_unavailable`.
+  - Each attempt writes its response to `response-<fencing token>` before
+    settling, and settlement records it only if the claim is still current;
+    otherwise the file is removed, so a stale attempt never replaces the
+    accepted response. A response that is gone reads as `409
+    result_unavailable`.
+  - The response is kept for `INFERENCE_RETENTION_SECONDS` (24 h) after
+    finishing; then the execution is deleted, and its directory once that
+    commits. `x-` response headers (e.g. `x-output-shape`) are kept in the row.
+  - Every 10 minutes, maintenance removes execution directories older than an
+    hour that have no row, left by a crash between writing a request and
+    inserting its row.
+  - Migration `0004` replaces the old `inference_payloads` table and removes
+    existing inference executions, whose bytes cannot move to files; drain
+    scheduled raw inference before upgrading.
 - Replay identity is the `Idempotency-Key` header; the fingerprint covers the
   model, `x-` request headers, timeout and payload hash.
 - Model responses: 2xx succeeds; 429/503 requeue without spending an attempt;
@@ -212,7 +232,8 @@ request the raw route takes and returns an execution.
   coordinate them.
 
 EMPAIA wiring is one settings class, `EmpaiaSettings` (`EMPAIA_*`), read by
-the facade and by builder replicas: `EMPAIA_ENABLED`, `EMPAIA_API_URLS`,
+the facade and by builder replicas: `EMPAIA_API_URLS` (empty refuses every
+EMPAIA job),
 `EMPAIA_WORKSPACE_ROOT`, `EMPAIA_SLIDE_ACCESS`, and
 `EMPAIA_APP_SERVICE_TIMEOUT_SECONDS` (default 60; creating a pixelmap took 10 s
 on the test instance, and the SDK's 5 s default failed that job). Helm renders

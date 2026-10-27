@@ -25,6 +25,7 @@ from model_service.providers.standalone import StandaloneProviderAdapter
 from model_service.scheduler.contracts import ProviderName
 from model_service.scheduler.domain import RetryPolicy
 from model_service.scheduler.scheduler import ExecutionScheduler
+from model_service.scheduler.store.payloads import PayloadStore
 from model_service.scheduler.store.postgres import PostgresExecutionRepository
 from model_service.scheduler.store.protected_context import ProtectedContextCipher
 
@@ -62,6 +63,7 @@ def create_app(
     repository = PostgresExecutionRepository(
         config.database_url,
         cipher=cipher,
+        payloads=PayloadStore(config.inference_storage_path),
         pool_size=config.database_pool_size,
         per_model_limit=config.per_model_limit,
         per_model_inference_limit=config.per_model_inference_limit,

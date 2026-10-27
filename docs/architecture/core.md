@@ -53,7 +53,8 @@ behind one public API that can also run builders durably.
 
 A scheduled tile (`POST /v1/models/{m}/schedule`) is the same lifecycle with a
 different payload: the facade checks the tile against the model's `tile_size`,
-stores its bytes with the execution, and an attempt sends them to the
+writes its bytes to a file on the inference storage volume that the execution
+row points to, and an attempt sends them to the
 model's Ray route exactly as `POST /v1/models/{m}/run` would. The response is stored for a
 day and served by `GET /v1/executions/{id}/result`. There is no provider
 finish. `POST /v1/executions/lookup` polls many executions at once.

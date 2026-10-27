@@ -56,6 +56,7 @@ class ExecutionErrorCode(StrEnum):
     MODEL_FAILED = "model_failed"
     MODEL_UNAVAILABLE = "model_unavailable"
     RESULT_TOO_LARGE = "inference_result_too_large"
+    REQUEST_UNAVAILABLE = "inference_request_unavailable"
 
 
 class ProviderName(StrEnum):

@@ -304,12 +304,18 @@ class ExecutionWorker:
             )
 
     async def _run_inference(self, claim: WorkClaim) -> Settlement:
-        if (
-            self._inference is None
-            or claim.payload is None
-            or not isinstance(claim.invocation, InferenceInvocation)
+        if self._inference is None or not isinstance(
+            claim.invocation, InferenceInvocation
         ):
             raise RuntimeError("inference claim cannot run in this worker")
+        if claim.payload is None:
+            return ProcessingFailed(
+                error=ExecutionError(
+                    ExecutionErrorCode.REQUEST_UNAVAILABLE,
+                    "the stored request is no longer available",
+                ),
+                retryable=False,
+            )
         try:
             # The model may have changed since admission.
             self._inference.check(claim.model_id, claim.payload)

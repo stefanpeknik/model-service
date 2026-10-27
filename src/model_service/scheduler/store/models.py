@@ -10,10 +10,10 @@ from datetime import datetime  # noqa: TC003 - SQLAlchemy resolves mapped annota
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     DateTime,
     Enum,
-    ForeignKey,
     Index,
     LargeBinary,
     Text,
@@ -143,27 +143,18 @@ class ExecutionRow(Base):
     result: Mapped[StoredResult | None] = mapped_column(ResultType())
     error_code: Mapped[str | None] = mapped_column(Text)
     error_message: Mapped[str | None] = mapped_column(Text)
+    # Raw-inference bytes live in files (see store/payloads.py); the request until
+    # the execution finishes, the response of a succeeded one until retention.
+    request_path: Mapped[str | None] = mapped_column(Text)
+    request_size: Mapped[int | None] = mapped_column(BigInteger)
+    response_path: Mapped[str | None] = mapped_column(Text)
+    response_size: Mapped[int | None] = mapped_column(BigInteger)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.clock_timestamp()
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.clock_timestamp()
     )
-
-
-class InferencePayloadRow(Base):
-    """Request and response bytes of one inference execution."""
-
-    __tablename__ = "inference_payloads"
-    __table_args__ = ({"schema": DEFAULT_SCHEMA},)
-
-    execution_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
-        ForeignKey(f"{DEFAULT_SCHEMA}.executions.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    request: Mapped[bytes | None] = mapped_column(LargeBinary)
-    response: Mapped[bytes | None] = mapped_column(LargeBinary)
 
 
 for counter in (

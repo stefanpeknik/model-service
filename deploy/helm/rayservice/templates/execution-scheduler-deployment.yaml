@@ -3,6 +3,7 @@
 {{- $databaseSecret := required "executionScheduler.database.existingSecret is required" .Values.executionScheduler.database.existingSecret }}
 {{- $encryptionSecret := required "executionScheduler.encryption.existingSecret is required" .Values.executionScheduler.encryption.existingSecret }}
 {{- $workspaceClaim := required "empaia.workspaceClaim is required: the facade publishes EMPAIA results the builders wrote there" .Values.empaia.workspaceClaim }}
+{{- $inferenceClaim := required "executionScheduler.inferenceStorage.existingClaim is required: scheduled raw inference keeps its request and response files there" .Values.executionScheduler.inferenceStorage.existingClaim }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -105,6 +106,8 @@ spec:
             - name: INFERENCE_RETENTION_SECONDS
               value: {{ .retentionSeconds | int64 | quote }}
             {{- end }}
+            - name: INFERENCE_STORAGE_PATH
+              value: {{ .Values.executionScheduler.inferenceStorage.mountPath | quote }}
 {{- include "model-service.empaiaEnv" . | nindent 12 }}
           readinessProbe:
             httpGet:
@@ -139,6 +142,8 @@ spec:
             {{- end }}
             - name: empaia-workspace
               mountPath: {{ .Values.empaia.workspaceRoot | quote }}
+            - name: inference-storage
+              mountPath: {{ .Values.executionScheduler.inferenceStorage.mountPath | quote }}
       volumes:
         - name: tmp
           emptyDir: {}
@@ -153,4 +158,7 @@ spec:
         - name: empaia-workspace
           persistentVolumeClaim:
             claimName: {{ $workspaceClaim | quote }}
+        - name: inference-storage
+          persistentVolumeClaim:
+            claimName: {{ $inferenceClaim | quote }}
 {{- end }}
