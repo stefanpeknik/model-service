@@ -38,6 +38,7 @@ from model_service.providers.empaia.gateway import (
     EmpaiaGatewayFactory,
     EmpaiaInputState,
     EmpaiaJobContext,
+    EmpaiaJobMode,
 )
 from model_service.providers.empaia.input_access import job_workspace
 from model_service.scheduler.contracts import (
@@ -46,7 +47,11 @@ from model_service.scheduler.contracts import (
     ScheduleRequest,
     SchedulingUnavailableError,
 )
-from model_service.scheduler.domain import PreparedInvocation, SubmissionIdentity
+from model_service.scheduler.domain import (
+    PreparedInvocation,
+    Priority,
+    SubmissionIdentity,
+)
 from model_service.scheduler.providers import (
     ProviderCancellation,
     ProviderFailure,
@@ -187,6 +192,12 @@ class EmpaiaProviderAdapter:
             protected_context=context.protected_values(),
             deadline_cap=credential_expires_at,
             terminal_report_deadline_at=credential_expires_at,
+            # Someone started it by hand and waits; preprocessing runs unattended.
+            priority=(
+                Priority.INTERACTIVE
+                if mode is EmpaiaJobMode.STANDALONE
+                else Priority.NORMAL
+            ),
         )
 
     async def finish(

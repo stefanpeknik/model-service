@@ -171,6 +171,18 @@ never scales down a replica that was never placed.
 - One process runs up to `MAX_CONCURRENT_EXECUTIONS` claims (default 4).
 - The capacity limit is per model (`PER_MODEL_LIMIT`, default 1), because the
   GPU-bound model is the shared resource.
+- Due work is claimed by priority first, then as before: models with a waiting
+  higher-priority execution are served first, and within a model higher
+  priority goes first. Providers set it; the public API does not take it yet.
+  An EMPAIA job in `STANDALONE` mode (someone started it in the Workbench and
+  waits) is `INTERACTIVE`; preprocessing and everything else is `NORMAL`.
+  Priority only orders the queue: work already running keeps its slot.
+  Migration `0005` adds the column.
+  Running these jobs outside the scheduler would not be faster: JES polls the
+  execution every 5 s whichever way it runs, and the scheduler adds about a
+  second (admission, the worker's 0.5 s poll, the claim) to jobs that take
+  minutes. What a waiting user would notice is queueing behind preprocessing,
+  which priority addresses, without losing durability across facade restarts.
 - Lease renewal tolerates transient database errors until the lease would
   actually expire.
 - Database connections are pooled (`DATABASE_POOL_SIZE`, 20). A new

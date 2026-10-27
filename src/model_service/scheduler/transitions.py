@@ -120,6 +120,7 @@ class ExecutionTransitions:
             created_at=now,
             updated_at=now,
             operation=admission.operation,
+            priority=admission.priority,
         )
 
     @staticmethod

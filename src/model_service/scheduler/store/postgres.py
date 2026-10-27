@@ -234,6 +234,7 @@ class PostgresExecutionRepository:
                     processing_rejections=execution.processing_rejections,
                     finish_attempts=execution.finish_attempts,
                     finish_mutation_started=execution.finish_mutation_started,
+                    priority=execution.priority,
                     request_path=request.path if request is not None else None,
                     request_size=request.size if request is not None else None,
                     created_at=execution.created_at,
@@ -473,7 +474,11 @@ class PostgresExecutionRepository:
                     ),
                 ),
             )
-            .order_by(ExecutionRow.next_attempt_at, ExecutionRow.created_at)
+            .order_by(
+                ExecutionRow.priority.desc(),
+                ExecutionRow.next_attempt_at,
+                ExecutionRow.created_at,
+            )
             .with_for_update(skip_locked=True)
             .limit(1)
         )
@@ -503,7 +508,10 @@ class PostgresExecutionRepository:
             select(ExecutionRow.operation, ExecutionRow.model_id)
             .where(*eligible)
             .group_by(ExecutionRow.operation, ExecutionRow.model_id)
-            .order_by(func.min(ExecutionRow.created_at))
+            .order_by(
+                func.max(ExecutionRow.priority).desc(),
+                func.min(ExecutionRow.created_at),
+            )
         )
         selected: list[ExecutionRow] = []
         for operation, model_id in targets.tuples():
@@ -538,7 +546,11 @@ class PostgresExecutionRepository:
                     ExecutionRow.operation == operation,
                     *eligible,
                 )
-                .order_by(ExecutionRow.next_attempt_at, ExecutionRow.created_at)
+                .order_by(
+                    ExecutionRow.priority.desc(),
+                    ExecutionRow.next_attempt_at,
+                    ExecutionRow.created_at,
+                )
                 .with_for_update(skip_locked=True)
                 .limit(wanted)
             )
@@ -803,6 +815,7 @@ class PostgresExecutionRepository:
             created_at=row.created_at,
             updated_at=row.updated_at,
             operation=row.operation,
+            priority=row.priority,
         )
 
     @staticmethod

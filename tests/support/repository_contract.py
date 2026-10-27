@@ -22,6 +22,7 @@ from model_service.scheduler.contracts import (
 from model_service.scheduler.domain import (
     Admission,
     InferenceSucceeded,
+    Priority,
     ProcessingFailed,
     ProcessingRejected,
     ProcessingSucceeded,
@@ -54,7 +55,11 @@ class ExecutionRepositoryContract:
         raise NotImplementedError
 
     async def _admit_execution(
-        self, key: str, model_id: str = "model-a", builder_id: str = "heatmap"
+        self,
+        key: str,
+        model_id: str = "model-a",
+        builder_id: str = "heatmap",
+        priority: int = Priority.NORMAL,
     ) -> str:
         deadline = datetime.now(UTC) + timedelta(minutes=5)
         admitted = await self.repository.admit(
@@ -73,6 +78,7 @@ class ExecutionRepositoryContract:
                 ),
                 protected_context={},
                 deadline_at=deadline,
+                priority=priority,
             )
         )
         return admitted.execution.id
@@ -118,6 +124,31 @@ class ExecutionRepositoryContract:
         assert selected is not None
         assert selected.execution_id == newer_id, selected
         assert selected.kind is WorkKind.PROVIDER_FINISH
+
+    async def test_higher_priority_is_claimed_first(self) -> None:
+        await self._admit_execution("older")
+        await self._advance_time(timedelta(milliseconds=10))
+        urgent_id = await self._admit_execution("urgent", priority=Priority.INTERACTIVE)
+
+        selected = await self.repository.claim_due("worker", timedelta(seconds=30))
+
+        assert selected is not None and selected.execution_id == urgent_id, selected
+        assert (await self.repository.get(urgent_id)).priority == Priority.INTERACTIVE
+
+    async def test_a_model_with_urgent_work_is_served_before_older_models(
+        self,
+    ) -> None:
+        await self._admit_execution("older", "older-model")
+        await self._advance_time(timedelta(milliseconds=10))
+        await self._admit_execution("normal", "busy-model")
+        await self._advance_time(timedelta(milliseconds=10))
+        urgent_id = await self._admit_execution(
+            "urgent", "busy-model", priority=Priority.INTERACTIVE
+        )
+
+        selected = await self.repository.claim_due("worker", timedelta(seconds=30))
+
+        assert selected is not None and selected.execution_id == urgent_id, selected
 
     async def test_processing_within_model_orders_by_due_time(self) -> None:
         older_id = await self._admit_execution("older")

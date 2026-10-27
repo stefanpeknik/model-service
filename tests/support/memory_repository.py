@@ -231,6 +231,7 @@ class InMemoryExecutionRepository:
                 and execution.fencing_token is None
             ]
             first_created: dict[tuple[Operation, str], datetime] = {}
+            top_priority: dict[tuple[Operation, str], int] = {}
             for execution in due:
                 if execution.work_kind is WorkKind.PROCESSING:
                     target = (execution.operation, execution.model_id)
@@ -238,17 +239,26 @@ class InMemoryExecutionRepository:
                         first_created.get(target, execution.created_at),
                         execution.created_at,
                     )
-            for execution in sorted(
-                due,
-                key=lambda item: (
+                    top_priority[target] = max(
+                        top_priority.get(target, execution.priority),
+                        execution.priority,
+                    )
+
+            def order(item: ExecutionRecord) -> tuple[object, ...]:
+                if item.work_kind is WorkKind.PROCESSING:
+                    target = (item.operation, item.model_id)
+                    group = (-top_priority[target], first_created[target])
+                else:
+                    group = (-item.priority, item.next_attempt_at)
+                return (
                     item.work_kind is WorkKind.PROCESSING,
-                    first_created[(item.operation, item.model_id)]
-                    if item.work_kind is WorkKind.PROCESSING
-                    else item.next_attempt_at,
+                    *group,
+                    -item.priority,
                     item.next_attempt_at,
                     item.created_at,
-                ),
-            ):
+                )
+
+            for execution in sorted(due, key=order):
                 target = (execution.operation, execution.model_id)
                 if (
                     execution.work_kind is WorkKind.PROCESSING

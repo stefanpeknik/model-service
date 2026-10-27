@@ -34,7 +34,7 @@ from model_service.scheduler.contracts import (
     ScheduleRequest,
     SchedulingUnavailableError,
 )
-from model_service.scheduler.domain import RetryPolicy
+from model_service.scheduler.domain import Priority, RetryPolicy
 from model_service.scheduler.providers import (
     ProviderFinishFailureError,
     ProviderSuccess,
@@ -308,6 +308,20 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
 
         state = EmpaiaInputState.model_validate(execution.invocation.input_access.state)
         self.assertEqual(state.mode, EmpaiaJobMode.PREPROCESSING)
+        self.assertEqual(execution.priority, Priority.NORMAL)
+
+    async def test_a_job_started_by_hand_is_interactive(self) -> None:
+        now = datetime.now(UTC)
+        service = ControlledEmpaiaService()
+        repository = InMemoryExecutionRepository(clock=lambda: now)
+        provider = EmpaiaProviderAdapter(service.gateway, allowed_api_urls=(API_URL,))
+        scheduler = scheduler_for(repository, provider, now)
+
+        scheduled = await scheduler.schedule(self._request(now, "credential"))
+        execution = await repository.get(scheduled.execution.id)
+
+        self.assertIs(service.mode, EmpaiaJobMode.STANDALONE)
+        self.assertEqual(execution.priority, Priority.INTERACTIVE)
 
     async def test_gateway_factory_failure_is_classified_during_prepare(self) -> None:
         """Verify gateway factory failure is classified during prepare."""

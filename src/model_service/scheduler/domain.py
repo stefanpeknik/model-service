@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import timedelta
-from enum import StrEnum
+from enum import IntEnum, StrEnum
 from typing import TYPE_CHECKING
 
 from model_service.scheduler.contracts import Operation, ProviderName
@@ -93,6 +93,17 @@ class SubmissionIdentity:
     fingerprint: str
 
 
+class Priority(IntEnum):
+    """Order in which due work is claimed; higher first, within each model's capacity.
+
+    Internal for now: providers set it, the public API does not take it.
+    """
+
+    NORMAL = 0
+    # Someone is waiting for the result, e.g. an EMPAIA job started by hand.
+    INTERACTIVE = 100
+
+
 @dataclass(frozen=True, slots=True)
 class PreparedInvocation:
     """Carry a validated invocation, private provider state, and any provider-imposed deadline limits."""
@@ -101,6 +112,7 @@ class PreparedInvocation:
     protected_context: dict[str, JsonValue]
     deadline_cap: datetime | None = None
     terminal_report_deadline_at: datetime | None = None
+    priority: int = Priority.NORMAL
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,6 +128,7 @@ class Admission:
     terminal_report_deadline_at: datetime | None = None
     operation: Operation = Operation.BUILDER
     payload: bytes | None = None
+    priority: int = Priority.NORMAL
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,6 +158,7 @@ class ExecutionRecord:
     created_at: datetime
     updated_at: datetime
     operation: Operation = Operation.BUILDER
+    priority: int = Priority.NORMAL
 
     @property
     def current_attempt(self) -> int:

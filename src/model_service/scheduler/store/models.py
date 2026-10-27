@@ -15,6 +15,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     Index,
+    Integer,
     LargeBinary,
     Text,
     UniqueConstraint,
@@ -145,6 +146,7 @@ class ExecutionRow(Base):
     error_message: Mapped[str | None] = mapped_column(Text)
     # Raw-inference bytes live in files (see store/payloads.py); the request until
     # the execution finishes, the response of a succeeded one until retention.
+    priority: Mapped[int] = mapped_column(Integer)
     request_path: Mapped[str | None] = mapped_column(Text)
     request_size: Mapped[int | None] = mapped_column(BigInteger)
     response_path: Mapped[str | None] = mapped_column(Text)

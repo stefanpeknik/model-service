@@ -154,6 +154,7 @@ class ExecutionScheduler:
                 protected_context=prepared.protected_context,
                 deadline_at=deadline_at,
                 terminal_report_deadline_at=(prepared.terminal_report_deadline_at),
+                priority=prepared.priority,
             )
         )
 
