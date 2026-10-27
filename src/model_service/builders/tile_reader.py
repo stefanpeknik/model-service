@@ -92,9 +92,10 @@ class TileReader:
 
     def read(self, x: int, y: int, tile_size: int) -> NDArray[np.uint8] | None:
         """Return a CHW uint8 tile, or None when the mask window is empty."""
-        if self._mask is not None and not self._mask_selects(x, y, tile_size):
-            return None
+        # The tissue check is an array lookup; the mask check reads the mask file.
         if self.tissue is not None and not self._has_tissue(x, y, tile_size):
+            return None
+        if self._mask is not None and not self._mask_selects(x, y, tile_size):
             return None
         tile = self.slide.read_tile(
             x=x, y=y, extent_x=tile_size, extent_y=tile_size, level=self.level
