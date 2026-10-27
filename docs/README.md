@@ -15,6 +15,7 @@
 | [EMPAIA job mode, header keys and pyramid publishing, 2026-10-26](operations/empaia-peknik-ns-2026-10-26.md) | Full-slide preprocessing job in peknik-ns; publication OOM found and fixed |
 | [Prostate heatmap on the EMPAIA test instance, 2026-10-27](operations/empaia-test-instance-2026-10-27.md) | ProstHM job from the test instance on `empaia-12`, `TERMINATED` 0 in about 7 minutes |
 | [Raw-inference payloads on a volume, 2026-10-27](operations/inference-payload-files-2026-10-27.md) | Tile bytes moved from PostgreSQL to an NFS claim; layout, sweep and throughput in peknik-ns |
+| [Region-of-interest slide download, 2026-10-27](operations/empaia-roi-download-2026-10-27.md) | Slide download limited to the region of interest; tissue checked before the mask |
 | [ADR 0001](adr/0001-run-scheduler-outside-ray-serve.md) | Why the scheduler runs outside Ray Serve |
 | [Available models](available-models.md) | Raw model routes and payloads |
 | [Ray-layer architecture](architecture/overview.md), [batching](architecture/batching.md), [queues](architecture/queues-and-backpressure.md) | Ray Serve internals |
