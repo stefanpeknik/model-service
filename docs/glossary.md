@@ -165,8 +165,8 @@ The physical pixel resolution a model expects based on its training data.
 It is a property of the model deployment, not a provider setting.
 
 **EMPAIA application definition (EAD)**:
-The EMPAIA declaration generated from an app file (builder, model and EMPAIA
-metadata) under `deploy/empaia/apps/`.
+The EMPAIA declaration of one app, generated for a builder, a model and a
+mode from the `empaia` block of the model's file.
 _Avoid_: EAD configuration, model configuration
 
 ## Quality control

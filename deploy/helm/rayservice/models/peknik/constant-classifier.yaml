@@ -2,6 +2,11 @@
 # builders and scheduling without a GPU.
 inference:
   contract: spatial-scores
+empaia:
+  name: Constant test
+  name_short: ConstHM
+  description: A test model that gives every tile the same score; it checks the pipeline, not the tissue.
+  modes: [standalone, preprocessing]
 serve:
   name: constant-classifier
   import_path: testing.constant_classifier:app

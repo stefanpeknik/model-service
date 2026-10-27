@@ -109,6 +109,27 @@ spec:
             - name: INFERENCE_STORAGE_PATH
               value: {{ .Values.executionScheduler.inferenceStorage.mountPath | quote }}
 {{- include "model-service.empaiaEnv" . | nindent 12 }}
+            {{- with .Values.empaia.marketplace }}
+            {{- if .url }}
+            - name: EMPAIA_MARKETPLACE_URL
+              value: {{ .url | quote }}
+            - name: EMPAIA_ORGANIZATION_ID
+              value: {{ required "empaia.marketplace.organizationId is required with a marketplace url" .organizationId | quote }}
+            - name: EMPAIA_JES_TARGET
+              value: {{ .jesTarget | quote }}
+            {{- if .idpUrl }}
+            - name: EMPAIA_IDP_URL
+              value: {{ .idpUrl | quote }}
+            - name: EMPAIA_CLIENT_ID
+              value: {{ required "empaia.marketplace.clientId is required with an idpUrl" .clientId | quote }}
+            - name: EMPAIA_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "empaia.marketplace.existingSecret is required with an idpUrl" .existingSecret }}
+                  key: {{ .clientSecretKey }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
           readinessProbe:
             httpGet:
               path: /readyz

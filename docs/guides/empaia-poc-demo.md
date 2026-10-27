@@ -80,8 +80,10 @@ JES polls the execution (GET Location); cancel and timeout send DELETE
   background; batching tiles per model call is not done yet.
 - No authentication between JES and model-service yet (cluster-internal).
 - JES `0.6.15-1` drops the `-memory` resource limits for container apps.
-- Registering apps in the test marketplace needs a service-client token
-  (LS-AAI), so it is run from inside the JES pod.
+- The facade registers apps automatically (`empaia.marketplace`), but the test
+  marketplace needs a service-client token (LS-AAI) and model-service has no
+  client there yet; the app above was registered by hand from inside the JES
+  pod, under the older namespace `org.empaia.rationai.prostate_cls_preprocessing.v3.0`.
 
 ## Afterwards
 

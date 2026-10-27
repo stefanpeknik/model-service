@@ -104,3 +104,7 @@ empaia:
   workspaceClaim: model-service-validation-full-wsi-scratch
   # Read the mock's slide through the App API, as in the EMPAIA test instance.
   slideAccess: http
+  # The marketplace mock in deploy/k8s/peknik-ns/empaia-mock.yaml (no auth).
+  marketplace:
+    url: http://empaia-mock-marketplace.peknik-ns.svc:8000
+    organizationId: 2c7c2b5e-8d4a-4f5e-9b1a-0d2f6c3e7a10

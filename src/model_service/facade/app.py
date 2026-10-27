@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 from typing import TYPE_CHECKING
 
 import httpx
@@ -17,8 +18,18 @@ from model_service.facade.health import DeploymentHealth
 from model_service.facade.inference import HttpInferenceProxy, ModelInference
 from model_service.facade.settings import SchedulerSettings
 from model_service.facade.synchronous import SynchronousBuilderService
+from model_service.providers.empaia.apps import app_definitions
+from model_service.providers.empaia.credentials import (
+    ClientCredentials,
+    NoCredentials,
+    OutgoingCredentials,
+)
 from model_service.providers.empaia.http_gateway import create_http_gateway
 from model_service.providers.empaia.provider import EmpaiaProviderAdapter
+from model_service.providers.empaia.registration import (
+    Marketplace,
+    register_until_done,
+)
 from model_service.providers.empaia.settings import EmpaiaSettings
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
 from model_service.providers.standalone import StandaloneProviderAdapter
@@ -118,13 +129,26 @@ def create_app(
         max_concurrent_inference=config.max_concurrent_inference,
     )
 
+    marketplace = _marketplace(empaia)
+    apps = app_definitions(catalog, catalog.empaia_listings)
+
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        registration = None
         try:
             await repository.initialize()
+            if marketplace is not None and apps:
+                # In the background: the API serves while the marketplace is down.
+                registration = asyncio.create_task(
+                    register_until_done(marketplace, apps)
+                )
             async with scheduler.running():
                 yield
         finally:
+            if registration is not None:
+                registration.cancel()
+                with suppress(asyncio.CancelledError):
+                    await registration
             await client.aclose()
             await repository.aclose()
 
@@ -150,4 +174,24 @@ def create_app(
             routes=[f"/builders/{builder_id}" for builder_id in builder_ids]
             + [f"/{model.id}" for model in catalog],
         ),
+    )
+
+
+def _marketplace(settings: EmpaiaSettings) -> Marketplace | None:
+    if settings.marketplace_url is None or settings.organization_id is None:
+        return None
+    credentials: OutgoingCredentials = NoCredentials()
+    if settings.idp_url is not None:
+        assert settings.client_id is not None and settings.client_secret is not None
+        credentials = ClientCredentials(
+            settings.idp_url,
+            settings.client_id,
+            settings.client_secret.get_secret_value(),
+        )
+    return Marketplace(
+        settings.marketplace_url,
+        settings.organization_id,
+        settings.jes_target,
+        credentials,
+        timeout=settings.app_service_timeout_seconds,
     )

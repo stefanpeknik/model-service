@@ -1,5 +1,11 @@
 inference:
   contract: spatial-scores
+# Offered in EMPAIA as one app per mode; the facade registers them at startup.
+empaia:
+  name: Prostate cancer
+  name_short: ProstHM
+  description: Classifies prostate tissue and shows the scores as a heatmap over the slide.
+  modes: [standalone, preprocessing]
 serve:
   name: prostate-classifier-1
   import_path: model_service.models.binary_classifier:app

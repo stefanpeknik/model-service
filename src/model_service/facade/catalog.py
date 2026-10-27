@@ -22,10 +22,11 @@ from model_service.builders.contracts import (
     UnknownModelError,
 )
 from model_service.builders.registry import BUILDERS
+from model_service.providers.empaia.apps import EmpaiaListing  # noqa: TC001
 
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Mapping
     from pathlib import Path
 
     from model_service.builders.contracts import ModelBinding
@@ -58,6 +59,8 @@ class ModelDocument(BaseModel):
 
     inference: InferenceDeclaration
     serve: _ServeApplication
+    # How the model is offered as EMPAIA apps; without it, it is not.
+    empaia: EmpaiaListing | None = None
 
 
 # Parameters each contract reads from user_config, and from the inference block.
@@ -108,10 +111,15 @@ def model_binding(document: ModelDocument) -> ModelBinding:
 
 
 class ModelCatalog:
-    def __init__(self, models: list[ModelBinding]) -> None:
+    def __init__(
+        self,
+        models: list[ModelBinding],
+        empaia_listings: Mapping[str, EmpaiaListing] | None = None,
+    ) -> None:
         self._models = {model.id: model for model in models}
         if len(self._models) != len(models):
             raise CatalogError("model IDs must be unique")
+        self.empaia_listings = dict(empaia_listings or {})
 
     @classmethod
     def from_documents(cls, documents: object) -> ModelCatalog:
@@ -121,7 +129,14 @@ class ModelCatalog:
             parsed = [ModelDocument.model_validate(item) for item in documents]
         except ValidationError as error:
             raise CatalogError(f"model catalog is invalid: {error}") from error
-        return cls([model_binding(document) for document in parsed])
+        return cls(
+            [model_binding(document) for document in parsed],
+            {
+                document.serve.name: document.empaia
+                for document in parsed
+                if document.empaia is not None
+            },
+        )
 
     @classmethod
     def from_file(cls, path: Path) -> ModelCatalog:

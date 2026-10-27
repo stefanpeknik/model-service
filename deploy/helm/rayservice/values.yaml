@@ -126,3 +126,16 @@ empaia:
   # Extra DNS search domains for pods that call AppService, when the
   # installation hands out short host names from another namespace.
   dnsSearches: []
+  # The facade registers an app per mode for every model whose file has an
+  # `empaia` block, at startup, in this marketplace (the marketplace mock that
+  # EMPAIA test installations run). Empty url: no registration.
+  marketplace:
+    url: ""
+    organizationId: ""
+    # model-service's name in the installation's JES_HTTP_TARGETS.
+    jesTarget: model-service
+    # Client credentials for the marketplace, from a Secret; empty idpUrl: none.
+    idpUrl: ""
+    clientId: ""
+    existingSecret: ""
+    clientSecretKey: client-secret

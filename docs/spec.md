@@ -144,8 +144,31 @@ those the job does not have (AppService answers 404). That is all the job's mode
 (standalone, preprocessing, …) changes for a builder. Admission still reads the
 mode and records it in the invocation's EMPAIA input state, but nothing acts on
 it yet. A preprocessing app, which EMPAIA starts with only a slide, thus runs
-the heatmap builder over the whole slide. An app file may list the inputs it takes (`inputs: [slide]`, see
-`deploy/empaia/apps/constant-heatmap-preprocessing.yaml`).
+the heatmap builder over the whole slide.
+
+EMPAIA apps are generated, not written by hand
+(`src/model_service/providers/empaia/apps.py`). A model file opts in with an
+`empaia` block: a display name (at most 22 characters, so `<name> <builder>`
+fits EMPAIA's 30), a short name (at most 10), a description of what the model
+finds, and the modes it runs in. Every builder that accepts the model's
+contract and has an EMPAIA type for each output (today the heatmap builder,
+not tile embeddings) becomes one app per listed mode: the standalone app takes
+the slide and an optional region of interest, the preprocessing app only the
+slide. Names, namespaces (`org.empaia.rationai.<builder>_<model>_<mode>.v3.0`),
+the mode's sentence of the description, and the image
+`http::<target>/builders/<builder>/models/<model>` are derived; each EAD is
+validated against the bundled EAD v3 schema.
+
+At startup the facade registers these apps in the marketplace set by
+`EMPAIA_MARKETPLACE_URL` (Helm `empaia.marketplace`), in the background and
+retrying every minute until it succeeds. It uses the marketplace mock's route
+(`/v1/custom-mock/portal-apps`) that EMPAIA test installations run; a
+production marketplace lists apps through its portal's review. App IDs derive
+from the namespace, so registering again replaces an app, and every replica
+may do it. Credentials for the marketplace go through an outgoing-credentials
+interface: none by default, or client credentials from an identity provider
+(`EMPAIA_IDP_URL`, `EMPAIA_CLIENT_ID`, `EMPAIA_CLIENT_SECRET`), obtained the way
+`empaia-sender-auth` does.
 
 EMPAIA slide inputs reach builders one of two ways, chosen by
 `EMPAIA_SLIDE_ACCESS` (Helm `empaia.slideAccess`):
@@ -318,8 +341,6 @@ the unsafe legacy `src/model_service/builders/heatmap_builder.py` endpoint, and
 
 Not part of the service, used to deploy and validate it:
 
-- `scripts/register_empaia_app.py` and `scripts/generate_ead.py`: an EAD and
-  marketplace registration from an app file in `deploy/empaia/apps/`.
 - `scripts/warm_model.py`: one scheduled tile, to start a GPU replica before a
   demo or a job.
 - `scripts/prepare_tissue_mask.py`: a tissue mask TIFF for standalone runs.
