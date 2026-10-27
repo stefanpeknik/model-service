@@ -11,6 +11,7 @@ from fastapi import FastAPI, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from model_service.facade.auth import Access
 from model_service.facade.health import DeploymentState, DeploymentStatus
 from model_service.facade.routes import builders, empaia, executions, models
 from model_service.facade.routes.common import (
@@ -44,8 +45,13 @@ def create_app(
     deployment_health: DeploymentHealth | None = None,
     inference_max_request_bytes: int = 2 * 1024 * 1024,
     capacity: Capacity | None = None,
+    access: Access | None = None,
+    empaia_access: Access | None = None,
 ) -> FastAPI:
+    """`access` guards the public API, `empaia_access` the EMPAIA route; both allow everyone by default."""
     capacity = capacity or NoCapacityInfo()
+    access = access or Access()
+    empaia_access = empaia_access or Access()
     app = FastAPI(title="model-service", lifespan=lifespan)
 
     @app.exception_handler(RequestValidationError)
@@ -92,10 +98,10 @@ def create_app(
 
     app.include_router(
         models.create_router(
-            scheduler, catalog, inference_target, inference_max_request_bytes
+            scheduler, catalog, inference_target, inference_max_request_bytes, access
         )
     )
-    app.include_router(builders.create_router(scheduler, builder_runner))
-    app.include_router(empaia.create_router(scheduler, capacity))
-    app.include_router(executions.create_router(scheduler, capacity))
+    app.include_router(builders.create_router(scheduler, builder_runner, access))
+    app.include_router(empaia.create_router(scheduler, capacity, empaia_access))
+    app.include_router(executions.create_router(scheduler, capacity, access))
     return app

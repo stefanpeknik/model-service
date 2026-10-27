@@ -8,6 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import Field
 
+from model_service.facade.auth import Access, Action
 from model_service.facade.routes.common import (
     ERRORS,
     ApiErrorCode,
@@ -32,10 +33,16 @@ class ExecutionLookup:
     ids: Annotated[list[str], Field(max_length=MAX_LOOKUP_IDS)]
 
 
-def create_router(scheduler: Scheduler, capacity: Capacity) -> APIRouter:
+def create_router(
+    scheduler: Scheduler, capacity: Capacity, access: Access
+) -> APIRouter:
     router = APIRouter(prefix="/v1/executions")
 
-    @router.get("/{execution_id}", responses=ERRORS)
+    @router.get(
+        "/{execution_id}",
+        responses=ERRORS,
+        dependencies=[access.require(Action.READ_EXECUTION)],
+    )
     async def get_execution(execution_id: str) -> ExecutionView:
         try:
             execution = await scheduler.get(execution_id)
@@ -45,7 +52,11 @@ def create_router(scheduler: Scheduler, capacity: Capacity) -> APIRouter:
             raise _unknown_execution() from error
         return await capacity.explain(execution)
 
-    @router.post("/lookup", responses=ERRORS)
+    @router.post(
+        "/lookup",
+        responses=ERRORS,
+        dependencies=[access.require(Action.READ_EXECUTION)],
+    )
     async def lookup_executions(body: ExecutionLookup) -> list[ExecutionView]:
         """Views of the listed executions that exist; unknown IDs are left out."""
         try:
@@ -60,6 +71,7 @@ def create_router(scheduler: Scheduler, capacity: Capacity) -> APIRouter:
             200: {"content": {"application/octet-stream": {}}},
             **ERRORS,
         },
+        dependencies=[access.require(Action.READ_EXECUTION)],
     )
     async def get_inference_result(execution_id: str) -> Response:
         """The stored model response of a succeeded inference execution."""
@@ -79,7 +91,11 @@ def create_router(scheduler: Scheduler, capacity: Capacity) -> APIRouter:
             content=content, media_type=result.media_type, headers=result.headers
         )
 
-    @router.post("/{execution_id}/cancel", responses=ERRORS)
+    @router.post(
+        "/{execution_id}/cancel",
+        responses=ERRORS,
+        dependencies=[access.require(Action.CANCEL_EXECUTION)],
+    )
     async def cancel_execution(execution_id: str) -> ExecutionView:
         try:
             return await scheduler.cancel(execution_id)

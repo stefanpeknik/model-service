@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Annotated
 from fastapi import APIRouter, Header, Response, status
 from pydantic import Field
 
+from model_service.facade.auth import Access, Action
 from model_service.facade.routes.common import (
     ERRORS,
     ApiErrorCode,
@@ -55,13 +56,16 @@ class EmpaiaExecutionStatus:
     message: str | None = None
 
 
-def create_router(scheduler: Scheduler, capacity: Capacity) -> APIRouter:
+def create_router(
+    scheduler: Scheduler, capacity: Capacity, access: Access
+) -> APIRouter:
     router = APIRouter(prefix="/v1/empaia")
 
     @router.post(
         "/builders/{builder_id}/models/{model_id}",
         status_code=status.HTTP_202_ACCEPTED,
         responses={200: {"model": EmpaiaExecutionStatus}, **ERRORS},
+        dependencies=[access.require(Action.SUBMIT_EMPAIA_JOB)],
     )
     async def execute(
         builder_id: str,
@@ -95,7 +99,11 @@ def create_router(scheduler: Scheduler, capacity: Capacity) -> APIRouter:
         response.headers["Location"] = f"/v1/empaia/executions/{result.execution.id}"
         return remote_status(result.execution)
 
-    @router.get("/executions/{execution_id}", responses=ERRORS)
+    @router.get(
+        "/executions/{execution_id}",
+        responses=ERRORS,
+        dependencies=[access.require(Action.READ_EXECUTION)],
+    )
     async def get_status(execution_id: str) -> EmpaiaExecutionStatus:
         try:
             execution = await scheduler.get(execution_id)
@@ -105,7 +113,11 @@ def create_router(scheduler: Scheduler, capacity: Capacity) -> APIRouter:
             raise _unknown_execution() from error
         return remote_status(await capacity.explain(execution))
 
-    @router.delete("/executions/{execution_id}", responses=ERRORS)
+    @router.delete(
+        "/executions/{execution_id}",
+        responses=ERRORS,
+        dependencies=[access.require(Action.CANCEL_EXECUTION)],
+    )
     async def cancel(execution_id: str) -> EmpaiaExecutionStatus:
         try:
             return remote_status(await scheduler.cancel(execution_id))

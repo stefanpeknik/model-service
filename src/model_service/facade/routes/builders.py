@@ -27,6 +27,7 @@ from model_service.builders.contracts import (
     UnknownModelError,
 )
 from model_service.builders.registry import BUILDERS
+from model_service.facade.auth import Access, Action
 
 # FastAPI reads these annotations at runtime.
 from model_service.facade.requests import (
@@ -81,11 +82,14 @@ class BuilderRunner(Protocol):
 
 
 def create_router(
-    scheduler: Scheduler, builder_runner: BuilderRunner | None
+    scheduler: Scheduler, builder_runner: BuilderRunner | None, access: Access
 ) -> APIRouter:
     router = APIRouter(prefix="/v1/builders")
 
-    @router.get("")
+    @router.get(
+        "",
+        dependencies=[access.require(Action.READ_CATALOG)],
+    )
     async def list_builders() -> list[BuilderView]:
         return [
             BuilderView(
@@ -104,7 +108,11 @@ def create_router(
             for spec in BUILDERS.values()
         ]
 
-    @router.post("/{builder_id}/models/{model_id}/run", responses=ERRORS)
+    @router.post(
+        "/{builder_id}/models/{model_id}/run",
+        responses=ERRORS,
+        dependencies=[access.require(Action.RUN)],
+    )
     async def run_builder(
         request: Request,
         builder_id: str,
@@ -160,6 +168,7 @@ def create_router(
         "/{builder_id}/models/{model_id}/schedule",
         status_code=status.HTTP_202_ACCEPTED,
         responses={200: {"model": ScheduleResult}, **ERRORS},
+        dependencies=[access.require(Action.SCHEDULE)],
     )
     async def schedule_builder(
         builder_id: str,

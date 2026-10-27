@@ -18,6 +18,7 @@ from model_service.builders.contracts import (
     ModelBinding,
     UnknownModelError,
 )
+from model_service.facade.auth import Access, Action
 from model_service.facade.inference import inference_headers
 from model_service.facade.routes.common import (
     ERRORS,
@@ -77,14 +78,22 @@ def create_router(
     catalog: ModelCatalog,
     inference: InferenceTarget | None,
     max_request_bytes: int,
+    access: Access,
 ) -> APIRouter:
     router = APIRouter(prefix="/v1/models")
 
-    @router.get("")
+    @router.get(
+        "",
+        dependencies=[access.require(Action.READ_CATALOG)],
+    )
     async def list_models() -> list[ModelView]:
         return [model_view(model) for model in catalog]
 
-    @router.get("/{model_id}", responses=ERRORS)
+    @router.get(
+        "/{model_id}",
+        responses=ERRORS,
+        dependencies=[access.require(Action.READ_CATALOG)],
+    )
     async def get_model(model_id: str) -> ModelView:
         try:
             return model_view(catalog.get(model_id))
@@ -95,6 +104,7 @@ def create_router(
         "/{model_id}/run",
         responses={200: {"content": {"application/octet-stream": {}}}, **ERRORS},
         openapi_extra=_BINARY_BODY,
+        dependencies=[access.require(Action.RUN)],
     )
     async def run_inference(model_id: str, request: Request) -> Response:
         """Send one raw request to the model and return its response."""
@@ -140,6 +150,7 @@ def create_router(
         status_code=status.HTTP_202_ACCEPTED,
         responses={200: {"model": ScheduleResult}, **ERRORS},
         openapi_extra=_BINARY_BODY,
+        dependencies=[access.require(Action.SCHEDULE)],
     )
     async def schedule_inference(
         model_id: str,

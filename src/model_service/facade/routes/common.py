@@ -50,6 +50,8 @@ class ApiErrorCode(StrEnum):
     PAYLOAD_TOO_LARGE = "payload_too_large"
     RESULT_UNAVAILABLE = "result_unavailable"
     MODEL_UNAVAILABLE = "model_inference_unavailable"
+    UNAUTHENTICATED = "unauthenticated"
+    FORBIDDEN = "forbidden"
 
 
 @dataclass(frozen=True, slots=True)

@@ -129,6 +129,16 @@ Unknown builder or model: 404 `unknown_builder` / `unknown_model`.
 Incompatible pair: 422 `incompatible_model`. Model temporarily down: durable
 requests queue; synchronous requests get 503.
 
+Authentication and authorization are interfaces with allow-everyone defaults
+(`src/model_service/facade/auth.py`); no implementation is chosen yet. Every
+route except the health checks asks an `Authenticator` for the caller's
+`Principal` (401 `unauthenticated` when it refuses) and an `Authorizer` whether
+that principal may perform the route's `Action`, given the execution ID in the
+path (403 `forbidden`). The public API and the EMPAIA route each take their own
+pair (`create_app(access=..., empaia_access=...)`): EMPAIA's service token, e.g.
+checked like `empaia-receiver-auth` does, and direct users with owned executions
+behind RBAC need different checks. Executions do not record an owner yet.
+
 EMPAIA admission asks AppService for each optional builder input and leaves out
 those the job does not have (AppService answers 404). That is all the job's mode
 (standalone, preprocessing, …) changes for a builder. Admission still reads the
@@ -324,6 +334,9 @@ Not part of the service, used to deploy and validate it:
 The EMPAIA bridge (JES's HTTP backend, registration, standalone and
 preprocessing apps) is now in scope and implemented. Still out of scope:
 annotation outputs, tile embeddings as EMPAIA outputs (EAD v3 has no type for
-them), quality control (QC) masks, authentication between JES and
-model-service, automatic preprocessing triggers, and batching tiles per model
-call.
+them), quality control (QC), concrete authentication and authorization
+(only the interfaces exist), and batching tiles per model call. Automatic
+preprocessing triggers are an EMPAIA admin's setting, not model-service's.
+A tissue mask from a real source is future QC work: QC would run as a
+preprocessing job whose mask later model-service jobs use; until then the
+heatmap builder's own background filter stands in.
