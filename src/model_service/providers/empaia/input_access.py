@@ -151,6 +151,13 @@ class EmpaiaInputAccessAdapter:
                         value.name,
                         str(directory),
                         mpp=model.mpp if model is not None else None,
+                        # A tile the region selects reads up to a tile past it.
+                        margin=model.tile_size if model is not None else 0,
+                        bounds=[
+                            other.name
+                            for key, other in invocation.inputs.items()
+                            if key != name and isinstance(other, ProviderInput)
+                        ],
                     )
                 )
                 if not path.is_relative_to(directory) or not path.is_file():

@@ -437,7 +437,12 @@ class BuilderHTTPTests(unittest.IsolatedAsyncioTestCase):
 
         class Gateway:
             async def materialize_input(
-                self, _name: str, directory: str, *, mpp: float | None = None
+                self,
+                _name: str,
+                directory: str,
+                *,
+                mpp: float | None = None,
+                **_: object,
             ) -> str:
                 path = Path(directory) / "slide.svs"
                 path.write_bytes(b"slide")

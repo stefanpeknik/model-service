@@ -428,9 +428,12 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
                 metadata: SlideMetadata,
                 mpp: float,
                 destination: Path,
+                *,
+                region: Rectangle | None = None,
+                margin: int = 0,
             ) -> None:
                 del gateway
-                downloads.append((metadata, mpp, destination))
+                downloads.append((metadata, mpp, destination, region, margin))
                 destination.touch()
 
         def handle(request: httpx.Request) -> httpx.Response:
@@ -454,7 +457,13 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
                 slide_access=SlideAccess.HTTP,
                 slide_downloader=RecordingDownloader(),
             )
-            slide_path = await gateway.materialize_input("slide", directory, mpp=0.5)
+            slide_path = await gateway.materialize_input(
+                "slide",
+                directory,
+                mpp=0.5,
+                margin=512,
+                bounds=["region_of_interest"],
+            )
             mask_path = await gateway.materialize_input(
                 "region_of_interest", directory, mpp=0.5
             )
@@ -467,6 +476,8 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(downloads), 1)
         self.assertEqual(downloads[0][0].identifier, "slide-1")
         self.assertEqual(downloads[0][1], 0.5)
+        # The slide download is limited to the job's region of interest.
+        self.assertEqual(downloads[0][3:], (Rectangle(10, 20, 100, 50), 512))
         self.assertEqual(len(writer.calls), 1)
         self.assertFalse(raised.exception.retryable)
         self.assertFalse(any(path.endswith("/direct-access") for path in requested))

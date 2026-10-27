@@ -149,6 +149,11 @@ EMPAIA slide inputs reach builders one of two ways, chosen by
   resolution, so the builder reads it unchanged as level 0. Region-of-interest
   rectangles still become a local mask. The model's `mpp` reaches the input
   adapter with the invocation.
+  When the job has a region of interest, only the tiles within one model tile
+  of it are fetched (tiles the builder selects reach up to a tile past the
+  region); the rest of the level is written white, which the builder treats as
+  background. Jobs without one, such as preprocessing jobs, still fetch the
+  whole level.
 
 A running execution whose model or builder has no running Serve replica, only
 one Ray has not placed on a node for `CAPACITY_GRACE_SECONDS` (default 60),

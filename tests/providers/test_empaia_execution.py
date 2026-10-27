@@ -45,7 +45,7 @@ from tests.support.memory_repository import InMemoryExecutionRepository
 
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Collection
 
     from model_service.builders.application import BuilderContext
     from model_service.builders.contracts import BuilderOutput, JsonValue
@@ -150,6 +150,7 @@ class ControlledEmpaiaService:
         self.configuration_reads = 0
         self.credentials: list[str] = []
         self.materialized: list[str] = []
+        self.bounds: dict[str, list[str]] = {}
         self.published: list[tuple[str, BuilderOutput]] = []
         self.publish_failures: list[EmpaiaGatewayError] = []
         self.finalize_failures: list[EmpaiaGatewayError] = []
@@ -197,10 +198,17 @@ class FakeGateway:
         return name not in self._service.absent_inputs
 
     async def materialize_input(
-        self, name: str, directory: str, *, mpp: float | None = None
+        self,
+        name: str,
+        directory: str,
+        *,
+        mpp: float | None = None,
+        margin: int = 0,
+        bounds: Collection[str] = (),
     ) -> str:
         """Record the input name and write identifiable fixture bytes into the directory."""
         self._service.materialized.append(name)
+        self._service.bounds[name] = list(bounds)
         path = Path(directory) / f"{name}.bin"
         path.write_bytes(f"{name}-from-empaia".encode())
         return str(path)
@@ -404,6 +412,8 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(completed.status, "succeeded")
         self.assertEqual(service.materialized, ["slide", "region_of_interest"])
+        # The slide is told which inputs may limit what it fetches.
+        self.assertEqual(service.bounds["slide"], ["region_of_interest"])
         self.assertEqual([name for name, _ in service.published], ["heatmap"])
         self.assertTrue(service.finalized)
         self.assertEqual(

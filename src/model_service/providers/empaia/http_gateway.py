@@ -39,7 +39,7 @@ from model_service.providers.empaia.settings import EmpaiaSettings, SlideAccess
 
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable
+    from collections.abc import Awaitable, Collection
 
     from model_service.builders.contracts import BuilderOutput, JsonValue
     from model_service.providers.empaia.gateway import MutationGuard
@@ -119,8 +119,15 @@ class SlideDownloader(Protocol):
         slide: SlideMetadata,
         mpp: float,
         destination: Path,
+        *,
+        region: Rectangle | None = None,
+        margin: int = 0,
     ) -> None:
-        """Write the slide level closest to `mpp`, read through the gateway, to `destination`."""
+        """Write the slide level closest to `mpp`, read through the gateway, to `destination`.
+
+        With a `region` (base-level pixels), only the part within `margin` level
+        pixels of it is fetched.
+        """
         ...
 
 
@@ -191,7 +198,13 @@ class HttpEmpaiaGateway:
         return True
 
     async def materialize_input(
-        self, name: str, directory: str, *, mpp: float | None = None
+        self,
+        name: str,
+        directory: str,
+        *,
+        mpp: float | None = None,
+        margin: int = 0,
+        bounds: Collection[str] = (),
     ) -> str:
         """Link or download a slide input, or fetch rectangle metadata and write a local mask."""
         if self._slide_access is SlideAccess.DIRECT:
@@ -206,7 +219,12 @@ class HttpEmpaiaGateway:
                 )
             target = Path(directory) / "slide.tiff"
             await self._slide_downloader.download(
-                self, _slide_metadata(value), mpp, target
+                self,
+                _slide_metadata(value),
+                mpp,
+                target,
+                region=await self._region(bounds),
+                margin=margin,
             )
             return str(target)
         target = Path(directory) / "mask.tiff"
@@ -318,6 +336,21 @@ class HttpEmpaiaGateway:
             storage_path=Path(direct.storage_path),
             supported=direct.direct_access_supported,
         )
+
+    async def _region(self, names: Collection[str]) -> Rectangle | None:
+        """The box around the rectangles among the named inputs; None if there are none."""
+        rectangles = []
+        for name in names:
+            value = await self._call(self._client.get_input_data(name))
+            if not _is_slide(value):
+                rectangles.append(_rectangle(value))
+        if not rectangles:
+            return None
+        left = min(r.x for r in rectangles)
+        top = min(r.y for r in rectangles)
+        right = max(r.x + r.width for r in rectangles)
+        bottom = max(r.y + r.height for r in rectangles)
+        return Rectangle(left, top, right - left, bottom - top)
 
     async def _slide_metadata(self) -> SlideMetadata:
         """Fetch and decode the job's slide input metadata."""

@@ -223,7 +223,12 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
 
         class Gateway:
             async def materialize_input(
-                self, _name: str, _directory: str, *, mpp: float | None = None
+                self,
+                _name: str,
+                _directory: str,
+                *,
+                mpp: float | None = None,
+                **_: object,
             ) -> str:
                 started.set()
                 await asyncio.Event().wait()
@@ -277,6 +282,7 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
                     *,
                     mpp: float | None = None,
                     failure: EmpaiaGatewayError = failure,
+                    **_: object,
                 ) -> str:
                     raise failure
 

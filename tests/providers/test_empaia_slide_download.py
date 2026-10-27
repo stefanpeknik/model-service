@@ -14,7 +14,11 @@ from PIL import Image
 from ratiopath.openslide import OpenSlide
 
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
-from model_service.providers.empaia.http_gateway import SlideLevel, SlideMetadata
+from model_service.providers.empaia.http_gateway import (
+    Rectangle,
+    SlideLevel,
+    SlideMetadata,
+)
 from model_service.providers.empaia.image_io import TiffSlideDownloader, closest_level
 
 
@@ -87,6 +91,30 @@ class SlideDownloadTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(("slide-1", 1, 512, 256, 88, 94), server.requests)
         difference = np.abs(pixels.astype(int) - pyramid()[1].astype(int))
         self.assertLess(difference.mean(), 3)
+
+    async def test_only_tiles_near_the_region_are_fetched(self) -> None:
+        server = RegionServer()
+        with TemporaryDirectory() as directory:
+            target = Path(directory) / "slide.tiff"
+
+            # Level 1 box (50, 50)-(150, 100), widened by 16 px: inside tile (0, 0).
+            await TiffSlideDownloader(tile_size=256).download(
+                server,  # type: ignore[arg-type]
+                SLIDE,
+                0.48,
+                target,
+                region=Rectangle(100, 100, 200, 100),
+                margin=16,
+            )
+
+            with OpenSlide(str(target)) as slide:
+                pixels = np.asarray(slide.read_region((0, 0), 0, (600, 350)))[..., :3]
+        self.assertEqual(server.requests, [("slide-1", 1, 0, 0, 256, 256)])
+        fetched = pixels[:256, :256].astype(int) - pyramid()[1][:256, :256]
+        self.assertLess(np.abs(fetched).mean(), 3)
+        # Skipped tiles are white, which the builder treats as background.
+        self.assertGreater(pixels[:, 256:].min(), 250)
+        self.assertGreater(pixels[256:, :].min(), 250)
 
     async def test_a_coarse_level_is_appended_for_finding_tissue(self) -> None:
         server = RegionServer()

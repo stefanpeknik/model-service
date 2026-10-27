@@ -17,6 +17,7 @@ import math
 import queue
 from collections import deque
 from dataclasses import replace
+from math import ceil, floor
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
     import numpy as np
     from numpy.typing import NDArray
@@ -224,8 +225,15 @@ class TiffSlideDownloader:
         slide: SlideMetadata,
         mpp: float,
         destination: Path,
+        *,
+        region: Rectangle | None = None,
+        margin: int = 0,
     ) -> None:
-        """Fetch every tile of the level closest to `mpp` and write it to `destination`."""
+        """Fetch the tiles of the level closest to `mpp` and write them to `destination`.
+
+        With a `region`, tiles farther than `margin` level pixels from it are not
+        fetched but written white, which the builder treats as background.
+        """
         level = closest_level(slide, mpp)
         size = self._tile_size
         positions = [
@@ -233,16 +241,20 @@ class TiffSlideDownloader:
             for y in range(0, level.height, size)
             for x in range(0, level.width, size)
         ]
+        wanted = _within(region, margin, slide, level, size)
         logger.info(
-            "downloading slide %s level %d (%dx%d px, %d tiles)",
+            "downloading slide %s level %d (%dx%d px, %d of %d tiles)",
             slide.identifier,
             level.index,
             level.width,
             level.height,
+            sum(wanted(x, y) for x, y in positions),
             len(positions),
         )
 
-        async def fetch(x: int, y: int) -> bytes:
+        async def fetch(x: int, y: int) -> bytes | None:
+            if not wanted(x, y):
+                return None
             return await gateway.read_region(
                 slide.identifier,
                 level.index,
@@ -256,7 +268,7 @@ class TiffSlideDownloader:
         writer = asyncio.ensure_future(
             asyncio.to_thread(self._write, destination, slide, level, tiles)
         )
-        pending: deque[tuple[int, int, asyncio.Task[bytes]]] = deque()
+        pending: deque[tuple[int, int, asyncio.Task[bytes | None]]] = deque()
         remaining = iter(positions)
         try:
             for x, y in itertools.islice(remaining, self._concurrency):
@@ -266,13 +278,16 @@ class TiffSlideDownloader:
                 data = await task
                 for nx, ny in itertools.islice(remaining, 1):
                     pending.append((nx, ny, asyncio.ensure_future(fetch(nx, ny))))
-                tile = await asyncio.to_thread(
-                    _decode_tile,
-                    data,
-                    min(size, level.width - x),
-                    min(size, level.height - y),
-                    size,
-                )
+                if data is None:
+                    tile = _blank_tile(size)
+                else:
+                    tile = await asyncio.to_thread(
+                        _decode_tile,
+                        data,
+                        min(size, level.width - x),
+                        min(size, level.height - y),
+                        size,
+                    )
                 await _hand_over(tiles, tile, writer)
             await writer
             await self._append_overview(gateway, slide, level, destination)
@@ -402,6 +417,31 @@ class TiffSlideDownloader:
 
 
 _ABORT = object()
+
+
+def _within(
+    region: Rectangle | None,
+    margin: int,
+    slide: SlideMetadata,
+    level: SlideLevel,
+    size: int,
+) -> Callable[[int, int], bool]:
+    """Whether a level tile at (x, y) lies within `margin` of `region`."""
+    if region is None:
+        return lambda _x, _y: True
+    scale_x = level.width / slide.width
+    scale_y = level.height / slide.height
+    left = floor(region.x * scale_x) - margin
+    top = floor(region.y * scale_y) - margin
+    right = ceil((region.x + region.width) * scale_x) + margin
+    bottom = ceil((region.y + region.height) * scale_y) + margin
+    return lambda x, y: x < right and x + size > left and y < bottom and y + size > top
+
+
+def _blank_tile(size: int) -> NDArray[np.uint8]:
+    import numpy as np
+
+    return np.full((size, size, 3), 255, dtype=np.uint8)
 
 
 async def _hand_over(
