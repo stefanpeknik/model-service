@@ -16,6 +16,7 @@ Nothing ran outside `peknik-ns`.
 | Orphan sweep (`empaia-14`) | A two-hour-old execution directory without a row was removed on the first maintenance pass after startup; 501 directories with rows were kept |
 | 2000 tiles, 128², 32 concurrent submissions (`empaia-15`) | All succeeded; admitted at 86/s, all final in 37.7 s. The 2026-10-15 run with request and response bytes in PostgreSQL: about 100/s admitted, all final in 37 s ([record](raw-inference-acceptance-2026-10-15.md)) |
 | Files left after the bursts | Only response files (2500); no request or temporary files from the service |
+| Orphan sweep (`empaia-15`) | 500 request files a benchmark wrote at 11:55 without rows were removed by 12:58, the first 10-minute pass after they turned an hour old |
 
 ## Found on the way
 
