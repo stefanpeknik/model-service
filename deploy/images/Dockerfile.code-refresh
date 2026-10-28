@@ -12,6 +12,16 @@ USER root
 RUN if [ -n "$EXTRA_PACKAGES" ]; then \
         uv pip install --system --python "$PYTHON" --no-cache $EXTRA_PACKAGES; \
     fi
+# Wheels in deploy/images/wheels/, e.g. a build of the EMPAIA SDK that is not
+# released yet, replace what the base image has.
+COPY deploy/images/wheels/ /tmp/wheels/
+RUN set -e; \
+    for wheel in /tmp/wheels/*.whl; do \
+        [ -e "$wheel" ] || continue; \
+        uv pip install --system --python "$PYTHON" --no-cache --no-deps \
+            --force-reinstall "$wheel"; \
+    done; \
+    rm -rf /tmp/wheels
 RUN rm -rf /app/models /app/providers /app/builders /app/integrations \
     /app/validation /app/testing /app/model_service /app/execution_scheduler \
     /app/workflow_execution /app/workflows /app/workflow-definitions

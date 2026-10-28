@@ -21,7 +21,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from model_service.builders.contracts import SCORE_SPACING_KEY
+from model_service.builders.score_grid import read_score_grid
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
+from model_service.providers.empaia.http_gateway import SlideLevel
 
 
 logger = logging.getLogger(__name__)
@@ -34,10 +36,10 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from model_service.builders.contracts import SharedArtifact
+    from model_service.builders.score_grid import ScoreGrid
     from model_service.providers.empaia.http_gateway import (
         HttpEmpaiaGateway,
         Rectangle,
-        SlideLevel,
         SlideMetadata,
     )
 
@@ -52,6 +54,11 @@ class TiffPixelmapPublisher:
     records how many pixels one score spans in a pyramidal TIFF. The pixelmap
     goes to the coarsest slide level that still keeps `MIN_PIXELS_PER_SCORE`
     pixels per score, so no score is lost while far fewer tiles are uploaded.
+
+    When the builder also kept the score grid beside the TIFF, the scores are
+    published from it instead: exactly what the model produced, in every level
+    from that one to the coarsest. Tiles are dense, so a skipped cell inside an
+    uploaded tile still reads 0, but a tile without a scored cell is not uploaded.
     """
 
     def __init__(self, tile_size: int = 512) -> None:
@@ -74,6 +81,14 @@ class TiffPixelmapPublisher:
         path = Path(artifact.path)
         if not path.is_file():
             raise EmpaiaGatewayError.invalid("EMPAIA output artifact is unavailable")
+        try:
+            grid = await asyncio.to_thread(read_score_grid, path)
+        except (OSError, ValueError, KeyError):
+            logger.warning("score grid of %s is unreadable; using its TIFF", path.name)
+            grid = None
+        if grid is not None and grid.scored.any():
+            await self._publish_scores(gateway, name, grid)
+            return
         try:
             import pyvips
 
@@ -148,6 +163,32 @@ class TiffPixelmapPublisher:
                     tile_y,
                     _channel_major(tile.cast("float") / scale),
                 )
+
+    async def _publish_scores(
+        self, gateway: HttpEmpaiaGateway, name: str, grid: ScoreGrid
+    ) -> None:
+        """Publish the score grid as a pixelmap pyramid built by the SDK."""
+        from rationai.empaia.utils.scalar_output import ScalarImageOutput
+
+        slide = await gateway.slide_info()
+        levels = tuple(
+            SlideLevel(index=index, width=level.extent.x, height=level.extent.y)
+            for index, level in enumerate(slide.levels)
+        )
+        source = _matching_level(levels, *grid.level_size)
+        target = _coarsest_level(levels, source, grid.cell_size)
+        scores = ScalarImageOutput(
+            values=grid.values,
+            valid_mask=grid.scored,
+            source_level=source.index,
+            cell_size=grid.cell_size,  # type: ignore[arg-type]
+            legacy_target_level=source.index,
+            pixelmap_target_level=target.index,
+        )
+        tile_sets = await asyncio.to_thread(
+            scores.to_pixelmap_pyramid, slide, self._tile_size, self._tile_size
+        )
+        await gateway.publish_pixelmap(name, slide.id, tile_sets)
 
 
 def _channel_major(tile: object) -> bytes:

@@ -200,8 +200,9 @@ model-service.
 _Avoid_: SDK, when the intended library is ambiguous
 
 **EMPAIA client**:
-The client library used inside the EMPAIA provider integration to access job
-inputs and publish outcomes.
+The SDK's `rationai.empaia.Client`, used inside the EMPAIA provider
+integration to access job inputs and publish outcomes. The integration needs
+a build of the SDK with raw job data, a request timeout and a write guard.
 _Avoid_: EMPAIA SDK
 
 **Execution backend**:

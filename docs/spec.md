@@ -173,7 +173,10 @@ interface: none by default, or client credentials from an identity provider
 EMPAIA slide inputs reach builders one of two ways, chosen by
 `EMPAIA_SLIDE_ACCESS` (Helm `empaia.slideAccess`):
 
-- `direct` (default): link the file named by the RationAI direct-access route.
+- `direct` (default): link the file named by the RationAI direct-access route
+  (`/v3/rationai/{job}/slides/{input}/direct-access`). When the route has
+  nothing for the input, the slide is downloaded as in `http`; a route that says
+  direct access is unsupported is an error.
 - `http`: download the slide through the App API's region route into the
   attempt workspace, for installations whose slide storage model-service cannot
   mount (the EMPAIA test instance's slides sit on a volume in another
@@ -300,11 +303,28 @@ job's directory on every outcome: before a failure or cancellation report, and
 after a successful publication (a failed publication keeps the outputs for its
 retry). A failed input preparation removes its attempt directory at once.
 
-The heatmap TIFF records how many of its pixels one model score spans
-(ImageDescription `score_spacing_px`; 256 for the prostate model). The EMPAIA
-publisher writes the pixelmap to the coarsest slide level that still keeps four
-pixels per score, each pixel the area average of the full-resolution heatmap, so
-no score is lost: 8 tiles instead of 17,600 on the prostate slide.
+EMPAIA is reached through the SDK's `rationai.empaia.Client` (the supervisor's
+typed client with direct slide reading and pixelmap pyramid upload), built from
+the SDK branch that adds raw job data (`get_configuration`, `get_mode`,
+`get_input_data`), a request `timeout`, `set_before_mutation` (the scheduler's
+write guard) and a public `get_direct_access_info`. The SDK retries region reads
+and tile uploads; what it gives up on after creating a pixelmap has an unknown
+outcome, so the finish step is not retried.
+
+Heatmap publication. The heatmap builder keeps its raw scores: next to the TIFF
+it writes `heatmap.tiff.scores.npz`, one score per cell, which cells were scored,
+the cell's size in pixels of the level it read (256 for the prostate model) and
+that level's size. It does so when the model has one channel and a cell covers
+at least two pixels; a full-resolution output (segmentation) has no grid, and a
+grid left in the place by an earlier build is removed. The EMPAIA publisher
+publishes from the grid through the SDK's `ScalarImageOutput.to_pixelmap_pyramid`:
+from the coarsest slide level that still keeps four pixels per score down to
+the coarsest slide level, so every score is published as the model produced it,
+without resampling the upsampled TIFF. A tile without a scored cell is not
+uploaded; a skipped cell inside an uploaded tile reads 0, since pixelmap tiles
+are dense. Without a grid, or with no scored cell, the publisher uploads the TIFF
+as before: the coarsest level keeping four pixels per score, each pixel the area
+average of the full-resolution heatmap.
 
 ### Safety and correctness fixes
 

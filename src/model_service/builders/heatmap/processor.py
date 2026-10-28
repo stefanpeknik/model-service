@@ -17,6 +17,12 @@ from typing import TYPE_CHECKING, Protocol
 
 from model_service.builders.contracts import SCORE_SPACING_KEY
 from model_service.builders.registry import ScoreEncoding
+from model_service.builders.score_grid import (
+    MIN_CELL_SIZE,
+    ScoreGrid,
+    score_grid_path,
+    write_score_grid,
+)
 
 
 if TYPE_CHECKING:
@@ -151,11 +157,28 @@ class SlideHeatmapProcessor:
                     submitted,
                     time.monotonic() - started,
                 )
-                result = np.asarray(mask_builder.finalize()["mask"])
+                finalized = mask_builder.finalize()
+                result = np.asarray(finalized["mask"])
                 image = pyvips.Image.new_from_array(result.transpose(1, 2, 0))
                 # Resize the padded grid before cropping; resizing to the unpadded
                 # extent would shift scores away from their tiles.
                 scale_y, scale_x = mask_builder.span / np.asarray(result.shape[1:])
+                cell_size = float(min(scale_x, scale_y))
+                # A grid left by an earlier build in the same place would be stale.
+                score_grid_path(request.output_path).unlink(missing_ok=True)
+                if n_channels == 1 and cell_size >= MIN_CELL_SIZE:
+                    # A score per cell, not a picture: keep what was scored, so a
+                    # cell the model gave 0 differs from one never scored.
+                    counts = np.asarray(finalized["overlap_counter"])
+                    write_score_grid(
+                        request.output_path,
+                        ScoreGrid(
+                            values=result[0].astype(np.float32),
+                            scored=counts.reshape(result.shape[1:]) > 0,
+                            cell_size=cell_size,
+                            level_size=(extent_x, extent_y),
+                        ),
+                    )
                 image = image.resize(float(scale_x), vscale=float(scale_y)).crop(
                     0, 0, extent_x, extent_y
                 )

@@ -15,6 +15,11 @@ from model_service.builders.heatmap.processor import (
     SlideHeatmapProcessor,
 )
 from model_service.builders.registry import ScoreEncoding
+from model_service.builders.score_grid import (
+    ScoreGrid,
+    read_score_grid,
+    write_score_grid,
+)
 from tests.support.builder_fixtures import write_slide
 
 
@@ -47,12 +52,20 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
         predictor: LandmarkPredictor | None = None,
         mask: str = "full",
         encoding: ScoreEncoding = ScoreEncoding.UINT8,
+        stale_grid: bool = False,
     ) -> np.ndarray:
         import pyvips
 
         predictor = predictor or LandmarkPredictor()
         directory = root / f"{width}-{height}-{mask}"
         directory.mkdir()
+        if stale_grid:
+            write_score_grid(
+                directory / "heatmap.tiff",
+                ScoreGrid(
+                    np.zeros((2, 2), np.float32), np.ones((2, 2), bool), 16.0, (4, 4)
+                ),
+            )
         y, x = np.indices((height, width))
         pixels = np.zeros((height, width, 3), dtype=np.uint8)
         pixels[..., 0] = ((x // 16 + y // 16) % 2) * 255
@@ -121,6 +134,35 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
                     predictor=LandmarkPredictor(output_tile_size),
                 )
                 np.testing.assert_array_equal(unaligned, aligned[:75, :107])
+
+    async def test_the_scores_are_kept_beside_the_tiff(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            constant = LandmarkPredictor(constant=0.5)
+            await self._build(root, 112, 80, predictor=constant)
+            await self._build(root, 112, 80, predictor=constant, mask="empty")
+            scored = read_score_grid(root / "112-80-full" / "heatmap.tiff")
+            unscored = read_score_grid(root / "112-80-empty" / "heatmap.tiff")
+
+        assert scored is not None and unscored is not None
+        # A tile every 16 px yields one score per 16 px; the empty mask scores none.
+        self.assertEqual((scored.cell_size, scored.level_size), (16.0, (112, 80)))
+        self.assertTrue(scored.scored.any())
+        np.testing.assert_allclose(scored.values[scored.scored], 0.5)
+        self.assertFalse(unscored.scored.any())
+
+    async def test_a_full_resolution_output_has_no_score_grid(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            await self._build(
+                root,
+                112,
+                80,
+                predictor=LandmarkPredictor(output_tile_size=32),
+                stale_grid=True,
+            )
+
+            self.assertIsNone(read_score_grid(root / "112-80-full" / "heatmap.tiff"))
 
     async def test_aligned_output_preserves_original_pixels_and_overlap_means(
         self,
