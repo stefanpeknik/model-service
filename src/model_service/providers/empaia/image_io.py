@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import io
 import itertools
 import json
 import logging
@@ -252,7 +251,7 @@ class TiffSlideDownloader:
             len(positions),
         )
 
-        async def fetch(x: int, y: int) -> bytes | None:
+        async def fetch(x: int, y: int) -> NDArray[np.uint8] | None:
             if not wanted(x, y):
                 return None
             return await gateway.read_region(
@@ -268,7 +267,9 @@ class TiffSlideDownloader:
         writer = asyncio.ensure_future(
             asyncio.to_thread(self._write, destination, slide, level, tiles)
         )
-        pending: deque[tuple[int, int, asyncio.Task[bytes | None]]] = deque()
+        pending: deque[tuple[int, int, asyncio.Task[NDArray[np.uint8] | None]]] = (
+            deque()
+        )
         remaining = iter(positions)
         try:
             for x, y in itertools.islice(remaining, self._concurrency):
@@ -282,7 +283,7 @@ class TiffSlideDownloader:
                     tile = _blank_tile(size)
                 else:
                     tile = await asyncio.to_thread(
-                        _decode_tile,
+                        _pad_tile,
                         data,
                         min(size, level.width - x),
                         min(size, level.height - y),
@@ -330,7 +331,7 @@ class TiffSlideDownloader:
                 data = await gateway.read_region(
                     slide.identifier, overview.index, x, y, width, height
                 )
-            tile = await asyncio.to_thread(_decode_tile, data, width, height, size)
+            tile = await asyncio.to_thread(_pad_tile, data, width, height, size)
             pixels[y : y + height, x : x + width] = tile[:height, :width]
 
         await asyncio.gather(
@@ -459,26 +460,21 @@ async def _hand_over(
             await asyncio.sleep(0.05)
 
 
-def _decode_tile(
-    data: bytes, width: int, height: int, tile_size: int
+def _pad_tile(
+    pixels: NDArray[np.uint8], width: int, height: int, tile_size: int
 ) -> NDArray[np.uint8]:
-    """Decode a region image to an RGB tile, padded to the full tile size."""
+    """Turn a region's pixels into an RGB tile, padded to the full tile size."""
     import numpy as np
-    from PIL import Image
 
-    try:
-        with Image.open(io.BytesIO(data)) as image:
-            pixels = np.asarray(image.convert("RGB"))
-    except Exception as error:
-        raise EmpaiaGatewayError.invalid(
-            "EMPAIA slide region is not a readable image"
-        ) from error
-    if pixels.shape[:2] != (height, width):
+    pixels = np.asarray(pixels)
+    if pixels.ndim == 2:
+        pixels = np.repeat(pixels[..., None], 3, axis=2)
+    if pixels.ndim != 3 or pixels.shape[2] < 3 or pixels.shape[:2] != (height, width):
         raise EmpaiaGatewayError.invalid(
             "EMPAIA slide region has unexpected dimensions"
         )
     tile = np.zeros((tile_size, tile_size, 3), dtype=np.uint8)
-    tile[:height, :width] = pixels
+    tile[:height, :width] = pixels[..., :3]
     return tile
 
 

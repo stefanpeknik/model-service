@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import numpy as np
 
@@ -164,43 +164,37 @@ class PixelmapEncodingTests(unittest.IsolatedAsyncioTestCase):
             await self.publish(pyvips.Image.black(4, 4).cast("ushort"))
 
 
-class TileUploadRetryTests(unittest.IsolatedAsyncioTestCase):
-    def gateway(self, put_tile: MagicMock) -> HttpEmpaiaGateway:
+class TileUploadFailureTests(unittest.IsolatedAsyncioTestCase):
+    """The SDK retries a tile PUT; what it gives up on has an unknown outcome."""
+
+    def gateway(self, put_tile: object) -> HttpEmpaiaGateway:
         client = SimpleNamespace(put_tile=put_tile)
         return HttpEmpaiaGateway(
             "https://empaia.invalid", "job-1", "credential", client=client
         )  # type: ignore[arg-type]
 
-    async def test_transient_tile_failure_is_retried(self) -> None:
-        unavailable = EmpaiaGatewayError("unavailable", retryable=True)
-        gateway = self.gateway(MagicMock(return_value=None))
-        calls = 0
+    async def test_a_tile_the_sdk_gave_up_on_is_an_unknown_outcome(self) -> None:
+        async def gave_up(*_args: object) -> None:
+            raise RuntimeError("Pixelmap tile upload failed after 5 attempts")
 
-        async def flaky(*_args: object, **_kwargs: object) -> None:
-            nonlocal calls
-            calls += 1
-            if calls == 1:
-                raise unavailable
+        gateway = self.gateway(gave_up)
 
-        with (
-            patch.object(gateway, "_call", side_effect=flaky),
-            patch("asyncio.sleep", AsyncMock()),
-        ):
+        with self.assertRaises(EmpaiaGatewayError) as raised:
             await gateway.put_pixelmap_tile("pixelmap-1", 0, 0, 0, b"tile")
 
-        self.assertEqual(calls, 2)
+        self.assertTrue(raised.exception.outcome_unknown)
+        self.assertFalse(raised.exception.retryable)
 
-    async def test_permanent_tile_failure_is_not_retried(self) -> None:
-        gateway = self.gateway(MagicMock(return_value=None))
-        rejected = EmpaiaGatewayError("rejected", retryable=False)
+    async def test_an_uploaded_tile_is_sent_once(self) -> None:
+        calls: list[tuple[object, ...]] = []
 
-        with (
-            patch.object(gateway, "_call", side_effect=rejected) as call,
-            self.assertRaises(EmpaiaGatewayError),
-        ):
-            await gateway.put_pixelmap_tile("pixelmap-1", 0, 0, 0, b"tile")
+        async def accepted(*args: object) -> int:
+            calls.append(args)
+            return 204
 
-        self.assertEqual(call.call_count, 1)
+        await self.gateway(accepted).put_pixelmap_tile("pixelmap-1", 2, 3, 4, b"tile")
+
+        self.assertEqual(calls, [("pixelmap-1", 2, 3, 4, b"tile")])
 
 
 def unused_gateway_factory(_context: object) -> object:

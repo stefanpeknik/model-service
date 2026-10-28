@@ -7,12 +7,13 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
+import numpy as np
 from aiohttp import web
 from aiohttp.test_utils import TestServer
-from rationai.empaia.app_service import AppServiceClient
+from rationai.empaia import Client
 
 from model_service.builders.contracts import InlineOutput, SharedArtifact
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
@@ -22,6 +23,7 @@ from model_service.providers.empaia.http_gateway import (
     SlideAccess,
     SlideMetadata,
 )
+from tests.providers.empaia_fixtures import PIXELMAP_ID, SLIDE_ID, created, png
 
 
 class RecordingArtifactPublisher:
@@ -113,7 +115,7 @@ class FakeVipsImageType:
 class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
     """Exercise AppService HTTP shapes, input materialization, and uncertain publication outcomes."""
 
-    async def appservice(self, transport: httpx.MockTransport) -> AppServiceClient:
+    async def appservice(self, transport: httpx.MockTransport) -> Client:
         """Serve HTTP response fixtures over loopback using the real SDK transport."""
         errors = []
 
@@ -145,7 +147,7 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
         server = TestServer(app)
         await server.start_server()
         self.addAsyncCleanup(server.close)
-        client = AppServiceClient(str(server.make_url("/")), "job-1", "credential")
+        client = Client(str(server.make_url("/")), "job-1", "credential")
         self.addAsyncCleanup(client.close)
         return client
 
@@ -298,6 +300,8 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             """Return scenario-specific mock HTTP responses and record or assert requests for this gateway test."""
             body = json.loads(request.content) if request.content else None
             requests.append((request.method, request.url.path, body))
+            if request.method == "POST":
+                return httpx.Response(200, json={**body, "id": PIXELMAP_ID})
             return httpx.Response(200, json={})
 
         gateway = HttpEmpaiaGateway(
@@ -312,26 +316,27 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
         await gateway.report_failure("failed safely")
         await gateway.close()
 
+        method, path, body = requests[0]
+        self.assertEqual((method, path), ("POST", "/v3/job-1/outputs/score"))
+        # The SDK sends the whole typed model; these are the fields that matter.
         self.assertEqual(
-            requests,
+            {
+                key: body[key]
+                for key in ("name", "type", "value", "creator_id", "creator_type")
+            },
+            {
+                "name": "score",
+                "type": "float",
+                "value": 0.75,
+                "creator_id": "job-1",
+                "creator_type": "job",
+            },
+        )
+        self.assertEqual(
+            requests[1:],
             [
-                (
-                    "POST",
-                    "/v3/job-1/outputs/score",
-                    {
-                        "name": "score",
-                        "type": "float",
-                        "value": 0.75,
-                        "creator_id": "job-1",
-                        "creator_type": "job",
-                    },
-                ),
                 ("PUT", "/v3/job-1/finalize", None),
-                (
-                    "PUT",
-                    "/v3/job-1/failure",
-                    {"user_message": "failed safely"},
-                ),
+                ("PUT", "/v3/job-1/failure", {"user_message": "failed safely"}),
             ],
         )
 
@@ -482,9 +487,10 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(raised.exception.retryable)
         self.assertFalse(any(path.endswith("/direct-access") for path in requested))
 
-    async def test_region_reads_retry_transient_failures(self) -> None:
-        """Verify a region read retries a transient AppService failure."""
-        answers = [httpx.Response(503), httpx.Response(200, content=b"png")]
+    async def test_region_reads_return_pixels_and_the_sdk_retries(self) -> None:
+        """Verify a region read returns pixels, after the SDK retries a transient failure."""
+        pixels = np.arange(128 * 256 * 3, dtype=np.uint8).reshape(128, 256, 3)
+        answers = [httpx.Response(503), httpx.Response(200, content=png(pixels))]
 
         def handle(request: httpx.Request) -> httpx.Response:
             self.assertEqual(
@@ -499,13 +505,11 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             "credential",
             client=await self.appservice(httpx.MockTransport(handle)),
         )
-        with patch(
-            "model_service.providers.empaia.http_gateway._READ_RETRY_SECONDS", 0
-        ):
+        with patch("asyncio.sleep", AsyncMock()):
             data = await gateway.read_region("slide-1", 1, 512, 0, 256, 128)
         await gateway.close()
 
-        self.assertEqual(data, b"png")
+        np.testing.assert_array_equal(data, pixels)
         self.assertEqual(answers, [])
 
     async def test_shared_artifact_uses_packaged_publisher(self) -> None:
@@ -537,7 +541,7 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
                 return httpx.Response(
                     200,
                     json={
-                        "id": "slide-1",
+                        "id": SLIDE_ID,
                         "extent": {"x": 1200, "y": 600, "z": 1},
                         "pixel_size_nm": {"x": 250.0, "y": 250.0},
                         "levels": [
@@ -550,7 +554,7 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
                 body = json.loads(request.content)
                 self.assertEqual(body["levels"][0]["slide_level"], 1)
                 self.assertEqual(body["levels"][0]["position_max_x"], 1)
-                return httpx.Response(200, json={"id": "pixelmap-1"})
+                return httpx.Response(200, json=created(body))
             if request.method == "PUT" and "/pixelmaps/" in request.url.path:
                 uploaded_tiles.append(request.url.path)
                 self.assertEqual(request.content, b"float32 tile")

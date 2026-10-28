@@ -52,14 +52,6 @@ class ConfigurationResponse(EmpaiaResponse):
         return self.global_values | self.customer_values
 
 
-class DirectAccessResponse(EmpaiaResponse):
-    """Describe a slide input's shared path and whether direct access is supported."""
-
-    slide_id: NonEmptyString
-    storage_path: NonEmptyString
-    direct_access_supported: bool
-
-
 class ExtentResponse(EmpaiaResponse):
     """Require positive integer image dimensions."""
 
@@ -95,9 +87,3 @@ class RectangleResponse(EmpaiaResponse):
     upper_left: Annotated[list[FiniteNumber], Field(min_length=2, max_length=2)]
     width: PositiveNumber
     height: PositiveNumber
-
-
-class PixelmapResponse(EmpaiaResponse):
-    """Require the created pixelmap's nonempty identifier."""
-
-    id: NonEmptyString

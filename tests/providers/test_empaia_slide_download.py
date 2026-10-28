@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import io
 import unittest
 from dataclasses import replace
 from pathlib import Path
@@ -10,7 +9,6 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 import pyvips
-from PIL import Image
 from ratiopath.openslide import OpenSlide
 
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
@@ -46,7 +44,7 @@ SLIDE = SlideMetadata(
 
 
 class RegionServer:
-    """Serves PNG regions of `pyramid()` like the App API's region route."""
+    """Serves regions of `pyramid()` like the App API's region route."""
 
     def __init__(self, fail_at: tuple[int, int] | None = None) -> None:
         self.levels = pyramid()
@@ -55,14 +53,11 @@ class RegionServer:
 
     async def read_region(
         self, slide_id: str, level: int, x: int, y: int, width: int, height: int
-    ) -> bytes:
+    ) -> np.ndarray:
         self.requests.append((slide_id, level, x, y, width, height))
         if (x, y) == self.fail_at:
             raise EmpaiaGatewayError("unavailable", retryable=True)
-        buffer = io.BytesIO()
-        region = self.levels[level][y : y + height, x : x + width]
-        Image.fromarray(region).save(buffer, format="PNG")
-        return buffer.getvalue()
+        return self.levels[level][y : y + height, x : x + width]
 
 
 class SlideDownloadTests(unittest.IsolatedAsyncioTestCase):

@@ -9,14 +9,14 @@ uncertain mutation outcomes.
 
 from __future__ import annotations
 
-import asyncio
 import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
-from aiohttp import ClientError, ClientResponseError
-from rationai.empaia.app_service import AppServiceClient, AppServiceDecodeError
+from aiohttp import ClientError, ClientResponseError, ContentTypeError
+from rationai.empaia import Client
+from rationai.empaia.typing import pixelmaps, primitives
 
 from model_service.builders.contracts import InlineOutput, SharedArtifact
 from model_service.providers.empaia.gateway import (
@@ -30,8 +30,6 @@ from model_service.providers.empaia.materialization import (
 )
 from model_service.providers.empaia.responses import (
     ConfigurationResponse,
-    DirectAccessResponse,
-    PixelmapResponse,
     RectangleResponse,
     SlideResponse,
 )
@@ -40,6 +38,11 @@ from model_service.providers.empaia.settings import EmpaiaSettings, SlideAccess
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Collection
+
+    import numpy as np
+    from numpy.typing import NDArray
+    from rationai.empaia.typing import SlideInfo
+    from rationai.empaia.utils.scalar_output import PixelmapTileSet
 
     from model_service.builders.contracts import BuilderOutput, JsonValue
     from model_service.providers.empaia.gateway import MutationGuard
@@ -140,7 +143,7 @@ class HttpEmpaiaGateway:
         job_id: str,
         credential: str,
         *,
-        client: AppServiceClient | None = None,
+        client: Client | None = None,
         artifact_publisher: ArtifactPublisher | None = None,
         rectangle_writer: RectangleMaskWriter | None = None,
         slide_access: SlideAccess = SlideAccess.DIRECT,
@@ -153,7 +156,7 @@ class HttpEmpaiaGateway:
                 retryable=False,
             )
         self._job_id = job_id
-        self._client = client or AppServiceClient(api_url, job_id, credential)
+        self._client = client or Client(api_url, job_id, credential)
         if (
             artifact_publisher is None
             or rectangle_writer is None
@@ -212,7 +215,8 @@ class HttpEmpaiaGateway:
             if direct is not None:
                 return str(link_direct_input(direct, Path(directory)))
         value = await self._call(self._client.get_input_data(name))
-        if self._slide_access is SlideAccess.HTTP and _is_slide(value):
+        # Without direct access the slide comes through the App API.
+        if _is_slide(value):
             if mpp is None:
                 raise EmpaiaGatewayError.invalid(
                     "EMPAIA slide download needs the model resolution"
@@ -236,7 +240,7 @@ class HttpEmpaiaGateway:
         """POST a supported inline primitive or delegate shared artifact publication to the image adapter."""
         if isinstance(output, InlineOutput):
             await self._call(
-                self._client.post_output_data(
+                self._client.post_output(
                     name, _primitive_output(name, self._job_id, output.value)
                 ),
                 mutation=True,
@@ -268,21 +272,43 @@ class HttpEmpaiaGateway:
         """Fetch validated slide geometry for artifact publication."""
         return await self._slide_metadata()
 
+    async def slide_info(self) -> SlideInfo:
+        """The slide with every level's downsample factor, as pixelmap tiles need."""
+        return await self._call(self._client.get_input("slide"))
+
+    async def publish_pixelmap(
+        self, name: str, slide_id: str, tile_sets: tuple[PixelmapTileSet, ...]
+    ) -> None:
+        """Create the pixelmap and upload its levels; failures leave an unknown outcome."""
+        try:
+            await self._call(
+                self._client.upload_pixelmap_pyramid(
+                    key=name, name=name, wsi_id=slide_id, tile_sets=tile_sets
+                ),
+                mutation=True,
+            )
+        except RuntimeError as error:
+            # The SDK gives up on a tile after its own retries; the pixelmap exists.
+            raise EmpaiaGatewayError(
+                "EMPAIA pixelmap upload failed", retryable=False, outcome_unknown=True
+            ) from error
+
     async def create_pixelmap(
         self,
         name: str,
         body: dict[str, object],
     ) -> str:
-        """Create a named pixelmap through a guarded POST and return its validated ID."""
-        value = await self._call(
-            self._client.post_output_data(name, body), mutation=True
-        )
+        """Create a named pixelmap through a guarded POST and return its ID."""
         try:
-            return PixelmapResponse.parse(value).id
-        except EmpaiaGatewayError as error:
-            raise EmpaiaGatewayError(
-                error.safe_message, retryable=False, outcome_unknown=True
+            pixelmap = pixelmaps.PostContinuousPixelmap.model_validate(body)
+        except ValueError as error:
+            raise EmpaiaGatewayError.invalid(
+                "EMPAIA pixelmap description is invalid"
             ) from error
+        created = await self._call(
+            self._client.post_output(name, pixelmap), mutation=True
+        )
+        return str(created.id)
 
     async def put_pixelmap_tile(
         self,
@@ -292,18 +318,18 @@ class HttpEmpaiaGateway:
         tile_y: int,
         data: bytes,
     ) -> None:
-        """Upload one tile; a PUT of the same tile is idempotent, so transient failures retry."""
-        for attempt in range(_TILE_ATTEMPTS):
-            try:
-                await self._call(
-                    self._client.put_tile(pixelmap_id, level, tile_x, tile_y, data),
-                    mutation=True,
-                )
-                return
-            except EmpaiaGatewayError as error:
-                if not error.retryable or attempt + 1 == _TILE_ATTEMPTS:
-                    raise
-                await asyncio.sleep(_TILE_RETRY_SECONDS * 2**attempt)
+        """Upload one tile; the SDK retries a tile PUT, which is idempotent."""
+        try:
+            await self._call(
+                self._client.put_tile(pixelmap_id, level, tile_x, tile_y, data),
+                mutation=True,
+            )
+        except RuntimeError as error:
+            raise EmpaiaGatewayError(
+                "EMPAIA pixelmap tile upload failed",
+                retryable=False,
+                outcome_unknown=True,
+            ) from error
 
     async def read_region(
         self,
@@ -313,28 +339,20 @@ class HttpEmpaiaGateway:
         y: int,
         width: int,
         height: int,
-    ) -> bytes:
-        """Read one slide region as an encoded image; transient failures retry."""
-        for attempt in range(_READ_ATTEMPTS):
-            try:
-                return await self._call(
-                    self._client.get_region_data(slide_id, level, x, y, width, height)
-                )
-            except EmpaiaGatewayError as error:
-                if not error.retryable or attempt + 1 == _READ_ATTEMPTS:
-                    raise
-                await asyncio.sleep(_READ_RETRY_SECONDS * 2**attempt)
-        raise AssertionError("unreachable")
+    ) -> NDArray[np.uint8]:
+        """Read one slide region as pixels (the SDK retries transient failures)."""
+        return await self._call(
+            self._client.get_region(slide_id, level, x, y, width, height)
+        )
 
     async def _direct_access(self, name: str) -> DirectAccess | None:
         """Query the extension endpoint; only a 404 permits rectangle fallback, while other failures remain errors."""
-        value = await self._call(self._client.get_direct_access(name))
-        if value is None:
+        info = await self._call(self._client.get_direct_access_info(name))
+        if info is None or not info.storage_path:
             return None
-        direct = DirectAccessResponse.parse(value)
         return DirectAccess(
-            storage_path=Path(direct.storage_path),
-            supported=direct.direct_access_supported,
+            storage_path=Path(info.storage_path),
+            supported=info.direct_access_supported,
         )
 
     async def _region(self, names: Collection[str]) -> Rectangle | None:
@@ -361,6 +379,13 @@ class HttpEmpaiaGateway:
         """Translate SDK failures without exposing upstream details."""
         try:
             return await operation
+        except ContentTypeError as error:
+            # The App Service answered 2xx with something that is not JSON.
+            raise EmpaiaGatewayError(
+                "EMPAIA AppService returned an invalid response",
+                retryable=False,
+                outcome_unknown=mutation,
+            ) from error
         except ClientResponseError as error:
             if error.status == 429 or error.status >= 500:
                 raise EmpaiaGatewayError(
@@ -381,18 +406,13 @@ class HttpEmpaiaGateway:
                 retryable=True,
                 outcome_unknown=mutation,
             ) from error
-        except AppServiceDecodeError as error:
+        except (ValueError, TypeError) as error:
+            # Not JSON, or not the shape the SDK's models require.
             raise EmpaiaGatewayError(
                 "EMPAIA AppService returned an invalid response",
                 retryable=False,
                 outcome_unknown=mutation,
             ) from error
-
-
-_TILE_ATTEMPTS = 4
-_TILE_RETRY_SECONDS = 1.0
-_READ_ATTEMPTS = 4
-_READ_RETRY_SECONDS = 1.0
 
 
 def create_http_gateway(context: EmpaiaJobContext) -> HttpEmpaiaGateway:
@@ -402,7 +422,7 @@ def create_http_gateway(context: EmpaiaJobContext) -> HttpEmpaiaGateway:
         context.api_url,
         context.job_id,
         context.credential,
-        client=AppServiceClient(
+        client=Client(
             context.api_url,
             context.job_id,
             context.credential,
@@ -417,28 +437,43 @@ def _is_slide(value: object) -> bool:
     return isinstance(value, dict) and "levels" in value
 
 
-def _primitive_output(name: str, job_id: str, value: JsonValue) -> dict[str, object]:
+type _PostPrimitive = (
+    primitives.PostBoolPrimitive
+    | primitives.PostIntegerPrimitive
+    | primitives.PostFloatPrimitive
+    | primitives.PostStringPrimitive
+)
+
+
+def _primitive_output(name: str, job_id: str, value: JsonValue) -> _PostPrimitive:
     """Encode a bool, integer, float, or nonempty string with EMPAIA output and creator metadata; reject other JSON values."""
-    output_type: str
+    kind: type[_PostPrimitive]
     if isinstance(value, bool):
-        output_type = "bool"
+        kind, output_type = primitives.PostBoolPrimitive, "bool"
     elif isinstance(value, int):
-        output_type = "integer"
+        kind, output_type = primitives.PostIntegerPrimitive, "integer"
     elif isinstance(value, float):
-        output_type = "float"
+        kind, output_type = primitives.PostFloatPrimitive, "float"
     elif isinstance(value, str) and value:
-        output_type = "string"
+        kind, output_type = primitives.PostStringPrimitive, "string"
     else:
         raise EmpaiaGatewayError.invalid(
             "EMPAIA inline output must be a non-empty primitive value"
         )
-    return {
-        "name": name,
-        "type": output_type,
-        "value": value,
-        "creator_id": job_id,
-        "creator_type": "job",
-    }
+    try:
+        return kind.model_validate(
+            {
+                "name": name,
+                "type": output_type,
+                "value": value,
+                "creator_id": job_id,
+                "creator_type": "job",
+            }
+        )
+    except ValueError as error:
+        raise EmpaiaGatewayError.invalid(
+            "EMPAIA inline output is not a valid primitive"
+        ) from error
 
 
 def _slide_metadata(value: object) -> SlideMetadata:

@@ -25,12 +25,13 @@ import io
 import json
 import os
 import struct
+import uuid
 from dataclasses import dataclass
 from enum import StrEnum
 from threading import Lock
 
 from fastapi import FastAPI, Header, HTTPException, Request, Response, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ValidationScenario(StrEnum):
@@ -54,6 +55,20 @@ class ValidationScenario(StrEnum):
     FILE = "file"
 
 
+def _stable_id(value: str) -> str:
+    """A UUID derived from `value`, shaped as the version 4 the SDK's models require."""
+    return str(uuid.UUID(bytes=uuid.uuid5(uuid.NAMESPACE_URL, value).bytes, version=4))
+
+
+def _slide_id(job_id: str) -> str:
+    """The real service identifies slides and pixelmaps by UUID."""
+    return _stable_id(f"{job_id}-slide")
+
+
+def _pixelmap_id(job_id: str) -> str:
+    return _stable_id(f"{job_id}-heatmap")
+
+
 class PixelmapRequest(BaseModel):
     """Accept the output type needed by the mock heatmap creation endpoint.
 
@@ -61,6 +76,8 @@ class PixelmapRequest(BaseModel):
         type: Mock output representation, required to be continuous_pixelmap for
             heatmaps.
     """
+
+    model_config = ConfigDict(extra="allow")
 
     type: str
 
@@ -324,7 +341,7 @@ async def direct_access(
         storage_path = f"{root}/{filename}"
     return {
         "direct_access_supported": True,
-        "slide_id": f"{job_id}-slide",
+        "slide_id": _slide_id(job_id),
         "storage_path": storage_path,
     }
 
@@ -353,18 +370,42 @@ async def slide(
                     break
             await asyncio.sleep(0.1)
     if _is_scenario(job_id, ValidationScenario.FILE):
-        return {
-            "id": f"{job_id}-slide",
-            **json.loads(os.environ["MOCK_FILE_SLIDE_METADATA"]),
-        }
+        return _complete_slide(
+            _slide_id(job_id), json.loads(os.environ["MOCK_FILE_SLIDE_METADATA"])
+        )
     native = _is_native(job_id)
     extent = 256 if native else 8
     pixel_size_nm = 500 if native else 250
+    return _complete_slide(
+        _slide_id(job_id),
+        {
+            "extent": {"x": extent, "y": extent},
+            "pixel_size_nm": {"x": pixel_size_nm, "y": pixel_size_nm},
+            "levels": [{"extent": {"x": extent, "y": extent}}],
+        },
+    )
+
+
+def _complete_slide(slide_id: str, metadata: dict[str, object]) -> dict[str, object]:
+    """Add what the real service sends and the SDK's models require."""
+    extent = {**metadata["extent"], "z": 1}  # type: ignore[dict-item]
+    levels = [
+        {
+            "extent": {**level["extent"], "z": 1},
+            "downsample_factor": extent["x"] / level["extent"]["x"],
+        }
+        for level in metadata["levels"]  # type: ignore[attr-defined]
+    ]
     return {
-        "id": f"{job_id}-slide",
-        "extent": {"x": extent, "y": extent},
-        "pixel_size_nm": {"x": pixel_size_nm, "y": pixel_size_nm},
-        "levels": [{"extent": {"x": extent, "y": extent}}],
+        "id": slide_id,
+        "extent": extent,
+        "num_levels": len(levels),
+        "pixel_size_nm": metadata["pixel_size_nm"],
+        "tile_extent": {"x": 256, "y": 256, "z": 1},
+        "levels": levels,
+        "format": "mock",
+        "tissue": None,
+        "stain": None,
     }
 
 
@@ -411,7 +452,7 @@ async def region(
     _authorize(authorization)
     with _lock:
         _job(job_id).region_reads += 1
-    if not _is_scenario(job_id, ValidationScenario.FILE) or wsi_id != f"{job_id}-slide":
+    if not _is_scenario(job_id, ValidationScenario.FILE) or wsi_id != _slide_id(job_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     data = await asyncio.to_thread(
         _read_region, level, start_x, start_y, size_x, size_y
@@ -468,7 +509,12 @@ def create_output(
         record = _job(job_id)
         record.output_create_attempts += 1
         record.output_created = True
-    return {"id": f"{job_id}-heatmap"}
+    return {
+        **body.model_dump(),
+        "id": _pixelmap_id(job_id),
+        "created_at": 1,
+        "updated_at": 1,
+    }
 
 
 @app.put(
@@ -508,7 +554,7 @@ async def put_tile(
     # A real slide's heatmap spans many tiles on the level matching the model.
     single_tile = not _is_scenario(job_id, ValidationScenario.FILE)
     if (
-        pixelmap_id != f"{job_id}-heatmap"
+        pixelmap_id != _pixelmap_id(job_id)
         or (single_tile and (level != 0 or tile_x != 0 or tile_y != 0))
         or not data
     ):

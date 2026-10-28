@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from aiohttp import web
 from aiohttp.test_utils import TestServer
-from rationai.empaia.app_service import AppServiceClient
+from rationai.empaia import Client
 
 from model_service.providers.empaia.gateway import (
     EmpaiaGatewayError,
@@ -18,13 +18,14 @@ from model_service.providers.empaia.http_gateway import (
     HttpEmpaiaGateway,
     create_http_gateway,
 )
+from tests.providers.empaia_fixtures import PIXELMAP_ID, created, pixelmap_body
 
 
 class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
     async def test_app_service_timeout_comes_from_the_environment(self) -> None:
         async def slow_pixelmap(_request: web.Request) -> web.Response:
             await asyncio.sleep(0.3)
-            return web.json_response({"id": "pixelmap-1"})
+            return web.json_response(created(pixelmap_body()))
 
         app = web.Application()
         app.router.add_post("/v3/job/outputs/heatmap", slow_pixelmap)
@@ -42,11 +43,15 @@ class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
                     gateway = create_http_gateway(context)
                     try:
                         if succeeds:
-                            pixelmap = await gateway.create_pixelmap("heatmap", {})
-                            self.assertEqual(pixelmap, "pixelmap-1")
+                            pixelmap = await gateway.create_pixelmap(
+                                "heatmap", pixelmap_body()
+                            )
+                            self.assertEqual(pixelmap, PIXELMAP_ID)
                         else:
                             with self.assertRaises(EmpaiaGatewayError) as raised:
-                                await gateway.create_pixelmap("heatmap", {})
+                                await gateway.create_pixelmap(
+                                    "heatmap", pixelmap_body()
+                                )
                             self.assertTrue(raised.exception.outcome_unknown)
                     finally:
                         await gateway.close()
@@ -90,13 +95,11 @@ class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
                 str(server.make_url("/")),
                 "job",
                 "private-token",
-                client=AppServiceClient(
-                    str(server.make_url("/")), "job", "private-token"
-                ),
+                client=Client(str(server.make_url("/")), "job", "private-token"),
             )
             try:
                 with self.assertRaises(EmpaiaGatewayError) as raised:
-                    await gateway.create_pixelmap("heatmap", {})
+                    await gateway.create_pixelmap("heatmap", pixelmap_body())
                 self.assertTrue(raised.exception.outcome_unknown)
                 self.assertFalse(raised.exception.retryable)
                 self.assertNotIn("private", raised.exception.safe_message)
@@ -119,7 +122,7 @@ class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
                     )
                     self.addAsyncCleanup(gateway.close)
                     with self.assertRaises(EmpaiaGatewayError) as raised:
-                        await gateway.create_pixelmap("heatmap", {})
+                        await gateway.create_pixelmap("heatmap", pixelmap_body())
                     self.assertTrue(raised.exception.outcome_unknown)
                     self.assertFalse(raised.exception.retryable)
                     await gateway.close()
@@ -174,7 +177,7 @@ class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
                 origin,
                 "job",
                 "token",
-                client=AppServiceClient(origin, "job", "token", timeout=0.05),
+                client=Client(origin, "job", "token", timeout=0.05),
             )
             try:
                 with self.assertRaises(EmpaiaGatewayError) as raised:
