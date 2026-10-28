@@ -37,7 +37,7 @@ podman build -f deploy/images/Dockerfile.code-refresh \
   -t cerit.io/stefanpeknik/model-service-ray:core-$REV .
 podman build -f deploy/images/Dockerfile.code-refresh \
   --build-arg BASE=cerit.io/stefanpeknik/model-service-scheduler:checkpoint-20261008-a91b519 \
-  --build-arg RUN_USER=10001 --build-arg 'EXTRA_PACKAGES=lz4>=4.4.5 jsonschema>=4.23.0,<5' \
+  --build-arg RUN_USER=10001 --build-arg 'EXTRA_PACKAGES=lz4>=4.4.5 jsonschema>=4.23.0,<5 numpy imageio h5py' \
   --build-arg SOURCE_REVISION=$REV \
   -t cerit.io/stefanpeknik/model-service-scheduler:core-$REV .
 podman push cerit.io/stefanpeknik/model-service-ray:core-$REV
@@ -78,7 +78,7 @@ curl -s localhost:18080/v1/executions/<id>/result
 
 ## EMPAIA (state on 2026-10-25)
 
-- Images `empaia-18` (Ray image `model-service-ray`; its base layers come from the older `model-service-workflow-gpu` checkpoint). The `empaia` values set `slideAccess: http`
+- Images `empaia-20` (Ray image `model-service-ray`; its base layers come from the older `model-service-workflow-gpu` checkpoint). The `empaia` values set `slideAccess: http`
   (slides are downloaded through the App API) and
   `dnsSearches: [rationai-infra-test-ns.svc.cluster.local]`, so the short App
   Service name `test-jobs-app-api` that the EMPAIA test instance's Workbench
