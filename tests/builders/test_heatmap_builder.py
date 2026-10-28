@@ -30,6 +30,7 @@ from model_service.builders.heatmap.processor import (
     SlideHeatmapProcessor,
 )
 from model_service.builders.registry import ScoreEncoding, get_builder
+from model_service.builders.score_grid import read_score_grid
 from model_service.builders.settings import WorkerSettings
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
 from tests.support.builder_fixtures import invocation, write_slide
@@ -393,6 +394,20 @@ class HeatmapBuilderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(image_format, "uchar")
         np.testing.assert_array_equal(values, 127)
         self.assertEqual(list(self.root.glob(".*.tiff")), [])
+
+    async def test_the_score_grid_is_kept_beside_the_published_tiff(self) -> None:
+        self.model = spatial(tile_size=32, output_tile_size=1)
+        config = {**self.config, "output_tile_size": 1}
+
+        artifact = await self.run_builder(
+            fake_handle(config, np.full((1, 1), 0.5, dtype=np.float32))
+        )
+
+        grid = read_score_grid(Path(artifact.path))
+        assert grid is not None
+        self.assertTrue(grid.scored.any())
+        np.testing.assert_allclose(grid.values[grid.scored], 0.5)
+        self.assertEqual(list(self.root.glob(".*")), [])
 
     async def test_float32_encoding_publishes_unquantized_scores(self) -> None:
         artifact = await self.run_builder(

@@ -16,6 +16,7 @@ from model_service.builders.heatmap.processor import (
     SlideHeatmapProcessor,
 )
 from model_service.builders.registry import HeatmapConfiguration
+from model_service.builders.score_grid import score_grid_path
 
 
 if TYPE_CHECKING:
@@ -57,6 +58,13 @@ class HeatmapBuilder:
                     skip_background=config.skip_background,
                 ),
             )
+            # The score grid was written beside the temporary TIFF; it is put in
+            # place first, so it is there by the time the TIFF appears.
+            grid = score_grid_path(temporary)
+            if grid.exists():
+                grid.replace(score_grid_path(destination))
+            else:
+                score_grid_path(destination).unlink(missing_ok=True)
         return BuilderResult(
             outputs={
                 "heatmap": SharedArtifact(
