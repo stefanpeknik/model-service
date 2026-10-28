@@ -99,9 +99,9 @@ class Priority(IntEnum):
     Internal for now: providers set it, the public API does not take it.
     """
 
-    LOW = -1
-    NORMAL = 0
-    HIGH = 1
+    LOW = 0
+    NORMAL = 1
+    HIGH = 2
 
 
 @dataclass(frozen=True, slots=True)
