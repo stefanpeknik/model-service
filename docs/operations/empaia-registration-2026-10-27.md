@@ -10,7 +10,7 @@ marketplace mock of `deploy/k8s/peknik-ns/empaia-mock.yaml`. Nothing ran outside
 | --- | --- |
 | Migration `0005` | Applied at startup; executions have a `priority` column |
 | Registration at startup | The peknik catalog lists one model with an `empaia` block (`constant-classifier`); its standalone app (`0d9d12a8-2764-4c9c-89a0-f827bbe9932f`, "Constant test heatmap") was in the marketplace after the facade started: mock JES resolved it and ran the job. `peknik/prostate-classifier-1` has no block, so it got no app |
-| Standalone job of that app | Admitted with priority 100 (`INTERACTIVE`); read the region of interest (2 rectangle reads); stopped through JES after 20 s, recorded `cancelled` |
+| Standalone job of that app | Admitted with the then-current top priority (stored as 100, since renamed `HIGH` = 1); read the region of interest (2 rectangle reads); stopped through JES after 20 s, recorded `cancelled` |
 
 ## Found on the way
 

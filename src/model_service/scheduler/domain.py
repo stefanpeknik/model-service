@@ -99,9 +99,9 @@ class Priority(IntEnum):
     Internal for now: providers set it, the public API does not take it.
     """
 
+    LOW = -1
     NORMAL = 0
-    # Someone is waiting for the result, e.g. an EMPAIA job started by hand.
-    INTERACTIVE = 100
+    HIGH = 1
 
 
 @dataclass(frozen=True, slots=True)

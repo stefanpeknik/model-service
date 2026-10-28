@@ -128,12 +128,12 @@ class ExecutionRepositoryContract:
     async def test_higher_priority_is_claimed_first(self) -> None:
         await self._admit_execution("older")
         await self._advance_time(timedelta(milliseconds=10))
-        urgent_id = await self._admit_execution("urgent", priority=Priority.INTERACTIVE)
+        urgent_id = await self._admit_execution("urgent", priority=Priority.HIGH)
 
         selected = await self.repository.claim_due("worker", timedelta(seconds=30))
 
         assert selected is not None and selected.execution_id == urgent_id, selected
-        assert (await self.repository.get(urgent_id)).priority == Priority.INTERACTIVE
+        assert (await self.repository.get(urgent_id)).priority == Priority.HIGH
 
     async def test_a_model_with_urgent_work_is_served_before_older_models(
         self,
@@ -143,7 +143,7 @@ class ExecutionRepositoryContract:
         await self._admit_execution("normal", "busy-model")
         await self._advance_time(timedelta(milliseconds=10))
         urgent_id = await self._admit_execution(
-            "urgent", "busy-model", priority=Priority.INTERACTIVE
+            "urgent", "busy-model", priority=Priority.HIGH
         )
 
         selected = await self.repository.claim_due("worker", timedelta(seconds=30))

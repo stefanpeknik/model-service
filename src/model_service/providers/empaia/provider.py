@@ -192,11 +192,10 @@ class EmpaiaProviderAdapter:
             protected_context=context.protected_values(),
             deadline_cap=credential_expires_at,
             terminal_report_deadline_at=credential_expires_at,
-            # Someone started it by hand and waits; preprocessing runs unattended.
+            # A standalone job was started by hand and someone waits for it;
+            # preprocessing runs unattended.
             priority=(
-                Priority.INTERACTIVE
-                if mode is EmpaiaJobMode.STANDALONE
-                else Priority.NORMAL
+                Priority.HIGH if mode is EmpaiaJobMode.STANDALONE else Priority.NORMAL
             ),
         )
 

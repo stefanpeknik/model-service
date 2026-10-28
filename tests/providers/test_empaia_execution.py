@@ -310,7 +310,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state.mode, EmpaiaJobMode.PREPROCESSING)
         self.assertEqual(execution.priority, Priority.NORMAL)
 
-    async def test_a_job_started_by_hand_is_interactive(self) -> None:
+    async def test_a_job_started_by_hand_has_high_priority(self) -> None:
         now = datetime.now(UTC)
         service = ControlledEmpaiaService()
         repository = InMemoryExecutionRepository(clock=lambda: now)
@@ -321,7 +321,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         execution = await repository.get(scheduled.execution.id)
 
         self.assertIs(service.mode, EmpaiaJobMode.STANDALONE)
-        self.assertEqual(execution.priority, Priority.INTERACTIVE)
+        self.assertEqual(execution.priority, Priority.HIGH)
 
     async def test_gateway_factory_failure_is_classified_during_prepare(self) -> None:
         """Verify gateway factory failure is classified during prepare."""

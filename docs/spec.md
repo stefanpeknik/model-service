@@ -208,7 +208,8 @@ never scales down a replica that was never placed.
   higher-priority execution are served first, and within a model higher
   priority goes first. Providers set it; the public API does not take it yet.
   An EMPAIA job in `STANDALONE` mode (someone started it in the Workbench and
-  waits) is `INTERACTIVE`; preprocessing and everything else is `NORMAL`.
+  waits) is `HIGH`; preprocessing and everything else is `NORMAL`. The
+  scale is `LOW`, `NORMAL`, `HIGH` (stored as -1, 0, 1).
   Priority only orders the queue: work already running keeps its slot.
   Migration `0005` adds the column.
   Running these jobs outside the scheduler would not be faster: JES polls the
