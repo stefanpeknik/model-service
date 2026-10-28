@@ -348,10 +348,13 @@ class HttpEmpaiaGateway:
     async def _direct_access(self, name: str) -> DirectAccess | None:
         """Query the extension endpoint; only a 404 permits rectangle fallback, while other failures remain errors."""
         info = await self._call(self._client.get_direct_access_info(name))
-        if info is None or not info.storage_path:
+        # CDS answers the path under its own data directory (physical_path)
+        # and relative to it (storage_path); model-service mounts the slide
+        # volume where CDS does, so the absolute path resolves here too.
+        if info is None or not info.path:
             return None
         return DirectAccess(
-            storage_path=Path(info.storage_path),
+            storage_path=Path(info.path),
             supported=info.direct_access_supported,
         )
 

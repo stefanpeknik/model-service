@@ -266,9 +266,12 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
                 if request.url.path.endswith("/direct-access"):
                     return httpx.Response(
                         200,
+                        # As CDS answers: absolute under its data directory,
+                        # and relative to it.
                         json={
                             "slide_id": "slide-1",
-                            "storage_path": str(source),
+                            "physical_path": str(source),
+                            "storage_path": "slide.tiff",
                             "direct_access_supported": True,
                         },
                     )

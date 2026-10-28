@@ -284,7 +284,7 @@ def mode(
     return {"mode": "STANDALONE"}
 
 
-@app.get("/v3/rationai/{job_id}/inputs/{name}/direct-access")
+@app.get("/v3/rationai/{job_id}/slides/{name}/direct-access")
 async def direct_access(
     job_id: str,
     name: str,
@@ -342,7 +342,9 @@ async def direct_access(
     return {
         "direct_access_supported": True,
         "slide_id": _slide_id(job_id),
-        "storage_path": storage_path,
+        # As CDS: absolute under its data directory, and relative to it.
+        "physical_path": storage_path,
+        "storage_path": storage_path.lstrip("/"),
     }
 
 

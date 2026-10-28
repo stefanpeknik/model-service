@@ -205,7 +205,11 @@ def generate_ead(
             f"_{mode.value}.v3.0"
         ),
         "description": f"{listing.description} {_MODE_DESCRIPTION[mode]}",
-        "permissions": {"data_transmission_to_external_service_provider": True},
+        # The RationAI direct-access route serves apps allowed raw slide access.
+        "permissions": {
+            "data_transmission_to_external_service_provider": True,
+            "wsi_raw_file_access": True,
+        },
         "io": io,
         "modes": {mode.value: {"inputs": list(inputs), "outputs": list(outputs)}},
     }
