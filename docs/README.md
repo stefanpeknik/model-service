@@ -7,6 +7,7 @@
 | [Adding models](guides/adding-models.md) | YAML-only onboarding, or a new inference implementation |
 | [Deployment guide](guides/deployment-guide.md), [configuration reference](guides/configuration-reference.md) | Helm chart and values |
 | [peknik-ns test deployment](operations/peknik-ns.md) | Building images, upgrading, the GPU and quota rules |
+| [rationai-infra-test-ns deployment](operations/rationai-test-ns.md) | model-service beside the EMPAIA test instance, reading its slide volume |
 | [Core acceptance, 2026-10-14](operations/core-acceptance-2026-10-14.md) | Live evidence for the current core |
 | [Scheduled raw inference acceptance, 2026-10-15](operations/raw-inference-acceptance-2026-10-15.md) | Live evidence and throughput for scheduled tiles |
 | [EMPAIA jobs through JES, 2026-10-21](operations/empaia-jes-mock-2026-10-21.md) | Postmortem of the JES HTTP backend + model-service run against EMPAIA stand-ins in peknik-ns |

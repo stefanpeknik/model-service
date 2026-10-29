@@ -165,6 +165,7 @@ spec:
               mountPath: {{ .Values.empaia.workspaceRoot | quote }}
             - name: inference-storage
               mountPath: {{ .Values.executionScheduler.inferenceStorage.mountPath | quote }}
+{{- include "model-service.slideVolumeMount" . | nindent 12 }}
       volumes:
         - name: tmp
           emptyDir: {}
@@ -182,4 +183,5 @@ spec:
         - name: inference-storage
           persistentVolumeClaim:
             claimName: {{ $inferenceClaim | quote }}
+{{- include "model-service.slideVolume" . | nindent 8 }}
 {{- end }}

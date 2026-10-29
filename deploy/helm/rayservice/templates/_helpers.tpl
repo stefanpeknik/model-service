@@ -18,6 +18,32 @@
   value: {{ .Values.empaia.slideAccess | quote }}
 {{- end }}
 
+{{/*
+The installation's slide volume, where direct access links slides from. It is
+read-only at the volume, not only the mount, so kubelet never re-owns the
+EMPAIA files to this pod's fsGroup.
+*/}}
+{{- define "model-service.slideVolumeMount" -}}
+{{- with .Values.empaia.slideVolume }}
+{{- if .existingClaim }}
+- name: empaia-slides
+  mountPath: {{ required "empaia.slideVolume.mountPath is required with a claim" .mountPath | quote }}
+  readOnly: true
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{- define "model-service.slideVolume" -}}
+{{- with .Values.empaia.slideVolume }}
+{{- if .existingClaim }}
+- name: empaia-slides
+  persistentVolumeClaim:
+    claimName: {{ .existingClaim | quote }}
+    readOnly: true
+{{- end }}
+{{- end }}
+{{- end }}
+
 {{/* Extra DNS search domains, for installations that hand out short App Service names. */}}
 {{- define "model-service.empaiaDns" -}}
 {{- with .Values.empaia.dnsSearches }}

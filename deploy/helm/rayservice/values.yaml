@@ -123,6 +123,12 @@ empaia:
   # RationAI direct-access route; "http" downloads the needed level through
   # the App API, for installations whose slide storage model-service can't mount.
   slideAccess: direct
+  # With direct access, the claim holding the installation's slides, mounted
+  # read-only where its CDS mounts it, since model-service links the absolute
+  # path CDS answers. The facade mounts it; worker files include it too.
+  slideVolume:
+    existingClaim: ""
+    mountPath: ""
   # Extra DNS search domains for pods that call AppService, when the
   # installation hands out short host names from another namespace.
   dnsSearches: []

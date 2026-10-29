@@ -1,0 +1,83 @@
+groupName: gpu-workers
+replicas: 0
+minReplicas: 0
+maxReplicas: 1
+rayStartParams:
+  num-cpus: "4"
+  num-gpus: "1"
+  object-store-memory: "1073741824"
+template:
+  spec:
+{{- include "model-service.empaiaDns" . | nindent 4 }}
+    securityContext:
+      fsGroup: 1000
+      fsGroupChangePolicy: OnRootMismatch
+      runAsNonRoot: true
+      runAsUser: 1000
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: ray-worker
+        image: "{{ .Values.rayImage.repository }}:{{ .Values.rayImage.tag }}"
+        imagePullPolicy: {{ .Values.rayImage.pullPolicy }}
+        resources:
+          requests:
+            cpu: 4
+            memory: 18Gi
+            nvidia.com/mig-2g.20gb: 1
+          limits:
+            cpu: 4
+            memory: 20Gi
+            nvidia.com/mig-2g.20gb: 1
+        env:
+          {{- include "peknik.proxyEnv" . | nindent 10 }}
+          - name: MLFLOW_TRACKING_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: mlflow-public-credentials
+                key: username
+          - name: MLFLOW_TRACKING_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: mlflow-public-credentials
+                key: token
+          - name: HF_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: huggingface-secret
+                key: token
+          # Builders may also be placed here, so storage matches the CPU group.
+          - name: TMPDIR
+            value: /mnt/scratch
+          - name: VIPS_DISC_THRESHOLD
+            value: "268435456"
+{{- include "model-service.empaiaEnv" . | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsUser: 1000
+        volumeMounts:
+          - name: shared
+            mountPath: /mnt/shared
+          - name: scratch
+            mountPath: /mnt/scratch
+          - name: trt-cache
+            mountPath: /mnt/cache
+          - name: hf-cache
+            mountPath: /mnt/huggingface_cache
+{{- include "model-service.slideVolumeMount" . | nindent 10 }}
+    volumes:
+      - name: shared
+        persistentVolumeClaim:
+          claimName: {{ .Release.Name }}-full-wsi-outputs
+      - name: scratch
+        persistentVolumeClaim:
+          claimName: {{ .Release.Name }}-full-wsi-scratch
+      - name: trt-cache
+        persistentVolumeClaim:
+          claimName: {{ .Release.Name }}-trt-cache
+      - name: hf-cache
+        persistentVolumeClaim:
+          claimName: {{ .Release.Name }}-hf-cache
+{{- include "model-service.slideVolume" . | nindent 6 }}

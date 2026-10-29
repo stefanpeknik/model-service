@@ -1,0 +1,108 @@
+# rationai-infra-test-ns, beside the EMPAIA test instance, as release
+# `model-service`. Same models, builders, workers and images as peknik-ns;
+# slides come from the instance's slide volume instead of the App API.
+# Other objects it needs: deploy/k8s/rationai-test-ns/ and the Secrets
+# model-service-db, mlflow-public-credentials and huggingface-secret.
+models:
+  - peknik/prostate-classifier-1
+  - peknik/constant-classifier
+  - peknik/virchow2
+
+builders:
+  heatmap:
+    deployment:
+      max_ongoing_requests: 1
+      max_queued_requests: 2
+      backpressure_config:
+        status_code: 429
+        retry_after_s: 5
+      autoscaling_config:
+        min_replicas: 0
+        max_replicas: 1
+        target_ongoing_requests: 1
+        downscale_delay_s: 120
+      ray_actor_options:
+        num_cpus: 2
+        memory: 4294967296
+    userConfig:
+      num_threads: 2
+      max_concurrent_tasks: 32
+  tile-embeddings:
+    deployment:
+      max_ongoing_requests: 1
+      max_queued_requests: 2
+      backpressure_config:
+        status_code: 429
+        retry_after_s: 5
+      autoscaling_config:
+        min_replicas: 0
+        max_replicas: 1
+        target_ongoing_requests: 1
+        downscale_delay_s: 120
+      ray_actor_options:
+        num_cpus: 1
+        memory: 2147483648
+    userConfig:
+      num_threads: 1
+      max_concurrent_tasks: 32
+
+sharedStorageRoots: [/mnt/shared]
+
+workers:
+  - rationai-test-cpu-workers
+  - rationai-test-gpu-workers
+
+rayImage:
+  repository: cerit.io/stefanpeknik/model-service-ray
+  tag: empaia-20
+  pullPolicy: IfNotPresent
+
+storage:
+  storageClassName: nfs-csi
+  outputSize: 32Gi
+  scratchSize: 32Gi
+
+validation:
+  appService:
+    enabled: false
+
+executionScheduler:
+  enabled: true
+  replicas: 1
+  image:
+    repository: cerit.io/stefanpeknik/model-service-scheduler
+    tag: empaia-20
+    pullPolicy: IfNotPresent
+  database:
+    existingSecret: model-service-db
+    urlKey: database-url
+  encryption:
+    existingSecret: model-service-db
+    keyKey: provider-context-key
+  sharedStorage:
+    existingClaim: model-service-full-wsi-outputs
+    mountPath: /mnt/shared
+  # deploy/k8s/rationai-test-ns/storage.yaml
+  inferenceStorage:
+    existingClaim: model-service-inference
+    mountPath: /mnt/model-service-inference
+  inferenceTimeoutSeconds: 900
+  defaultDeadlineSeconds: 21600
+  maximumDeadlineSeconds: 86400
+  processingAttempts: 2
+  maxConcurrentExecutions: 4
+
+empaia:
+  # The test instance's App API, under the name its Workbench Daemon hands to JES.
+  apiUrls: ["http://test-jobs-app-api:10009"]
+  workspaceRoot: /mnt/scratch
+  workspaceClaim: model-service-full-wsi-scratch
+  slideAccess: direct
+  # Where the instance's CDS plugins mount it; CDS answers paths under /data.
+  slideVolume:
+    existingClaim: test-data-storage-pvc
+    mountPath: /data/Projects
+  # No registration: the instance's marketplace needs credentials
+  # model-service doesn't have yet.
+  marketplace:
+    url: ""
