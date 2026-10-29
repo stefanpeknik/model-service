@@ -58,7 +58,11 @@ class BuilderSpec:
         try:
             return self.configuration.model_validate(dict(overrides or {}))
         except ValidationError as error:
-            raise InvalidInvocation(f"{self.id} configuration is invalid") from error
+            # Field names only: values may come from callers.
+            fields = sorted({".".join(map(str, e["loc"])) for e in error.errors()})
+            raise InvalidInvocation(
+                f"{self.id} configuration is invalid: {', '.join(fields)}"
+            ) from error
 
 
 class ScoreEncoding(StrEnum):

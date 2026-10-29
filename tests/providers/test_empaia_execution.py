@@ -282,6 +282,25 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(execution.builder_id, "heatmap")
         self.assertEqual(execution.model_id, MODEL.id)
 
+    async def test_configuration_keys_the_builder_does_not_take_are_ignored(
+        self,
+    ) -> None:
+        now = datetime.now(UTC)
+        service = ControlledEmpaiaService()
+        service.configuration["viewer_colormap"] = "viridis"
+        repository = InMemoryExecutionRepository(clock=lambda: now)
+        provider = EmpaiaProviderAdapter(service.gateway, allowed_api_urls=(API_URL,))
+        scheduler = scheduler_for(repository, provider, now)
+
+        with self.assertLogs("model_service.providers.empaia", "WARNING") as logs:
+            scheduled = await scheduler.schedule(self._request(now, "credential"))
+        execution = await repository.get(scheduled.execution.id)
+
+        self.assertEqual(
+            execution.invocation.resolved_configuration, DEFAULT_CONFIGURATION
+        )
+        self.assertIn("viewer_colormap", logs.output[0])
+
     async def test_optional_inputs_the_job_lacks_are_left_out(self) -> None:
         now = datetime.now(UTC)
         service = ControlledEmpaiaService()

@@ -153,6 +153,18 @@ class EmpaiaProviderAdapter:
             except EmpaiaGatewayError as error:
                 _raise_preparation_error(error)
             spec = get_builder(request.builder_id)
+            # Installation admins may configure an app with keys meant for
+            # something else; the builder takes only the ones it knows.
+            known = spec.configuration.model_fields
+            if ignored := sorted(configuration.keys() - known.keys()):
+                logger.warning(
+                    "EMPAIA job %s: ignoring configuration keys the %s builder "
+                    "does not take: %s",
+                    context.job_id,
+                    spec.id,
+                    ", ".join(ignored),
+                )
+            configuration = {k: v for k, v in configuration.items() if k in known}
             try:
                 configuration = spec.resolve_configuration(configuration).model_dump(
                     mode="json"

@@ -6,6 +6,7 @@ responses.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated, Any, Protocol
@@ -35,6 +36,9 @@ if TYPE_CHECKING:
         ScheduleRequest,
         ScheduleResult,
     )
+
+
+logger = logging.getLogger(__name__)
 
 
 class ApiErrorCode(StrEnum):
@@ -126,15 +130,31 @@ async def submit(
         UnknownModelError,
         IncompatibleModelError,
     ) as error:
+        _log_refusal(request, error)
         raise lookup_error(error) from error
     except ScheduleConflictError as error:
+        _log_refusal(request, error)
         raise http_error(409, ApiErrorCode.SCHEDULE_CONFLICT, str(error)) from error
     except (InvalidScheduleRequestError, IncompatibleInputError) as error:
+        _log_refusal(request, error)
         raise http_error(422, ApiErrorCode.INVALID_REQUEST, str(error)) from error
     except SchedulingUnavailableError as error:
+        _log_refusal(request, error)
         raise unavailable(error) from error
     response.status_code = 202 if result.created else 200
     return result
+
+
+def _log_refusal(
+    request: ScheduleRequest | InferenceScheduleRequest, error: Exception
+) -> None:
+    # The callers (JES among them) may not log the response body, so the
+    # reason is kept here; error messages are the safe public ones.
+    if isinstance(request, InferenceScheduleRequest):
+        subject = f"inference on {request.model_id}"
+    else:
+        subject = f"{request.provider} {request.builder_id} on {request.model_id}"
+    logger.warning("Refused %s: %s", subject, error)
 
 
 def unavailable(error: SchedulingUnavailableError) -> HTTPException:
