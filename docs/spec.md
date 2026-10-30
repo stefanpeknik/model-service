@@ -367,9 +367,8 @@ Not part of the service, used to deploy and validate it:
 - `scripts/prepare_tissue_mask.py`: a tissue mask TIFF for standalone runs.
 - `deploy/images/Dockerfile.code-refresh`: swaps the code layer of an existing
   image for test deployments; release images build from source.
-- `testing/` doubles, `deploy/helm/rayservice/templates/validation-appservice-*`
-  and `deploy/k8s/peknik-ns/empaia-mock.yaml`: the mock AppService and EMPAIA
-  stand-ins for peknik-ns.
+- `testing/` doubles and `deploy/helm/rayservice/templates/validation-appservice-*`:
+  the mock AppService and EMPAIA stand-ins.
 
 ## Out of scope
 

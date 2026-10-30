@@ -39,7 +39,7 @@ nav:
       - Optimization Guide: guides/optimization-guide.md
       - Troubleshooting: guides/troubleshooting.md
   - Operations:
-      - peknik-ns test deployment: operations/peknik-ns.md
+      - rationai-infra-test-ns deployment: operations/rationai-test-ns.md
       - Core acceptance, 2026-10-14: operations/core-acceptance-2026-10-14.md
       - Scheduled raw inference acceptance, 2026-10-15: operations/raw-inference-acceptance-2026-10-15.md
   - Available Models: available-models.md

@@ -17,7 +17,7 @@ marketplace mock of `deploy/k8s/peknik-ns/empaia-mock.yaml`. Nothing ran outside
 The first `empaia-18` facade crashed at import: `jsonschema`, a declared
 dependency now used at runtime for EAD validation, was missing from the
 October scheduler checkpoint image the code-refresh build starts from. The
-build now adds it (`EXTRA_PACKAGES`, see [peknik-ns](peknik-ns.md)); the old
+build now adds it (`EXTRA_PACKAGES`, see [the test deployment](rationai-test-ns.md)); the old
 pod kept serving until the fixed image rolled out.
 
 The facade does not configure INFO logging for model-service's own loggers, so

@@ -43,4 +43,4 @@ The scheduler does not change the request; the model's batching does.
 
 The GPU worker started for the cold-start test at about 11:12 and served the
 later checks. It was scaled down by Ray after the last request; see the
-[runbook](peknik-ns.md) for how to check.
+[runbook](rationai-test-ns.md) for how to check.
