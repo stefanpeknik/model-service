@@ -47,6 +47,23 @@ class HeatmapRequest:
     skip_background: bool = False
 
 
+@dataclass(slots=True)
+class _StageTiming:
+    """Per-tile durations of one stage, to tell slide reads from model waits."""
+
+    count: int = 0
+    seconds: float = 0.0
+
+    def add(self, seconds: float) -> None:
+        self.count += 1
+        self.seconds += seconds
+
+    def __str__(self) -> str:
+        if not self.count:
+            return "none"
+        return f"{self.seconds / self.count * 1000:.0f} ms"
+
+
 class TilePredictor(Protocol):
     async def predict(self, tile: object) -> object:
         """Return `n_channels x output_tile_size²` scores for one CHW uint8 tile."""
@@ -111,15 +128,27 @@ class SlideHeatmapProcessor:
             )
             started = last_report = time.monotonic()
             submitted = 0
+            reads = _StageTiming()
+            predictions = _StageTiming()
+
+            def timed_read(x: int, y: int) -> tuple[object, float]:
+                # Timed in the thread, so waiting for a free thread is not counted.
+                began = time.perf_counter()
+                tile = reader.read(x, y, tile_size)
+                return tile, time.perf_counter() - began
+
             try:
 
                 async def process_tile(x: int, y: int) -> None:
-                    tile = await loop.run_in_executor(
-                        executor, reader.read, x, y, tile_size
+                    tile, read_seconds = await loop.run_in_executor(
+                        executor, timed_read, x, y
                     )
                     if tile is None:
                         return
+                    reads.add(read_seconds)
+                    began = time.perf_counter()
                     prediction = await self._predictor.predict(tile)
+                    predictions.add(time.perf_counter() - began)
                     batch = np.asarray(prediction, dtype=np.float32).reshape(
                         1, n_channels, output_tile_size, output_tile_size
                     )
@@ -142,20 +171,28 @@ class SlideHeatmapProcessor:
                     if time.monotonic() - last_report >= _PROGRESS_SECONDS:
                         last_report = time.monotonic()
                         logger.info(
-                            "heatmap of %s: %d grid positions after %.0f s, at y=%d of %d",
+                            "heatmap of %s: %d grid positions after %.0f s, at y=%d "
+                            "of %d; %d tissue tiles, per tile: read %s, model %s",
                             model.id,
                             submitted,
                             last_report - started,
                             y,
                             extent_y,
+                            reads.count,
+                            reads,
+                            predictions,
                         )
                 if tasks:
                     await asyncio.gather(*tasks)
                 logger.info(
-                    "heatmap of %s: %d grid positions in %.0f s, writing the TIFF",
+                    "heatmap of %s: %d grid positions in %.0f s; %d tissue tiles, "
+                    "per tile: read %s, model %s; writing the TIFF",
                     model.id,
                     submitted,
                     time.monotonic() - started,
+                    reads.count,
+                    reads,
+                    predictions,
                 )
                 finalized = mask_builder.finalize()
                 result = np.asarray(finalized["mask"])
