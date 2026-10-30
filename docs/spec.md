@@ -381,3 +381,14 @@ preprocessing triggers are an EMPAIA admin's setting, not model-service's.
 A tissue mask from a real source is future QC work: QC would run as a
 preprocessing job whose mask later model-service jobs use; until then the
 heatmap builder's own background filter stands in.
+
+## Possible future work
+
+Ideas with a reason, not commitments:
+
+- Fewer slide reads in the heatmap builder. With stride 0.5 neighbouring
+  tiles overlap by half, so each tissue pixel is read and decoded about four
+  times over NFS; OpenSlide's cache absorbs only part of it. Reading a band
+  once and cutting tiles from memory, or a larger OpenSlide cache, would cut
+  that. The builder's tiling was taken over as is, so this waits for a profile
+  showing slide reads dominate.
