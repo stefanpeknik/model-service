@@ -7,6 +7,17 @@ empaia:
   name_short: ConstHM
   description: A test model that gives every tile the same score; it checks the pipeline, not the tissue.
   modes: [standalone, preprocessing]
+  viewer:
+    inputs:
+      slide: {target: xopat, lossless: false}
+    outputs:
+      heatmap:
+        render: shader
+        label: Constant Heatmap
+        visible: true
+        shader:
+          type: heatmap
+          params: {threshold: 65, opacity: 0.5, color: "#ffff00"}
 serve:
   name: constant-classifier
   import_path: testing.constant_classifier:app

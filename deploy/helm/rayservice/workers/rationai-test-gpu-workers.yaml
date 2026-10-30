@@ -23,10 +23,12 @@ template:
         resources:
           requests:
             cpu: 4
+            ephemeral-storage: 8Gi
             memory: 18Gi
             nvidia.com/mig-2g.20gb: 1
           limits:
             cpu: 4
+            ephemeral-storage: 40Gi
             memory: 20Gi
             nvidia.com/mig-2g.20gb: 1
         env:
@@ -47,8 +49,9 @@ template:
                 name: huggingface-secret
                 key: token
           # Builders may also be placed here, so storage matches the CPU group.
+          # Working files (score sums, libvips spills) stay on the node's disk.
           - name: TMPDIR
-            value: /mnt/scratch
+            value: /mnt/tmp
           - name: VIPS_DISC_THRESHOLD
             value: "268435456"
 {{- include "model-service.empaiaEnv" . | nindent 10 }}
@@ -62,6 +65,8 @@ template:
             mountPath: /mnt/shared
           - name: scratch
             mountPath: /mnt/scratch
+          - name: tmp
+            mountPath: /mnt/tmp
           - name: trt-cache
             mountPath: /mnt/cache
           - name: hf-cache
@@ -74,6 +79,9 @@ template:
       - name: scratch
         persistentVolumeClaim:
           claimName: {{ .Release.Name }}-full-wsi-scratch
+      - name: tmp
+        emptyDir:
+          sizeLimit: 32Gi
       - name: trt-cache
         persistentVolumeClaim:
           claimName: {{ .Release.Name }}-trt-cache

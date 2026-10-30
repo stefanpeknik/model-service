@@ -1,7 +1,8 @@
 """Register the deployed models' EMPAIA apps in a marketplace when the facade starts.
 
-It posts to the route of the marketplace mock EMPAIA test installations run
-(`/v1/custom-mock/portal-apps`); a production marketplace lists apps through its
+It posts to the routes of the marketplace mock EMPAIA test installations run
+(`/v1/custom-mock/portal-apps`, then the app's global configuration, such as
+the case browser's viewer settings); a production marketplace lists apps through its
 portal's review instead. App IDs derive from the EAD namespace, so registering
 again replaces an app and every facade replica may do it.
 """
@@ -38,7 +39,7 @@ class Marketplace:
         timeout: float = 30,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
-        self._url = f"{url.rstrip('/')}/v1/custom-mock/portal-apps"
+        self._mock = f"{url.rstrip('/')}/v1/custom-mock"
         self._organization_id = organization_id
         self._target = target
         self._credentials = credentials
@@ -56,11 +57,18 @@ class Marketplace:
                 headers["Authorization"] = authorization
             for app in apps:
                 response = await client.post(
-                    self._url,
+                    f"{self._mock}/portal-apps",
                     json=app.portal_app(self._target, self._organization_id),
                     headers=headers,
                 )
                 response.raise_for_status()
+                if app.global_configuration:
+                    response = await client.put(
+                        f"{self._mock}/apps/{app.app_id}/config/global",
+                        json=app.global_configuration,
+                        headers=headers,
+                    )
+                    response.raise_for_status()
                 logger.info(
                     "registered EMPAIA app %s (%s, %s on %s)",
                     app.app_id,

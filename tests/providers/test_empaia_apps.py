@@ -17,8 +17,10 @@ from pydantic import ValidationError as SettingsError
 from model_service.builders.registry import get_builder
 from model_service.facade.catalog import ModelCatalog
 from model_service.providers.empaia.apps import (
+    VIEWER_CONFIG_KEY,
     AppMode,
     EmpaiaListing,
+    ViewerConfig,
     app_definitions,
     generate_ead,
 )
@@ -81,6 +83,45 @@ class AppDefinitionTests(unittest.TestCase):
             "http::model-service/builders/heatmap/models/prostate-classifier-1",
         )
 
+    def test_the_viewer_settings_are_declared_and_given_to_each_app(self) -> None:
+        models = catalog("prostate-classifier-1")
+
+        standalone, _ = app_definitions(models, models.empaia_listings)
+
+        self.assertEqual(
+            standalone.ead["configuration"]["global"][VIEWER_CONFIG_KEY]["type"],
+            "string",
+        )
+        viewer = json.loads(standalone.global_configuration[VIEWER_CONFIG_KEY])
+        self.assertEqual(
+            viewer["inputs"]["slide"], {"target": "xopat", "lossless": False}
+        )
+        self.assertEqual(viewer["outputs"]["heatmap"]["shader"]["type"], "heatmap")
+
+    def test_viewer_entries_for_io_an_app_lacks_are_left_out(self) -> None:
+        listing = EmpaiaListing(
+            name="Prostate cancer",
+            name_short="ProstHM",
+            description="Finds things.",
+            modes=(AppMode.PREPROCESSING,),
+            viewer=ViewerConfig.model_validate(
+                {
+                    "inputs": {"region_of_interest": {"label": "ROI"}},
+                    "outputs": {"heatmap": {"render": "shader"}},
+                }
+            ),
+        )
+        models = catalog("prostate-classifier-1")
+
+        (app,) = app_definitions(
+            models, {"prostate-classifier-1": listing}, [get_builder("heatmap")]
+        )
+
+        self.assertEqual(
+            json.loads(app.global_configuration[VIEWER_CONFIG_KEY]),
+            {"inputs": {}, "outputs": {"heatmap": {"render": "shader"}}},
+        )
+
     def test_every_listed_model_in_the_repository_yields_valid_apps(self) -> None:
         listed = 0
         for path in sorted(MODELS.rglob("*.yaml")):
@@ -130,6 +171,7 @@ def token(lifetime: float) -> str:
 class RegistrationTests(unittest.IsolatedAsyncioTestCase):
     async def test_apps_are_posted_with_client_credentials(self) -> None:
         posted: list[tuple[str, dict[str, object]]] = []
+        configured: list[tuple[str, dict[str, object]]] = []
         tokens = 0
 
         def handle(request: httpx.Request) -> httpx.Response:
@@ -141,9 +183,11 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
             if request.url.path == "/token":
                 tokens += 1
                 return httpx.Response(200, json={"access_token": token(600)})
-            posted.append(
-                (request.headers["authorization"], json.loads(request.content))
-            )
+            sent = (request.headers["authorization"], json.loads(request.content))
+            if request.method == "PUT":
+                configured.append((request.url.path, sent[1]))
+                return httpx.Response(200)
+            posted.append(sent)
             return httpx.Response(201)
 
         models = catalog("prostate-classifier-1")
@@ -166,9 +210,20 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
         app = posted[0][1]["active_app_views"]["v3"]["app"]  # type: ignore[index]
         self.assertEqual(app["id"], apps[0].app_id)
         self.assertEqual(app["registry_image_url"], apps[0].image("model-service"))
+        self.assertEqual(
+            configured[0],
+            (
+                f"/v1/custom-mock/apps/{apps[0].app_id}/config/global",
+                apps[0].global_configuration,
+            ),
+        )
 
     async def test_registration_is_retried_until_the_marketplace_answers(self) -> None:
-        answers = [httpx.Response(503), httpx.Response(201), httpx.Response(201)]
+        # Each app: the portal app, then its viewer configuration.
+        answers = [
+            httpx.Response(503),
+            *(httpx.Response(201), httpx.Response(200)) * 2,
+        ]
 
         def handle(request: httpx.Request) -> httpx.Response:
             self.assertNotIn("authorization", request.headers)

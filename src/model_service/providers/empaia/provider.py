@@ -32,6 +32,7 @@ from model_service.builders.contracts import (
     is_json_value,
 )
 from model_service.builders.registry import get_builder
+from model_service.providers.empaia.apps import VIEWER_CONFIG_KEY
 from model_service.providers.empaia.gateway import (
     EmpaiaGateway,
     EmpaiaGatewayError,
@@ -156,7 +157,10 @@ class EmpaiaProviderAdapter:
             # Installation admins may configure an app with keys meant for
             # something else; the builder takes only the ones it knows.
             known = spec.configuration.model_fields
-            if ignored := sorted(configuration.keys() - known.keys()):
+            # The viewer's settings are expected and meant for the case browser.
+            if ignored := sorted(
+                configuration.keys() - known.keys() - {VIEWER_CONFIG_KEY}
+            ):
                 logger.warning(
                     "EMPAIA job %s: ignoring configuration keys the %s builder "
                     "does not take: %s",

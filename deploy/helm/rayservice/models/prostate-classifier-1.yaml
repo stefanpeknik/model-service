@@ -6,6 +6,18 @@ empaia:
   name_short: ProstHM
   description: Classifies prostate tissue and shows the scores as a heatmap over the slide.
   modes: [standalone, preprocessing]
+  # The AigoPath case browser's display settings (xOpat shader and its params).
+  viewer:
+    inputs:
+      slide: {target: xopat, lossless: false}
+    outputs:
+      heatmap:
+        render: shader
+        label: Prostate Heatmap
+        visible: true
+        shader:
+          type: heatmap
+          params: {threshold: 65, opacity: 0.5, color: "#ffff00"}
 serve:
   name: prostate-classifier-1
   import_path: model_service.models.binary_classifier:app
