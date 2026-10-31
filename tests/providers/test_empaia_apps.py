@@ -25,6 +25,7 @@ from model_service.providers.empaia.apps import (
     generate_ead,
 )
 from model_service.providers.empaia.credentials import ClientCredentials
+from model_service.providers.empaia.publishers import default_publishers
 from model_service.providers.empaia.registration import (
     Marketplace,
     register_until_done,
@@ -32,6 +33,7 @@ from model_service.providers.empaia.registration import (
 from model_service.providers.empaia.settings import EmpaiaSettings
 
 
+PUBLISHERS = default_publishers()
 MODELS = (
     Path(__file__).resolve().parents[2] / "deploy" / "helm" / "rayservice" / "models"
 )
@@ -49,7 +51,7 @@ class AppDefinitionTests(unittest.TestCase):
     ) -> None:
         models = catalog("prostate-classifier-1", "virchow2")
 
-        apps = app_definitions(models, models.empaia_listings)
+        apps = app_definitions(models, models.empaia_listings, PUBLISHERS)
 
         self.assertEqual(
             [(app.builder_id, app.model_id, app.mode) for app in apps],
@@ -86,7 +88,7 @@ class AppDefinitionTests(unittest.TestCase):
     def test_the_viewer_settings_are_declared_and_given_to_each_app(self) -> None:
         models = catalog("prostate-classifier-1")
 
-        standalone, _ = app_definitions(models, models.empaia_listings)
+        standalone, _ = app_definitions(models, models.empaia_listings, PUBLISHERS)
 
         self.assertEqual(
             standalone.ead["configuration"]["global"][VIEWER_CONFIG_KEY]["type"],
@@ -114,7 +116,10 @@ class AppDefinitionTests(unittest.TestCase):
         models = catalog("prostate-classifier-1")
 
         (app,) = app_definitions(
-            models, {"prostate-classifier-1": listing}, [get_builder("heatmap")]
+            models,
+            {"prostate-classifier-1": listing},
+            PUBLISHERS,
+            [get_builder("heatmap")],
         )
 
         self.assertEqual(
@@ -127,7 +132,7 @@ class AppDefinitionTests(unittest.TestCase):
         for path in sorted(MODELS.rglob("*.yaml")):
             with self.subTest(model=str(path.relative_to(MODELS))):
                 models = catalog(str(path.relative_to(MODELS).with_suffix("")))
-                apps = app_definitions(models, models.empaia_listings)
+                apps = app_definitions(models, models.empaia_listings, PUBLISHERS)
                 if models.empaia_listings:
                     listed += 1
                     self.assertTrue(apps)
@@ -191,7 +196,7 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
             return httpx.Response(201)
 
         models = catalog("prostate-classifier-1")
-        apps = app_definitions(models, models.empaia_listings)
+        apps = app_definitions(models, models.empaia_listings, PUBLISHERS)
         credentials = ClientCredentials("https://idp.example/realm", "ms", "secret")
         marketplace = Marketplace(
             "https://marketplace.example",
@@ -230,7 +235,7 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
             return answers.pop(0)
 
         models = catalog("prostate-classifier-1")
-        apps = app_definitions(models, models.empaia_listings)
+        apps = app_definitions(models, models.empaia_listings, PUBLISHERS)
         settings = EmpaiaSettings(
             marketplace_url="https://marketplace.example", organization_id="org-1"
         )

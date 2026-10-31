@@ -10,20 +10,16 @@ from aiohttp import web
 from aiohttp.test_utils import TestServer
 from rationai.empaia import Client
 
-from model_service.builders.contracts import InlineOutput
 from model_service.providers.empaia.gateway import (
     EmpaiaGatewayError,
     EmpaiaJobContext,
 )
 from model_service.providers.empaia.http_gateway import (
     HttpEmpaiaGateway,
-    create_http_gateway,
+    http_gateway_factory,
 )
+from model_service.providers.empaia.settings import EmpaiaSettings
 from tests.providers.empaia_fixtures import PIXELMAP_ID
-
-
-# Any mutating request does: posting an inline output is the simplest.
-SCORE = InlineOutput(value=0.75)
 
 
 class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
@@ -45,13 +41,13 @@ class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
                         "os.environ", {"EMPAIA_APP_SERVICE_TIMEOUT_SECONDS": seconds}
                     ),
                 ):
-                    gateway = create_http_gateway(context)
+                    gateway = http_gateway_factory(EmpaiaSettings())(context)
                     try:
                         if succeeds:
-                            await gateway.publish_output("score", SCORE)
+                            await gateway.post_primitive("score", "float", 0.75)
                         else:
                             with self.assertRaises(EmpaiaGatewayError) as raised:
-                                await gateway.publish_output("score", SCORE)
+                                await gateway.post_primitive("score", "float", 0.75)
                             self.assertTrue(raised.exception.outcome_unknown)
                     finally:
                         await gateway.close()
@@ -99,7 +95,7 @@ class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
             )
             try:
                 with self.assertRaises(EmpaiaGatewayError) as raised:
-                    await gateway.publish_output("score", SCORE)
+                    await gateway.post_primitive("score", "float", 0.75)
                 self.assertTrue(raised.exception.outcome_unknown)
                 self.assertFalse(raised.exception.retryable)
                 self.assertNotIn("private", raised.exception.safe_message)
@@ -122,7 +118,7 @@ class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
                     )
                     self.addAsyncCleanup(gateway.close)
                     with self.assertRaises(EmpaiaGatewayError) as raised:
-                        await gateway.publish_output("score", SCORE)
+                        await gateway.post_primitive("score", "float", 0.75)
                     self.assertTrue(raised.exception.outcome_unknown)
                     self.assertFalse(raised.exception.retryable)
                     await gateway.close()

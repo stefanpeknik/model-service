@@ -42,6 +42,7 @@ from model_service.providers.empaia.gateway import (
     EmpaiaJobMode,
 )
 from model_service.providers.empaia.input_access import job_workspace
+from model_service.providers.empaia.publishers import default_publishers
 from model_service.scheduler.contracts import (
     InvalidScheduleRequestError,
     ProviderName,
@@ -67,6 +68,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from model_service.builders.contracts import JsonValue
+    from model_service.providers.empaia.publishers import PublisherRegistry
     from model_service.scheduler.providers import BeforeMutation
 
 
@@ -96,9 +98,11 @@ class EmpaiaProviderAdapter:
         *,
         allowed_api_urls: tuple[str, ...],
         workspace_root: Path | None = None,
+        publishers: PublisherRegistry | None = None,
     ) -> None:
         """Only `allowed_api_urls` origins or path prefixes receive job credentials; none, no job."""
         self._gateway_factory = gateway_factory
+        self._publishers = publishers or default_publishers()
         self._allowed_api_urls = tuple(url.rstrip("/") for url in allowed_api_urls)
         self._workspace_root = workspace_root
 
@@ -236,8 +240,15 @@ class EmpaiaProviderAdapter:
             mutation_completed = False
             try:
                 if isinstance(outcome, ProviderSuccess):
+                    declared = get_builder(outcome.builder_id).outputs
                     for name, output in outcome.result.outputs.items():
-                        await gateway.publish_output(name, output)
+                        spec = declared.get(name)
+                        if spec is None:
+                            raise EmpaiaGatewayError.invalid(
+                                f"EMPAIA output {name!r} is not declared"
+                            )
+                        publisher = self._publishers.publisher_for(name, spec, output)
+                        await publisher.publish(gateway, name, output)
                         mutation_completed = True
                     await gateway.finalize()
                 elif isinstance(outcome, ProviderFailure):

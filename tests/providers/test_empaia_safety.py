@@ -12,6 +12,7 @@ from model_service.builders.contracts import BuilderResult, SharedArtifact
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.input_access import job_workspace
 from model_service.providers.empaia.provider import EmpaiaProviderAdapter
+from model_service.providers.empaia.publishers import PublisherRegistry
 from model_service.scheduler.contracts import (
     ExecutionError,
     InvalidScheduleRequestError,
@@ -22,6 +23,12 @@ from model_service.scheduler.providers import (
     ProviderFailure,
     ProviderFinishFailureError,
     ProviderSuccess,
+)
+
+
+# Publishes nothing: these tests are about the workspace.
+PUBLISHERS = PublisherRegistry(
+    {("continuous_pixelmap", "application/x-npz"): AsyncMock()}
 )
 
 
@@ -101,6 +108,7 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
                 lambda _context: gateway,  # type: ignore[arg-type, return-value]
                 allowed_api_urls=("https://empaia.invalid",),
                 workspace_root=root,
+                publishers=PUBLISHERS,
             )
 
             await provider.finish(
@@ -112,7 +120,8 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
                                 path=str(artifact), media_type="application/x-npz"
                             )
                         }
-                    )
+                    ),
+                    "heatmap",
                 ),
             )
 
@@ -135,6 +144,7 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
                 lambda _context: gateway,  # type: ignore[arg-type, return-value]
                 allowed_api_urls=("https://empaia.invalid",),
                 workspace_root=root,
+                publishers=PUBLISHERS,
             )
 
             with self.assertRaises(ProviderFinishFailureError):
@@ -165,6 +175,7 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
                 lambda _context: gateway,  # type: ignore[arg-type, return-value]
                 allowed_api_urls=("https://empaia.invalid",),
                 workspace_root=root,
+                publishers=PUBLISHERS,
             )
 
             with self.assertRaises(ProviderFinishFailureError):
@@ -174,7 +185,7 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
                         "job_id": "j",
                         "credential": "c",
                     },
-                    ProviderSuccess(BuilderResult(outputs={})),
+                    ProviderSuccess(BuilderResult(outputs={}), "heatmap"),
                 )
 
             self.assertTrue(artifact.exists())

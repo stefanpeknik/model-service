@@ -14,6 +14,7 @@ from aiohttp.test_utils import TestServer
 from model_service.builders.contracts import SharedArtifact
 from model_service.builders.score_grid import MEDIA_TYPE, ScoreGrid, write_score_grid
 from model_service.providers.empaia.http_gateway import HttpEmpaiaGateway
+from model_service.providers.empaia.image_io import ScoreGridPublisher
 from testing.empaia_app_service import app
 
 
@@ -61,7 +62,8 @@ class ValidationEmpaiaPublicationTests(unittest.IsolatedAsyncioTestCase):
                         "synthetic-token",
                     )
                     try:
-                        await gateway.publish_output(
+                        await ScoreGridPublisher().publish(
+                            gateway,
                             "heatmap",
                             SharedArtifact(path=str(path), media_type=MEDIA_TYPE),
                         )

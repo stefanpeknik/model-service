@@ -1,8 +1,8 @@
 """EMPAIA apps for the deployed models, one per builder and mode.
 
 A model file opts in with an `empaia` block: how the model is presented and in
-which modes it runs. Every builder that accepts the model's contract and has an
-EMPAIA type for each output then becomes one app per mode. A standalone app
+which modes it runs. Every builder that accepts the model's contract and whose
+outputs all have a publisher that takes the model then becomes one app per mode. A standalone app
 takes all of the builder's EMPAIA inputs (e.g. a region of interest); a
 preprocessing app takes only the required ones, because EMPAIA starts it with a
 slide alone. The app's image is `http::<target>/builders/<builder>/models/<model>`,
@@ -12,6 +12,7 @@ which JES hands to model-service.
 from __future__ import annotations
 
 import json
+import logging
 import time
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -22,7 +23,6 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from jsonschema import Draft7Validator
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
-from model_service.builders.contracts import SpatialScoresModel
 from model_service.builders.registry import BUILDERS
 
 
@@ -31,12 +31,15 @@ if TYPE_CHECKING:
 
     from model_service.builders.contracts import ModelBinding
     from model_service.builders.registry import BuilderSpec
+    from model_service.providers.empaia.publishers import PublisherRegistry
 
 
 EAD_SCHEMA_URL = "https://gitlab.com/empaia/integration/definitions/-/raw/main/ead/ead-schema.v3.json"
 _EAD_SCHEMA = Draft7Validator(
     json.loads(Path(__file__).with_name("ead-v3.schema.json").read_text())
 )
+logger = logging.getLogger(__name__)
+
 # EAD names allow letters, digits, spaces, `-` and `_`.
 _TEXT = r"^[a-zA-Z0-9_\s\-]+$"
 
@@ -214,6 +217,7 @@ def stable_id(kind: str, namespace: str) -> str:
 def app_definitions(
     models: Iterable[ModelBinding],
     listings: Mapping[str, EmpaiaListing],
+    publishers: PublisherRegistry,
     builders: Iterable[BuilderSpec] = BUILDERS.values(),
 ) -> list[AppDefinition]:
     """Every app the listed models offer."""
@@ -223,11 +227,22 @@ def app_definitions(
         listing = listings.get(model.id)
         if listing is None:
             continue
-        # The SDK publishes single-channel pixelmaps only.
-        if isinstance(model, SpatialScoresModel) and model.n_channels != 1:
-            continue
         for spec in builders:
-            if spec.accepts is not model.contract or not _publishable(spec):
+            if spec.accepts is not model.contract:
+                continue
+            if unpublishable := [
+                name
+                for name, output in spec.outputs.items()
+                if (publisher := publishers.resolve(output)) is None
+                or not publisher.accepts(model)
+            ]:
+                logger.info(
+                    "%s with the %s builder is not offered in EMPAIA: "
+                    "nothing publishes %s",
+                    model.id,
+                    spec.id,
+                    ", ".join(unpublishable),
+                )
                 continue
             for mode in listing.modes:
                 ead = generate_ead(spec, model.id, listing, mode)
@@ -285,11 +300,6 @@ def generate_ead(
         }
     _EAD_SCHEMA.validate(ead)
     return ead
-
-
-def _publishable(spec: BuilderSpec) -> bool:
-    """EMPAIA has a type for every output, e.g. not for HDF5 embeddings."""
-    return all(output.empaia for output in spec.outputs.values())
 
 
 def _identifier(value: str) -> str:

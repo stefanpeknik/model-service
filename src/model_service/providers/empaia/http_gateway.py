@@ -18,7 +18,6 @@ from aiohttp import ClientError, ClientResponseError, ContentTypeError
 from rationai.empaia import Client
 from rationai.empaia.typing import primitives
 
-from model_service.builders.contracts import InlineOutput, SharedArtifact
 from model_service.providers.empaia.gateway import (
     EmpaiaGatewayError,
     EmpaiaJobContext,
@@ -44,8 +43,11 @@ if TYPE_CHECKING:
     from rationai.empaia.typing import SlideInfo
     from rationai.empaia.utils.scalar_output import PixelmapTileSet
 
-    from model_service.builders.contracts import BuilderOutput, JsonValue
-    from model_service.providers.empaia.gateway import MutationGuard
+    from model_service.builders.contracts import JsonValue
+    from model_service.providers.empaia.gateway import (
+        EmpaiaGatewayFactory,
+        MutationGuard,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,19 +87,6 @@ class Rectangle:
     y: int
     width: int
     height: int
-
-
-class ArtifactPublisher(Protocol):
-    """Define conversion and publication of a completed shared artifact into external job outputs."""
-
-    async def publish(
-        self,
-        gateway: HttpEmpaiaGateway,
-        name: str,
-        artifact: SharedArtifact,
-    ) -> None:
-        """Publish one named artifact using the gateway's guarded external-write operations."""
-        ...
 
 
 class RectangleMaskWriter(Protocol):
@@ -144,12 +133,11 @@ class HttpEmpaiaGateway:
         credential: str,
         *,
         client: Client | None = None,
-        artifact_publisher: ArtifactPublisher | None = None,
         rectangle_writer: RectangleMaskWriter | None = None,
         slide_access: SlideAccess = SlideAccess.DIRECT,
         slide_downloader: SlideDownloader | None = None,
     ) -> None:
-        """Require complete connection settings and select the SDK client, score grid publisher, and rectangle writer. close() closes even an injected client."""
+        """Require complete connection settings and select the SDK client, slide downloader, and rectangle writer. close() closes even an injected client."""
         if not api_url or not job_id or not credential:
             raise EmpaiaGatewayError(
                 "EMPAIA connection settings are incomplete",
@@ -157,18 +145,12 @@ class HttpEmpaiaGateway:
             )
         self._job_id = job_id
         self._client = client or Client(api_url, job_id, credential)
-        if (
-            artifact_publisher is None
-            or rectangle_writer is None
-            or slide_downloader is None
-        ):
+        if rectangle_writer is None or slide_downloader is None:
             from model_service.providers.empaia.image_io import (
-                ScoreGridPublisher,
                 TiffSlideDownloader,
                 VipsRectangleMaskWriter,
             )
 
-        self._artifact_publisher = artifact_publisher or ScoreGridPublisher()
         self._rectangle_writer = rectangle_writer or VipsRectangleMaskWriter()
         self._slide_access = slide_access
         self._slide_downloader = slide_downloader or TiffSlideDownloader()
@@ -236,20 +218,16 @@ class HttpEmpaiaGateway:
         write_rectangle_input(self._rectangle_writer, target, slide, _rectangle(value))
         return str(target)
 
-    async def publish_output(self, name: str, output: BuilderOutput) -> None:
-        """POST a supported inline primitive or delegate shared artifact publication to the image adapter."""
-        if isinstance(output, InlineOutput):
-            await self._call(
-                self._client.post_output(
-                    name, _primitive_output(name, self._job_id, output.value)
-                ),
-                mutation=True,
-            )
-            return
-        if isinstance(output, SharedArtifact):
-            await self._artifact_publisher.publish(self, name, output)
-            return
-        raise EmpaiaGatewayError.invalid("EMPAIA output type is unsupported")
+    async def post_primitive(
+        self, name: str, output_type: str, value: JsonValue
+    ) -> None:
+        """POST the guarded primitive output."""
+        await self._call(
+            self._client.post_output(
+                name, _primitive_output(name, self._job_id, output_type, value)
+            ),
+            mutation=True,
+        )
 
     async def finalize(self) -> None:
         """PUT the guarded successful job-finalization request."""
@@ -381,21 +359,24 @@ class HttpEmpaiaGateway:
             ) from error
 
 
-def create_http_gateway(context: EmpaiaJobContext) -> HttpEmpaiaGateway:
-    """Construct the default HTTP gateway from protected job settings and `EmpaiaSettings`."""
-    settings = EmpaiaSettings()
-    return HttpEmpaiaGateway(
-        context.api_url,
-        context.job_id,
-        context.credential,
-        client=Client(
+def http_gateway_factory(settings: EmpaiaSettings) -> EmpaiaGatewayFactory:
+    """The gateway factory of a deployment, configured once from its settings."""
+
+    def create(context: EmpaiaJobContext) -> HttpEmpaiaGateway:
+        return HttpEmpaiaGateway(
             context.api_url,
             context.job_id,
             context.credential,
-            timeout=settings.app_service_timeout_seconds,
-        ),
-        slide_access=settings.slide_access,
-    )
+            client=Client(
+                context.api_url,
+                context.job_id,
+                context.credential,
+                timeout=settings.app_service_timeout_seconds,
+            ),
+            slide_access=settings.slide_access,
+        )
+
+    return create
 
 
 def _is_slide(value: object) -> bool:
@@ -411,21 +392,21 @@ type _PostPrimitive = (
 )
 
 
-def _primitive_output(name: str, job_id: str, value: JsonValue) -> _PostPrimitive:
-    """Encode a bool, integer, float, or nonempty string with EMPAIA output and creator metadata; reject other JSON values."""
-    kind: type[_PostPrimitive]
-    if isinstance(value, bool):
-        kind, output_type = primitives.PostBoolPrimitive, "bool"
-    elif isinstance(value, int):
-        kind, output_type = primitives.PostIntegerPrimitive, "integer"
-    elif isinstance(value, float):
-        kind, output_type = primitives.PostFloatPrimitive, "float"
-    elif isinstance(value, str) and value:
-        kind, output_type = primitives.PostStringPrimitive, "string"
-    else:
-        raise EmpaiaGatewayError.invalid(
-            "EMPAIA inline output must be a non-empty primitive value"
-        )
+_PRIMITIVES: dict[str, type[_PostPrimitive]] = {
+    "bool": primitives.PostBoolPrimitive,
+    "integer": primitives.PostIntegerPrimitive,
+    "float": primitives.PostFloatPrimitive,
+    "string": primitives.PostStringPrimitive,
+}
+
+
+def _primitive_output(
+    name: str, job_id: str, output_type: str, value: JsonValue
+) -> _PostPrimitive:
+    """Encode a primitive of the given type with EMPAIA output and creator metadata."""
+    kind = _PRIMITIVES.get(output_type)
+    if kind is None:
+        raise EmpaiaGatewayError.invalid(f"EMPAIA has no {output_type!r} primitive")
     try:
         return kind.model_validate(
             {

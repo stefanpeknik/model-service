@@ -320,7 +320,20 @@ model). It reads with NumPy alone; an image of the slide's size is the grid
 scaled by the cell size. The builder no longer renders a TIFF: EMPAIA never
 used it, and it took longer to write than the inference.
 
-The EMPAIA publisher publishes the grid only through the SDK's
+EMPAIA outputs. Each builder output declares its EMPAIA type and media type
+(`OutputSpec` in `src/model_service/builders/registry.py`), and
+`src/model_service/providers/empaia/publishers.py` maps each (type, media
+type) pair to a publisher: the four primitive types (inline values, checked
+against the declared type) and `continuous_pixelmap` from a score grid. The
+mapping is built once at facade startup. App generation offers a model with a
+builder only if every output has a publisher that takes the model, and logs
+why it skips one. Finish publishes each output with the publisher of its
+declaration and fails the job, before any write, for an output that is not
+declared or not what was declared. The gateway is the transport only. Adding an
+EMPAIA type, annotations for example, takes a publisher, a gateway call to the
+SDK and one entry in `default_publishers`.
+
+The score-grid publisher publishes the grid only through the SDK's
 `ScalarImageOutput.to_pixelmap_pyramid` and `upload_pixelmap_pyramid`: from the
 coarsest slide level that still keeps four pixels per score down to the
 coarsest slide level, so every score is published as the model produced it. A

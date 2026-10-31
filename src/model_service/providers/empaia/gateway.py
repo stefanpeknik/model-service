@@ -16,7 +16,10 @@ from pydantic import BaseModel, ConfigDict, Field
 if TYPE_CHECKING:
     from collections.abc import Collection
 
-    from model_service.builders.contracts import BuilderOutput, JsonValue
+    from rationai.empaia.typing import SlideInfo
+    from rationai.empaia.utils.scalar_output import PixelmapTileSet
+
+    from model_service.builders.contracts import JsonValue
 
 
 type MutationGuard = Callable[[], Awaitable[None]]
@@ -121,8 +124,20 @@ class EmpaiaGateway(Protocol):
         """
         ...
 
-    async def publish_output(self, name: str, output: BuilderOutput) -> None:
-        """Publish one inline value or completed shared artifact to the external job."""
+    async def post_primitive(
+        self, name: str, output_type: str, value: JsonValue
+    ) -> None:
+        """Post one output as a primitive of the given EMPAIA type."""
+        ...
+
+    async def slide_info(self) -> SlideInfo:
+        """The job's slide with every level's downsample factor."""
+        ...
+
+    async def publish_pixelmap(
+        self, name: str, slide_id: str, tile_sets: tuple[PixelmapTileSet, ...]
+    ) -> None:
+        """Create one output pixelmap on the slide and upload its levels."""
         ...
 
     async def finalize(self) -> None:

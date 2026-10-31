@@ -24,8 +24,9 @@ from model_service.providers.empaia.credentials import (
     NoCredentials,
     OutgoingCredentials,
 )
-from model_service.providers.empaia.http_gateway import create_http_gateway
+from model_service.providers.empaia.http_gateway import http_gateway_factory
 from model_service.providers.empaia.provider import EmpaiaProviderAdapter
+from model_service.providers.empaia.publishers import default_publishers
 from model_service.providers.empaia.registration import (
     Marketplace,
     register_until_done,
@@ -96,10 +97,12 @@ def create_app(
         )
     }
     empaia = empaia_settings or EmpaiaSettings()
+    publishers = default_publishers()
     providers[ProviderName.EMPAIA] = EmpaiaProviderAdapter(
-        create_http_gateway,
+        http_gateway_factory(empaia),
         allowed_api_urls=empaia.api_urls,
         workspace_root=empaia.workspace_root,
+        publishers=publishers,
     )
     client = httpx.AsyncClient()
     dispatch = HTTPBuilderDispatch(client, origin=config.ray_serve_origin)
@@ -130,7 +133,7 @@ def create_app(
     )
 
     marketplace = _marketplace(empaia)
-    apps = app_definitions(catalog, catalog.empaia_listings)
+    apps = app_definitions(catalog, catalog.empaia_listings, publishers)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:

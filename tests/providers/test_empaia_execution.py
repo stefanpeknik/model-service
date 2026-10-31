@@ -28,6 +28,7 @@ from model_service.providers.empaia.gateway import (
 )
 from model_service.providers.empaia.input_access import EmpaiaInputAccessAdapter
 from model_service.providers.empaia.provider import EmpaiaProviderAdapter
+from model_service.providers.empaia.publishers import PublisherRegistry
 from model_service.scheduler.active_work import ActiveWorkRegistry
 from model_service.scheduler.contracts import (
     InvalidScheduleRequestError,
@@ -49,7 +50,7 @@ if TYPE_CHECKING:
 
     from model_service.builders.application import BuilderContext
     from model_service.builders.contracts import BuilderOutput, JsonValue
-    from model_service.providers.empaia.gateway import MutationGuard
+    from model_service.providers.empaia.gateway import EmpaiaGateway, MutationGuard
 
 
 MODEL = SpatialScoresModel(
@@ -163,6 +164,24 @@ class ControlledEmpaiaService:
         return FakeGateway(self, context.api_url, context.job_id)
 
 
+class RecordingPublisher:
+    """Hand each heatmap to the fake gateway, which records it."""
+
+    def accepts(self, model: ModelBinding) -> bool:
+        return True
+
+    async def publish(
+        self, gateway: EmpaiaGateway, name: str, output: BuilderOutput
+    ) -> None:
+        assert isinstance(gateway, FakeGateway)
+        await gateway.publish_output(name, output)
+
+
+PUBLISHERS = PublisherRegistry(
+    {("continuous_pixelmap", "application/x-npz"): RecordingPublisher()}
+)
+
+
 class FakeGateway:
     """Simulate one EMPAIA job while recording acquisition, mutation guards, publication, and cleanup."""
 
@@ -267,7 +286,9 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         service = ControlledEmpaiaService()
         service.configuration = {}
         repository = InMemoryExecutionRepository(clock=lambda: now)
-        provider = EmpaiaProviderAdapter(service.gateway, allowed_api_urls=(API_URL,))
+        provider = EmpaiaProviderAdapter(
+            service.gateway, allowed_api_urls=(API_URL,), publishers=PUBLISHERS
+        )
         scheduler = scheduler_for(repository, provider, now)
 
         scheduled = await scheduler.schedule(self._request(now, "credential"))
@@ -286,7 +307,9 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         service = ControlledEmpaiaService()
         service.configuration["viewer_colormap"] = "viridis"
         repository = InMemoryExecutionRepository(clock=lambda: now)
-        provider = EmpaiaProviderAdapter(service.gateway, allowed_api_urls=(API_URL,))
+        provider = EmpaiaProviderAdapter(
+            service.gateway, allowed_api_urls=(API_URL,), publishers=PUBLISHERS
+        )
         scheduler = scheduler_for(repository, provider, now)
 
         with self.assertLogs("model_service.providers.empaia", "WARNING") as logs:
@@ -303,7 +326,9 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         service = ControlledEmpaiaService()
         service.absent_inputs = {"region_of_interest"}
         repository = InMemoryExecutionRepository(clock=lambda: now)
-        provider = EmpaiaProviderAdapter(service.gateway, allowed_api_urls=(API_URL,))
+        provider = EmpaiaProviderAdapter(
+            service.gateway, allowed_api_urls=(API_URL,), publishers=PUBLISHERS
+        )
         scheduler = scheduler_for(repository, provider, now)
 
         scheduled = await scheduler.schedule(self._request(now, "credential"))
@@ -316,7 +341,9 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         service = ControlledEmpaiaService()
         service.mode = EmpaiaJobMode.PREPROCESSING
         repository = InMemoryExecutionRepository(clock=lambda: now)
-        provider = EmpaiaProviderAdapter(service.gateway, allowed_api_urls=(API_URL,))
+        provider = EmpaiaProviderAdapter(
+            service.gateway, allowed_api_urls=(API_URL,), publishers=PUBLISHERS
+        )
         scheduler = scheduler_for(repository, provider, now)
 
         scheduled = await scheduler.schedule(self._request(now, "credential"))
@@ -330,7 +357,9 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         now = datetime.now(UTC)
         service = ControlledEmpaiaService()
         repository = InMemoryExecutionRepository(clock=lambda: now)
-        provider = EmpaiaProviderAdapter(service.gateway, allowed_api_urls=(API_URL,))
+        provider = EmpaiaProviderAdapter(
+            service.gateway, allowed_api_urls=(API_URL,), publishers=PUBLISHERS
+        )
         scheduler = scheduler_for(repository, provider, now)
 
         scheduled = await scheduler.schedule(self._request(now, "credential"))
@@ -383,7 +412,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
                     "job_id": "job-1",
                     "credential": "credential",
                 },
-                ProviderSuccess(BuilderResult(outputs={})),
+                ProviderSuccess(BuilderResult(outputs={}), "heatmap"),
             )
 
         self.assertTrue(raised.exception.retryable)
@@ -398,7 +427,9 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
                 retryable=True,
             )
         )
-        provider = EmpaiaProviderAdapter(service.gateway, allowed_api_urls=(API_URL,))
+        provider = EmpaiaProviderAdapter(
+            service.gateway, allowed_api_urls=(API_URL,), publishers=PUBLISHERS
+        )
 
         await provider.finish(
             {
@@ -406,7 +437,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
                 "job_id": "job-1",
                 "credential": "credential",
             },
-            ProviderSuccess(BuilderResult(outputs={})),
+            ProviderSuccess(BuilderResult(outputs={}), "heatmap"),
         )
 
         self.assertTrue(service.finalized)
@@ -415,7 +446,9 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         """Verify controlled EMPAIA lifecycle and admitted replay."""
         now = datetime.now(UTC)
         service = ControlledEmpaiaService()
-        provider = EmpaiaProviderAdapter(service.gateway, allowed_api_urls=(API_URL,))
+        provider = EmpaiaProviderAdapter(
+            service.gateway, allowed_api_urls=(API_URL,), publishers=PUBLISHERS
+        )
         repository = InMemoryExecutionRepository(clock=lambda: now)
         scheduler = scheduler_for(repository, provider, now)
         with TemporaryDirectory() as directory:
@@ -460,7 +493,9 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         now = datetime.now(UTC)
         expiry = now + timedelta(minutes=10)
         service = ControlledEmpaiaService()
-        provider = EmpaiaProviderAdapter(service.gateway, allowed_api_urls=(API_URL,))
+        provider = EmpaiaProviderAdapter(
+            service.gateway, allowed_api_urls=(API_URL,), publishers=PUBLISHERS
+        )
         repository = InMemoryExecutionRepository(clock=lambda: now)
         scheduler = scheduler_for(repository, provider, now)
 
@@ -488,7 +523,9 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         service = ControlledEmpaiaService()
         service.configuration["stride_fraction"] = 0
         repository = InMemoryExecutionRepository(clock=lambda: now)
-        provider = EmpaiaProviderAdapter(service.gateway, allowed_api_urls=(API_URL,))
+        provider = EmpaiaProviderAdapter(
+            service.gateway, allowed_api_urls=(API_URL,), publishers=PUBLISHERS
+        )
         scheduler = scheduler_for(repository, provider, now)
 
         request = self._request(now, "credential")
@@ -510,7 +547,9 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
                 retryable=True,
             )
         )
-        provider = EmpaiaProviderAdapter(service.gateway, allowed_api_urls=(API_URL,))
+        provider = EmpaiaProviderAdapter(
+            service.gateway, allowed_api_urls=(API_URL,), publishers=PUBLISHERS
+        )
         repository = InMemoryExecutionRepository(
             clock=lambda: now,
             finish_policy=RetryPolicy(3, timedelta(0), timedelta(0)),
@@ -556,7 +595,9 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
                 retryable=True,
             )
         )
-        provider = EmpaiaProviderAdapter(service.gateway, allowed_api_urls=(API_URL,))
+        provider = EmpaiaProviderAdapter(
+            service.gateway, allowed_api_urls=(API_URL,), publishers=PUBLISHERS
+        )
         repository = InMemoryExecutionRepository(
             clock=lambda: now,
             finish_policy=RetryPolicy(3, timedelta(0), timedelta(0)),

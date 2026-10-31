@@ -18,7 +18,7 @@ from math import ceil, floor
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from model_service.builders.score_grid import MEDIA_TYPE as SCORE_GRID_MEDIA_TYPE
+from model_service.builders.contracts import SharedArtifact, SpatialScoresModel
 from model_service.builders.score_grid import read_score_grid
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.http_gateway import SlideLevel
@@ -33,7 +33,8 @@ if TYPE_CHECKING:
     import numpy as np
     from numpy.typing import NDArray
 
-    from model_service.builders.contracts import SharedArtifact
+    from model_service.builders.contracts import BuilderOutput, ModelBinding
+    from model_service.providers.empaia.gateway import EmpaiaGateway
     from model_service.providers.empaia.http_gateway import (
         HttpEmpaiaGateway,
         Rectangle,
@@ -57,17 +58,18 @@ class ScoreGridPublisher:
             raise ValueError("EMPAIA pixelmap tile size must be between 256 and 2048")
         self._tile_size = tile_size
 
+    def accepts(self, model: ModelBinding) -> bool:
+        # The SDK uploads single-channel pixelmaps only.
+        return isinstance(model, SpatialScoresModel) and model.n_channels == 1
+
     async def publish(
-        self,
-        gateway: HttpEmpaiaGateway,
-        name: str,
-        artifact: SharedArtifact,
+        self, gateway: EmpaiaGateway, name: str, output: BuilderOutput
     ) -> None:
-        if artifact.media_type != SCORE_GRID_MEDIA_TYPE:
+        if not isinstance(output, SharedArtifact):
             raise EmpaiaGatewayError.invalid(
                 "EMPAIA shared output must be a score grid"
             )
-        path = Path(artifact.path)
+        path = Path(output.path)
         try:
             grid = await asyncio.to_thread(read_score_grid, path)
         except (OSError, ValueError, KeyError) as error:

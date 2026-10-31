@@ -410,9 +410,9 @@ class ExecutionWorker:
 def _finish_outcome(claim: WorkClaim) -> ProviderFinishOutcome:
     """Convert a provider claim into success, failure, or cancellation, requiring the corresponding stored result or error."""
     if claim.kind is WorkKind.PROVIDER_FINISH:
-        if not isinstance(claim.result, BuilderResult):
+        if not isinstance(claim.result, BuilderResult) or claim.builder_id is None:
             raise RuntimeError("provider finish requires a durable builder result")
-        return ProviderSuccess(claim.result)
+        return ProviderSuccess(claim.result, claim.builder_id)
     if claim.kind is WorkKind.PROVIDER_FAILURE_REPORT:
         if claim.error is None:
             raise RuntimeError("provider failure report requires a durable error")

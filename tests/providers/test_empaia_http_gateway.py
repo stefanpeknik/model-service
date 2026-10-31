@@ -14,7 +14,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestServer
 from rationai.empaia import Client
 
-from model_service.builders.contracts import InlineOutput, SharedArtifact
+from model_service.builders.contracts import SharedArtifact
 from model_service.builders.score_grid import MEDIA_TYPE, ScoreGrid, write_score_grid
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.http_gateway import (
@@ -23,25 +23,8 @@ from model_service.providers.empaia.http_gateway import (
     SlideAccess,
     SlideMetadata,
 )
+from model_service.providers.empaia.image_io import ScoreGridPublisher
 from tests.providers.empaia_fixtures import PIXELMAP_ID, SLIDE_ID, created, png
-
-
-class RecordingArtifactPublisher:
-    """Record shared artifacts passed from the HTTP gateway without performing image conversion."""
-
-    def __init__(self) -> None:
-        """Start an empty list of named artifact publication requests."""
-        self.calls: list[tuple[str, SharedArtifact]] = []
-
-    async def publish(
-        self,
-        gateway: HttpEmpaiaGateway,
-        name: str,
-        artifact: SharedArtifact,
-    ) -> None:
-        """Record the output name and artifact without writing to an external service."""
-        del gateway
-        self.calls.append((name, artifact))
 
 
 class RecordingRectangleWriter:
@@ -284,7 +267,7 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             client=await self.appservice(httpx.MockTransport(handle)),
         )
 
-        await gateway.publish_output("score", InlineOutput(value=0.75))
+        await gateway.post_primitive("score", "float", 0.75)
         await gateway.finalize()
         await gateway.report_failure("failed safely")
         await gateway.close()
@@ -485,26 +468,7 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
         np.testing.assert_array_equal(data, pixels)
         self.assertEqual(answers, [])
 
-    async def test_shared_artifact_uses_packaged_publisher(self) -> None:
-        """Verify shared artifact uses packaged publisher."""
-        publisher = RecordingArtifactPublisher()
-        gateway = HttpEmpaiaGateway(
-            "https://empaia.example",
-            "job-1",
-            "credential",
-            client=await self.appservice(
-                httpx.MockTransport(lambda _request: httpx.Response(200, json={}))
-            ),
-            artifact_publisher=publisher,
-        )
-        artifact = SharedArtifact(path="/shared/heatmap.npz", media_type=MEDIA_TYPE)
-
-        await gateway.publish_output("heatmap", artifact)
-
-        self.assertEqual(publisher.calls, [("heatmap", artifact)])
-        await gateway.close()
-
-    async def test_default_publisher_uploads_the_score_grid_through_the_sdk(
+    async def test_the_score_grid_publisher_uploads_through_the_sdk(
         self,
     ) -> None:
         uploaded: list[str] = []
@@ -538,8 +502,10 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
                 "credential",
                 client=await self.appservice(httpx.MockTransport(handle)),
             )
-            await gateway.publish_output(
-                "heatmap", SharedArtifact(path=str(path), media_type=MEDIA_TYPE)
+            await ScoreGridPublisher().publish(
+                gateway,
+                "heatmap",
+                SharedArtifact(path=str(path), media_type=MEDIA_TYPE),
             )
             await gateway.close()
 

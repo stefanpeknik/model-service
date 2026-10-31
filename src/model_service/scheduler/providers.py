@@ -28,6 +28,8 @@ class ProviderSuccess:
     """Give provider finish the durable builder result to publish."""
 
     result: BuilderResult
+    # The builder that produced it, whose declarations say what each output is.
+    builder_id: str
 
 
 @dataclass(frozen=True, slots=True)
