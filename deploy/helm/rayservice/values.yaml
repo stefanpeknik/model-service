@@ -1,0 +1,147 @@
+# Model deployments: files under models/ (without .yaml). Each file holds the
+# model's `inference` declaration and its Ray Serve application (`serve`).
+# Adding a compatible model = add a file here and list it.
+models:
+  - prostate-classifier-1
+  - episeg-1
+  - virchow2
+  - prov-gigapath
+
+# Builders run `builders.serve:app`; the key is the builder ID.
+builders:
+  heatmap:
+    deployment:
+      max_ongoing_requests: 1
+      max_queued_requests: 4
+      backpressure_config:
+        status_code: 429
+        retry_after_s: 5
+      autoscaling_config:
+        min_replicas: 0
+        max_replicas: 4
+        target_ongoing_requests: 1
+      ray_actor_options:
+        num_cpus: 8
+        memory: 12884901888
+    userConfig:
+      num_threads: 8
+      max_concurrent_tasks: 16
+  tile-embeddings:
+    deployment:
+      max_ongoing_requests: 1
+      max_queued_requests: 4
+      backpressure_config:
+        status_code: 429
+        retry_after_s: 5
+      autoscaling_config:
+        min_replicas: 0
+        max_replicas: 2
+        target_ongoing_requests: 1
+      ray_actor_options:
+        num_cpus: 2
+        memory: 4294967296
+    userConfig:
+      num_threads: 2
+      max_concurrent_tasks: 8
+
+# Roots callers may name in shared-storage requests (facade and builders).
+sharedStorageRoots: [/mnt/data, /mnt/projects]
+
+workers:
+  - cpu-workers
+  - mig20-workers
+
+rayImage:
+  repository: rayproject/ray
+  tag: 2.58.0-py312
+  pullPolicy: Always
+
+executionScheduler:
+  enabled: false
+  replicas: 2
+  image:
+    repository: cerit.io/rationai/model-service-execution-scheduler
+    tag: ""
+    pullPolicy: IfNotPresent
+  database:
+    existingSecret: ""
+    urlKey: database-url
+  encryption:
+    existingSecret: ""
+    keyKey: provider-context-key
+  sharedStorage:
+    existingClaim: ""
+    mountPath: /mnt/data
+  rayServeOrigin: ""
+  # Ray dashboard, read to explain executions waiting for cluster capacity.
+  rayDashboardOrigin: ""
+  inferenceModelOrigins: {}
+  leaseSeconds: 60
+  workerPollSeconds: 0.5
+  processingAttempts: 3
+  providerFinishAttempts: 3
+  initialBackoffSeconds: 5
+  maximumBackoffSeconds: 300
+  defaultDeadlineSeconds: 21600
+  maximumDeadlineSeconds: 86400
+  perModelLimit: 1
+  maxConcurrentExecutions: 4
+  # POST /v1/models/{id}/schedule: one execution per tile, with its own
+  # slots so tiles and builders cannot starve each other. Worst-case facade
+  # memory for running tiles is maxConcurrent x (maxRequestBytes + maxResultBytes).
+  scheduledInference:
+    perModelLimit: 32
+    maxConcurrent: 32
+    maxRequestBytes: 2097152
+    maxResultBytes: 4194304
+    retentionSeconds: 86400
+  # Request and response files of scheduled raw inference. A ReadWriteMany
+  # claim mounted by every facade replica and nothing else, separate from the
+  # EMPAIA workspace so a burst of tiles cannot fill the volume publication
+  # needs. Size it for the tiles kept: up to 4 MiB per response for
+  # retentionSeconds, plus requests still queued.
+  inferenceStorage:
+    existingClaim: ""
+    mountPath: /mnt/model-service-inference
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 1
+      memory: 512Mi
+
+empaia:
+  # AppService URLs that may receive EMPAIA job credentials; empty refuses
+  # every EMPAIA job.
+  apiUrls: []
+  workspaceRoot: /mnt/model-service-executions
+  # Shared by the facade and the builder workers: builders write job outputs
+  # there and the facade publishes them. Required by the facade.
+  workspaceClaim: ""
+  # How slide inputs reach builders: "direct" links the file named by the
+  # RationAI direct-access route; "http" downloads the needed level through
+  # the App API, for installations whose slide storage model-service can't mount.
+  slideAccess: direct
+  # With direct access, the claim holding the installation's slides, mounted
+  # read-only where its CDS mounts it, since model-service links the absolute
+  # path CDS answers. The facade mounts it; worker files include it too.
+  slideVolume:
+    existingClaim: ""
+    mountPath: ""
+  # Extra DNS search domains for pods that call AppService, when the
+  # installation hands out short host names from another namespace.
+  dnsSearches: []
+  # The facade registers an app per mode for every model whose file has an
+  # `empaia` block, at startup, in this marketplace (the marketplace mock that
+  # EMPAIA test installations run). Empty url: no registration.
+  marketplace:
+    url: ""
+    organizationId: ""
+    # model-service's name in the installation's JES_HTTP_TARGETS.
+    jesTarget: model-service
+    # Client credentials for the marketplace, from a Secret; empty idpUrl: none.
+    idpUrl: ""
+    clientId: ""
+    existingSecret: ""
+    clientSecretKey: client-secret

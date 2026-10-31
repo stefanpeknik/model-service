@@ -1,108 +1,71 @@
 # Model Service
 
-Model deployment infrastructure for RationAI using Ray Serve on Kubernetes.
+RationAI's service for running pathology models on Ray Serve: raw per-tile
+inference, and **builders** that run a chosen model over a whole slide, either
+synchronously or as durable executions you can poll and cancel.
 
-This repository contains:
-
-- `builders/`: WSI output aggregation services (e.g., `heatmap_builder.py`).
-- `docker/`: Dockerfiles for building CPU and GPU environments.
-- `docs/`: MkDocs documentation and architecture guides.
-- `helm/rayservice/`: A Helm chart that renders and deploys a KubeRay `RayService`.
-- `models/`: Python entrypoints for model implementations (e.g., `binary_classifier.py`, `virchow2.py`).
-
-## Documentation
-
-- MkDocs content: `docs/`
-- Key pages:
-  - `docs/available-models.md`
-  - `docs/get-started/quick-start.md`
-  - `docs/guides/deployment-guide.md`
-  - `docs/guides/adding-models.md`
-  - `docs/guides/configuration-reference.md`
-  - `docs/guides/troubleshooting.md`
-  - `docs/architecture/overview.md`
-  - `docs/architecture/request-lifecycle.md`
-  - `docs/architecture/queues-and-backpressure.md`
-  - `docs/architecture/batching.md`
-
-## Quick Start (Kubernetes)
-
-Full walkthrough: `docs/get-started/quick-start.md`.
-
-### Prerequisites
-
-- Kubernetes cluster with KubeRay operator installed
-- `kubectl` configured for the cluster
-- `helm` installed locally
-
-### Deploy
-
-```bash
-helm upgrade --install <release-name> helm/rayservice -n <namespace>
-kubectl get rayservice <release-name> -n <namespace>
+```text
+src/model_service/
+  facade/        the public API pod: routes/, model catalog, raw inference proxy
+  scheduler/     durable executions on PostgreSQL (runs inside the facade pod)
+  providers/     where builders read input and publish output: standalone, EMPAIA
+  builders/      heatmap and tile-embeddings builders (Ray Serve)
+  models/        inference implementations (Ray Serve)
+deploy/
+  helm/rayservice/models/<id>.yaml   one file per trained model
+  images/  k8s/  empaia/             Dockerfiles, manifests, EADs
+testing/         deployable test doubles (constant classifier, mock AppService)
+tests/           unit and PostgreSQL tests
 ```
 
-Use a dedicated test release name (for example `rayservice-model-my-model`) so local testing actions do not affect a shared main deployment.
+Read [how it is put together](docs/architecture/core.md), then the
+[documentation map](docs/README.md).
 
-### Access locally
+## Add a model
 
-```bash
-kubectl port-forward -n <namespace> svc/<release-name>-serve-svc 8000:8000
-```
+A model that fits an existing implementation needs only YAML: add
+`deploy/helm/rayservice/models/<id>.yaml`, list it under `models:` in the values file,
+and `helm upgrade`. See [Adding models](docs/guides/adding-models.md).
 
-### Test the reference model (`BinaryClassifier`)
-
-The reference deployment in `helm/rayservice/applications/prostate-classifier-1.yaml` exposes an app at the route prefix:
-
-- `/prostate-classifier-1`
-
-`models/binary_classifier.py` expects a **request body that is LZ4-compressed raw bytes** of a single RGB tile:
-
-- dtype: `uint8`
-- shape: `(tile_size, tile_size, 3)`
-- byte order: row-major (NumPy default)
-
-Example (Python):
-
-```bash
-pip install numpy lz4 requests
-```
+## Use it
 
 ```python
-import lz4.frame
-import numpy as np
-import requests
+from rationai import Client
+from rationai.types import BuilderRequest, InputAccess, SharedPathInput
 
-tile_size = 512  # must match RayService user_config.tile_size
-tile = np.zeros((tile_size, tile_size, 3), dtype=np.uint8)
-
-payload = lz4.frame.compress(tile.tobytes())
-
-resp = requests.post(
-  "http://localhost:8000/prostate-classifier-1/",
-  data=payload,
-  headers={"Content-Type": "application/octet-stream"},
-  timeout=60,
-)
-resp.raise_for_status()
-print(resp.json() if resp.headers.get("content-type", "").startswith("application/json") else resp.text)
+with Client(base_url="http://<facade>:8080") as client:
+    print([(m.id, m.builders) for m in client.models.list()])
+    scheduled = client.builders.schedule(
+        "heatmap",
+        BuilderRequest(
+            model_id="prostate-classifier-1",
+            inputs={"slide": SharedPathInput("slides/slide.mrxs")},
+            input_access=InputAccess("shared_storage", {"root": "/mnt/data"}),
+            output_path="outputs/heatmap.npz",
+        ),
+    )
+    print(client.executions.get(scheduled.execution.id).status)
 ```
 
-### Clean up
+The heatmap is a score grid: `numpy.load("heatmap.npz")` gives the scores per
+cell (`values`), which cells were scored, and the slide level, cell size and
+microns per pixel to place them on the slide.
 
-```bash
-helm uninstall <release-name> -n <namespace>
+## Develop
+
+```sh
+UV_CACHE_DIR=.cache/uv uv sync
+podman run -d --name ms-test-pg -p 127.0.0.1:55432:5432 \
+  -e POSTGRES_PASSWORD=test docker.io/library/postgres:17-alpine
+TEST_POSTGRES_DSN=postgresql://postgres:test@127.0.0.1:55432/postgres \
+  UV_CACHE_DIR=.cache/uv uv run python -m unittest discover -s tests -t .
+UV_CACHE_DIR=.cache/uv uv run ruff check
+UV_CACHE_DIR=.cache/uv uv run mypy src testing
 ```
 
-## Support
-
-- **Issues:** Report bugs or request features via [GitHub Issues](https://github.com/RationAI/model-service/issues)
-- **Contact:** RationAI team at Masaryk University
+Without `TEST_POSTGRES_DSN` the PostgreSQL tests are skipped.
 
 ## License
 
-This project is licensed under the MIT License. See the `LICENSE` file for details.
-
-## Authors
-
-Developed and maintained by the RationAI team at Masaryk University, Faculty of Informatics.
+MIT; see `LICENSE`. Developed by the RationAI team at Masaryk University,
+Faculty of Informatics.

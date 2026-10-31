@@ -1,0 +1,187 @@
+{{- if .Values.executionScheduler.enabled }}
+{{- $imageTag := required "executionScheduler.image.tag is required" .Values.executionScheduler.image.tag }}
+{{- $databaseSecret := required "executionScheduler.database.existingSecret is required" .Values.executionScheduler.database.existingSecret }}
+{{- $encryptionSecret := required "executionScheduler.encryption.existingSecret is required" .Values.executionScheduler.encryption.existingSecret }}
+{{- $workspaceClaim := required "empaia.workspaceClaim is required: the facade publishes EMPAIA results the builders wrote there" .Values.empaia.workspaceClaim }}
+{{- $inferenceClaim := required "executionScheduler.inferenceStorage.existingClaim is required: scheduled raw inference keeps its request and response files there" .Values.executionScheduler.inferenceStorage.existingClaim }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-execution-scheduler
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: model-service-execution-scheduler
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.executionScheduler.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: model-service-execution-scheduler
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+        checksum/model-catalog: {{ include (print $.Template.BasePath "/model-catalog.yaml") . | sha256sum }}
+      labels:
+        app.kubernetes.io/name: model-service-execution-scheduler
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+{{- include "model-service.empaiaDns" . | nindent 6 }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: execution-scheduler
+          image: "{{ .Values.executionScheduler.image.repository }}:{{ $imageTag }}"
+          imagePullPolicy: {{ .Values.executionScheduler.image.pullPolicy }}
+          # Explicit, so code-refresh images built on older bases start the current module.
+          command: ["uvicorn", "model_service.facade.main:app", "--host", "0.0.0.0", "--port", "8080"]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $databaseSecret }}
+                  key: {{ .Values.executionScheduler.database.urlKey }}
+            - name: PROVIDER_CONTEXT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $encryptionSecret }}
+                  key: {{ .Values.executionScheduler.encryption.keyKey }}
+            - name: RAY_SERVE_ORIGIN
+              value: {{ default (printf "http://%s-serve-svc.%s.svc.cluster.local:8000" .Release.Name (.Release.Namespace | default "rationai-jobs-ns")) .Values.executionScheduler.rayServeOrigin | quote }}
+            - name: RAY_DASHBOARD_ORIGIN
+              value: {{ default (printf "http://%s-head-svc.%s.svc.cluster.local:8265" .Release.Name (.Release.Namespace | default "rationai-jobs-ns")) .Values.executionScheduler.rayDashboardOrigin | quote }}
+            - name: MODEL_CATALOG_PATH
+              value: /etc/model-service/model-catalog.json
+            - name: BUILDER_IDS
+              value: {{ keys .Values.builders | sortAlpha | toJson | quote }}
+            - name: SHARED_STORAGE_ROOTS
+              value: {{ .Values.sharedStorageRoots | toJson | quote }}
+            {{- if .Values.executionScheduler.inferenceServeOrigin }}
+            - name: INFERENCE_SERVE_ORIGIN
+              value: {{ .Values.executionScheduler.inferenceServeOrigin | quote }}
+            {{- end }}
+            {{- if .Values.executionScheduler.inferenceModelOrigins }}
+            - name: INFERENCE_MODEL_ORIGINS
+              value: {{ .Values.executionScheduler.inferenceModelOrigins | toJson | quote }}
+            {{- end }}
+            - name: INFERENCE_TIMEOUT_SECONDS
+              value: {{ default 900 .Values.executionScheduler.inferenceTimeoutSeconds | quote }}
+            - name: LEASE_SECONDS
+              value: {{ .Values.executionScheduler.leaseSeconds | quote }}
+            - name: WORKER_POLL_SECONDS
+              value: {{ .Values.executionScheduler.workerPollSeconds | quote }}
+            - name: PROCESSING_ATTEMPTS
+              value: {{ .Values.executionScheduler.processingAttempts | quote }}
+            - name: PROVIDER_FINISH_ATTEMPTS
+              value: {{ .Values.executionScheduler.providerFinishAttempts | quote }}
+            - name: INITIAL_BACKOFF_SECONDS
+              value: {{ .Values.executionScheduler.initialBackoffSeconds | quote }}
+            - name: MAXIMUM_BACKOFF_SECONDS
+              value: {{ .Values.executionScheduler.maximumBackoffSeconds | quote }}
+            - name: DEFAULT_DEADLINE_SECONDS
+              value: {{ .Values.executionScheduler.defaultDeadlineSeconds | quote }}
+            - name: MAXIMUM_DEADLINE_SECONDS
+              value: {{ .Values.executionScheduler.maximumDeadlineSeconds | quote }}
+            - name: PER_MODEL_LIMIT
+              value: {{ .Values.executionScheduler.perModelLimit | quote }}
+            - name: MAX_CONCURRENT_EXECUTIONS
+              value: {{ .Values.executionScheduler.maxConcurrentExecutions | quote }}
+            {{- with .Values.executionScheduler.scheduledInference }}
+            - name: PER_MODEL_INFERENCE_LIMIT
+              value: {{ .perModelLimit | quote }}
+            - name: MAX_CONCURRENT_INFERENCE
+              value: {{ .maxConcurrent | quote }}
+            - name: INFERENCE_MAX_REQUEST_BYTES
+              value: {{ .maxRequestBytes | int64 | quote }}
+            - name: INFERENCE_MAX_RESULT_BYTES
+              value: {{ .maxResultBytes | int64 | quote }}
+            - name: INFERENCE_RETENTION_SECONDS
+              value: {{ .retentionSeconds | int64 | quote }}
+            {{- end }}
+            - name: INFERENCE_STORAGE_PATH
+              value: {{ .Values.executionScheduler.inferenceStorage.mountPath | quote }}
+{{- include "model-service.empaiaEnv" . | nindent 12 }}
+            {{- with .Values.empaia.marketplace }}
+            {{- if .url }}
+            - name: EMPAIA_MARKETPLACE_URL
+              value: {{ .url | quote }}
+            - name: EMPAIA_ORGANIZATION_ID
+              value: {{ required "empaia.marketplace.organizationId is required with a marketplace url" .organizationId | quote }}
+            - name: EMPAIA_JES_TARGET
+              value: {{ .jesTarget | quote }}
+            {{- if .idpUrl }}
+            - name: EMPAIA_IDP_URL
+              value: {{ .idpUrl | quote }}
+            - name: EMPAIA_CLIENT_ID
+              value: {{ required "empaia.marketplace.clientId is required with an idpUrl" .clientId | quote }}
+            - name: EMPAIA_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "empaia.marketplace.existingSecret is required with an idpUrl" .existingSecret }}
+                  key: {{ .clientSecretKey }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.executionScheduler.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsUser: 10001
+            runAsGroup: 10001
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: model-catalog
+              mountPath: /etc/model-service
+              readOnly: true
+            {{- if .Values.executionScheduler.sharedStorage.existingClaim }}
+            - name: shared-storage
+              mountPath: {{ .Values.executionScheduler.sharedStorage.mountPath | quote }}
+            {{- end }}
+            - name: empaia-workspace
+              mountPath: {{ .Values.empaia.workspaceRoot | quote }}
+            - name: inference-storage
+              mountPath: {{ .Values.executionScheduler.inferenceStorage.mountPath | quote }}
+{{- include "model-service.slideVolumeMount" . | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: model-catalog
+          configMap:
+            name: {{ .Release.Name }}-model-catalog
+        {{- if .Values.executionScheduler.sharedStorage.existingClaim }}
+        - name: shared-storage
+          persistentVolumeClaim:
+            claimName: {{ .Values.executionScheduler.sharedStorage.existingClaim | quote }}
+        {{- end }}
+        - name: empaia-workspace
+          persistentVolumeClaim:
+            claimName: {{ $workspaceClaim | quote }}
+        - name: inference-storage
+          persistentVolumeClaim:
+            claimName: {{ $inferenceClaim | quote }}
+{{- include "model-service.slideVolume" . | nindent 8 }}
+{{- end }}

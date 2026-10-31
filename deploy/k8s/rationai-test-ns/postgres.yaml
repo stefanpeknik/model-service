@@ -1,0 +1,99 @@
+# PostgreSQL for the model-service release in rationai-infra-test-ns, as in
+# peknik-ns. The model-service-db Secret holds postgres-password (and the
+# facade's database-url and provider-context-key).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-service-postgres-data
+  namespace: rationai-infra-test-ns
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: nfs-csi
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model-service-postgres
+  namespace: rationai-infra-test-ns
+  labels:
+    app.kubernetes.io/name: model-service-postgres
+    app.kubernetes.io/part-of: model-service
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: model-service-postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: model-service-postgres
+        app.kubernetes.io/part-of: model-service
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 70
+        runAsGroup: 70
+        runAsNonRoot: true
+        runAsUser: 70
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: docker.io/library/postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POSTGRES_DB
+              value: model_service
+            - name: POSTGRES_USER
+              value: model_service
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: model-service-db
+                  key: postgres-password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "model_service", "-d", "model_service"]
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: database
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: database
+          persistentVolumeClaim:
+            claimName: model-service-postgres-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: model-service-postgres
+  namespace: rationai-infra-test-ns
+spec:
+  selector:
+    app.kubernetes.io/name: model-service-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres

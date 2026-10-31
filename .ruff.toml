@@ -1,6 +1,8 @@
 fix = true
 line-length = 88
 target-version = "py312"
+src = ["src", "."]
+extend-exclude = ["prototypes/empaia-control-plane"]
 
 [format]
 docstring-code-format = true # Enable reformatting of code snippets in docstrings.

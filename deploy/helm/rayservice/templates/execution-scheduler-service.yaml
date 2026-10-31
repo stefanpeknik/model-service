@@ -1,0 +1,19 @@
+{{- if .Values.executionScheduler.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-execution-scheduler
+  namespace: {{ .Release.Namespace | default "rationai-jobs-ns" }}
+  labels:
+    app.kubernetes.io/name: model-service-execution-scheduler
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: model-service-execution-scheduler
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+{{- end }}

@@ -1,0 +1,11 @@
+FROM cerit.io/stefanpeknik/model-service-scheduler:0fd9a57
+
+USER root
+# The region route reads the `file-` slide with OpenSlide.
+RUN uv pip install --system --no-cache "openslide-python>=1.4" "openslide-bin>=4.0.0,<5" "pillow>=11"
+USER 10001:10001
+
+WORKDIR /app
+COPY testing testing
+
+CMD ["uvicorn", "testing.empaia_app_service:app", "--host", "0.0.0.0", "--port", "8000"]

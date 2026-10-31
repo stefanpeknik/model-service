@@ -1,0 +1,29 @@
+{{- if .Values.storage }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-full-wsi-outputs
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: {{ .Values.storage.storageClassName | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.outputSize }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-full-wsi-scratch
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: {{ .Values.storage.storageClassName | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.scratchSize }}
+{{- end }}

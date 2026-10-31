@@ -89,7 +89,7 @@ kubectl logs -n rationai-jobs-ns -l ray.io/node-type=worker --tail=500
 ### Fix
 
 - Ensure `import_path` matches your file:
-  - Example: `models.binary_classifier:app` means there is `models/binary_classifier.py` defining `app = ...`.
+  - Example: `model_service.models.binary_classifier:app` means there is `src/model_service/models/binary_classifier.py` defining `app = ...`.
 - Add missing dependencies to `runtime_env.pip`.
 
 In this repository, dependencies are typically installed per deployment:
@@ -127,7 +127,7 @@ You must increase **both** the Ray logical allocation and the Kubernetes physica
    ```
 
 2. Increase Kubernetes container limits (Hardware limit):
-   Ensure the worker configurations in your Helm values (`helm/rayservice/values.yaml` or relevant worker definitions) provide **more** memory than the sum of all actors on that node plus overhead (~30%).
+   Ensure the worker configurations in your Helm values (`deploy/helm/rayservice/values.yaml` or relevant worker definitions) provide **more** memory than the sum of all actors on that node plus overhead (~30%).
 
    ```yaml
    resources:

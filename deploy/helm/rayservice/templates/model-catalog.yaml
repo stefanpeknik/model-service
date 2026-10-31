@@ -1,0 +1,13 @@
+{{- /* The facade's model catalog, rendered from the same files as the Serve config. */}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-model-catalog
+  namespace: {{ .Release.Namespace }}
+data:
+  model-catalog.json: |
+    {{- $models := list }}
+    {{- range $path := .Values.models }}
+    {{- $models = append $models (tpl (printf "models/%s.yaml" $path | $.Files.Get) $ | fromYaml) }}
+    {{- end }}
+    {{- toJson $models | nindent 4 }}
