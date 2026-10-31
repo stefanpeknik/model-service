@@ -1,23 +1,5 @@
 inference:
   contract: spatial-scores
-# One score per pixel: only a region of interest fits in a score grid, so the
-# app is standalone only (preprocessing runs on the whole slide).
-empaia:
-  name: Epithelium
-  name_short: EpiSeg
-  description: Segments epithelium and shows its probability over the region of interest.
-  modes: [standalone]
-  viewer:
-    inputs:
-      slide: {target: xopat, lossless: false}
-    outputs:
-      heatmap:
-        render: shader
-        label: Epithelium
-        visible: true
-        shader:
-          type: heatmap
-          params: {threshold: 50, opacity: 0.5, color: "#00ff00"}
 serve:
   name: episeg-1
   import_path: model_service.models.semantic_segmentation:app
