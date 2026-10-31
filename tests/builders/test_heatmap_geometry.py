@@ -5,10 +5,11 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import numpy as np
 
-from model_service.builders.contracts import SpatialScoresModel
+from model_service.builders.contracts import InvalidInvocation, SpatialScoresModel
 from model_service.builders.heatmap.processor import (
     HeatmapRequest,
     SlideHeatmapProcessor,
@@ -43,6 +44,10 @@ def render(grid: ScoreGrid) -> np.ndarray:
     return grid.values[0][np.ix_(rows, columns)]
 
 
+# Rows 40-59 and columns 50-89 of a 112x80 slide.
+REGION = (slice(40, 60), slice(50, 90))
+
+
 class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
     async def _build(
         self,
@@ -64,7 +69,11 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
         mask_path = None
         if mask != "none":
             mask_path = directory / "mask.tiff"
-            write_slide(mask_path, np.full_like(pixels, 0 if mask == "empty" else 255))
+            selected = np.full_like(pixels, 0 if mask == "empty" else 255)
+            if mask == "region":
+                selected[:] = 0
+                selected[REGION] = 255
+            write_slide(mask_path, selected)
         output = directory / "heatmap.npz"
         await SlideHeatmapProcessor(
             predictor, num_threads=1, max_concurrent_tasks=2
@@ -184,6 +193,42 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(unmasked.calls, 24)
         self.assertEqual(masked.calls, 24)
         np.testing.assert_array_equal(without_mask.values, with_mask.values)
+
+    async def test_a_region_of_interest_grid_covers_only_its_box(self) -> None:
+        whole_predictor, region_predictor = LandmarkPredictor(), LandmarkPredictor()
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            whole = await self._build(root, 112, 80, predictor=whole_predictor)
+            region = await self._build(
+                root, 112, 80, predictor=region_predictor, mask="region"
+            )
+
+        # The first 32-px tile reaching column 50 starts at 19, snapped to the
+        # 16-px stride; row 40 is reached from 9, snapped to 0.
+        self.assertEqual(region.origin, (16, 0))
+        self.assertEqual(region.cell_size, whole.cell_size)
+        self.assertLess(region.values.size, whole.values.size)
+        self.assertLess(region_predictor.calls, whole_predictor.calls)
+        # The box's cells, rows 2-3 and columns 3-5 of the slide, score as in a
+        # whole-slide run.
+        np.testing.assert_array_equal(
+            region.values[:, 2:4, 2:5], whole.values[:, 2:4, 3:6]
+        )
+        self.assertTrue(region.scored[2:4, 2:5].all())
+
+    async def test_a_grid_too_large_to_hold_is_refused_before_any_tile(
+        self,
+    ) -> None:
+        predictor = LandmarkPredictor(output_tile_size=32)
+        with (
+            TemporaryDirectory() as directory,
+            patch("model_service.builders.heatmap.processor.MAX_GRID_CELLS", 1000),
+            self.assertRaises(InvalidInvocation) as raised,
+        ):
+            await self._build(Path(directory), 112, 80, predictor=predictor)
+
+        self.assertIn("smaller region of interest", str(raised.exception))
+        self.assertEqual(predictor.calls, 0)
 
     async def test_empty_mask_skips_predictions_and_scores_nothing(self) -> None:
         predictor = LandmarkPredictor()

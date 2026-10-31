@@ -90,6 +90,32 @@ class TileReader:
         with open_slide(mask_path, "region_of_interest") as mask:
             yield cls(slide, mask, mpp, tissue)
 
+    def region(self) -> tuple[int, int, int, int] | None:
+        """The mask's nonzero box (left, top, right, bottom) in level pixels.
+
+        Found on the mask's coarsest level and rounded outward, so it may be
+        a little larger than the mask. None without a mask, and an empty box
+        for an empty mask, which selects no tile.
+        """
+        if self._mask is None:
+            return None
+        level = self._mask.level_count - 1
+        mask_width, mask_height = self._mask.level_dimensions[level]
+        window = self._mask.read_region_relative(
+            (0, 0), level, (mask_width, mask_height)
+        )
+        rows, columns = np.nonzero(np.asarray(window.convert("L")))
+        if rows.size == 0:
+            return (0, 0, 0, 0)
+        width, height = self.slide.level_dimensions[self.level]
+        scale_x, scale_y = width / mask_width, height / mask_height
+        return (
+            max(0, floor(columns.min() * scale_x)),
+            max(0, floor(rows.min() * scale_y)),
+            min(width, ceil((columns.max() + 1) * scale_x)),
+            min(height, ceil((rows.max() + 1) * scale_y)),
+        )
+
     def read(self, x: int, y: int, tile_size: int) -> NDArray[np.uint8] | None:
         """Return a CHW uint8 tile, or None when the mask window is empty."""
         # The tissue check is an array lookup; the mask check reads the mask file.

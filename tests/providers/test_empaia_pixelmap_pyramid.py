@@ -111,6 +111,35 @@ class PixelmapPyramidTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(float(data[0:4, 0:4].max()), 0.0)
         self.assertEqual(float(data.max()), 0.75)
 
+    async def test_a_region_grid_is_published_where_it_lies(self) -> None:
+        values = np.zeros((1, 4, 6), dtype=np.float32)
+        scored = np.zeros((4, 6), dtype=bool)
+        values[0, 1, 2:4], scored[1, 2:4] = (0.75, 0.5), True
+        # The same two scores in a grid that starts at cell (1, 2).
+        region = ScoreGrid(
+            values=values[:, 1:2, 2:4],
+            scored=scored[1:2, 2:4],
+            level=0,
+            level_size=(384, 256),
+            cell_size=64.0,
+            mpp=(0.25, 0.25),
+            origin=(128, 64),
+        )
+        with TemporaryDirectory() as directory:
+            whole = await self.publish(artifact(directory, grid(values, scored)))
+            part = await self.publish(artifact(directory, region))
+
+        [(_, _, expected)] = whole.published
+        [(_, _, actual)] = part.published
+        self.assertEqual(len(actual), len(expected))
+        for got, want in zip(actual, expected, strict=True):
+            self.assertEqual(
+                [(t.x, t.y) for t in got.tiles],  # type: ignore[attr-defined]
+                [(t.x, t.y) for t in want.tiles],  # type: ignore[attr-defined]
+            )
+            for got_tile, want_tile in zip(got.tiles, want.tiles, strict=True):  # type: ignore[attr-defined]
+                np.testing.assert_array_equal(got_tile.data, want_tile.data)
+
     async def test_grids_it_cannot_publish_are_invalid(self) -> None:
         nothing_scored = grid(np.zeros((1, 4, 6), np.float32), np.zeros((4, 6), bool))
         two_channels = grid(np.zeros((2, 4, 6), np.float32), np.ones((4, 6), bool))

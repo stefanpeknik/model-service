@@ -1,8 +1,10 @@
-"""Build a whole-slide score map from model tiles.
+"""Build a score map of a slide, or of its region of interest, from model tiles.
 
 OpenSlide reads run in a thread pool and predictions run concurrently through the
 predictor. A memory-mapped MaskBuilder averages overlapping scores into a grid
-at the model's output resolution, which is written as a score grid.
+at the model's output resolution, which is written as a score grid. With a
+region of interest the grid covers only its box, so a model that scores every
+pixel stays within memory; a grid that would not is refused before any tile.
 """
 
 from __future__ import annotations
@@ -12,8 +14,10 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from math import ceil
 from typing import TYPE_CHECKING, Protocol
 
+from model_service.builders.contracts import InvalidInvocation
 from model_service.builders.score_grid import ScoreGrid, write_score_grid
 
 
@@ -25,6 +29,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 _PROGRESS_SECONDS = 60
+# Scores across all channels; the grid and its overlap counts are memory-mapped
+# but the publisher holds them in memory. 2**26 float32 scores are 256 MiB.
+MAX_GRID_CELLS = 2**26
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,8 +101,26 @@ class SlideHeatmapProcessor:
         ):
             extent_x, extent_y = slide.level_dimensions[reader.level]
             mpp_x, mpp_y = slide.slide_resolution(reader.level)
+            left, top, right, bottom = reader.region() or (0, 0, extent_x, extent_y)
+            # Back to the first tile that still reaches the box, snapped to the
+            # stride, so the box's cells get the tiles a whole-slide run gives them.
+            origin_x = _snap(max(0, left - tile_size + 1), stride)
+            origin_y = _snap(max(0, top - tile_size + 1), stride)
+            # On to the end of the last tile that starts in the box.
+            span_x = min(extent_x, _snap(right - 1, stride) + tile_size) - origin_x
+            span_y = min(extent_y, _snap(bottom - 1, stride) + tile_size) - origin_y
+            cells = (
+                n_channels
+                * ceil(max(span_x, tile_size) * output_tile_size / tile_size)
+                * ceil(max(span_y, tile_size) * output_tile_size / tile_size)
+            )
+            if cells > MAX_GRID_CELLS:
+                raise InvalidInvocation(
+                    f"{model.id} scores {span_x}x{span_y} pixels too finely to "
+                    "hold; choose a smaller region of interest"
+                )
             mask_builder = MaskBuilder(
-                source_extents=(extent_y, extent_x),
+                source_extents=(span_y, span_x),
                 source_tile_extent=tile_size,
                 output_tile_extent=output_tile_size,
                 stride=stride,
@@ -103,11 +128,14 @@ class SlideHeatmapProcessor:
                 storage="memmap",
             )
             logger.info(
-                "heatmap of %s: level %d (%dx%d px), %d-px tiles, stride %d, %s",
+                "heatmap of %s: level %d (%dx%d px at %d,%d), %d-px tiles, "
+                "stride %d, %s",
                 model.id,
                 reader.level,
-                extent_x,
-                extent_y,
+                span_x,
+                span_y,
+                origin_x,
+                origin_y,
                 tile_size,
                 stride,
                 "no background filter"
@@ -129,7 +157,7 @@ class SlideHeatmapProcessor:
 
                 async def process_tile(x: int, y: int) -> None:
                     tile, read_seconds = await loop.run_in_executor(
-                        executor, timed_read, x, y
+                        executor, timed_read, origin_x + x, origin_y + y
                     )
                     if tile is None:
                         return
@@ -145,7 +173,7 @@ class SlideHeatmapProcessor:
                     )
 
                 for x, y in grid_tiles(
-                    slide_extent=(max(extent_x, tile_size), max(extent_y, tile_size)),
+                    slide_extent=(max(span_x, tile_size), max(span_y, tile_size)),
                     tile_extent=(tile_size, tile_size),
                     stride=(stride, stride),
                 ):
@@ -165,7 +193,7 @@ class SlideHeatmapProcessor:
                             submitted,
                             last_report - started,
                             y,
-                            extent_y,
+                            span_y,
                             reads.count,
                             reads,
                             predictions,
@@ -197,6 +225,7 @@ class SlideHeatmapProcessor:
                         level_size=(extent_x, extent_y),
                         cell_size=float(min(scale_x, scale_y)),
                         mpp=(float(mpp_x), float(mpp_y)),
+                        origin=(origin_x, origin_y),
                     ),
                 )
             finally:
@@ -204,3 +233,7 @@ class SlideHeatmapProcessor:
                     task.cancel()
                 await asyncio.gather(*tasks, return_exceptions=True)
                 mask_builder.cleanup()
+
+
+def _snap(value: int, stride: int) -> int:
+    return value - value % stride

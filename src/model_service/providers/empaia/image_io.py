@@ -102,6 +102,8 @@ class ScoreGridPublisher:
             cell_size=grid.cell_size,  # type: ignore[arg-type]
             legacy_target_level=source.index,
             pixelmap_target_level=target.index,
+            origin_x=grid.origin[0],
+            origin_y=grid.origin[1],
         )
         tile_sets = await asyncio.to_thread(
             scores.to_pixelmap_pyramid, slide, self._tile_size, self._tile_size

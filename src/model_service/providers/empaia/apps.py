@@ -50,9 +50,7 @@ class AppMode(StrEnum):
 
 
 _MODE_DESCRIPTION = {
-    AppMode.STANDALONE: (
-        "Runs on the region of interest you draw, or on the whole slide without one."
-    ),
+    AppMode.STANDALONE: ("Runs on the region of interest you draw."),
     AppMode.PREPROCESSING: "Runs on the whole slide when the slide is preprocessed.",
 }
 
