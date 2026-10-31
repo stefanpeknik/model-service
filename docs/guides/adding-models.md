@@ -254,7 +254,7 @@ Builders in `src/model_service/builders/` do the whole-slide work; a model only 
 
 1. **Heatmaps and segmentation maps:** a `spatial-scores` model works with the
    `heatmap` builder, which tiles the slide at the model's resolution, averages
-   overlapping predictions and writes a pyramidal TIFF. Nothing to implement.
+   overlapping predictions and writes a score grid (`.npz`). Nothing to implement.
 2. **Tile embeddings:** a `tile-embedding` model works with the `tile-embeddings`
    builder, which writes one feature row per selected tile to HDF5.
 3. **Other slide-level outputs** (a slide score, annotations, statistics) need a

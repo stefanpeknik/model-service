@@ -1,28 +1,20 @@
 """Build a whole-slide score map from model tiles.
 
 OpenSlide reads run in a thread pool and predictions run concurrently through the
-predictor. A memory-mapped MaskBuilder averages overlapping scores before libvips
-writes a pyramidal TIFF at the selected slide level's resolution.
+predictor. A memory-mapped MaskBuilder averages overlapping scores into a grid
+at the model's output resolution, which is written as a score grid.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
-from model_service.builders.contracts import SCORE_SPACING_KEY
-from model_service.builders.registry import ScoreEncoding
-from model_service.builders.score_grid import (
-    MIN_CELL_SIZE,
-    ScoreGrid,
-    score_grid_path,
-    write_score_grid,
-)
+from model_service.builders.score_grid import ScoreGrid, write_score_grid
 
 
 if TYPE_CHECKING:
@@ -41,9 +33,6 @@ class HeatmapRequest:
     mask_path: Path | None
     output_path: Path
     stride_fraction: float
-    output_tile_height: int
-    output_tile_width: int
-    encoding: ScoreEncoding = ScoreEncoding.UINT8
     skip_background: bool = False
 
 
@@ -82,7 +71,6 @@ class SlideHeatmapProcessor:
 
     async def build(self, model: SpatialScoresModel, request: HeatmapRequest) -> None:
         import numpy as np
-        import pyvips
         from ratiopath.masks.mask_builders import MaskBuilder
         from ratiopath.tiling import grid_tiles
 
@@ -186,7 +174,7 @@ class SlideHeatmapProcessor:
                     await asyncio.gather(*tasks)
                 logger.info(
                     "heatmap of %s: %d grid positions in %.0f s; %d tissue tiles, "
-                    "per tile: read %s, model %s; writing the TIFF",
+                    "per tile: read %s, model %s",
                     model.id,
                     submitted,
                     time.monotonic() - started,
@@ -195,53 +183,21 @@ class SlideHeatmapProcessor:
                     predictions,
                 )
                 finalized = mask_builder.finalize()
-                result = np.asarray(finalized["mask"])
-                image = pyvips.Image.new_from_array(result.transpose(1, 2, 0))
-                # Resize the padded grid before cropping; resizing to the unpadded
-                # extent would shift scores away from their tiles.
-                scale_y, scale_x = mask_builder.span / np.asarray(result.shape[1:])
-                cell_size = float(min(scale_x, scale_y))
-                # A grid left by an earlier build in the same place would be stale.
-                score_grid_path(request.output_path).unlink(missing_ok=True)
-                if n_channels == 1 and cell_size >= MIN_CELL_SIZE:
-                    # A score per cell, not a picture: keep what was scored, so a
-                    # cell the model gave 0 differs from one never scored.
-                    counts = np.asarray(finalized["overlap_counter"])
-                    write_score_grid(
-                        request.output_path,
-                        ScoreGrid(
-                            values=result[0].astype(np.float32),
-                            scored=counts.reshape(result.shape[1:]) > 0,
-                            cell_size=cell_size,
-                            level_size=(extent_x, extent_y),
-                        ),
-                    )
-                image = image.resize(float(scale_x), vscale=float(scale_y)).crop(
-                    0, 0, extent_x, extent_y
-                )
-                if request.encoding is ScoreEncoding.UINT8:
-                    image = (image * 255).cast(pyvips.BandFormat.UCHAR)
-                else:
-                    image = image.cast(pyvips.BandFormat.FLOAT)
-                # Pixels of this level per score: the image is upsampled from the
-                # score grid, so readers may store it this much coarser losslessly.
-                image.set_type(
-                    pyvips.GValue.gstr_type,
-                    "image-description",
-                    json.dumps(
-                        {SCORE_SPACING_KEY: float(min(scale_x, scale_y))},
+                values = np.asarray(finalized["mask"], dtype=np.float32)
+                counts = np.asarray(finalized["overlap_counter"])
+                # The grid covers the padded span, so a cell is span / cells
+                # pixels of the level along each axis.
+                scale_y, scale_x = mask_builder.span / np.asarray(values.shape[1:])
+                write_score_grid(
+                    request.output_path,
+                    ScoreGrid(
+                        values=values,
+                        scored=counts.reshape(values.shape[1:]) > 0,
+                        level=reader.level,
+                        level_size=(extent_x, extent_y),
+                        cell_size=float(min(scale_x, scale_y)),
+                        mpp=(float(mpp_x), float(mpp_y)),
                     ),
-                )
-                image.tiffsave(
-                    str(request.output_path),
-                    bigtiff=True,
-                    compression=pyvips.enums.ForeignTiffCompression.DEFLATE,
-                    tile=True,
-                    tile_width=request.output_tile_width,
-                    tile_height=request.output_tile_height,
-                    xres=1000 / mpp_x,
-                    yres=1000 / mpp_y,
-                    pyramid=True,
                 )
             finally:
                 for task in tasks:

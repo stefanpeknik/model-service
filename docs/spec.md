@@ -91,7 +91,7 @@ defaults. One Ray application per builder (`builders.serve:app`, route
 
 | Builder | Accepts | Inputs | Output | Defaults |
 | --- | --- | --- | --- | --- |
-| `heatmap` | `spatial-scores` | `slide`, optional `region_of_interest` mask | `heatmap` pyramidal TIFF | stride 0.5, 256² TIFF tiles, `uint8` encoding |
+| `heatmap` | `spatial-scores` | `slide`, optional `region_of_interest` mask | `heatmap` score grid (`.npz`) | stride 0.5, background tiles skipped |
 | `tile-embeddings` | `tile-embedding` | `slide`, optional `region_of_interest` mask | `embeddings` HDF5 | stride 1.0 |
 
 - The facade resolves the model's current catalog entry for every attempt and
@@ -311,20 +311,24 @@ write guard) and a public `get_direct_access_info`. The SDK retries region reads
 and tile uploads; what it gives up on after creating a pixelmap has an unknown
 outcome, so the finish step is not retried.
 
-Heatmap publication. The heatmap builder keeps its raw scores: next to the TIFF
-it writes `heatmap.tiff.scores.npz`, one score per cell, which cells were scored,
-the cell's size in pixels of the level it read (256 for the prostate model) and
-that level's size. It does so when the model has one channel and a cell covers
-at least two pixels; a full-resolution output (segmentation) has no grid, and a
-grid left in the place by an earlier build is removed. The EMPAIA publisher
-publishes from the grid through the SDK's `ScalarImageOutput.to_pixelmap_pyramid`:
-from the coarsest slide level that still keeps four pixels per score down to
-the coarsest slide level, so every score is published as the model produced it,
-without resampling the upsampled TIFF. A tile without a scored cell is not
-uploaded; a skipped cell inside an uploaded tile reads 0, since pixelmap tiles
-are dense. Without a grid, or with no scored cell, the publisher uploads the TIFF
-as before: the coarsest level keeping four pixels per score, each pixel the area
-average of the full-resolution heatmap.
+Heatmap output. The heatmap builder's only output is a score grid, a NumPy
+`.npz` (`src/model_service/builders/score_grid.py`): the model's scores at the
+resolution it produced them, shaped (channels, rows, columns), which cells any
+tile scored, the slide level they were computed at with its size and microns
+per pixel, and the cell's size in pixels of that level (256 for the prostate
+model). It reads with NumPy alone; an image of the slide's size is the grid
+scaled by the cell size. The builder no longer renders a TIFF: EMPAIA never
+used it, and it took longer to write than the inference.
+
+The EMPAIA publisher publishes the grid only through the SDK's
+`ScalarImageOutput.to_pixelmap_pyramid` and `upload_pixelmap_pyramid`: from the
+coarsest slide level that still keeps four pixels per score down to the
+coarsest slide level, so every score is published as the model produced it. A
+tile without a scored cell is not uploaded; a skipped cell inside an uploaded
+tile reads 0, since pixelmap tiles are dense. A grid with no scored cell fails
+the job (the SDK refuses empty pixelmaps), and a model with more than one
+channel does not become an EMPAIA app: the SDK uploads single-channel pixelmaps
+only, while EMPAIA itself has multi-channel and class pixelmaps.
 
 ### Safety and correctness fixes
 

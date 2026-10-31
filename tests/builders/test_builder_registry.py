@@ -19,7 +19,6 @@ from model_service.builders.contracts import (
 from model_service.builders.registry import (
     BUILDERS,
     HeatmapConfiguration,
-    ScoreEncoding,
     get_builder,
 )
 
@@ -59,21 +58,21 @@ class BuilderRegistryTests(unittest.TestCase):
         defaults = spec.resolve_configuration(None)
         self.assertEqual(defaults, HeatmapConfiguration())
         assert isinstance(defaults, HeatmapConfiguration)
-        self.assertIs(defaults.encoding, ScoreEncoding.UINT8)
         self.assertEqual(defaults.stride_fraction, 0.5)
-        resolved = spec.resolve_configuration({"encoding": "float32"})
+        self.assertTrue(defaults.skip_background)
+        resolved = spec.resolve_configuration({"stride_fraction": 1.0})
         assert isinstance(resolved, HeatmapConfiguration)
-        self.assertIs(resolved.encoding, ScoreEncoding.FLOAT32)
-        self.assertEqual(resolved.output_tile_width, 256)
+        self.assertEqual(resolved.stride_fraction, 1.0)
+        self.assertTrue(resolved.skip_background)
 
     def test_invalid_configuration_is_an_invalid_invocation(self) -> None:
         spec = get_builder("heatmap")
         for overrides in (
             {"stride_fraction": 0},
             {"stride_fraction": 1.5},
-            {"output_tile_width": "256"},
-            {"encoding": "int16"},
-            {"output_path": "heatmap.tiff"},
+            {"skip_background": "maybe"},
+            {"encoding": "uint8"},
+            {"output_path": "heatmap.npz"},
         ):
             with (
                 self.subTest(overrides=overrides),

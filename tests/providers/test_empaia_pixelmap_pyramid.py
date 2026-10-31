@@ -8,14 +8,17 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 
 import numpy as np
-import pyvips
 from rationai.empaia.typing import SlideInfo
 
 from model_service.builders.contracts import SharedArtifact
-from model_service.builders.score_grid import ScoreGrid, write_score_grid
+from model_service.builders.score_grid import (
+    MEDIA_TYPE,
+    ScoreGrid,
+    write_score_grid,
+)
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.http_gateway import HttpEmpaiaGateway
-from model_service.providers.empaia.image_io import TiffPixelmapPublisher
+from model_service.providers.empaia.image_io import ScoreGridPublisher
 from tests.providers.empaia_fixtures import SLIDE_ID
 
 
@@ -57,39 +60,44 @@ class PyramidGateway:
     ) -> None:
         self.published.append((name, slide_id, tile_sets))
 
-    async def slide_metadata(self) -> object:
-        raise AssertionError("the TIFF path must not run")
+
+def grid(values: np.ndarray, scored: np.ndarray) -> ScoreGrid:
+    # 64 px per score at level 0: 4 px at level 4, 2 px at level 5.
+    return ScoreGrid(
+        values=values,
+        scored=scored,
+        level=0,
+        level_size=(384, 256),
+        cell_size=64.0,
+        mpp=(0.25, 0.25),
+    )
 
 
-def artifact(directory: str, grid: ScoreGrid | None) -> SharedArtifact:
-    path = Path(directory) / "heatmap.tiff"
-    pyvips.Image.black(384, 256).tiffsave(str(path))
-    if grid is not None:
-        write_score_grid(path, grid)
-    return SharedArtifact(path=str(path), media_type="image/tiff")
+def artifact(directory: str, scores: ScoreGrid) -> SharedArtifact:
+    path = Path(directory) / "heatmap.npz"
+    write_score_grid(path, scores)
+    return SharedArtifact(path=str(path), media_type=MEDIA_TYPE)
 
 
 class PixelmapPyramidTests(unittest.IsolatedAsyncioTestCase):
+    async def publish(self, shared: SharedArtifact) -> PyramidGateway:
+        gateway = PyramidGateway()
+        await ScoreGridPublisher(tile_size=256).publish(
+            gateway,  # type: ignore[arg-type]
+            "heatmap",
+            shared,
+        )
+        return gateway
+
     async def test_scores_are_published_exactly_at_every_level_from_the_coarsest_that_keeps_four_pixels_per_score(
         self,
     ) -> None:
-        values = np.zeros((4, 6), dtype=np.float32)
+        values = np.zeros((1, 4, 6), dtype=np.float32)
         scored = np.zeros((4, 6), dtype=bool)
-        values[1, 2], scored[1, 2] = 0.75, True
-        values[3, 5], scored[3, 5] = 0.25, True
-        gateway = PyramidGateway()
+        values[0, 1, 2], scored[1, 2] = 0.75, True
+        values[0, 3, 5], scored[3, 5] = 0.25, True
         with TemporaryDirectory() as directory:
-            shared = artifact(
-                directory,
-                # 64 px per score at level 0: 4 px at level 4, 2 px at level 5.
-                ScoreGrid(values, scored, cell_size=64.0, level_size=(384, 256)),
-            )
-
-            await TiffPixelmapPublisher(tile_size=256).publish(
-                gateway,  # type: ignore[arg-type]
-                "heatmap",
-                shared,
-            )
+            gateway = await self.publish(artifact(directory, grid(values, scored)))
 
         [(name, slide_id, tile_sets)] = gateway.published
         self.assertEqual((name, slide_id), ("heatmap", SLIDE_ID))
@@ -103,44 +111,30 @@ class PixelmapPyramidTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(float(data[0:4, 0:4].max()), 0.0)
         self.assertEqual(float(data.max()), 0.75)
 
-    async def test_a_grid_without_scored_cells_falls_back_to_the_tiff(self) -> None:
-        class FellBackError(Exception):
-            pass
-
-        class TiffGateway(PyramidGateway):
-            async def slide_metadata(self) -> object:
-                raise FellBackError
-
-        empty = ScoreGrid(
-            np.zeros((4, 6), np.float32),
-            np.zeros((4, 6), bool),
-            cell_size=64.0,
-            level_size=(384, 256),
-        )
-        with TemporaryDirectory() as directory, self.assertRaises(FellBackError):
-            await TiffPixelmapPublisher(tile_size=256).publish(
-                TiffGateway(),  # type: ignore[arg-type]
-                "heatmap",
-                artifact(directory, empty),
-            )
-
-    async def test_an_unreadable_grid_falls_back_to_the_tiff(self) -> None:
-        class FellBackError(Exception):
-            pass
-
-        class TiffGateway(PyramidGateway):
-            async def slide_metadata(self) -> object:
-                raise FellBackError
-
+    async def test_grids_it_cannot_publish_are_invalid(self) -> None:
+        nothing_scored = grid(np.zeros((1, 4, 6), np.float32), np.zeros((4, 6), bool))
+        two_channels = grid(np.zeros((2, 4, 6), np.float32), np.ones((4, 6), bool))
         with TemporaryDirectory() as directory:
-            shared = artifact(directory, None)
-            Path(shared.path + ".scores.npz").write_bytes(b"not an npz")
-            with self.assertRaises(FellBackError):
-                await TiffPixelmapPublisher(tile_size=256).publish(
-                    TiffGateway(),  # type: ignore[arg-type]
-                    "heatmap",
-                    shared,
-                )
+            unreadable = Path(directory) / "unreadable.npz"
+            unreadable.write_bytes(b"not an npz")
+            cases = {
+                "nothing scored": artifact(directory, nothing_scored),
+                "two channels": artifact(directory, two_channels),
+                "unreadable": SharedArtifact(
+                    path=str(unreadable), media_type=MEDIA_TYPE
+                ),
+                "not a grid": SharedArtifact(
+                    path=str(unreadable), media_type="image/tiff"
+                ),
+            }
+            for case, shared in cases.items():
+                with (
+                    self.subTest(case),
+                    self.assertRaises(EmpaiaGatewayError) as raised,
+                ):
+                    await self.publish(shared)
+                self.assertFalse(raised.exception.retryable)
+                self.assertFalse(raised.exception.outcome_unknown)
 
 
 class PyramidUploadFailureTests(unittest.IsolatedAsyncioTestCase):
@@ -156,6 +150,16 @@ class PyramidUploadFailureTests(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(EmpaiaGatewayError) as raised:
             await self.gateway(gave_up).publish_pixelmap("heatmap", SLIDE_ID, ())
+
+        self.assertTrue(raised.exception.outcome_unknown)
+        self.assertFalse(raised.exception.retryable)
+
+    async def test_a_direct_write_that_failed_is_an_unknown_outcome(self) -> None:
+        async def failed(**_kwargs: object) -> str:
+            raise PermissionError("pixelmap storage is not writable")
+
+        with self.assertRaises(EmpaiaGatewayError) as raised:
+            await self.gateway(failed).publish_pixelmap("heatmap", SLIDE_ID, ())
 
         self.assertTrue(raised.exception.outcome_unknown)
         self.assertFalse(raised.exception.retryable)

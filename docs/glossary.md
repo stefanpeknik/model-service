@@ -156,7 +156,7 @@ _Avoid_: Local path
 ## Configuration and deployment
 
 **Builder configuration**:
-A builder's processing settings (stride, tile sizes, encoding) with defaults
+A builder's processing settings (stride, background skipping) with defaults
 in `src/model_service/builders/registry.py`. Standalone requests do not set them; EMPAIA jobs may.
 _Avoid_: Execution spec, model parameters
 

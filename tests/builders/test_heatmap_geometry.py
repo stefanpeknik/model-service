@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -14,12 +13,7 @@ from model_service.builders.heatmap.processor import (
     HeatmapRequest,
     SlideHeatmapProcessor,
 )
-from model_service.builders.registry import ScoreEncoding
-from model_service.builders.score_grid import (
-    ScoreGrid,
-    read_score_grid,
-    write_score_grid,
-)
+from model_service.builders.score_grid import ScoreGrid, read_score_grid
 from tests.support.builder_fixtures import write_slide
 
 
@@ -41,6 +35,14 @@ class LandmarkPredictor:
         return np.full((self.output_tile_size, self.output_tile_size), score)
 
 
+def render(grid: ScoreGrid) -> np.ndarray:
+    """The level's pixels, each with the score of the cell it falls in."""
+    width, height = grid.level_size
+    rows = (np.arange(height) / grid.cell_size).astype(int)
+    columns = (np.arange(width) / grid.cell_size).astype(int)
+    return grid.values[0][np.ix_(rows, columns)]
+
+
 class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
     async def _build(
         self,
@@ -51,21 +53,10 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
         stride_fraction: float = 0.5,
         predictor: LandmarkPredictor | None = None,
         mask: str = "full",
-        encoding: ScoreEncoding = ScoreEncoding.UINT8,
-        stale_grid: bool = False,
-    ) -> np.ndarray:
-        import pyvips
-
+    ) -> ScoreGrid:
         predictor = predictor or LandmarkPredictor()
         directory = root / f"{width}-{height}-{mask}"
         directory.mkdir()
-        if stale_grid:
-            write_score_grid(
-                directory / "heatmap.tiff",
-                ScoreGrid(
-                    np.zeros((2, 2), np.float32), np.ones((2, 2), bool), 16.0, (4, 4)
-                ),
-            )
         y, x = np.indices((height, width))
         pixels = np.zeros((height, width, 3), dtype=np.uint8)
         pixels[..., 0] = ((x // 16 + y // 16) % 2) * 255
@@ -74,7 +65,7 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
         if mask != "none":
             mask_path = directory / "mask.tiff"
             write_slide(mask_path, np.full_like(pixels, 0 if mask == "empty" else 255))
-        output = directory / "heatmap.tiff"
+        output = directory / "heatmap.npz"
         await SlideHeatmapProcessor(
             predictor, num_threads=1, max_concurrent_tasks=2
         ).build(
@@ -90,22 +81,15 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
                 mask_path=mask_path,
                 output_path=output,
                 stride_fraction=stride_fraction,
-                output_tile_height=128,
-                output_tile_width=128,
-                encoding=encoding,
             ),
         )
-        image = pyvips.Image.new_from_file(str(output))
-        self.assertEqual((image.width, image.height, image.bands), (width, height, 1))
-        self.assertAlmostEqual(image.xres, 2000)
-        self.assertAlmostEqual(image.yres, 2000)
-        floating = encoding is ScoreEncoding.FLOAT32
-        self.assertEqual(image.format, "float" if floating else "uchar")
-        return np.frombuffer(
-            image.write_to_memory(), dtype=np.float32 if floating else np.uint8
-        ).reshape(height, width)
+        grid = read_score_grid(output)
+        self.assertEqual((grid.level, grid.level_size), (0, (width, height)))
+        self.assertEqual(grid.mpp, (0.5, 0.5))
+        self.assertEqual(grid.values.dtype, np.float32)
+        return grid
 
-    async def test_padding_is_cropped_without_compressing_tile_placement(self) -> None:
+    async def test_padding_does_not_move_tile_placement(self) -> None:
         for width, height, stride, output_tile_size in (
             (112, 80, 0.5, 1),
             (128, 96, 1.0, 1),
@@ -133,73 +117,61 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
                     stride_fraction=stride,
                     predictor=LandmarkPredictor(output_tile_size),
                 )
-                np.testing.assert_array_equal(unaligned, aligned[:75, :107])
+                np.testing.assert_array_equal(
+                    render(unaligned), render(aligned)[:75, :107]
+                )
 
-    async def test_the_scores_are_kept_beside_the_tiff(self) -> None:
+    async def test_cells_record_whether_any_tile_scored_them(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)
             constant = LandmarkPredictor(constant=0.5)
-            await self._build(root, 112, 80, predictor=constant)
-            await self._build(root, 112, 80, predictor=constant, mask="empty")
-            scored = read_score_grid(root / "112-80-full" / "heatmap.tiff")
-            unscored = read_score_grid(root / "112-80-empty" / "heatmap.tiff")
+            scored = await self._build(root, 112, 80, predictor=constant)
+            unscored = await self._build(
+                root, 112, 80, predictor=constant, mask="empty"
+            )
 
-        assert scored is not None and unscored is not None
         # A tile every 16 px yields one score per 16 px; the empty mask scores none.
-        self.assertEqual((scored.cell_size, scored.level_size), (16.0, (112, 80)))
+        self.assertEqual(scored.cell_size, 16.0)
         self.assertTrue(scored.scored.any())
-        np.testing.assert_allclose(scored.values[scored.scored], 0.5)
+        np.testing.assert_allclose(scored.values[0][scored.scored], 0.5)
         self.assertFalse(unscored.scored.any())
 
-    async def test_a_full_resolution_output_has_no_score_grid(self) -> None:
+    async def test_a_full_resolution_output_has_a_cell_per_pixel(self) -> None:
         with TemporaryDirectory() as directory:
-            root = Path(directory)
-            await self._build(
-                root,
+            grid = await self._build(
+                Path(directory),
                 112,
                 80,
                 predictor=LandmarkPredictor(output_tile_size=32),
-                stale_grid=True,
             )
 
-            self.assertIsNone(read_score_grid(root / "112-80-full" / "heatmap.tiff"))
+        self.assertEqual(grid.cell_size, 1.0)
+        self.assertGreaterEqual(grid.values.shape[1:], (80, 112))
 
-    async def test_aligned_output_preserves_original_pixels_and_overlap_means(
+    async def test_scores_land_on_their_tiles_and_overlaps_are_averaged(
         self,
     ) -> None:
         with TemporaryDirectory() as directory:
-            pixels = await self._build(Path(directory), 112, 80)
+            pixels = render(await self._build(Path(directory), 112, 80))
 
-        self.assertEqual(
-            hashlib.sha256(pixels.tobytes()).hexdigest(),
-            "01a90dd369c6c5b5122335061de7cc609156cb094798a5d3851cc98a2333b58f",
-        )
-        self.assertEqual(int(pixels[0, 0]), 0)
-        self.assertEqual(int(pixels[0, -1]), 255)
-        self.assertEqual(int(pixels[-1, 0]), 255)
-        self.assertEqual(int(pixels[-1, -1]), 0)
-        self.assertEqual(int(pixels[39, 55]), 127)
+        self.assertEqual(pixels[0, 0], 0)
+        self.assertEqual(pixels[0, -1], 1)
+        self.assertEqual(pixels[-1, 0], 1)
+        self.assertEqual(pixels[-1, -1], 0)
+        # Inside, four tiles overlap a cell: two black and two red origins.
+        self.assertEqual(pixels[39, 55], 0.5)
 
     async def test_constant_scores_remain_constant_through_overlap_and_padding(
         self,
     ) -> None:
-        predictor = LandmarkPredictor(constant=0.75)
+        predictor = LandmarkPredictor(constant=0.375)
         with TemporaryDirectory() as directory:
-            pixels = await self._build(Path(directory), 107, 75, predictor=predictor)
+            pixels = render(
+                await self._build(Path(directory), 107, 75, predictor=predictor)
+            )
 
         self.assertEqual(predictor.calls, 24)
-        np.testing.assert_array_equal(pixels, np.full((75, 107), 191, dtype=np.uint8))
-
-    async def test_float32_encoding_keeps_unquantized_scores(self) -> None:
-        with TemporaryDirectory() as directory:
-            pixels = await self._build(
-                Path(directory),
-                107,
-                75,
-                predictor=LandmarkPredictor(constant=0.375),
-                encoding=ScoreEncoding.FLOAT32,
-            )
-        np.testing.assert_allclose(pixels, 0.375)
+        np.testing.assert_array_equal(pixels, np.full((75, 107), 0.375))
 
     async def test_without_a_mask_every_grid_tile_is_predicted(self) -> None:
         masked = LandmarkPredictor()
@@ -211,19 +183,18 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(unmasked.calls, 24)
         self.assertEqual(masked.calls, 24)
-        np.testing.assert_array_equal(without_mask, with_mask)
+        np.testing.assert_array_equal(without_mask.values, with_mask.values)
 
-    async def test_empty_mask_skips_predictions_and_writes_zero_background(
-        self,
-    ) -> None:
+    async def test_empty_mask_skips_predictions_and_scores_nothing(self) -> None:
         predictor = LandmarkPredictor()
         with TemporaryDirectory() as directory:
-            pixels = await self._build(
+            grid = await self._build(
                 Path(directory), 107, 75, predictor=predictor, mask="empty"
             )
 
         self.assertEqual(predictor.calls, 0)
-        self.assertFalse(pixels.any())
+        self.assertFalse(grid.values.any())
+        self.assertFalse(grid.scored.any())
 
 
 if __name__ == "__main__":

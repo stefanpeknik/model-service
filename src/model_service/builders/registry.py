@@ -8,7 +8,6 @@ lazily from `implementation` inside Ray replicas.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -65,23 +64,13 @@ class BuilderSpec:
             ) from error
 
 
-class ScoreEncoding(StrEnum):
-    UINT8 = "uint8"
-    FLOAT32 = "float32"
-
-
 _STRIDE = Annotated[float, Field(gt=0, le=1, allow_inf_nan=False)]
 
 
 class HeatmapConfiguration(BaseModel):
-    """`uint8` maps scores in [0, 1] to 0-255 and matches the existing artifacts."""
-
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     stride_fraction: _STRIDE = 0.5
-    output_tile_height: Annotated[int, Field(strict=True, gt=0)] = 256
-    output_tile_width: Annotated[int, Field(strict=True, gt=0)] = 256
-    encoding: ScoreEncoding = ScoreEncoding.UINT8
     # Skip tiles without tissue; they score 0.
     skip_background: bool = True
 
@@ -113,8 +102,8 @@ BUILDERS: dict[str, BuilderSpec] = {
             outputs={
                 "heatmap": OutputSpec(
                     kind=OutputKind.SHARED_ARTIFACT,
-                    media_type="image/tiff",
-                    default_path="heatmap.tiff",
+                    media_type="application/x-npz",
+                    default_path="heatmap.npz",
                     empaia={"type": "continuous_pixelmap", "reference": "slide"},
                 )
             },

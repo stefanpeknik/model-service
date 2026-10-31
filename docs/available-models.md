@@ -114,7 +114,7 @@ public API, not on the Ray route, and take the model as a parameter:
 
 | Builder | Accepts | Output |
 | --- | --- | --- |
-| `heatmap` | `spatial-scores` models (classifiers, segmentation) | pyramidal TIFF score map |
+| `heatmap` | `spatial-scores` models (classifiers, segmentation) | score grid (`.npz`): scores per cell with the slide geometry |
 | `tile-embeddings` | `tile-embedding` models (Virchow2, Prov-GigaPath) | HDF5 with one feature row per tile |
 
 `GET /v1/models` lists the deployed models and the builders each works with.

@@ -1,4 +1,4 @@
-"""Heatmap builder: one score map per slide from any `spatial-scores` model."""
+"""Heatmap builder: one score grid per slide from any `spatial-scores` model."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from model_service.builders.heatmap.processor import (
     SlideHeatmapProcessor,
 )
 from model_service.builders.registry import HeatmapConfiguration
-from model_service.builders.score_grid import score_grid_path
+from model_service.builders.score_grid import MEDIA_TYPE
 
 
 if TYPE_CHECKING:
@@ -52,23 +52,11 @@ class HeatmapBuilder:
                     mask_path=mask,
                     output_path=temporary,
                     stride_fraction=config.stride_fraction,
-                    output_tile_height=config.output_tile_height,
-                    output_tile_width=config.output_tile_width,
-                    encoding=config.encoding,
                     skip_background=config.skip_background,
                 ),
             )
-            # The score grid was written beside the temporary TIFF; it is put in
-            # place first, so it is there by the time the TIFF appears.
-            grid = score_grid_path(temporary)
-            if grid.exists():
-                grid.replace(score_grid_path(destination))
-            else:
-                score_grid_path(destination).unlink(missing_ok=True)
         return BuilderResult(
             outputs={
-                "heatmap": SharedArtifact(
-                    path=str(destination), media_type="image/tiff"
-                )
+                "heatmap": SharedArtifact(path=str(destination), media_type=MEDIA_TYPE)
             }
         )

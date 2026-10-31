@@ -1,26 +1,15 @@
-"""Pixelmap encoding, tile-upload retries, URL allowlist and workspace cleanup."""
+"""URL allowlist and workspace cleanup."""
 
 from __future__ import annotations
 
-import json
-import struct
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-import numpy as np
-
-from model_service.builders.contracts import (
-    SCORE_SPACING_KEY,
-    BuilderResult,
-    SharedArtifact,
-)
+from model_service.builders.contracts import BuilderResult, SharedArtifact
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
-from model_service.providers.empaia.http_gateway import HttpEmpaiaGateway
-from model_service.providers.empaia.image_io import TiffPixelmapPublisher
 from model_service.providers.empaia.input_access import job_workspace
 from model_service.providers.empaia.provider import EmpaiaProviderAdapter
 from model_service.scheduler.contracts import (
@@ -34,167 +23,6 @@ from model_service.scheduler.providers import (
     ProviderFinishFailureError,
     ProviderSuccess,
 )
-
-
-try:
-    import pyvips
-except (ImportError, OSError):
-    HAS_VIPS = False
-else:
-    HAS_VIPS = bool(pyvips.Image)
-
-
-class RecordingGateway:
-    job_id = "job-1"
-
-    def __init__(self, width: int, height: int, levels: int = 1) -> None:
-        self.created: list[dict[str, object]] = []
-        self.tiles: list[bytes] = []
-        self.positions: list[tuple[int, int, int]] = []
-        self._slide = SimpleNamespace(
-            identifier="slide-1",
-            levels=tuple(
-                SimpleNamespace(
-                    index=index, width=width >> index, height=height >> index
-                )
-                for index in range(levels)
-            ),
-        )
-
-    async def slide_metadata(self) -> object:
-        return self._slide
-
-    async def create_pixelmap(self, _name: str, body: dict[str, object]) -> str:
-        self.created.append(body)
-        return "pixelmap-1"
-
-    async def put_pixelmap_tile(
-        self, _pixelmap: str, level: int, tile_x: int, tile_y: int, data: bytes
-    ) -> None:
-        self.positions.append((level, tile_x, tile_y))
-        self.tiles.append(data)
-
-
-def floats(data: bytes) -> list[float]:
-    return list(struct.unpack(f"<{len(data) // 4}f", data))
-
-
-@unittest.skipUnless(HAS_VIPS, "libvips is unavailable")
-class PixelmapEncodingTests(unittest.IsolatedAsyncioTestCase):
-    async def publish(self, image: pyvips.Image) -> RecordingGateway:
-        gateway = RecordingGateway(image.width, image.height)
-        with TemporaryDirectory() as directory:
-            path = Path(directory) / "scores.tiff"
-            image.tiffsave(str(path))
-            await TiffPixelmapPublisher(tile_size=256).publish(
-                gateway,  # type: ignore[arg-type]
-                "heatmap",
-                SharedArtifact(path=str(path), media_type="image/tiff"),
-            )
-        return gateway
-
-    async def test_heatmap_goes_to_the_coarsest_level_that_keeps_every_score(
-        self,
-    ) -> None:
-        # A 4x6 grid of distinct scores, upsampled 64x like the heatmap builder does.
-        scores = np.arange(24, dtype=np.float32).reshape(4, 6) / 24 + 0.01
-        image = pyvips.Image.new_from_array(scores).resize(64)
-        image = (image * 255).cast("uchar")
-        image.set_type(
-            pyvips.GValue.gstr_type,
-            "image-description",
-            json.dumps({SCORE_SPACING_KEY: 64.0}),
-        )
-        # Slide levels 384x256 down to 24x16 (16x): 4 pixels per score there.
-        gateway = RecordingGateway(image.width, image.height, levels=6)
-        with TemporaryDirectory() as directory:
-            path = Path(directory) / "scores.tiff"
-            image.tiffsave(str(path), tile=True, pyramid=True)
-            await TiffPixelmapPublisher(tile_size=256).publish(
-                gateway,  # type: ignore[arg-type]
-                "heatmap",
-                SharedArtifact(path=str(path), media_type="image/tiff"),
-            )
-
-        level = gateway.created[0]["levels"][0]  # type: ignore[index]
-        self.assertEqual(level["slide_level"], 4)
-        self.assertEqual(gateway.positions, [(4, 0, 0)])
-        published = np.asarray(floats(gateway.tiles[0])).reshape(256, 256)[:16, :24]
-        # Each published pixel is the full-resolution heatmap averaged over its area.
-        full = (
-            np.ndarray(buffer=image.write_to_memory(), dtype=np.uint8, shape=(256, 384))
-            / 255
-        )
-        np.testing.assert_allclose(
-            published, full.reshape(16, 16, 24, 16).mean(axis=(1, 3)), atol=0.01
-        )
-
-    async def test_uint8_scores_are_scaled_to_unit_range(self) -> None:
-        gateway = await self.publish(pyvips.Image.black(4, 4).new_from_image(51))
-
-        self.assertEqual(gateway.created[0]["element_type"], "float32")
-        values = floats(gateway.tiles[0])
-        self.assertAlmostEqual(values[0], 0.2, places=6)
-        # The edge tile is padded with zeros up to the provider tile size.
-        self.assertEqual(len(values), 256 * 256)
-        self.assertEqual(values[4], 0.0)
-
-    async def test_float32_scores_are_published_unchanged(self) -> None:
-        image = (pyvips.Image.black(4, 4) + 0.375).cast("float")
-
-        values = floats((await self.publish(image)).tiles[0])
-
-        self.assertEqual(values[0], 0.375)
-
-    async def test_channels_are_sent_as_separate_planes(self) -> None:
-        image = (
-            pyvips.Image.black(4, 4).bandjoin_const([0]).linear([1, 1], [0.25, 0.75])
-        )
-        image = image.cast("float")
-
-        gateway = await self.publish(image)
-
-        values = floats(gateway.tiles[0])
-        self.assertEqual(gateway.created[0]["channel_count"], 2)
-        self.assertEqual(values[0], 0.25)
-        self.assertEqual(values[256 * 256], 0.75)
-
-    async def test_other_pixel_formats_are_rejected(self) -> None:
-        with self.assertRaises(EmpaiaGatewayError):
-            await self.publish(pyvips.Image.black(4, 4).cast("ushort"))
-
-
-class TileUploadFailureTests(unittest.IsolatedAsyncioTestCase):
-    """The SDK retries a tile PUT; what it gives up on has an unknown outcome."""
-
-    def gateway(self, put_tile: object) -> HttpEmpaiaGateway:
-        client = SimpleNamespace(put_tile=put_tile)
-        return HttpEmpaiaGateway(
-            "https://empaia.invalid", "job-1", "credential", client=client
-        )  # type: ignore[arg-type]
-
-    async def test_a_tile_the_sdk_gave_up_on_is_an_unknown_outcome(self) -> None:
-        async def gave_up(*_args: object) -> None:
-            raise RuntimeError("Pixelmap tile upload failed after 5 attempts")
-
-        gateway = self.gateway(gave_up)
-
-        with self.assertRaises(EmpaiaGatewayError) as raised:
-            await gateway.put_pixelmap_tile("pixelmap-1", 0, 0, 0, b"tile")
-
-        self.assertTrue(raised.exception.outcome_unknown)
-        self.assertFalse(raised.exception.retryable)
-
-    async def test_an_uploaded_tile_is_sent_once(self) -> None:
-        calls: list[tuple[object, ...]] = []
-
-        async def accepted(*args: object) -> int:
-            calls.append(args)
-            return 204
-
-        await self.gateway(accepted).put_pixelmap_tile("pixelmap-1", 2, 3, 4, b"tile")
-
-        self.assertEqual(calls, [("pixelmap-1", 2, 3, 4, b"tile")])
 
 
 def unused_gateway_factory(_context: object) -> object:
@@ -253,9 +81,9 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
     def job_workspaces(self, root: Path) -> tuple[Path, Path, Path]:
         """Two attempts of job "j" (one with a heatmap) and another job's workspace."""
         job = job_workspace(root, "https://empaia.invalid", "j")
-        artifact = job / "attempt-2" / "outputs" / "heatmap.tiff"
+        artifact = job / "attempt-2" / "outputs" / "heatmap.npz"
         artifact.parent.mkdir(parents=True)
-        artifact.write_bytes(b"tiff")
+        artifact.write_bytes(b"npz")
         (job / "attempt-1" / "outputs").mkdir(parents=True)
         other_job = job_workspace(root, "https://empaia.invalid", "other")
         other_job.mkdir()
@@ -281,7 +109,7 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
                     BuilderResult(
                         outputs={
                             "heatmap": SharedArtifact(
-                                path=str(artifact), media_type="image/tiff"
+                                path=str(artifact), media_type="application/x-npz"
                             )
                         }
                     )

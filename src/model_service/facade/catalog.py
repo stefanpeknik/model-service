@@ -83,9 +83,8 @@ def model_binding(document: ModelDocument) -> ModelBinding:
         raise CatalogError(f"model {model_id!r} must use route_prefix /{model_id}")
     inference = document.inference
     from_user_config, from_inference = _PARAMETERS[inference.contract]
-    declared = {
-        name for name in ("mpp", "summaries") if getattr(inference, name) is not None
-    }
+    declared_values = {"mpp": inference.mpp, "summaries": inference.summaries}
+    declared = {name for name, value in declared_values.items() if value is not None}
     if extra := declared - set(from_inference):
         raise CatalogError(
             f"model {model_id!r} declares {', '.join(sorted(extra))} in inference; "
@@ -98,7 +97,7 @@ def model_binding(document: ModelDocument) -> ModelBinding:
             raise CatalogError(f"model {model_id!r} user_config lacks {name}")
         values[name] = user_config[name]
     for name in from_inference:
-        value = getattr(inference, name)
+        value = declared_values[name]
         if value is None:
             raise CatalogError(f"model {model_id!r} inference lacks {name}")
         values[name] = value

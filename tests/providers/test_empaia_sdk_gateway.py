@@ -10,6 +10,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestServer
 from rationai.empaia import Client
 
+from model_service.builders.contracts import InlineOutput
 from model_service.providers.empaia.gateway import (
     EmpaiaGatewayError,
     EmpaiaJobContext,
@@ -18,17 +19,21 @@ from model_service.providers.empaia.http_gateway import (
     HttpEmpaiaGateway,
     create_http_gateway,
 )
-from tests.providers.empaia_fixtures import PIXELMAP_ID, created, pixelmap_body
+from tests.providers.empaia_fixtures import PIXELMAP_ID
+
+
+# Any mutating request does: posting an inline output is the simplest.
+SCORE = InlineOutput(value=0.75)
 
 
 class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
     async def test_app_service_timeout_comes_from_the_environment(self) -> None:
-        async def slow_pixelmap(_request: web.Request) -> web.Response:
+        async def slow_output(request: web.Request) -> web.Response:
             await asyncio.sleep(0.3)
-            return web.json_response(created(pixelmap_body()))
+            return web.json_response({**await request.json(), "id": PIXELMAP_ID})
 
         app = web.Application()
-        app.router.add_post("/v3/job/outputs/heatmap", slow_pixelmap)
+        app.router.add_post("/v3/job/outputs/score", slow_output)
         async with TestServer(app) as server:
             context = EmpaiaJobContext(
                 api_url=str(server.make_url("/")), job_id="job", credential="token"
@@ -43,15 +48,10 @@ class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
                     gateway = create_http_gateway(context)
                     try:
                         if succeeds:
-                            pixelmap = await gateway.create_pixelmap(
-                                "heatmap", pixelmap_body()
-                            )
-                            self.assertEqual(pixelmap, PIXELMAP_ID)
+                            await gateway.publish_output("score", SCORE)
                         else:
                             with self.assertRaises(EmpaiaGatewayError) as raised:
-                                await gateway.create_pixelmap(
-                                    "heatmap", pixelmap_body()
-                                )
+                                await gateway.publish_output("score", SCORE)
                             self.assertTrue(raised.exception.outcome_unknown)
                     finally:
                         await gateway.close()
@@ -89,7 +89,7 @@ class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
             return web.Response(text="private malformed response")
 
         app = web.Application()
-        app.router.add_post("/v3/job/outputs/heatmap", handle)
+        app.router.add_post("/v3/job/outputs/score", handle)
         async with TestServer(app) as server:
             gateway = HttpEmpaiaGateway(
                 str(server.make_url("/")),
@@ -99,15 +99,15 @@ class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
             )
             try:
                 with self.assertRaises(EmpaiaGatewayError) as raised:
-                    await gateway.create_pixelmap("heatmap", pixelmap_body())
+                    await gateway.publish_output("score", SCORE)
                 self.assertTrue(raised.exception.outcome_unknown)
                 self.assertFalse(raised.exception.retryable)
                 self.assertNotIn("private", raised.exception.safe_message)
             finally:
                 await gateway.close()
-        self.assertEqual(received, ["/v3/job/outputs/heatmap"])
+        self.assertEqual(received, ["/v3/job/outputs/score"])
 
-    async def test_unusable_pixelmap_id_after_creation_is_outcome_unknown(self):
+    async def test_an_unusable_acknowledgment_of_an_output_is_outcome_unknown(self):
         for value in ({}, {"id": ""}, {"id": 4}, None):
             with self.subTest(value=value):
 
@@ -115,14 +115,14 @@ class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
                     return web.json_response(value)
 
                 app = web.Application()
-                app.router.add_post("/v3/job/outputs/heatmap", handle)
+                app.router.add_post("/v3/job/outputs/score", handle)
                 async with TestServer(app) as server:
                     gateway = HttpEmpaiaGateway(
                         str(server.make_url("/")), "job", "token"
                     )
                     self.addAsyncCleanup(gateway.close)
                     with self.assertRaises(EmpaiaGatewayError) as raised:
-                        await gateway.create_pixelmap("heatmap", pixelmap_body())
+                        await gateway.publish_output("score", SCORE)
                     self.assertTrue(raised.exception.outcome_unknown)
                     self.assertFalse(raised.exception.retryable)
                     await gateway.close()

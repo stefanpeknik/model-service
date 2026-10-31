@@ -279,9 +279,9 @@ class CatalogRouteTests(ApiTestCase):
         self.assertTrue(heatmap["inputs"]["slide"]["required"])
         self.assertEqual(
             heatmap["outputs"],
-            {"heatmap": {"kind": "shared_artifact", "media_type": "image/tiff"}},
+            {"heatmap": {"kind": "shared_artifact", "media_type": "application/x-npz"}},
         )
-        self.assertEqual(heatmap["configuration"]["encoding"], "uint8")
+        self.assertEqual(heatmap["configuration"]["stride_fraction"], 0.5)
         self.assertEqual(builders["tile-embeddings"]["accepts"], "tile-embedding")
 
 

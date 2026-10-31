@@ -22,6 +22,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from jsonschema import Draft7Validator
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
+from model_service.builders.contracts import SpatialScoresModel
 from model_service.builders.registry import BUILDERS
 
 
@@ -221,6 +222,9 @@ def app_definitions(
     for model in models:
         listing = listings.get(model.id)
         if listing is None:
+            continue
+        # The SDK publishes single-channel pixelmaps only.
+        if isinstance(model, SpatialScoresModel) and model.n_channels != 1:
             continue
         for spec in builders:
             if spec.accepts is not model.contract or not _publishable(spec):

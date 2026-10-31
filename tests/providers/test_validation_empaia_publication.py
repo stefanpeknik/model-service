@@ -1,4 +1,4 @@
-"""Check TIFF-to-pixelmap publication through the mock AppService."""
+"""Check score-grid publication through the mock AppService."""
 
 from __future__ import annotations
 
@@ -7,31 +7,32 @@ import unittest
 from pathlib import Path
 
 import httpx
+import numpy as np
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 
 from model_service.builders.contracts import SharedArtifact
+from model_service.builders.score_grid import MEDIA_TYPE, ScoreGrid, write_score_grid
 from model_service.providers.empaia.http_gateway import HttpEmpaiaGateway
 from testing.empaia_app_service import app
 
 
-try:
-    import pyvips
-except (ImportError, OSError):
-    HAS_VIPS = False
-else:
-    HAS_VIPS = bool(pyvips.Image)
-
-
-@unittest.skipUnless(HAS_VIPS, "libvips is unavailable")
 class ValidationEmpaiaPublicationTests(unittest.IsolatedAsyncioTestCase):
-    """Exercise TIFF-to-pixelmap publication through the mock AppService."""
-
-    async def test_tiff_pixelmap_publication(self) -> None:
-        """Verify TIFF pixelmap publication."""
+    async def test_score_grid_publication(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "heatmap.tiff"
-            pyvips.Image.black(8, 8).new_from_image(128).tiffsave(str(path))
+            path = Path(directory) / "heatmap.npz"
+            # The mock's slide: 8x8 pixels in one level, so 4-pixel cells.
+            write_score_grid(
+                path,
+                ScoreGrid(
+                    np.full((1, 2, 2), 0.5, dtype=np.float32),
+                    np.ones((2, 2), dtype=bool),
+                    0,
+                    (8, 8),
+                    4.0,
+                    (0.25, 0.25),
+                ),
+            )
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app),
                 base_url="http://appservice",
@@ -62,7 +63,7 @@ class ValidationEmpaiaPublicationTests(unittest.IsolatedAsyncioTestCase):
                     try:
                         await gateway.publish_output(
                             "heatmap",
-                            SharedArtifact(path=str(path), media_type="image/tiff"),
+                            SharedArtifact(path=str(path), media_type=MEDIA_TYPE),
                         )
                         await gateway.finalize()
                     finally:

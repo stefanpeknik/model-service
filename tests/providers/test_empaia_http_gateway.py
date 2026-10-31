@@ -6,7 +6,6 @@ import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -16,6 +15,7 @@ from aiohttp.test_utils import TestServer
 from rationai.empaia import Client
 
 from model_service.builders.contracts import InlineOutput, SharedArtifact
+from model_service.builders.score_grid import MEDIA_TYPE, ScoreGrid, write_score_grid
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.http_gateway import (
     HttpEmpaiaGateway,
@@ -62,54 +62,24 @@ class RecordingRectangleWriter:
         destination.touch()
 
 
-class FakeVipsImage:
-    """Stand in for libvips images so tests can observe encoding or publication without native image I/O."""
-
-    format = "uchar"
-    width = 600
-    height = 300
-    bands = 1
-
-    def crop(self, _x: int, _y: int, _width: int, _height: int) -> FakeVipsImage:
-        """Return the same fake image instead of executing native cropping."""
-        return self
-
-    def embed(
-        self,
-        _x: int,
-        _y: int,
-        _width: int,
-        _height: int,
-        *,
-        extend: str,
-    ) -> FakeVipsImage:
-        """Require black padding and return the fake image for edge-tile publication."""
-        assert extend == "black"
-        return self
-
-    def cast(self, image_format: str) -> FakeVipsImage:
-        """Accept the requested conversion without native pixel processing."""
-        assert image_format == "float"
-        return self
-
-    def __truediv__(self, value: float) -> FakeVipsImage:
-        """Require normalization by 255 and return the same fake image."""
-        assert value == 255.0
-        return self
-
-    def write_to_memory(self) -> memoryview:
-        """Return deterministic placeholder bytes for the fake float32 tile upload."""
-        return memoryview(b"float32 tile")
-
-
-class FakeVipsImageType:
-    """Provide the fake libvips file-open operation used by publication tests."""
-
-    @staticmethod
-    def new_from_file(_path: str, *, access: str) -> FakeVipsImage:
-        """Require sequential file access and return the fake image fixture."""
-        assert access == "sequential"
-        return FakeVipsImage()
+# Six levels from 384x256, each half the size of the one before.
+SLIDE = {
+    "id": SLIDE_ID,
+    "extent": {"x": 384, "y": 256, "z": 1},
+    "num_levels": 6,
+    "pixel_size_nm": {"x": 250.0, "y": 250.0},
+    "tile_extent": {"x": 256, "y": 256, "z": 1},
+    "levels": [
+        {
+            "extent": {"x": 384 >> level, "y": 256 >> level, "z": 1},
+            "downsample_factor": float(2**level),
+        }
+        for level in range(6)
+    ],
+    "format": "test",
+    "tissue": None,
+    "stain": None,
+}
 
 
 class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
@@ -527,67 +497,54 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             ),
             artifact_publisher=publisher,
         )
-        artifact = SharedArtifact(path="/shared/heatmap.tiff", media_type="image/tiff")
+        artifact = SharedArtifact(path="/shared/heatmap.npz", media_type=MEDIA_TYPE)
 
         await gateway.publish_output("heatmap", artifact)
 
         self.assertEqual(publisher.calls, [("heatmap", artifact)])
         await gateway.close()
 
-    async def test_default_tiff_publisher_registers_and_uploads_pixelmap(self) -> None:
-        """Verify default TIFF publisher registers and uploads pixelmap."""
-        uploaded_tiles: list[str] = []
+    async def test_default_publisher_uploads_the_score_grid_through_the_sdk(
+        self,
+    ) -> None:
+        uploaded: list[str] = []
 
         def handle(request: httpx.Request) -> httpx.Response:
-            """Return scenario-specific mock HTTP responses and record or assert requests for this gateway test."""
             if request.url.path.endswith("/inputs/slide"):
-                return httpx.Response(
-                    200,
-                    json={
-                        "id": SLIDE_ID,
-                        "extent": {"x": 1200, "y": 600, "z": 1},
-                        "pixel_size_nm": {"x": 250.0, "y": 250.0},
-                        "levels": [
-                            {"extent": {"x": 1200, "y": 600, "z": 1}},
-                            {"extent": {"x": 600, "y": 300, "z": 1}},
-                        ],
-                    },
-                )
+                return httpx.Response(200, json=SLIDE)
             if request.method == "POST":
                 body = json.loads(request.content)
-                self.assertEqual(body["levels"][0]["slide_level"], 1)
-                self.assertEqual(body["levels"][0]["position_max_x"], 1)
+                self.assertEqual(
+                    [level["slide_level"] for level in body["levels"]], [4, 5]
+                )
                 return httpx.Response(200, json=created(body))
             if request.method == "PUT" and "/pixelmaps/" in request.url.path:
-                uploaded_tiles.append(request.url.path)
-                self.assertEqual(request.content, b"float32 tile")
+                uploaded.append(request.url.path)
                 return httpx.Response(204)
             raise AssertionError((request.method, request.url.path))
 
+        values = np.zeros((1, 4, 6), dtype=np.float32)
+        scored = np.zeros((4, 6), dtype=bool)
+        values[0, 1, 2], scored[1, 2] = 0.75, True
         with TemporaryDirectory() as directory:
-            artifact_path = Path(directory) / "heatmap.tiff"
-            artifact_path.touch()
+            path = Path(directory) / "heatmap.npz"
+            write_score_grid(
+                path,
+                ScoreGrid(values, scored, 0, (384, 256), 64.0, (0.25, 0.25)),
+            )
             gateway = HttpEmpaiaGateway(
                 "https://empaia.example",
                 "job-1",
                 "credential",
                 client=await self.appservice(httpx.MockTransport(handle)),
             )
-
-            with patch.dict(
-                "sys.modules",
-                {"pyvips": SimpleNamespace(Image=FakeVipsImageType)},
-            ):
-                await gateway.publish_output(
-                    "heatmap",
-                    SharedArtifact(
-                        path=str(artifact_path),
-                        media_type="image/tiff",
-                    ),
-                )
-
-            self.assertEqual(len(uploaded_tiles), 2)
+            await gateway.publish_output(
+                "heatmap", SharedArtifact(path=str(path), media_type=MEDIA_TYPE)
+            )
             await gateway.close()
+
+        # One tile on each of levels 4 and 5.
+        self.assertEqual(len(uploaded), 2)
 
     async def test_mutating_transport_failure_is_safe_and_outcome_unknown(self) -> None:
         """Verify mutating transport failure is safe and outcome unknown."""

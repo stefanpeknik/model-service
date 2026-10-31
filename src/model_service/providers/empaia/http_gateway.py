@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from aiohttp import ClientError, ClientResponseError, ContentTypeError
 from rationai.empaia import Client
-from rationai.empaia.typing import pixelmaps, primitives
+from rationai.empaia.typing import primitives
 
 from model_service.builders.contracts import InlineOutput, SharedArtifact
 from model_service.providers.empaia.gateway import (
@@ -149,7 +149,7 @@ class HttpEmpaiaGateway:
         slide_access: SlideAccess = SlideAccess.DIRECT,
         slide_downloader: SlideDownloader | None = None,
     ) -> None:
-        """Require complete connection settings and select the SDK client, TIFF publisher, and rectangle writer. close() closes even an injected client."""
+        """Require complete connection settings and select the SDK client, score grid publisher, and rectangle writer. close() closes even an injected client."""
         if not api_url or not job_id or not credential:
             raise EmpaiaGatewayError(
                 "EMPAIA connection settings are incomplete",
@@ -163,12 +163,12 @@ class HttpEmpaiaGateway:
             or slide_downloader is None
         ):
             from model_service.providers.empaia.image_io import (
-                TiffPixelmapPublisher,
+                ScoreGridPublisher,
                 TiffSlideDownloader,
                 VipsRectangleMaskWriter,
             )
 
-        self._artifact_publisher = artifact_publisher or TiffPixelmapPublisher()
+        self._artifact_publisher = artifact_publisher or ScoreGridPublisher()
         self._rectangle_writer = rectangle_writer or VipsRectangleMaskWriter()
         self._slide_access = slide_access
         self._slide_downloader = slide_downloader or TiffSlideDownloader()
@@ -287,48 +287,11 @@ class HttpEmpaiaGateway:
                 ),
                 mutation=True,
             )
-        except RuntimeError as error:
-            # The SDK gives up on a tile after its own retries; the pixelmap exists.
+        except (RuntimeError, OSError) as error:
+            # The SDK gave up on a tile after its own retries, or could not write
+            # its storage directly; the pixelmap exists.
             raise EmpaiaGatewayError(
                 "EMPAIA pixelmap upload failed", retryable=False, outcome_unknown=True
-            ) from error
-
-    async def create_pixelmap(
-        self,
-        name: str,
-        body: dict[str, object],
-    ) -> str:
-        """Create a named pixelmap through a guarded POST and return its ID."""
-        try:
-            pixelmap = pixelmaps.PostContinuousPixelmap.model_validate(body)
-        except ValueError as error:
-            raise EmpaiaGatewayError.invalid(
-                "EMPAIA pixelmap description is invalid"
-            ) from error
-        created = await self._call(
-            self._client.post_output(name, pixelmap), mutation=True
-        )
-        return str(created.id)
-
-    async def put_pixelmap_tile(
-        self,
-        pixelmap_id: str,
-        level: int,
-        tile_x: int,
-        tile_y: int,
-        data: bytes,
-    ) -> None:
-        """Upload one tile; the SDK retries a tile PUT, which is idempotent."""
-        try:
-            await self._call(
-                self._client.put_tile(pixelmap_id, level, tile_x, tile_y, data),
-                mutation=True,
-            )
-        except RuntimeError as error:
-            raise EmpaiaGatewayError(
-                "EMPAIA pixelmap tile upload failed",
-                retryable=False,
-                outcome_unknown=True,
             ) from error
 
     async def read_region(

@@ -41,11 +41,15 @@ with Client(base_url="http://<facade>:8080") as client:
             model_id="prostate-classifier-1",
             inputs={"slide": SharedPathInput("slides/slide.mrxs")},
             input_access=InputAccess("shared_storage", {"root": "/mnt/data"}),
-            output_path="outputs/heatmap.tiff",
+            output_path="outputs/heatmap.npz",
         ),
     )
     print(client.executions.get(scheduled.execution.id).status)
 ```
+
+The heatmap is a score grid: `numpy.load("heatmap.npz")` gives the scores per
+cell (`values`), which cells were scored, and the slide level, cell size and
+microns per pixel to place them on the slide.
 
 ## Develop
 

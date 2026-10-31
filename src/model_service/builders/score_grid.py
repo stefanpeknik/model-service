@@ -1,15 +1,23 @@
-"""The raw scores behind a heatmap, kept beside its TIFF.
+"""The heatmap builder's artifact: the model's scores, one per cell of a grid.
 
-The TIFF is the scores upsampled to a slide level, so a score of 0 and a cell
-the builder never scored look the same in it. This file keeps what the model
-produced: one score per cell, which cells were scored, and how many pixels of
-the level a cell covers. A provider that publishes scores, not pictures, reads
-it instead of the TIFF.
+A NumPy `.npz` archive holding what the model produced, at the resolution it
+produced it:
+
+- `values`: float32 scores in 0..1, shaped (channels, rows, columns);
+- `scored`: bool (rows, columns), whether any tile covered the cell, so a
+  cell the model gave 0 differs from one it never scored;
+- `level`: the slide level the scores were computed at;
+- `level_size`: that level's width and height in pixels;
+- `cell_size`: pixels of that level one cell covers along each axis;
+- `mpp`: microns per pixel of that level, x and y.
+
+Cell (r, c) covers the level's pixels from (c, r) * cell_size; the grid may
+reach past the level's edge. Reading it needs only NumPy (`numpy.load`), and an
+image of the slide's size is the grid scaled by `cell_size`.
 """
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -22,51 +30,42 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
-SCORE_GRID_SUFFIX = ".scores.npz"
-# Cells of one pixel are a full-resolution mask, which is the picture itself.
-MIN_CELL_SIZE = 2.0
+MEDIA_TYPE = "application/x-npz"
 
 
 @dataclass(frozen=True, slots=True)
 class ScoreGrid:
-    """Scores in 0..1 per cell, which cells were scored, and the cell's size."""
-
     values: NDArray[np.float32]
     scored: NDArray[np.bool_]
-    # Pixels of the level the heatmap was built at that one cell covers.
-    cell_size: float
-    # Width and height of that level in pixels.
+    level: int
     level_size: tuple[int, int]
+    cell_size: float
+    mpp: tuple[float, float]
 
 
-def score_grid_path(artifact: Path) -> Path:
-    return artifact.with_name(artifact.name + SCORE_GRID_SUFFIX)
+def write_score_grid(path: Path, grid: ScoreGrid) -> None:
+    # A file object, so NumPy keeps the name as given.
+    with path.open("wb") as file:
+        np.savez_compressed(
+            file,
+            values=grid.values,
+            scored=grid.scored,
+            level=np.int64(grid.level),
+            level_size=np.asarray(grid.level_size, dtype=np.int64),
+            cell_size=np.float64(grid.cell_size),
+            mpp=np.asarray(grid.mpp, dtype=np.float64),
+        )
 
 
-def write_score_grid(artifact: Path, grid: ScoreGrid) -> None:
-    """Write the grid beside `artifact`; it appears under its name once complete."""
-    path = score_grid_path(artifact)
-    temporary = path.with_name(f".{path.name}.partial.npz")
-    np.savez_compressed(
-        temporary,
-        values=grid.values,
-        scored=grid.scored,
-        cell_size=np.float64(grid.cell_size),
-        level_size=np.asarray(grid.level_size, dtype=np.int64),
-    )
-    os.replace(temporary, path)
-
-
-def read_score_grid(artifact: Path) -> ScoreGrid | None:
-    """The grid beside `artifact`, or None when the builder wrote none."""
-    path = score_grid_path(artifact)
-    if not path.is_file():
-        return None
+def read_score_grid(path: Path) -> ScoreGrid:
     with np.load(path, allow_pickle=False) as stored:
         width, height = (int(value) for value in stored["level_size"])
+        mpp_x, mpp_y = (float(value) for value in stored["mpp"])
         return ScoreGrid(
             values=stored["values"],
             scored=stored["scored"],
-            cell_size=float(stored["cell_size"]),
+            level=int(stored["level"]),
             level_size=(width, height),
+            cell_size=float(stored["cell_size"]),
+            mpp=(mpp_x, mpp_y),
         )

@@ -61,9 +61,6 @@ MODEL = SpatialScoresModel(
 )
 DEFAULT_CONFIGURATION: dict[str, JsonValue] = {
     "stride_fraction": 0.5,
-    "output_tile_height": 256,
-    "output_tile_width": 256,
-    "encoding": "uint8",
     "skip_background": True,
 }
 
@@ -256,7 +253,7 @@ class CopyInputsBuilder:
             outputs={
                 "heatmap": SharedArtifact(
                     path=str(output),
-                    media_type="image/tiff",
+                    media_type="application/x-npz",
                 )
             }
         )
