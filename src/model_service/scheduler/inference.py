@@ -14,10 +14,10 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Protocol
 
 from model_service.scheduler.contracts import (
+    INFERENCE_PROVIDER,
     ExecutionError,
     ExecutionErrorCode,
     InferenceResult,
-    ProviderName,
 )
 from model_service.scheduler.domain import (
     InferenceSucceeded,
@@ -76,7 +76,7 @@ def identify(request: InferenceScheduleRequest) -> SubmissionIdentity:
         separators=(",", ":"),
     ).encode()
     return SubmissionIdentity(
-        provider=ProviderName.INFERENCE,
+        provider=INFERENCE_PROVIDER,
         key=request.idempotency_key,
         fingerprint=hashlib.sha256(canonical).hexdigest(),
     )

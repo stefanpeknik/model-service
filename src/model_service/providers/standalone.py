@@ -16,11 +16,11 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from model_service.builders.application import validate_invocation
 from model_service.builders.contracts import (
+    SHARED_STORAGE,
     BuilderInput,
     Deadline,
     ExecutionContext,
     InputAccessContext,
-    InputAccessKind,
     InvalidInvocation,
     Invocation,
     SharedPathInput,
@@ -38,6 +38,9 @@ if TYPE_CHECKING:
     from model_service.builders.contracts import JsonValue
     from model_service.providers.shared_storage import SharedStorageAccessAdapter
     from model_service.scheduler.providers import BeforeMutation, ProviderFinishOutcome
+
+
+NAME: ProviderName = "standalone"
 
 
 class BuilderRequest(BaseModel):
@@ -64,7 +67,7 @@ class BuilderRequest(BaseModel):
 
 
 class StandaloneProviderAdapter:
-    name = ProviderName.STANDALONE
+    name = NAME
 
     def __init__(self, shared_storage: SharedStorageAccessAdapter) -> None:
         self._shared_storage = shared_storage
@@ -113,7 +116,7 @@ class StandaloneProviderAdapter:
                 invocation,
                 now=deadline_at - timedelta(microseconds=1),
             )
-            if invocation.input_access.kind is not InputAccessKind.SHARED_STORAGE:
+            if invocation.input_access.kind != SHARED_STORAGE:
                 raise InvalidInvocation("standalone scheduling requires shared storage")
             access = self._shared_storage.create(invocation, ExecutionContext())
             for name, value in invocation.inputs.items():

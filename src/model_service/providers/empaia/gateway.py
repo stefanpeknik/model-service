@@ -22,6 +22,9 @@ if TYPE_CHECKING:
 
 type MutationGuard = Callable[[], Awaitable[None]]
 
+PROVIDER_NAME = "empaia"
+INPUT_ACCESS_KIND = "empaia"
+
 
 class EmpaiaGatewayError(RuntimeError):
     """Carry safe integration failure metadata, including retry permission and uncertain remote mutations."""

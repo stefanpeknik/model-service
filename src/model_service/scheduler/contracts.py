@@ -59,13 +59,10 @@ class ExecutionErrorCode(StrEnum):
     REQUEST_UNAVAILABLE = "inference_request_unavailable"
 
 
-class ProviderName(StrEnum):
-    """The integration a scheduled execution belongs to."""
-
-    STANDALONE = "standalone"
-    EMPAIA = "empaia"
-    # Scheduled raw inference; it has no provider adapter.
-    INFERENCE = "inference"
+# The integration a scheduled execution belongs to; each provider names itself.
+type ProviderName = str
+# Scheduled raw inference; it has no provider adapter.
+INFERENCE_PROVIDER: ProviderName = "inference"
 
 
 @dataclass(frozen=True, slots=True)

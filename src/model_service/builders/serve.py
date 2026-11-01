@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from ray import serve
 
 from model_service.builders.application import BuilderApplication
-from model_service.builders.contracts import BuilderResult, InputAccessKind
+from model_service.builders.contracts import SHARED_STORAGE, BuilderResult
 from model_service.builders.http import (
     ErrorCode,
     ErrorResponse,
@@ -25,6 +25,9 @@ from model_service.builders.http import (
 )
 from model_service.builders.registry import get_builder
 from model_service.builders.settings import DeploymentSettings, WorkerSettings
+from model_service.providers.empaia.gateway import (
+    INPUT_ACCESS_KIND as EMPAIA_INPUT_ACCESS,
+)
 from model_service.providers.empaia.http_gateway import http_gateway_factory
 from model_service.providers.empaia.input_access import EmpaiaInputAccessAdapter
 from model_service.providers.empaia.settings import EmpaiaSettings
@@ -61,11 +64,9 @@ def build_application(config: DeploymentSettings) -> BuilderApplication:
     implementation = getattr(importlib.import_module(module_name), class_name)
     settings = WorkerSettings.model_validate(config.model_dump(exclude={"builder_id"}))
     empaia = EmpaiaSettings()
-    adapters: dict[InputAccessKind, AccessAdapter] = {
-        InputAccessKind.SHARED_STORAGE: SharedStorageAccessAdapter(
-            settings.shared_storage_roots
-        ),
-        InputAccessKind.EMPAIA: EmpaiaInputAccessAdapter(
+    adapters: dict[str, AccessAdapter] = {
+        SHARED_STORAGE: SharedStorageAccessAdapter(settings.shared_storage_roots),
+        EMPAIA_INPUT_ACCESS: EmpaiaInputAccessAdapter(
             http_gateway_factory(empaia), empaia.workspace_root
         ),
     }

@@ -31,8 +31,8 @@ from model_service.facade.auth import Access, Action
 
 # FastAPI reads these annotations at runtime.
 from model_service.facade.requests import (
-    ImmediateBuilderRequest,  # noqa: TC001
-    ScheduledBuilderRequest,  # noqa: TC001
+    ImmediateBuilderRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations.
+    ScheduledBuilderRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations.
 )
 from model_service.facade.routes.common import (
     ERRORS,
@@ -43,8 +43,8 @@ from model_service.facade.routes.common import (
     require_idempotency_key,
     submit,
 )
+from model_service.providers.standalone import NAME as STANDALONE
 from model_service.scheduler.contracts import (
-    ProviderName,
     ScheduleRequest,
     ScheduleResult,
 )
@@ -182,7 +182,7 @@ def create_router(
             ScheduleRequest(
                 builder_id=builder_id,
                 model_id=model_id,
-                provider=ProviderName.STANDALONE,
+                provider=STANDALONE,
                 body=body.builder_request(),
                 requested_timeout_seconds=body.requested_timeout_seconds,
                 idempotency_key=idempotency_key,

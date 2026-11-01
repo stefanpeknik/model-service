@@ -119,11 +119,10 @@ type BuilderInput = Annotated[
 ]
 
 
-class InputAccessKind(StrEnum):
-    """Which access adapter resolves an invocation's inputs and outputs."""
-
-    SHARED_STORAGE = "shared_storage"
-    EMPAIA = "empaia"
+# Which access adapter resolves an invocation's inputs and outputs; each
+# provider names its own, the builder replica holds one adapter per kind.
+type InputAccessKind = str
+SHARED_STORAGE: InputAccessKind = "shared_storage"
 
 
 @dataclass(frozen=True, slots=True)

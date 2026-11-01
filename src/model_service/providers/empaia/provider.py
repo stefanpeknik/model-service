@@ -25,7 +25,6 @@ from pydantic import Field, ValidationError
 from model_service.builders.application import validate_invocation
 from model_service.builders.contracts import (
     InputAccessContext,
-    InputAccessKind,
     InvalidInvocation,
     Invocation,
     ProviderInput,
@@ -34,6 +33,8 @@ from model_service.builders.contracts import (
 from model_service.builders.registry import get_builder
 from model_service.providers.empaia.apps import VIEWER_CONFIG_KEY
 from model_service.providers.empaia.gateway import (
+    INPUT_ACCESS_KIND,
+    PROVIDER_NAME,
     EmpaiaGateway,
     EmpaiaGatewayError,
     EmpaiaGatewayFactory,
@@ -45,7 +46,6 @@ from model_service.providers.empaia.input_access import job_workspace
 from model_service.providers.empaia.publishers import default_publishers
 from model_service.scheduler.contracts import (
     InvalidScheduleRequestError,
-    ProviderName,
     ScheduleRequest,
     SchedulingUnavailableError,
 )
@@ -90,7 +90,7 @@ logger = logging.getLogger(__name__)
 class EmpaiaProviderAdapter:
     """Implement provider-scoped admission and terminal publication for EMPAIA jobs."""
 
-    name = ProviderName.EMPAIA
+    name = PROVIDER_NAME
 
     def __init__(
         self,
@@ -192,7 +192,7 @@ class EmpaiaProviderAdapter:
             inputs={name: ProviderInput(name=name) for name in names},
             resolved_configuration=deepcopy(configuration),
             input_access=InputAccessContext(
-                kind=InputAccessKind.EMPAIA,
+                kind=INPUT_ACCESS_KIND,
                 state=EmpaiaInputState(
                     api_url=context.api_url, job_id=context.job_id, mode=mode
                 ).model_dump(mode="json"),

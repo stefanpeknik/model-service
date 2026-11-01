@@ -22,7 +22,7 @@ from model_service.builders.contracts import (
     UnknownModelError,
 )
 from model_service.builders.registry import BUILDERS
-from model_service.providers.empaia.apps import EmpaiaListing  # noqa: TC001
+from model_service.providers.empaia.apps import EmpaiaListing
 
 
 if TYPE_CHECKING:

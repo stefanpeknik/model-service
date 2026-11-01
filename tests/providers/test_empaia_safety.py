@@ -16,7 +16,6 @@ from model_service.providers.empaia.publishers import PublisherRegistry
 from model_service.scheduler.contracts import (
     ExecutionError,
     InvalidScheduleRequestError,
-    ProviderName,
     ScheduleRequest,
 )
 from model_service.scheduler.providers import (
@@ -74,7 +73,7 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
                 ScheduleRequest(
                     builder_id="heatmap",
                     model_id="prostate-classifier-1",
-                    provider=ProviderName.EMPAIA,
+                    provider="empaia",
                     body={
                         "installation_id": "https://empaia.example/app-api",
                         "api_url": "https://empaia.example/app-api",

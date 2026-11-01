@@ -24,6 +24,7 @@ from model_service.providers.empaia.credentials import (
     NoCredentials,
     OutgoingCredentials,
 )
+from model_service.providers.empaia.gateway import PROVIDER_NAME as EMPAIA
 from model_service.providers.empaia.http_gateway import http_gateway_factory
 from model_service.providers.empaia.provider import EmpaiaProviderAdapter
 from model_service.providers.empaia.publishers import default_publishers
@@ -33,8 +34,8 @@ from model_service.providers.empaia.registration import (
 )
 from model_service.providers.empaia.settings import EmpaiaSettings
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
+from model_service.providers.standalone import NAME as STANDALONE
 from model_service.providers.standalone import StandaloneProviderAdapter
-from model_service.scheduler.contracts import ProviderName
 from model_service.scheduler.domain import RetryPolicy
 from model_service.scheduler.scheduler import ExecutionScheduler
 from model_service.scheduler.store.payloads import PayloadStore
@@ -91,14 +92,14 @@ def create_app(
             maximum_backoff=config.maximum_backoff,
         ),
     )
-    providers: dict[ProviderName, ProviderAdapter] = {
-        ProviderName.STANDALONE: StandaloneProviderAdapter(
+    providers: dict[str, ProviderAdapter] = {
+        STANDALONE: StandaloneProviderAdapter(
             SharedStorageAccessAdapter(config.shared_storage_roots)
         )
     }
     empaia = empaia_settings or EmpaiaSettings()
     publishers = default_publishers()
-    providers[ProviderName.EMPAIA] = EmpaiaProviderAdapter(
+    providers[EMPAIA] = EmpaiaProviderAdapter(
         http_gateway_factory(empaia),
         allowed_api_urls=empaia.api_urls,
         workspace_root=empaia.workspace_root,

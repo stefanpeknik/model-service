@@ -28,9 +28,9 @@ from model_service.facade.routes.common import (
     submit,
     unavailable,
 )
+from model_service.providers.empaia.gateway import PROVIDER_NAME
 from model_service.scheduler.contracts import (
     ExecutionStatus,
-    ProviderName,
     ScheduleRequest,
     SchedulingUnavailableError,
     UnknownExecutionError,
@@ -85,7 +85,7 @@ def create_router(
             ScheduleRequest(
                 builder_id=builder_id,
                 model_id=model_id,
-                provider=ProviderName.EMPAIA,
+                provider=PROVIDER_NAME,
                 body={
                     # Job IDs are unique per installation; its App API URL names it.
                     "installation_id": body.app_api.rstrip("/"),
