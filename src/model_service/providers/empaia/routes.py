@@ -57,15 +57,17 @@ class EmpaiaExecutionStatus:
 
 
 def create_router(
-    scheduler: Scheduler, capacity: Capacity, access: Access
+    scheduler: Scheduler, capacity: Capacity, access: Access | None = None
 ) -> APIRouter:
+    """`access` guards the routes; everyone is let in by default."""
+    access = access or Access()
     router = APIRouter(prefix="/v1/empaia")
 
     @router.post(
         "/builders/{builder_id}/models/{model_id}",
         status_code=status.HTTP_202_ACCEPTED,
         responses={200: {"model": EmpaiaExecutionStatus}, **ERRORS},
-        dependencies=[access.require(Action.SUBMIT_EMPAIA_JOB)],
+        dependencies=[access.require(Action.SUBMIT_PROVIDER_JOB)],
     )
     async def execute(
         builder_id: str,

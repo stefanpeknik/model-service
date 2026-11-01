@@ -129,10 +129,6 @@ class EmpaiaListing(BaseModel):
     viewer: ViewerConfig | None = None
 
 
-# The model files' block this provider reads.
-CATALOG_BLOCK = "empaia"
-
-
 def parse_listings(blocks: Mapping[str, object]) -> dict[str, EmpaiaListing]:
     """The listings of the models whose file has an `empaia` block."""
     listings = {}

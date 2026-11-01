@@ -33,7 +33,27 @@ behind one public API that can also run builders durably.
 | `src/model_service/builders/` | Builder registry, the builder runtime (validation, deadline, input access, cleanup) and the two builders. One Ray ingress, `src/model_service/builders/serve.py`, hosts any builder. |
 | `src/model_service/facade/` | The facade: public API, model catalog, synchronous runs, raw inference proxy, process wiring. |
 | `src/model_service/scheduler/` | Durable executions: admission, leases with fencing, retries, deadlines, cancellation, provider finish. PostgreSQL with Yoyo migrations. |
-| `src/model_service/providers/` | Providers: standalone (shared storage) and EMPAIA (AppService input and publication). |
+| `src/model_service/providers/` | Providers: standalone (shared storage) and EMPAIA (AppService input and publication). `providers/composition.py` lists them; the facade and the builder ingress compose what each contributes and name none of them. |
+
+### Providers
+
+A provider is a package that plugs into the facade and the builder replicas
+through one object (`Provider` in `providers/composition.py`):
+
+- `facade(catalog, settings)` gives the scheduler adapter that admits and
+  finishes its jobs, any routes of its own (EMPAIA's `/v1/empaia`), and work
+  to run in the background (EMPAIA's app registration);
+- `catalog_block` names the top-level block of the model files it reads (the
+  catalog keeps it unread and rejects blocks no provider takes);
+- `input_access(settings)` gives builder replicas the access adapters for the
+  inputs its jobs hand out.
+
+Providers name themselves and their input access kinds; the builders, the
+catalog and the scheduler know none of them. How builders appear in EMPAIA, the
+EAD `io` of their inputs and outputs, lives in `providers/empaia/io.py`. The
+facade's public builder routes are the standalone provider's front door and
+build on its request body. Adding a provider means a package and one entry in
+`PROVIDERS`.
 
 ## A request, end to end
 

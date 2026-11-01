@@ -2,9 +2,9 @@
 
 An `Authenticator` turns a request into a `Principal` or rejects it (401). An
 `Authorizer` decides whether that principal may perform an `Action`, on the
-execution it names if any (403). The public API and the EMPAIA route each get
-their own `Access`, so EMPAIA's service token and direct users can be checked
-differently. Both default to letting everyone in.
+execution it names if any (403). The public API and each provider's routes
+get their own `Access`, so a provider's service token (EMPAIA's JES, say) and
+direct users can be checked differently. All default to letting everyone in.
 """
 
 from __future__ import annotations
@@ -28,7 +28,8 @@ class Action(StrEnum):
     SCHEDULE = "schedule"
     READ_EXECUTION = "read_execution"
     CANCEL_EXECUTION = "cancel_execution"
-    SUBMIT_EMPAIA_JOB = "submit_empaia_job"
+    # A job a provider's own route submits, e.g. EMPAIA's JES.
+    SUBMIT_PROVIDER_JOB = "submit_provider_job"
 
 
 @dataclass(frozen=True, slots=True)

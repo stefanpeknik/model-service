@@ -35,7 +35,14 @@ from model_service.scheduler.domain import PreparedInvocation, SubmissionIdentit
 
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from model_service.builders.application import AccessAdapter
     from model_service.builders.contracts import JsonValue
+    from model_service.builders.settings import WorkerSettings
+    from model_service.facade.catalog import ModelCatalog
+    from model_service.facade.settings import SchedulerSettings
+    from model_service.providers.composition import FacadeContribution
     from model_service.providers.shared_storage import SharedStorageAccessAdapter
     from model_service.scheduler.providers import BeforeMutation, ProviderFinishOutcome
 
@@ -134,3 +141,32 @@ class StandaloneProviderAdapter:
         before_mutation: BeforeMutation,
     ) -> None:
         del before_mutation
+
+
+class StandaloneProvider:
+    """Shared-storage jobs, through the public builder routes the facade serves."""
+
+    catalog_block = None
+
+    def facade(
+        self, catalog: ModelCatalog, settings: SchedulerSettings
+    ) -> FacadeContribution:
+        from model_service.providers.composition import FacadeContribution
+        from model_service.providers.shared_storage import SharedStorageAccessAdapter
+
+        del catalog
+        return FacadeContribution(
+            StandaloneProviderAdapter(
+                SharedStorageAccessAdapter(settings.shared_storage_roots)
+            )
+        )
+
+    def input_access(self, settings: WorkerSettings) -> Mapping[str, AccessAdapter]:
+        from model_service.providers.shared_storage import SharedStorageAccessAdapter
+
+        return {
+            SHARED_STORAGE: SharedStorageAccessAdapter(settings.shared_storage_roots)
+        }
+
+
+PROVIDER = StandaloneProvider()

@@ -17,6 +17,7 @@ from model_service.facade.auth import (
     Principal,
 )
 from model_service.facade.catalog import ModelCatalog
+from model_service.providers.empaia.routes import create_router
 from model_service.scheduler.contracts import (
     ExecutionStatus,
     ExecutionView,
@@ -74,7 +75,12 @@ class Recorder:
 
 
 def client(**access: Access) -> AsyncClient:
-    app = create_app(Scheduler(), catalog=CATALOG, **access)  # type: ignore[arg-type]
+    app = create_app(
+        Scheduler(),  # type: ignore[arg-type]
+        catalog=CATALOG,
+        provider_routes=[create_router],
+        **access,
+    )
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://ms")
 
 

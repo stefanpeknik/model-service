@@ -17,7 +17,6 @@ from pydantic import ValidationError as SettingsError
 from model_service.builders.registry import get_builder
 from model_service.facade.catalog import ModelCatalog
 from model_service.providers.empaia.apps import (
-    CATALOG_BLOCK,
     VIEWER_CONFIG_KEY,
     AppMode,
     EmpaiaListing,
@@ -26,6 +25,7 @@ from model_service.providers.empaia.apps import (
     generate_ead,
     parse_listings,
 )
+from model_service.providers.empaia.composition import CATALOG_BLOCK
 from model_service.providers.empaia.credentials import ClientCredentials
 from model_service.providers.empaia.io import BUILDER_IO
 from model_service.providers.empaia.publishers import default_publishers
@@ -241,7 +241,7 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
         settings = EmpaiaSettings(
             marketplace_url="https://marketplace.example", organization_id="org-1"
         )
-        from model_service.facade.app import _marketplace
+        from model_service.providers.empaia.composition import _marketplace
 
         marketplace = _marketplace(settings)
         assert marketplace is not None

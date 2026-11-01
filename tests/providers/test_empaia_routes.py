@@ -9,6 +9,7 @@ from httpx import ASGITransport, AsyncClient
 from model_service.builders.contracts import SpatialScoresModel, UnknownModelError
 from model_service.facade.api import create_app
 from model_service.facade.catalog import ModelCatalog
+from model_service.providers.empaia.routes import create_router
 from model_service.scheduler.contracts import (
     ExecutionError,
     ExecutionStatus,
@@ -81,6 +82,7 @@ def client(scheduler: ScriptedScheduler) -> AsyncClient:
     app = create_app(
         scheduler,  # type: ignore[arg-type]
         catalog=ModelCatalog([PROSTATE]),
+        provider_routes=[create_router],
     )
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://ms")
 

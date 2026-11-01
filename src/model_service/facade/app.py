@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
 import httpx
@@ -18,28 +18,7 @@ from model_service.facade.health import DeploymentHealth
 from model_service.facade.inference import HttpInferenceProxy, ModelInference
 from model_service.facade.settings import SchedulerSettings
 from model_service.facade.synchronous import SynchronousBuilderService
-from model_service.providers.empaia.apps import (
-    CATALOG_BLOCK,
-    app_definitions,
-    parse_listings,
-)
-from model_service.providers.empaia.credentials import (
-    ClientCredentials,
-    NoCredentials,
-    OutgoingCredentials,
-)
-from model_service.providers.empaia.gateway import PROVIDER_NAME as EMPAIA
-from model_service.providers.empaia.http_gateway import http_gateway_factory
-from model_service.providers.empaia.provider import EmpaiaProviderAdapter
-from model_service.providers.empaia.publishers import default_publishers
-from model_service.providers.empaia.registration import (
-    Marketplace,
-    register_until_done,
-)
-from model_service.providers.empaia.settings import EmpaiaSettings
-from model_service.providers.shared_storage import SharedStorageAccessAdapter
-from model_service.providers.standalone import NAME as STANDALONE
-from model_service.providers.standalone import StandaloneProviderAdapter
+from model_service.providers.composition import load_providers
 from model_service.scheduler.domain import RetryPolicy
 from model_service.scheduler.scheduler import ExecutionScheduler
 from model_service.scheduler.store.payloads import PayloadStore
@@ -54,7 +33,6 @@ if TYPE_CHECKING:
 
     from model_service.builders.contracts import ModelBinding
     from model_service.scheduler.contracts import ModelResolver
-    from model_service.scheduler.providers import ProviderAdapter
 
 
 def model_resolver(catalog: ModelCatalog) -> ModelResolver:
@@ -67,12 +45,13 @@ def model_resolver(catalog: ModelCatalog) -> ModelResolver:
     return resolve
 
 
-def create_app(
-    settings: SchedulerSettings | None = None,
-    empaia_settings: EmpaiaSettings | None = None,
-) -> FastAPI:
+def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
     config = settings or SchedulerSettings.from_environment()
-    catalog = ModelCatalog.from_file(config.model_catalog_path, [CATALOG_BLOCK])
+    providers = load_providers()
+    catalog = ModelCatalog.from_file(
+        config.model_catalog_path,
+        [p.catalog_block for p in providers if p.catalog_block is not None],
+    )
     builder_ids = config.builder_ids or frozenset(BUILDERS)
     for builder_id in builder_ids:
         get_builder(builder_id)
@@ -96,19 +75,7 @@ def create_app(
             maximum_backoff=config.maximum_backoff,
         ),
     )
-    providers: dict[str, ProviderAdapter] = {
-        STANDALONE: StandaloneProviderAdapter(
-            SharedStorageAccessAdapter(config.shared_storage_roots)
-        )
-    }
-    empaia = empaia_settings or EmpaiaSettings()
-    publishers = default_publishers()
-    providers[EMPAIA] = EmpaiaProviderAdapter(
-        http_gateway_factory(empaia),
-        allowed_api_urls=empaia.api_urls,
-        workspace_root=empaia.workspace_root,
-        publishers=publishers,
-    )
+    contributions = [provider.facade(catalog, config) for provider in providers]
     client = httpx.AsyncClient()
     dispatch = HTTPBuilderDispatch(client, origin=config.ray_serve_origin)
     inference_proxy = HttpInferenceProxy(
@@ -126,7 +93,7 @@ def create_app(
     scheduler = ExecutionScheduler(
         repository=repository,
         dispatch=dispatch,
-        providers=providers,
+        providers={c.adapter.name: c.adapter for c in contributions},
         resolve_model=model_resolver(catalog),
         default_timeout=config.default_deadline,
         maximum_timeout=config.maximum_deadline,
@@ -137,28 +104,22 @@ def create_app(
         max_concurrent_inference=config.max_concurrent_inference,
     )
 
-    marketplace = _marketplace(empaia)
-    apps = app_definitions(
-        catalog, parse_listings(catalog.provider_block(CATALOG_BLOCK)), publishers
-    )
-
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-        registration = None
+        background: list[asyncio.Task[None]] = []
         try:
             await repository.initialize()
-            if marketplace is not None and apps:
-                # In the background: the API serves while the marketplace is down.
-                registration = asyncio.create_task(
-                    register_until_done(marketplace, apps)
-                )
+            background = [
+                asyncio.create_task(c.background())
+                for c in contributions
+                if c.background is not None
+            ]
             async with scheduler.running():
                 yield
         finally:
-            if registration is not None:
-                registration.cancel()
-                with suppress(asyncio.CancelledError):
-                    await registration
+            for task in background:
+                task.cancel()
+            await asyncio.gather(*background, return_exceptions=True)
             await client.aclose()
             await repository.aclose()
 
@@ -169,6 +130,7 @@ def create_app(
         inference_target=inference_target,
         inference_max_request_bytes=config.inference_max_request_bytes,
         lifespan=lifespan,
+        provider_routes=[c.routes for c in contributions if c.routes is not None],
         capacity=(
             ServeCapacity(
                 client,
@@ -184,24 +146,4 @@ def create_app(
             routes=[f"/builders/{builder_id}" for builder_id in builder_ids]
             + [f"/{model.id}" for model in catalog],
         ),
-    )
-
-
-def _marketplace(settings: EmpaiaSettings) -> Marketplace | None:
-    if settings.marketplace_url is None or settings.organization_id is None:
-        return None
-    credentials: OutgoingCredentials = NoCredentials()
-    if settings.idp_url is not None:
-        assert settings.client_id is not None and settings.client_secret is not None
-        credentials = ClientCredentials(
-            settings.idp_url,
-            settings.client_id,
-            settings.client_secret.get_secret_value(),
-        )
-    return Marketplace(
-        settings.marketplace_url,
-        settings.organization_id,
-        settings.jes_target,
-        credentials,
-        timeout=settings.app_service_timeout_seconds,
     )

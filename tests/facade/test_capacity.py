@@ -16,8 +16,9 @@ from httpx import (
 from model_service.facade.api import create_app
 from model_service.facade.capacity import ServeCapacity
 from model_service.facade.catalog import ModelCatalog
+from model_service.providers.empaia.routes import create_router
 from model_service.scheduler.contracts import ExecutionStatus
-from tests.facade.test_empaia_routes import PROSTATE, ScriptedScheduler, view
+from tests.providers.test_empaia_routes import PROSTATE, ScriptedScheduler, view
 
 
 NOW = 10_000.0
@@ -60,6 +61,7 @@ class CapacityMessageTests(unittest.IsolatedAsyncioTestCase):
                 ScriptedScheduler(view(status)),  # type: ignore[arg-type]
                 catalog=ModelCatalog([PROSTATE]),
                 capacity=capacity,
+                provider_routes=[create_router],
             )
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://ms"

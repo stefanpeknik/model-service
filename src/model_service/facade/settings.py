@@ -1,7 +1,7 @@
 """Read scheduler process settings from environment variables.
 
-Required storage, encryption, and dispatch settings are separate from optional EMPAIA
-and per-model origins. Parsed durations feed runtime wiring and retry policies.
+Required storage, encryption, and dispatch settings are separate from optional
+per-model origins; each provider reads its own settings. Parsed durations feed runtime wiring and retry policies.
 """
 
 from __future__ import annotations

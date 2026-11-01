@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 
 from model_service.facade.auth import Access
 from model_service.facade.health import DeploymentState, DeploymentStatus
-from model_service.facade.routes import builders, empaia, executions, models
+from model_service.facade.routes import builders, executions, models
 from model_service.facade.routes.common import (
     ApiErrorCode,
     NoCapacityInfo,
@@ -23,11 +23,14 @@ from model_service.scheduler.contracts import SchedulingUnavailableError
 
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from starlette.types import Lifespan
 
     from model_service.facade.catalog import ModelCatalog
     from model_service.facade.routes.builders import BuilderRunner
     from model_service.facade.routes.common import Capacity, Scheduler
+    from model_service.providers.composition import RouteFactory
     from model_service.scheduler.inference import InferenceTarget
 
 
@@ -46,12 +49,11 @@ def create_app(
     inference_max_request_bytes: int = 2 * 1024 * 1024,
     capacity: Capacity | None = None,
     access: Access | None = None,
-    empaia_access: Access | None = None,
+    provider_routes: Sequence[RouteFactory] = (),
 ) -> FastAPI:
-    """`access` guards the public API, `empaia_access` the EMPAIA route; both allow everyone by default."""
+    """`access` guards the public API and allows everyone by default; providers guard their own routes."""
     capacity = capacity or NoCapacityInfo()
     access = access or Access()
-    empaia_access = empaia_access or Access()
     app = FastAPI(title="model-service", lifespan=lifespan)
 
     @app.exception_handler(RequestValidationError)
@@ -105,6 +107,7 @@ def create_app(
         )
     )
     app.include_router(builders.create_router(scheduler, builder_runner, access))
-    app.include_router(empaia.create_router(scheduler, capacity, empaia_access))
+    for routes in provider_routes:
+        app.include_router(routes(scheduler, capacity))
     app.include_router(executions.create_router(scheduler, capacity, access))
     return app
