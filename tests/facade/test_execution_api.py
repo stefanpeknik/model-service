@@ -587,6 +587,15 @@ class HealthAndAvailabilityTests(ApiTestCase):
             routes=["/builders/heatmap", "/prostate-classifier-1"],
         )
 
+    async def test_a_facade_without_a_running_worker_is_not_live(self) -> None:
+        async with self.client(self.app()) as client:
+            stopped = await client.get("/healthz")
+            async with self.scheduler.running():
+                live = await client.get("/healthz")
+
+        self.assertEqual(stopped.status_code, 503)
+        self.assertEqual(live.status_code, 200)
+
     async def test_missing_routes_are_separate_from_readiness(self) -> None:
         routes = {"/builders/heatmap/": "heatmap"}
         async with (
@@ -594,6 +603,7 @@ class HealthAndAvailabilityTests(ApiTestCase):
                 transport=MockTransport(lambda _request: Response(200, json=routes))
             ) as ray,
             self.client(self.app(deployment_health=self.health(ray))) as client,
+            self.scheduler.running(),
         ):
             live = await client.get("/healthz")
             ready = await client.get("/readyz")
@@ -663,7 +673,10 @@ class HealthAndAvailabilityTests(ApiTestCase):
                 raise ExecutionRepositoryUnavailableError("database unavailable")
 
         self.scheduler = self.make_scheduler(UnavailableRepository(), self.dispatch)
-        async with self.client(self.app(), raise_app_exceptions=False) as client:
+        async with (
+            self.client(self.app(), raise_app_exceptions=False) as client,
+            self.scheduler.running(),
+        ):
             responses = [
                 await client.get("/readyz"),
                 await client.get("/v1/executions/execution-1"),

@@ -71,8 +71,11 @@ def create_app(
         )
 
     @app.get("/healthz")
-    async def health() -> dict[str, str]:
-        return {"status": "ok"}
+    async def health() -> JSONResponse:
+        # Liveness: a facade whose worker stopped would hold jobs forever.
+        if not scheduler.alive:
+            return JSONResponse({"status": "worker stopped"}, status_code=503)
+        return JSONResponse({"status": "ok"})
 
     @app.get("/readyz")
     async def readiness() -> dict[str, str]:

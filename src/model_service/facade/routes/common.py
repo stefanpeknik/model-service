@@ -76,6 +76,9 @@ ERRORS: dict[int | str, dict[str, Any]] = {
 
 
 class Scheduler(Protocol):
+    @property
+    def alive(self) -> bool: ...
+
     async def check_ready(self) -> None: ...
 
     async def schedule(self, request: ScheduleRequest) -> ScheduleResult: ...

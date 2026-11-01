@@ -94,6 +94,7 @@ class ExecutionScheduler:
         )
         self._poll_interval = poll_interval
         self._running = False
+        self._worker_task: asyncio.Task[None] | None = None
 
     @asynccontextmanager
     async def running(self) -> AsyncIterator[None]:
@@ -107,6 +108,7 @@ class ExecutionScheduler:
                 worker_task = tasks.create_task(
                     self._worker.run(stop, poll_interval=self._poll_interval)
                 )
+                self._worker_task = worker_task
                 try:
                     yield
                 finally:
@@ -114,6 +116,12 @@ class ExecutionScheduler:
                     worker_task.cancel()
         finally:
             self._running = False
+            self._worker_task = None
+
+    @property
+    def alive(self) -> bool:
+        """Whether the worker still claims work; a process without one is useless."""
+        return self._worker_task is not None and not self._worker_task.done()
 
     async def check_ready(self) -> None:
         """Translate repository readiness failures into a public scheduling availability error."""

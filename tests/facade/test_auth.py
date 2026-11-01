@@ -35,6 +35,8 @@ EXECUTION = "00000000-0000-4000-8000-000000000001"
 
 
 class Scheduler:
+    alive = True
+
     async def check_ready(self) -> None:
         return None
 
