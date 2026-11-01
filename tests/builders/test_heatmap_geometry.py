@@ -5,11 +5,10 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
 
 import numpy as np
 
-from model_service.builders.contracts import InvalidInvocation, SpatialScoresModel
+from model_service.builders.contracts import SpatialScoresModel
 from model_service.builders.heatmap.processor import (
     HeatmapRequest,
     SlideHeatmapProcessor,
@@ -215,20 +214,6 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
             region.values[:, 2:4, 2:5], whole.values[:, 2:4, 3:6]
         )
         self.assertTrue(region.scored[2:4, 2:5].all())
-
-    async def test_a_grid_too_large_to_hold_is_refused_before_any_tile(
-        self,
-    ) -> None:
-        predictor = LandmarkPredictor(output_tile_size=32)
-        with (
-            TemporaryDirectory() as directory,
-            patch("model_service.builders.heatmap.processor.MAX_GRID_CELLS", 1000),
-            self.assertRaises(InvalidInvocation) as raised,
-        ):
-            await self._build(Path(directory), 112, 80, predictor=predictor)
-
-        self.assertIn("smaller region of interest", str(raised.exception))
-        self.assertEqual(predictor.calls, 0)
 
     async def test_empty_mask_skips_predictions_and_scores_nothing(self) -> None:
         predictor = LandmarkPredictor()

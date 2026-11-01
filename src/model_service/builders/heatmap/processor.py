@@ -3,8 +3,7 @@
 OpenSlide reads run in a thread pool and predictions run concurrently through the
 predictor. A memory-mapped MaskBuilder averages overlapping scores into a grid
 at the model's output resolution, which is written as a score grid. With a
-region of interest the grid covers only its box, so a model that scores every
-pixel stays within memory; a grid that would not is refused before any tile.
+region of interest the grid covers only its box.
 """
 
 from __future__ import annotations
@@ -14,10 +13,8 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from math import ceil
 from typing import TYPE_CHECKING, Protocol
 
-from model_service.builders.contracts import InvalidInvocation
 from model_service.builders.score_grid import ScoreGrid, write_score_grid
 
 
@@ -29,9 +26,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 _PROGRESS_SECONDS = 60
-# Scores across all channels; the grid and its overlap counts are memory-mapped
-# but the publisher holds them in memory. 2**26 float32 scores are 256 MiB.
-MAX_GRID_CELLS = 2**26
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,16 +103,6 @@ class SlideHeatmapProcessor:
             # On to the end of the last tile that starts in the box.
             span_x = min(extent_x, _snap(right - 1, stride) + tile_size) - origin_x
             span_y = min(extent_y, _snap(bottom - 1, stride) + tile_size) - origin_y
-            cells = (
-                n_channels
-                * ceil(max(span_x, tile_size) * output_tile_size / tile_size)
-                * ceil(max(span_y, tile_size) * output_tile_size / tile_size)
-            )
-            if cells > MAX_GRID_CELLS:
-                raise InvalidInvocation(
-                    f"{model.id} scores {span_x}x{span_y} pixels too finely to "
-                    "hold; choose a smaller region of interest"
-                )
             mask_builder = MaskBuilder(
                 source_extents=(span_y, span_x),
                 source_tile_extent=tile_size,

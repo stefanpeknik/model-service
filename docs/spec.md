@@ -320,11 +320,9 @@ model). It reads with NumPy alone; an image of the slide's size is the grid
 scaled by the cell size. With a region of interest the grid covers only its
 box, from the first tile that reaches it, snapped to the stride, to the end of
 the last; its `origin` records where cell (0, 0) lies, and the box's cells
-score as in a whole-slide run. A grid of more than 2^26 scores is refused
-before any tile is read. That is what keeps a model scoring every pixel, such
-as EPISeg, to a region of interest, so such an app would be standalone only
-(no EPISeg app is listed yet). The SDK places
-such a grid with `ScalarImageOutput.origin_x`/`origin_y`, added on the SDK
+score as in a whole-slide run. Nothing caps a grid's size yet: a model
+scoring every pixel, such as EPISeg, fits only a region of interest, and no
+app for one is listed. The SDK places such a grid with `ScalarImageOutput.origin_x`/`origin_y`, added on the SDK
 branch `feat/scalar-output-origin`. The builder no longer renders a TIFF: EMPAIA never
 used it, and it took longer to write than the inference.
 
