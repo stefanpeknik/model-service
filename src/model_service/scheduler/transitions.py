@@ -141,6 +141,9 @@ class ExecutionTransitions:
             lease_owner=None,
             fencing_token=None,
             lease_expires_at=None,
+            # A publication's mark is not the report's: left set, recovery
+            # would take the report as already sent and drop it.
+            finish_mutation_started=False,
             updated_at=now,
         )
 

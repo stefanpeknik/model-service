@@ -279,6 +279,36 @@ class ExecutionRepositoryContract:
         assert execution.result is None
         assert execution.work_kind is WorkKind.PROVIDER_CANCELLATION_REPORT
 
+    async def test_a_cancellation_report_survives_a_cancelled_publication(
+        self,
+    ) -> None:
+        execution_id = await self._admit_execution("cancelled-in-finish")
+        processing = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert processing is not None
+        await self.repository.settle(
+            execution_id,
+            processing.fencing_token,
+            ProcessingSucceeded(BuilderResult({})),
+        )
+        finish = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert finish is not None
+        assert finish.kind is WorkKind.PROVIDER_FINISH
+        await self.repository.mark_finish_mutation_started(
+            execution_id, finish.fencing_token
+        )
+        await self.repository.request_cancel(execution_id)
+        report = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert report is not None
+        assert report.kind is WorkKind.PROVIDER_CANCELLATION_REPORT
+
+        # The report's worker dies before it writes anything.
+        await self._advance_time(timedelta(seconds=31))
+        retried = await self.repository.claim_due("worker", timedelta(seconds=30))
+
+        assert retried is not None, "the cancellation report was dropped"
+        assert retried.execution_id == execution_id
+        assert retried.kind is WorkKind.PROVIDER_CANCELLATION_REPORT
+
     async def test_inference_claim_carries_payload_and_settles_without_provider(
         self,
     ) -> None:
