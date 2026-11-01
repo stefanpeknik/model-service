@@ -17,12 +17,14 @@ from pydantic import ValidationError as SettingsError
 from model_service.builders.registry import get_builder
 from model_service.facade.catalog import ModelCatalog
 from model_service.providers.empaia.apps import (
+    CATALOG_BLOCK,
     VIEWER_CONFIG_KEY,
     AppMode,
     EmpaiaListing,
     ViewerConfig,
     app_definitions,
     generate_ead,
+    parse_listings,
 )
 from model_service.providers.empaia.credentials import ClientCredentials
 from model_service.providers.empaia.io import BUILDER_IO
@@ -42,8 +44,13 @@ MODELS = (
 
 def catalog(*names: str) -> ModelCatalog:
     return ModelCatalog.from_documents(
-        [yaml.safe_load((MODELS / f"{name}.yaml").read_text()) for name in names]
+        [yaml.safe_load((MODELS / f"{name}.yaml").read_text()) for name in names],
+        [CATALOG_BLOCK],
     )
+
+
+def listings(models: ModelCatalog) -> dict[str, EmpaiaListing]:
+    return parse_listings(models.provider_block(CATALOG_BLOCK))
 
 
 class AppDefinitionTests(unittest.TestCase):
@@ -52,7 +59,7 @@ class AppDefinitionTests(unittest.TestCase):
     ) -> None:
         models = catalog("prostate-classifier-1", "virchow2")
 
-        apps = app_definitions(models, models.empaia_listings, PUBLISHERS)
+        apps = app_definitions(models, listings(models), PUBLISHERS)
 
         self.assertEqual(
             [(app.builder_id, app.model_id, app.mode) for app in apps],
@@ -89,7 +96,7 @@ class AppDefinitionTests(unittest.TestCase):
     def test_the_viewer_settings_are_declared_and_given_to_each_app(self) -> None:
         models = catalog("prostate-classifier-1")
 
-        standalone, _ = app_definitions(models, models.empaia_listings, PUBLISHERS)
+        standalone, _ = app_definitions(models, listings(models), PUBLISHERS)
 
         self.assertEqual(
             standalone.ead["configuration"]["global"][VIEWER_CONFIG_KEY]["type"],
@@ -133,8 +140,8 @@ class AppDefinitionTests(unittest.TestCase):
         for path in sorted(MODELS.rglob("*.yaml")):
             with self.subTest(model=str(path.relative_to(MODELS))):
                 models = catalog(str(path.relative_to(MODELS).with_suffix("")))
-                apps = app_definitions(models, models.empaia_listings, PUBLISHERS)
-                if models.empaia_listings:
+                apps = app_definitions(models, listings(models), PUBLISHERS)
+                if listings(models):
                     listed += 1
                     self.assertTrue(apps)
         self.assertGreater(listed, 0)
@@ -191,7 +198,7 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
             return httpx.Response(201)
 
         models = catalog("prostate-classifier-1")
-        apps = app_definitions(models, models.empaia_listings, PUBLISHERS)
+        apps = app_definitions(models, listings(models), PUBLISHERS)
         credentials = ClientCredentials("https://idp.example/realm", "ms", "secret")
         marketplace = Marketplace(
             "https://marketplace.example",
@@ -230,7 +237,7 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
             return answers.pop(0)
 
         models = catalog("prostate-classifier-1")
-        apps = app_definitions(models, models.empaia_listings, PUBLISHERS)
+        apps = app_definitions(models, listings(models), PUBLISHERS)
         settings = EmpaiaSettings(
             marketplace_url="https://marketplace.example", organization_id="org-1"
         )

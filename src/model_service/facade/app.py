@@ -18,7 +18,11 @@ from model_service.facade.health import DeploymentHealth
 from model_service.facade.inference import HttpInferenceProxy, ModelInference
 from model_service.facade.settings import SchedulerSettings
 from model_service.facade.synchronous import SynchronousBuilderService
-from model_service.providers.empaia.apps import app_definitions
+from model_service.providers.empaia.apps import (
+    CATALOG_BLOCK,
+    app_definitions,
+    parse_listings,
+)
 from model_service.providers.empaia.credentials import (
     ClientCredentials,
     NoCredentials,
@@ -68,7 +72,7 @@ def create_app(
     empaia_settings: EmpaiaSettings | None = None,
 ) -> FastAPI:
     config = settings or SchedulerSettings.from_environment()
-    catalog = ModelCatalog.from_file(config.model_catalog_path)
+    catalog = ModelCatalog.from_file(config.model_catalog_path, [CATALOG_BLOCK])
     builder_ids = config.builder_ids or frozenset(BUILDERS)
     for builder_id in builder_ids:
         get_builder(builder_id)
@@ -134,7 +138,9 @@ def create_app(
     )
 
     marketplace = _marketplace(empaia)
-    apps = app_definitions(catalog, catalog.empaia_listings, publishers)
+    apps = app_definitions(
+        catalog, parse_listings(catalog.provider_block(CATALOG_BLOCK)), publishers
+    )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:

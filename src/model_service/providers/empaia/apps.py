@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from jsonschema import Draft7Validator
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 
 from model_service.builders.registry import BUILDERS
 from model_service.providers.empaia.io import BUILDER_IO
@@ -127,6 +127,23 @@ class EmpaiaListing(BaseModel):
     modes: Annotated[tuple[AppMode, ...], Field(min_length=1)]
     # Entries for io keys an app lacks are left out of that app's value.
     viewer: ViewerConfig | None = None
+
+
+# The model files' block this provider reads.
+CATALOG_BLOCK = "empaia"
+
+
+def parse_listings(blocks: Mapping[str, object]) -> dict[str, EmpaiaListing]:
+    """The listings of the models whose file has an `empaia` block."""
+    listings = {}
+    for model_id, block in blocks.items():
+        try:
+            listings[model_id] = EmpaiaListing.model_validate(block)
+        except ValidationError as error:
+            raise ValueError(
+                f"model {model_id!r} has an invalid EMPAIA listing: {error}"
+            ) from error
+    return listings
 
 
 @dataclass(frozen=True, slots=True)

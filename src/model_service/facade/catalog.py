@@ -6,7 +6,10 @@ that Helm also injects into the RayService, so the catalog and the running
 models come from the same files.
 
 Contract parameters the model already reads from its `user_config` are taken
-from there; `inference` declares only what the model does not read itself.
+from there; `inference` declares only what the model does not read itself. Any
+other top-level block belongs to a provider (e.g. `empaia`, how the model is
+offered there): the catalog keeps it for that provider, unread, and rejects a
+block no provider takes.
 """
 
 from __future__ import annotations
@@ -22,11 +25,10 @@ from model_service.builders.contracts import (
     UnknownModelError,
 )
 from model_service.builders.registry import BUILDERS
-from model_service.providers.empaia.apps import EmpaiaListing
 
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping
+    from collections.abc import Collection, Iterator, Mapping
     from pathlib import Path
 
     from model_service.builders.contracts import ModelBinding
@@ -55,12 +57,11 @@ class _ServeApplication(BaseModel):
 
 
 class ModelDocument(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # Other blocks are providers'.
+    model_config = ConfigDict(extra="allow")
 
     inference: InferenceDeclaration
     serve: _ServeApplication
-    # How the model is offered as EMPAIA apps; without it, it is not.
-    empaia: EmpaiaListing | None = None
 
 
 # Parameters each contract reads from user_config, and from the inference block.
@@ -113,37 +114,48 @@ class ModelCatalog:
     def __init__(
         self,
         models: list[ModelBinding],
-        empaia_listings: Mapping[str, EmpaiaListing] | None = None,
+        blocks: Mapping[str, Mapping[str, object]] | None = None,
     ) -> None:
         self._models = {model.id: model for model in models}
         if len(self._models) != len(models):
             raise CatalogError("model IDs must be unique")
-        self.empaia_listings = dict(empaia_listings or {})
+        self._blocks = {key: dict(value) for key, value in (blocks or {}).items()}
 
     @classmethod
-    def from_documents(cls, documents: object) -> ModelCatalog:
+    def from_documents(
+        cls, documents: object, provider_blocks: Collection[str] = ()
+    ) -> ModelCatalog:
+        """`provider_blocks` are the top-level keys providers read."""
         if not isinstance(documents, list):
             raise CatalogError("model catalog must be a list")
         try:
             parsed = [ModelDocument.model_validate(item) for item in documents]
         except ValidationError as error:
             raise CatalogError(f"model catalog is invalid: {error}") from error
-        return cls(
-            [model_binding(document) for document in parsed],
-            {
-                document.serve.name: document.empaia
-                for document in parsed
-                if document.empaia is not None
-            },
-        )
+        blocks: dict[str, dict[str, object]] = {key: {} for key in provider_blocks}
+        for document in parsed:
+            for key, value in (document.model_extra or {}).items():
+                if key not in blocks:
+                    raise CatalogError(
+                        f"model {document.serve.name!r} has a {key!r} block "
+                        "no provider takes"
+                    )
+                blocks[key][document.serve.name] = value
+        return cls([model_binding(document) for document in parsed], blocks)
 
     @classmethod
-    def from_file(cls, path: Path) -> ModelCatalog:
+    def from_file(
+        cls, path: Path, provider_blocks: Collection[str] = ()
+    ) -> ModelCatalog:
         try:
             documents = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as error:
             raise CatalogError(f"cannot read model catalog {path}") from error
-        return cls.from_documents(documents)
+        return cls.from_documents(documents, provider_blocks)
+
+    def provider_block(self, key: str) -> dict[str, object]:
+        """Each model's `key` block, by model ID; models without one are absent."""
+        return dict(self._blocks.get(key, {}))
 
     def get(self, model_id: str) -> ModelBinding:
         try:
