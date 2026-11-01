@@ -170,26 +170,13 @@ interface: none by default, or client credentials from an identity provider
 (`EMPAIA_IDP_URL`, `EMPAIA_CLIENT_ID`, `EMPAIA_CLIENT_SECRET`), obtained the way
 `empaia-sender-auth` does.
 
-EMPAIA slide inputs reach builders one of two ways, chosen by
-`EMPAIA_SLIDE_ACCESS` (Helm `empaia.slideAccess`):
-
-- `direct` (default): link the file named by the RationAI direct-access route
-  (`/v3/rationai/{job}/slides/{input}/direct-access`). When the route has
-  nothing for the input, the slide is downloaded as in `http`; a route that says
-  direct access is unsupported is an error.
-- `http`: download the slide through the App API's region route into the
-  attempt workspace, for installations whose slide storage model-service cannot
-  mount (the EMPAIA test instance's slides sit on a volume in another
-  namespace). Only the level closest to the model's `mpp` is fetched, tile by
-  tile and streamed into a tiled JPEG TIFF that records that level's
-  resolution, so the builder reads it unchanged as level 0. Region-of-interest
-  rectangles still become a local mask. The model's `mpp` reaches the input
-  adapter with the invocation.
-  When the job has a region of interest, only the tiles within one model tile
-  of it are fetched (tiles the builder selects reach up to a tile past the
-  region); the rest of the level is written white, which the builder treats as
-  background. Jobs without one, such as preprocessing jobs, still fetch the
-  whole level.
+EMPAIA slide inputs reach builders as a link to the file named by the
+RationAI direct-access route (`/v3/rationai/{job}/slides/{input}/direct-access`),
+on the installation's slide volume, which model-service mounts read-only where
+its CDS does. A slide the route has nothing for is an error, as is a route that
+says direct access is unsupported. Region-of-interest rectangles become a local
+mask. (Downloading slides through the App API, `EMPAIA_SLIDE_ACCESS=http`, was
+removed on 2026-11-01: no deployment used it.)
 
 A running execution whose model or builder has no running Serve replica, only
 one Ray has not placed on a node for `CAPACITY_GRACE_SECONDS` (default 60),
@@ -290,7 +277,7 @@ request the raw route takes and returns an execution.
 EMPAIA wiring is one settings class, `EmpaiaSettings` (`EMPAIA_*`), read by
 the facade and by builder replicas: `EMPAIA_API_URLS` (empty refuses every
 EMPAIA job),
-`EMPAIA_WORKSPACE_ROOT`, `EMPAIA_SLIDE_ACCESS`, and
+`EMPAIA_WORKSPACE_ROOT`, and
 `EMPAIA_APP_SERVICE_TIMEOUT_SECONDS` (default 60; creating a pixelmap took 10 s
 on the test instance, and the SDK's 5 s default failed that job). Helm renders
 them from the top-level `empaia` values for the facade and every worker group;

@@ -119,11 +119,8 @@ empaia:
   # Shared by the facade and the builder workers: builders write job outputs
   # there and the facade publishes them. Required by the facade.
   workspaceClaim: ""
-  # How slide inputs reach builders: "direct" links the file named by the
-  # RationAI direct-access route; "http" downloads the needed level through
-  # the App API, for installations whose slide storage model-service can't mount.
-  slideAccess: direct
-  # With direct access, the claim holding the installation's slides, mounted
+  # Slide inputs are linked from the file named by the RationAI direct-access
+  # route. The claim holding the installation's slides, mounted
   # read-only where its CDS mounts it, since model-service links the absolute
   # path CDS answers. The facade mounts it; worker files include it too.
   slideVolume:

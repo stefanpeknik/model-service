@@ -14,8 +14,6 @@
   value: {{ .Values.empaia.apiUrls | toJson | quote }}
 - name: EMPAIA_WORKSPACE_ROOT
   value: {{ .Values.empaia.workspaceRoot | quote }}
-- name: EMPAIA_SLIDE_ACCESS
-  value: {{ .Values.empaia.slideAccess | quote }}
 {{- end }}
 
 {{/*

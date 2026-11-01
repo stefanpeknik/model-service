@@ -14,7 +14,7 @@ Release `model-service`, values `deploy/helm/rayservice/values.rationai-test.yam
   MIG GPU worker group that scales to zero. GPUs are scarce on the cluster:
   after testing, check that no `gpu-workers` pod remains (it goes about six
   minutes after the last request).
-- Slides: `EMPAIA_SLIDE_ACCESS=direct`. The facade and both worker groups mount
+- Slides: linked through the direct-access route. The facade and both worker groups mount
   the instance's `test-data-storage-pvc` read-only at `/data/Projects`, where
   its CDS plugins mount it, because model-service links the absolute path CDS
   answers. The claim is read-only on the volume itself, not only the mount,

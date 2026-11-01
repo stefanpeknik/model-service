@@ -97,7 +97,6 @@ empaia:
   apiUrls: ["http://test-jobs-app-api:10009"]
   workspaceRoot: /mnt/scratch
   workspaceClaim: model-service-full-wsi-scratch
-  slideAccess: direct
   # Where the instance's CDS plugins mount it; CDS answers paths under /data.
   slideVolume:
     existingClaim: test-data-storage-pvc

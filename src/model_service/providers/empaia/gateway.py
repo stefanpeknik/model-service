@@ -14,8 +14,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 if TYPE_CHECKING:
-    from collections.abc import Collection
-
     from rationai.empaia.typing import SlideInfo
     from rationai.empaia.utils.scalar_output import PixelmapTileSet
 
@@ -110,18 +108,8 @@ class EmpaiaGateway(Protocol):
         self,
         name: str,
         directory: str,
-        *,
-        mpp: float | None = None,
-        margin: int = 0,
-        bounds: Collection[str] = (),
     ) -> str:
-        """Make a named job input available inside `directory`; return its file path.
-
-        For gateways that fetch slides: `mpp` is the resolution the builder reads,
-        `bounds` names the job's other inputs, whose rectangles limit what is
-        fetched, and `margin` is how far past them, in pixels at `mpp`, the
-        builder's tiles may reach.
-        """
+        """Make a named job input available inside `directory`; return its file path."""
         ...
 
     async def post_primitive(

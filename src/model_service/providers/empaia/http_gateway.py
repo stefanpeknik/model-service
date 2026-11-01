@@ -1,9 +1,7 @@
 """Implement AppService HTTP access and classify safe integration failures.
 
-Input acquisition uses direct shared access when available or rectangle-mask
-materialization. Where the slide storage is not visible to model-service,
-`EMPAIA_SLIDE_ACCESS=http` downloads slides through the App API's region route
-instead. Output publication invokes a durable guard before writes and tracks
+Slides are linked from the slide volume through the RationAI direct-access
+route; rectangles become masks. Output publication invokes a durable guard before writes and tracks
 uncertain mutation outcomes.
 """
 
@@ -32,14 +30,11 @@ from model_service.providers.empaia.responses import (
     RectangleResponse,
     SlideResponse,
 )
-from model_service.providers.empaia.settings import EmpaiaSettings, SlideAccess
 
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Collection
+    from collections.abc import Awaitable
 
-    import numpy as np
-    from numpy.typing import NDArray
     from rationai.empaia.typing import SlideInfo
     from rationai.empaia.utils.scalar_output import PixelmapTileSet
 
@@ -48,6 +43,7 @@ if TYPE_CHECKING:
         EmpaiaGatewayFactory,
         MutationGuard,
     )
+    from model_service.providers.empaia.settings import EmpaiaSettings
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,27 +98,6 @@ class RectangleMaskWriter(Protocol):
         ...
 
 
-class SlideDownloader(Protocol):
-    """Define download of one slide level into a local TIFF readable by OpenSlide."""
-
-    async def download(
-        self,
-        gateway: HttpEmpaiaGateway,
-        slide: SlideMetadata,
-        mpp: float,
-        destination: Path,
-        *,
-        region: Rectangle | None = None,
-        margin: int = 0,
-    ) -> None:
-        """Write the slide level closest to `mpp`, read through the gateway, to `destination`.
-
-        With a `region` (base-level pixels), only the part within `margin` level
-        pixels of it is fetched.
-        """
-        ...
-
-
 class HttpEmpaiaGateway:
     """Access one EMPAIA job through authenticated HTTP and pluggable image adapters."""
 
@@ -134,8 +109,6 @@ class HttpEmpaiaGateway:
         *,
         client: Client | None = None,
         rectangle_writer: RectangleMaskWriter | None = None,
-        slide_access: SlideAccess = SlideAccess.DIRECT,
-        slide_downloader: SlideDownloader | None = None,
     ) -> None:
         """Require complete connection settings and select the SDK client, slide downloader, and rectangle writer. close() closes even an injected client."""
         if not api_url or not job_id or not credential:
@@ -145,15 +118,10 @@ class HttpEmpaiaGateway:
             )
         self._job_id = job_id
         self._client = client or Client(api_url, job_id, credential)
-        if rectangle_writer is None or slide_downloader is None:
-            from model_service.providers.empaia.image_io import (
-                TiffSlideDownloader,
-                VipsRectangleMaskWriter,
-            )
+        if rectangle_writer is None:
+            from model_service.providers.empaia.image_io import VipsRectangleMaskWriter
 
         self._rectangle_writer = rectangle_writer or VipsRectangleMaskWriter()
-        self._slide_access = slide_access
-        self._slide_downloader = slide_downloader or TiffSlideDownloader()
 
     def set_before_mutation(self, callback: MutationGuard) -> None:
         """Install the async durable-claim guard used immediately before each external mutation."""
@@ -186,33 +154,16 @@ class HttpEmpaiaGateway:
         self,
         name: str,
         directory: str,
-        *,
-        mpp: float | None = None,
-        margin: int = 0,
-        bounds: Collection[str] = (),
     ) -> str:
-        """Link or download a slide input, or fetch rectangle metadata and write a local mask."""
-        if self._slide_access is SlideAccess.DIRECT:
-            direct = await self._direct_access(name)
-            if direct is not None:
-                return str(link_direct_input(direct, Path(directory)))
+        """Link a slide input, or fetch rectangle metadata and write a local mask."""
+        direct = await self._direct_access(name)
+        if direct is not None:
+            return str(link_direct_input(direct, Path(directory)))
         value = await self._call(self._client.get_input_data(name))
-        # Without direct access the slide comes through the App API.
         if _is_slide(value):
-            if mpp is None:
-                raise EmpaiaGatewayError.invalid(
-                    "EMPAIA slide download needs the model resolution"
-                )
-            target = Path(directory) / "slide.tiff"
-            await self._slide_downloader.download(
-                self,
-                _slide_metadata(value),
-                mpp,
-                target,
-                region=await self._region(bounds),
-                margin=margin,
+            raise EmpaiaGatewayError.invalid(
+                "EMPAIA slide is not on the slide volume model-service reads"
             )
-            return str(target)
         target = Path(directory) / "mask.tiff"
         slide = await self._slide_metadata()
         write_rectangle_input(self._rectangle_writer, target, slide, _rectangle(value))
@@ -272,20 +223,6 @@ class HttpEmpaiaGateway:
                 "EMPAIA pixelmap upload failed", retryable=False, outcome_unknown=True
             ) from error
 
-    async def read_region(
-        self,
-        slide_id: str,
-        level: int,
-        x: int,
-        y: int,
-        width: int,
-        height: int,
-    ) -> NDArray[np.uint8]:
-        """Read one slide region as pixels (the SDK retries transient failures)."""
-        return await self._call(
-            self._client.get_region(slide_id, level, x, y, width, height)
-        )
-
     async def _direct_access(self, name: str) -> DirectAccess | None:
         """Query the extension endpoint; only a 404 permits rectangle fallback, while other failures remain errors."""
         info = await self._call(self._client.get_direct_access_info(name))
@@ -298,21 +235,6 @@ class HttpEmpaiaGateway:
             storage_path=Path(info.path),
             supported=info.direct_access_supported,
         )
-
-    async def _region(self, names: Collection[str]) -> Rectangle | None:
-        """The box around the rectangles among the named inputs; None if there are none."""
-        rectangles = []
-        for name in names:
-            value = await self._call(self._client.get_input_data(name))
-            if not _is_slide(value):
-                rectangles.append(_rectangle(value))
-        if not rectangles:
-            return None
-        left = min(r.x for r in rectangles)
-        top = min(r.y for r in rectangles)
-        right = max(r.x + r.width for r in rectangles)
-        bottom = max(r.y + r.height for r in rectangles)
-        return Rectangle(left, top, right - left, bottom - top)
 
     async def _slide_metadata(self) -> SlideMetadata:
         """Fetch and decode the job's slide input metadata."""
@@ -373,7 +295,6 @@ def http_gateway_factory(settings: EmpaiaSettings) -> EmpaiaGatewayFactory:
                 context.credential,
                 timeout=settings.app_service_timeout_seconds,
             ),
-            slide_access=settings.slide_access,
         )
 
     return create

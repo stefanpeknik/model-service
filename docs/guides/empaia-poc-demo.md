@@ -24,7 +24,7 @@ JES polls the execution (GET Location); cancel and timeout send DELETE
 | --- | --- |
 | `rationai-infra-test-ns` | JES `0.6.15-1` with `JES_HTTP_TARGETS={"model-service": "http://model-service-execution-scheduler.rationai-infra-test-ns.svc.cluster.local:8080/v1/empaia"}` (patched on the Deployment) |
 | test marketplace | **Prostate Heatmap** (`ProstHM`, preprocessing, slide only), image `http::model-service/builders/heatmap/models/prostate-classifier-1` |
-| `rationai-infra-test-ns` | model-service, Helm release `model-service`, `slideAccess: direct` ([deployment](../operations/rationai-test-ns.md)) |
+| `rationai-infra-test-ns` | model-service, Helm release `model-service` ([deployment](../operations/rationai-test-ns.md)) |
 
 ## Before the demo (30 minutes ahead)
 
@@ -69,9 +69,8 @@ JES polls the execution (GET Location); cancel and timeout send DELETE
 - Durable execution: idempotent submission per job, restart-safe handles,
   cancellation and timeouts reach model-service, failures are reported to App
   Service before JES ends the job.
-- Slides are read straight from the installation's slide volume
-  (`slideAccess: direct`); where storage is not shared, model-service reads
-  them over the App API instead (`slideAccess: http`).
+- Slides are read straight from the installation's slide volume, which
+  model-service mounts read-only.
 
 ## Known limits
 
