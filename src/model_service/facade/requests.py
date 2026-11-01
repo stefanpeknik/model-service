@@ -7,38 +7,10 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
-from model_service.builders.contracts import (
-    BuilderInput,
-    Deadline,
-    InputAccessContext,
-    Invocation,
-    JsonValue,
-)
-
-
-class BuilderRequest(BaseModel):
-    """Inputs and their access, and an optional output path.
-
-    Processing settings are not part of the request; each attempt uses the
-    builder's current defaults.
-    """
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    inputs: Annotated[dict[str, BuilderInput], Field(strict=True)]
-    input_access: InputAccessContext
-    output_path: Annotated[str, Field(strict=True, min_length=1)] | None = None
-
-    def invocation(self, deadline_at: Deadline) -> Invocation:
-        return Invocation(
-            inputs=self.inputs,
-            resolved_configuration=None,
-            input_access=self.input_access,
-            deadline_at=deadline_at,
-            output_path=self.output_path,
-        )
+from model_service.builders.contracts import Deadline, JsonValue  # noqa: TC001
+from model_service.providers.standalone import BuilderRequest
 
 
 class ImmediateBuilderRequest(BuilderRequest):

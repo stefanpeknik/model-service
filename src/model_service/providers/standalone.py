@@ -10,19 +10,22 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from model_service.builders.application import validate_invocation
 from model_service.builders.contracts import (
+    BuilderInput,
+    Deadline,
     ExecutionContext,
+    InputAccessContext,
     InputAccessKind,
     InvalidInvocation,
+    Invocation,
     SharedPathInput,
 )
 from model_service.builders.registry import get_builder
-from model_service.facade.requests import BuilderRequest
 from model_service.scheduler.contracts import (
     InvalidScheduleRequestError,
     ProviderName,
@@ -35,6 +38,29 @@ if TYPE_CHECKING:
     from model_service.builders.contracts import JsonValue
     from model_service.providers.shared_storage import SharedStorageAccessAdapter
     from model_service.scheduler.providers import BeforeMutation, ProviderFinishOutcome
+
+
+class BuilderRequest(BaseModel):
+    """Inputs and their access, and an optional output path.
+
+    Processing settings are not part of the request; each attempt uses the
+    builder's current defaults.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    inputs: Annotated[dict[str, BuilderInput], Field(strict=True)]
+    input_access: InputAccessContext
+    output_path: Annotated[str, Field(strict=True, min_length=1)] | None = None
+
+    def invocation(self, deadline_at: Deadline) -> Invocation:
+        return Invocation(
+            inputs=self.inputs,
+            resolved_configuration=None,
+            input_access=self.input_access,
+            deadline_at=deadline_at,
+            output_path=self.output_path,
+        )
 
 
 class StandaloneProviderAdapter:
