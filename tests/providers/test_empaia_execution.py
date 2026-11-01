@@ -28,7 +28,7 @@ from model_service.providers.empaia.gateway import (
 )
 from model_service.providers.empaia.input_access import EmpaiaInputAccessAdapter
 from model_service.providers.empaia.provider import EmpaiaProviderAdapter
-from model_service.providers.empaia.publishers import PublisherRegistry
+from model_service.providers.empaia.publishers import Commit, PublisherRegistry
 from model_service.scheduler.active_work import ActiveWorkRegistry
 from model_service.scheduler.contracts import (
     InvalidScheduleRequestError,
@@ -170,11 +170,11 @@ class RecordingPublisher:
     def accepts(self, model: ModelBinding) -> bool:
         return True
 
-    async def publish(
+    async def prepare(
         self, gateway: EmpaiaGateway, name: str, output: BuilderOutput
-    ) -> None:
+    ) -> Commit:
         assert isinstance(gateway, FakeGateway)
-        await gateway.publish_output(name, output)
+        return lambda: gateway.publish_output(name, output)
 
 
 PUBLISHERS = PublisherRegistry(

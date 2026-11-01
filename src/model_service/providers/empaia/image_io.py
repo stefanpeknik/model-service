@@ -40,6 +40,7 @@ if TYPE_CHECKING:
         Rectangle,
         SlideMetadata,
     )
+    from model_service.providers.empaia.publishers import Commit
 
 
 class ScoreGridPublisher:
@@ -62,9 +63,9 @@ class ScoreGridPublisher:
         # The SDK uploads single-channel pixelmaps only.
         return isinstance(model, SpatialScoresModel) and model.n_channels == 1
 
-    async def publish(
+    async def prepare(
         self, gateway: EmpaiaGateway, name: str, output: BuilderOutput
-    ) -> None:
+    ) -> Commit:
         if not isinstance(output, SharedArtifact):
             raise EmpaiaGatewayError.invalid(
                 "EMPAIA shared output must be a score grid"
@@ -108,7 +109,7 @@ class ScoreGridPublisher:
         tile_sets = await asyncio.to_thread(
             scores.to_pixelmap_pyramid, slide, self._tile_size, self._tile_size
         )
-        await gateway.publish_pixelmap(name, slide.id, tile_sets)
+        return lambda: gateway.publish_pixelmap(name, slide.id, tile_sets)
 
 
 class VipsRectangleMaskWriter:

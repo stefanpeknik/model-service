@@ -82,11 +82,13 @@ def artifact(directory: str, scores: ScoreGrid) -> SharedArtifact:
 class PixelmapPyramidTests(unittest.IsolatedAsyncioTestCase):
     async def publish(self, shared: SharedArtifact) -> PyramidGateway:
         gateway = PyramidGateway()
-        await ScoreGridPublisher(tile_size=256).publish(
+        commit = await ScoreGridPublisher(tile_size=256).prepare(
             gateway,  # type: ignore[arg-type]
             "heatmap",
             shared,
         )
+        self.assertEqual(gateway.published, [])
+        await commit()
         return gateway
 
     async def test_scores_are_published_exactly_at_every_level_from_the_coarsest_that_keeps_four_pixels_per_score(

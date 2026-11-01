@@ -62,11 +62,12 @@ class ValidationEmpaiaPublicationTests(unittest.IsolatedAsyncioTestCase):
                         "synthetic-token",
                     )
                     try:
-                        await ScoreGridPublisher().publish(
+                        commit = await ScoreGridPublisher().prepare(
                             gateway,
                             "heatmap",
                             SharedArtifact(path=str(path), media_type=MEDIA_TYPE),
                         )
+                        await commit()
                         await gateway.finalize()
                     finally:
                         await gateway.close()

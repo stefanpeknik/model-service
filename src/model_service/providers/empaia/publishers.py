@@ -3,12 +3,16 @@
 A builder declares every output's EMPAIA type and media type up front
 (`OutputSpec`), so the publisher of each output is known before a job runs:
 app generation offers only apps whose outputs all have one, and finish
-publishes each output with the publisher of its declaration. Supporting a new
+publishes each output with the publisher of its declaration. Publishing is two
+steps: every output is prepared (read, validated, converted) without a write,
+and only then are they all committed, so an output EMPAIA cannot take never
+leaves the others half published. Supporting a new
 EMPAIA type takes a publisher and an entry in `default_publishers`.
 """
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Protocol
 
 from model_service.builders.contracts import InlineOutput, SharedArtifact
@@ -24,6 +28,8 @@ if TYPE_CHECKING:
 
 
 type PublisherKey = tuple[str, str | None]
+# Writes one prepared output; nothing before it does.
+type Commit = Callable[[], Awaitable[None]]
 
 
 class OutputPublisher(Protocol):
@@ -33,9 +39,11 @@ class OutputPublisher(Protocol):
         """Whether this model's outputs can be published, e.g. its channel count."""
         ...
 
-    async def publish(
+    async def prepare(
         self, gateway: EmpaiaGateway, name: str, output: BuilderOutput
-    ) -> None: ...
+    ) -> Commit:
+        """Read and validate the output without writing; return its write."""
+        ...
 
 
 class PrimitivePublisher:
@@ -49,16 +57,17 @@ class PrimitivePublisher:
     def accepts(self, model: ModelBinding) -> bool:
         return True
 
-    async def publish(
+    async def prepare(
         self, gateway: EmpaiaGateway, name: str, output: BuilderOutput
-    ) -> None:
+    ) -> Commit:
         if not isinstance(output, InlineOutput) or not _PRIMITIVE_VALUES[self._type](
             output.value
         ):
             raise EmpaiaGatewayError.invalid(
                 f"EMPAIA output {name!r} must be a {self._type} value"
             )
-        await gateway.post_primitive(name, self._type, output.value)
+        value = output.value
+        return lambda: gateway.post_primitive(name, self._type, value)
 
 
 # bool is an int in Python, and a float primitive takes whole numbers too.

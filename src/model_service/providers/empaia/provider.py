@@ -241,6 +241,8 @@ class EmpaiaProviderAdapter:
             try:
                 if isinstance(outcome, ProviderSuccess):
                     declared = get_builder(outcome.builder_id).outputs
+                    # Every output is checked before the first write.
+                    commits = []
                     for name, output in outcome.result.outputs.items():
                         spec = declared.get(name)
                         if spec is None:
@@ -248,7 +250,9 @@ class EmpaiaProviderAdapter:
                                 f"EMPAIA output {name!r} is not declared"
                             )
                         publisher = self._publishers.publisher_for(name, spec, output)
-                        await publisher.publish(gateway, name, output)
+                        commits.append(await publisher.prepare(gateway, name, output))
+                    for commit in commits:
+                        await commit()
                         mutation_completed = True
                     await gateway.finalize()
                 elif isinstance(outcome, ProviderFailure):

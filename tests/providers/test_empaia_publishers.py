@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import replace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from model_service.builders.contracts import (
     BuilderResult,
@@ -20,6 +20,7 @@ from model_service.providers.empaia.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.provider import EmpaiaProviderAdapter
 from model_service.providers.empaia.publishers import (
     PrimitivePublisher,
+    PublisherRegistry,
     default_publishers,
 )
 from model_service.scheduler.providers import (
@@ -52,7 +53,11 @@ class PublisherTests(unittest.IsolatedAsyncioTestCase):
     async def test_a_primitive_is_posted_as_its_declared_type(self) -> None:
         gateway = AsyncMock()
 
-        await PrimitivePublisher("float").publish(gateway, "score", InlineOutput(1))
+        commit = await PrimitivePublisher("float").prepare(
+            gateway, "score", InlineOutput(1)
+        )
+        gateway.post_primitive.assert_not_awaited()
+        await commit()
 
         gateway.post_primitive.assert_awaited_once_with("score", "float", 1)
 
@@ -67,7 +72,7 @@ class PublisherTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(output_type=output_type, value=value):
                 gateway = AsyncMock()
                 with self.assertRaises(EmpaiaGatewayError) as raised:
-                    await PrimitivePublisher(output_type).publish(
+                    await PrimitivePublisher(output_type).prepare(
                         gateway, "score", InlineOutput(value)
                     )
                 self.assertFalse(raised.exception.retryable)
@@ -159,6 +164,58 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(raised.exception.retryable)
         self.assertFalse(raised.exception.outcome_unknown)
         gateway.finalize.assert_not_awaited()
+
+    async def test_an_invalid_output_stops_the_job_before_any_write(self) -> None:
+        heatmap = get_builder("heatmap")
+        with_score = replace(
+            heatmap,
+            outputs={
+                **heatmap.outputs,
+                "score": OutputSpec(kind=OutputKind.INLINE, empaia={"type": "float"}),
+            },
+        )
+        pixelmaps = AsyncMock()
+        publishers = PublisherRegistry(
+            {
+                ("continuous_pixelmap", MEDIA_TYPE): pixelmaps,
+                ("float", None): PrimitivePublisher("float"),
+            }
+        )
+        gateway = AsyncMock()
+        gateway.set_before_mutation = lambda _callback: None
+        provider = EmpaiaProviderAdapter(
+            lambda _context: gateway,  # type: ignore[arg-type, return-value]
+            allowed_api_urls=("https://empaia.invalid",),
+            publishers=publishers,
+        )
+
+        with (
+            patch(
+                "model_service.providers.empaia.provider.get_builder",
+                return_value=with_score,
+            ),
+            self.assertRaises(ProviderFinishFailureError) as raised,
+        ):
+            await provider.finish(
+                {"api_url": "https://empaia.invalid", "job_id": "j", "credential": "c"},
+                ProviderSuccess(
+                    BuilderResult(
+                        outputs={
+                            "heatmap": SharedArtifact(
+                                path="/shared/heatmap.npz", media_type=MEDIA_TYPE
+                            ),
+                            "score": InlineOutput("high"),
+                        }
+                    ),
+                    "heatmap",
+                ),
+            )
+
+        # The heatmap was prepared, but its write never ran.
+        pixelmaps.prepare.assert_awaited_once()
+        pixelmaps.prepare.return_value.assert_not_awaited()
+        gateway.post_primitive.assert_not_awaited()
+        self.assertFalse(raised.exception.outcome_unknown)
 
 
 if __name__ == "__main__":
