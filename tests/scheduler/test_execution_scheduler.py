@@ -7,7 +7,7 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from model_service.builders.client import (
     ConfirmedRejectionError,
@@ -180,6 +180,20 @@ class UnavailableExecutionRepository(InMemoryExecutionRepository):
     ) -> None:
         """Raise storage unavailability during the early replay lookup."""
         raise ExecutionRepositoryUnavailableError("database unavailable")
+
+
+class FlakySettlementRepository(InMemoryExecutionRepository):
+    """Fail the first settlements as an unreachable database would."""
+
+    def __init__(self, *, failures: int, **options: Any) -> None:
+        super().__init__(**options)
+        self.failures = failures
+
+    async def settle(self, *args: Any, **kwargs: Any) -> Any:
+        if self.failures:
+            self.failures -= 1
+            raise ExecutionRepositoryUnavailableError("database unavailable")
+        return await super().settle(*args, **kwargs)
 
 
 class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
@@ -950,6 +964,48 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         durable = await repository.get(admitted.execution.id)
         self.assertNotIn("credential", durable.invocation.input_access.state)
         self.assertNotIn("processing_attempt_id", durable.invocation.input_access.state)
+
+    async def test_a_brief_storage_outage_does_not_lose_finished_work(self) -> None:
+        now = datetime(2026, 9, 17, 8, tzinfo=UTC)
+        repository = FlakySettlementRepository(failures=2, clock=lambda: now)
+        provider = StandaloneProvider()
+        scheduler = ExecutionScheduler(
+            repository=repository,
+            dispatch=FakeDispatch({}),
+            providers={provider.name: provider},
+            resolve_model=resolve_test_model,
+            default_timeout=timedelta(hours=1),
+            maximum_timeout=timedelta(hours=6),
+            clock=lambda: now,
+        )
+        worker = ExecutionWorker(
+            resolve_model=resolve_test_model,
+            repository=repository,
+            active_work=ActiveWorkRegistry(),
+            providers={provider.name: provider},
+            dispatch=FakeDispatch(
+                {"heatmap": lambda _invocation, _context: BuilderResult(outputs={})}
+            ),
+            owner="worker-1",
+            lease_duration=timedelta(minutes=1),
+        )
+        admitted = await scheduler.schedule(
+            ScheduleRequest(
+                builder_id="heatmap",
+                model_id="prostate-classifier-1",
+                provider="standalone",
+                body={},
+                idempotency_key="request-1",
+            )
+        )
+
+        with self.assertLogs("model_service.scheduler.worker", "WARNING"):
+            self.assertTrue(await worker.run_once())
+
+        execution = await repository.get(admitted.execution.id)
+        self.assertEqual(repository.failures, 0)
+        self.assertIs(execution.work_kind, WorkKind.PROVIDER_FINISH)
+        self.assertEqual(execution.processing_attempts, 1)
 
     async def test_scheduled_result_is_visible_after_provider_finish(self) -> None:
         now = datetime(2026, 9, 17, 8, tzinfo=UTC)

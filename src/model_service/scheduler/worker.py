@@ -233,10 +233,40 @@ class ExecutionWorker:
                     pending_task.cancel()
             await asyncio.gather(task, renewal_task, return_exceptions=True)
             self._active_work.unregister(claim.execution_id, claim.fencing_token)
-        with suppress(StaleWorkClaimError):
-            await self._repository.settle(
-                claim.execution_id, claim.fencing_token, settlement
-            )
+        await self._settle(claim, settlement)
+
+    async def _settle(self, claim: WorkClaim, settlement: Settlement) -> None:
+        """Record the outcome, retrying a failed write for up to one lease.
+
+        Losing it would rerun finished work, or exhaust its attempts. A retry is
+        safe: a settlement that did land, or a lease that was given up meanwhile,
+        makes the claim stale.
+        """
+        loop = asyncio.get_running_loop()
+        give_up_at = loop.time() + self._lease_duration.total_seconds()
+        delay = 0.1
+        while True:
+            try:
+                await self._repository.settle(
+                    claim.execution_id, claim.fencing_token, settlement
+                )
+                return
+            except StaleWorkClaimError:
+                return
+            except (
+                TimeoutError,
+                OSError,
+                ExecutionRepositoryUnavailableError,
+            ) as error:
+                if loop.time() + delay >= give_up_at:
+                    raise
+                logger.warning(
+                    "settlement failed, retrying: id=%s error=%s",
+                    claim.execution_id,
+                    type(error).__name__,
+                )
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, 5.0)
 
     async def _renew_while_running(
         self, claim: WorkClaim, task: asyncio.Task[Settlement]
