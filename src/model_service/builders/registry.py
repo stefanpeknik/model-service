@@ -7,7 +7,7 @@ lazily from `implementation` inside Ray replicas.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -30,7 +30,6 @@ if TYPE_CHECKING:
 class InputSpec:
     required: bool = True
     media_type: str | None = None
-    empaia: Mapping[str, JsonValue] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,7 +37,6 @@ class OutputSpec:
     kind: OutputKind
     media_type: str | None = None
     default_path: str | None = None
-    empaia: Mapping[str, JsonValue] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,16 +79,8 @@ class EmbeddingConfiguration(BaseModel):
     stride_fraction: _STRIDE = 1.0
 
 
-_SLIDE = InputSpec(media_type="application/vnd.openmicroscopy", empaia={"type": "wsi"})
-_REGION_OF_INTEREST = InputSpec(
-    required=False,
-    media_type="image/tiff",
-    empaia={
-        "type": "rectangle",
-        "reference": "slide",
-        "classes": ["org.empaia.global.v1.classes.roi"],
-    },
-)
+_SLIDE = InputSpec(media_type="application/vnd.openmicroscopy")
+_REGION_OF_INTEREST = InputSpec(required=False, media_type="image/tiff")
 
 BUILDERS: dict[str, BuilderSpec] = {
     spec.id: spec
@@ -104,7 +94,6 @@ BUILDERS: dict[str, BuilderSpec] = {
                     kind=OutputKind.SHARED_ARTIFACT,
                     media_type="application/x-npz",
                     default_path="heatmap.npz",
-                    empaia={"type": "continuous_pixelmap", "reference": "slide"},
                 )
             },
             configuration=HeatmapConfiguration,

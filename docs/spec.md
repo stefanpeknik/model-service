@@ -151,8 +151,9 @@ EMPAIA apps are generated, not written by hand
 `empaia` block: a display name (at most 22 characters, so `<name> <builder>`
 fits EMPAIA's 30), a short name (at most 10), a description of what the model
 finds, and the modes it runs in. Every builder that accepts the model's
-contract and has an EMPAIA type for each output (today the heatmap builder,
-not tile embeddings) becomes one app per listed mode: the standalone app takes
+contract and is listed in `src/model_service/providers/empaia/io.py`, which
+gives the EAD `io` entry of its inputs and outputs (today the heatmap builder,
+not tile embeddings), becomes one app per listed mode: the standalone app takes
 the slide and an optional region of interest, the preprocessing app only the
 slide. Names, namespaces (`org.empaia.rationai.<builder>_<model>_<mode>.v3.0`),
 the mode's sentence of the description, and the image
@@ -313,8 +314,9 @@ app for one is listed. The SDK places such a grid with `ScalarImageOutput.origin
 branch `feat/scalar-output-origin`. The builder no longer renders a TIFF: EMPAIA never
 used it, and it took longer to write than the inference.
 
-EMPAIA outputs. Each builder output declares its EMPAIA type and media type
-(`OutputSpec` in `src/model_service/builders/registry.py`), and
+EMPAIA outputs. Each builder output declares its media type (`OutputSpec` in
+`src/model_service/builders/registry.py`); EMPAIA's `io.py` gives its EMPAIA
+type, so builders know nothing of EMPAIA. Then
 `src/model_service/providers/empaia/publishers.py` maps each (type, media
 type) pair to a publisher: the four primitive types (inline values, checked
 against the declared type) and `continuous_pixelmap` from a score grid. The
@@ -324,7 +326,8 @@ why it skips one. Finish publishes each output with the publisher of its
 declaration and fails the job, before any write, for an output that is not
 declared or not what was declared. The gateway is the transport only. Adding an
 EMPAIA type, annotations for example, takes a publisher, a gateway call to the
-SDK and one entry in `default_publishers`.
+SDK and one entry in `default_publishers`; offering a builder in EMPAIA takes
+its entry in `io.py`.
 
 The score-grid publisher publishes the grid only through the SDK's
 `ScalarImageOutput.to_pixelmap_pyramid` and `upload_pixelmap_pyramid`: from the

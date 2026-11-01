@@ -1,7 +1,7 @@
 """Turn each declared builder output into its EMPAIA output.
 
-A builder declares every output's EMPAIA type and media type up front
-(`OutputSpec`), so the publisher of each output is known before a job runs:
+Each builder output's media type (`OutputSpec`) and EMPAIA type (`io`) are
+declared up front, so the publisher of each output is known before a job runs:
 app generation offers only apps whose outputs all have one, and finish
 publishes each output with the publisher of its declaration. Publishing is two
 steps: every output is prepared (read, validated, converted) without a write,
@@ -85,17 +85,22 @@ class PublisherRegistry:
     def __init__(self, publishers: Mapping[PublisherKey, OutputPublisher]) -> None:
         self._publishers = dict(publishers)
 
-    def resolve(self, spec: OutputSpec) -> OutputPublisher | None:
-        output_type = spec.empaia.get("type")
-        if not isinstance(output_type, str):
+    def resolve(
+        self, output_type: str | None, spec: OutputSpec
+    ) -> OutputPublisher | None:
+        if output_type is None:
             return None
         return self._publishers.get((output_type, spec.media_type))
 
     def publisher_for(
-        self, name: str, spec: OutputSpec, output: BuilderOutput
+        self,
+        name: str,
+        output_type: str | None,
+        spec: OutputSpec,
+        output: BuilderOutput,
     ) -> OutputPublisher:
         """The publisher of a produced output, which must be what was declared."""
-        publisher = self.resolve(spec)
+        publisher = self.resolve(output_type, spec)
         if publisher is None:
             raise EmpaiaGatewayError.invalid(f"EMPAIA output {name!r} has no publisher")
         declared = output.kind is spec.kind and (

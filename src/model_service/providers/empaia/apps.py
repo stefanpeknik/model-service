@@ -1,8 +1,9 @@
 """EMPAIA apps for the deployed models, one per builder and mode.
 
 A model file opts in with an `empaia` block: how the model is presented and in
-which modes it runs. Every builder that accepts the model's contract and whose
-outputs all have a publisher that takes the model then becomes one app per mode. A standalone app
+which modes it runs. Every builder that accepts the model's contract, is listed
+in `io.BUILDER_IO`, and whose outputs all have a publisher that takes the model
+then becomes one app per mode. A standalone app
 takes all of the builder's EMPAIA inputs (e.g. a region of interest); a
 preprocessing app takes only the required ones, because EMPAIA starts it with a
 slide alone. The app's image is `http::<target>/builders/<builder>/models/<model>`,
@@ -24,6 +25,7 @@ from jsonschema import Draft7Validator
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from model_service.builders.registry import BUILDERS
+from model_service.providers.empaia.io import BUILDER_IO
 
 
 if TYPE_CHECKING:
@@ -31,6 +33,7 @@ if TYPE_CHECKING:
 
     from model_service.builders.contracts import ModelBinding
     from model_service.builders.registry import BuilderSpec
+    from model_service.providers.empaia.io import BuilderIo
     from model_service.providers.empaia.publishers import PublisherRegistry
 
 
@@ -217,6 +220,7 @@ def app_definitions(
     listings: Mapping[str, EmpaiaListing],
     publishers: PublisherRegistry,
     builders: Iterable[BuilderSpec] = BUILDERS.values(),
+    io: Mapping[str, BuilderIo] = BUILDER_IO,
 ) -> list[AppDefinition]:
     """Every app the listed models offer."""
     builders = list(builders)
@@ -226,12 +230,18 @@ def app_definitions(
         if listing is None:
             continue
         for spec in builders:
-            if spec.accepts is not model.contract:
+            builder_io = io.get(spec.id)
+            if spec.accepts is not model.contract or builder_io is None:
                 continue
             if unpublishable := [
                 name
                 for name, output in spec.outputs.items()
-                if (publisher := publishers.resolve(output)) is None
+                if (
+                    publisher := publishers.resolve(
+                        builder_io.output_type(name), output
+                    )
+                )
+                is None
                 or not publisher.accepts(model)
             ]:
                 logger.info(
@@ -243,7 +253,7 @@ def app_definitions(
                 )
                 continue
             for mode in listing.modes:
-                ead = generate_ead(spec, model.id, listing, mode)
+                ead = generate_ead(spec, builder_io, model.id, listing, mode)
                 configuration = {}
                 if listing.viewer is not None:
                     configuration[VIEWER_CONFIG_KEY] = listing.viewer.for_io(ead["io"])
@@ -252,15 +262,19 @@ def app_definitions(
 
 
 def generate_ead(
-    spec: BuilderSpec, model_id: str, listing: EmpaiaListing, mode: AppMode
+    spec: BuilderSpec,
+    builder_io: BuilderIo,
+    model_id: str,
+    listing: EmpaiaListing,
+    mode: AppMode,
 ) -> dict[str, Any]:
     """Build and schema-validate the EAD of one app."""
     inputs = {
-        name: item.empaia
+        name: builder_io.inputs[name]
         for name, item in spec.inputs.items()
-        if item.empaia and (item.required or mode is AppMode.STANDALONE)
+        if name in builder_io.inputs and (item.required or mode is AppMode.STANDALONE)
     }
-    outputs = {name: item.empaia for name, item in spec.outputs.items()}
+    outputs = {name: builder_io.outputs[name] for name in spec.outputs}
     io = {}
     for name, mapping in {**inputs, **outputs}.items():
         entry = dict(mapping or {})

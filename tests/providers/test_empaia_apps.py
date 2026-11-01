@@ -25,6 +25,7 @@ from model_service.providers.empaia.apps import (
     generate_ead,
 )
 from model_service.providers.empaia.credentials import ClientCredentials
+from model_service.providers.empaia.io import BUILDER_IO
 from model_service.providers.empaia.publishers import default_publishers
 from model_service.providers.empaia.registration import (
     Marketplace,
@@ -152,18 +153,12 @@ class AppDefinitionTests(unittest.TestCase):
             description="Finds things.",
             modes=(AppMode.STANDALONE,),
         )
-        spec = get_builder("heatmap")
-        heatmap = spec.outputs["heatmap"]
-        broken = replace(
-            spec,
-            outputs={
-                "heatmap": replace(
-                    heatmap, empaia={**heatmap.empaia, "type": "no_such_type"}
-                )
-            },
-        )
+        heatmap = BUILDER_IO["heatmap"]
+        broken = replace(heatmap, outputs={"heatmap": {"type": "no_such_type"}})
         with self.assertRaises(ValidationError):
-            generate_ead(broken, "model", listing, AppMode.STANDALONE)
+            generate_ead(
+                get_builder("heatmap"), broken, "model", listing, AppMode.STANDALONE
+            )
 
 
 def token(lifetime: float) -> str:

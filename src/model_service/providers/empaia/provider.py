@@ -43,6 +43,7 @@ from model_service.providers.empaia.gateway import (
     EmpaiaJobMode,
 )
 from model_service.providers.empaia.input_access import job_workspace
+from model_service.providers.empaia.io import BUILDER_IO
 from model_service.providers.empaia.publishers import default_publishers
 from model_service.scheduler.contracts import (
     InvalidScheduleRequestError,
@@ -64,10 +65,11 @@ from model_service.scheduler.providers import (
 
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncIterator, Mapping
     from pathlib import Path
 
     from model_service.builders.contracts import JsonValue
+    from model_service.providers.empaia.io import BuilderIo
     from model_service.providers.empaia.publishers import PublisherRegistry
     from model_service.scheduler.providers import BeforeMutation
 
@@ -99,10 +101,12 @@ class EmpaiaProviderAdapter:
         allowed_api_urls: tuple[str, ...],
         workspace_root: Path | None = None,
         publishers: PublisherRegistry | None = None,
+        io: Mapping[str, BuilderIo] = BUILDER_IO,
     ) -> None:
         """Only `allowed_api_urls` origins or path prefixes receive job credentials; none, no job."""
         self._gateway_factory = gateway_factory
         self._publishers = publishers or default_publishers()
+        self._io = io
         self._allowed_api_urls = tuple(url.rstrip("/") for url in allowed_api_urls)
         self._workspace_root = workspace_root
 
@@ -241,15 +245,18 @@ class EmpaiaProviderAdapter:
             try:
                 if isinstance(outcome, ProviderSuccess):
                     declared = get_builder(outcome.builder_id).outputs
+                    io = self._io.get(outcome.builder_id)
                     # Every output is checked before the first write.
                     commits = []
                     for name, output in outcome.result.outputs.items():
                         spec = declared.get(name)
-                        if spec is None:
+                        if spec is None or io is None:
                             raise EmpaiaGatewayError.invalid(
                                 f"EMPAIA output {name!r} is not declared"
                             )
-                        publisher = self._publishers.publisher_for(name, spec, output)
+                        publisher = self._publishers.publisher_for(
+                            name, io.output_type(name), spec, output
+                        )
                         commits.append(await publisher.prepare(gateway, name, output))
                     for commit in commits:
                         await commit()

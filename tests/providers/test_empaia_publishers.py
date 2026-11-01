@@ -17,6 +17,7 @@ from model_service.builders.registry import OutputSpec, get_builder
 from model_service.builders.score_grid import MEDIA_TYPE
 from model_service.providers.empaia.apps import AppMode, EmpaiaListing, app_definitions
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
+from model_service.providers.empaia.io import BUILDER_IO
 from model_service.providers.empaia.provider import EmpaiaProviderAdapter
 from model_service.providers.empaia.publishers import (
     PrimitivePublisher,
@@ -87,15 +88,16 @@ class PublisherTests(unittest.IsolatedAsyncioTestCase):
                 self.subTest(output=output),
                 self.assertRaises(EmpaiaGatewayError),
             ):
-                PUBLISHERS.publisher_for("heatmap", HEATMAP, output)
+                PUBLISHERS.publisher_for(
+                    "heatmap", "continuous_pixelmap", HEATMAP, output
+                )
 
     def test_an_output_without_a_known_empaia_type_has_no_publisher(self) -> None:
-        embeddings = get_builder("tile-embeddings").outputs["embeddings"]
-        polygon = OutputSpec(kind=OutputKind.INLINE, empaia={"type": "polygon"})
+        inline = OutputSpec(kind=OutputKind.INLINE)
 
-        self.assertIsNone(PUBLISHERS.resolve(embeddings))
-        self.assertIsNone(PUBLISHERS.resolve(polygon))
-        self.assertIsNotNone(PUBLISHERS.resolve(HEATMAP))
+        self.assertIsNone(PUBLISHERS.resolve(None, HEATMAP))
+        self.assertIsNone(PUBLISHERS.resolve("polygon", inline))
+        self.assertIsNotNone(PUBLISHERS.resolve("continuous_pixelmap", HEATMAP))
 
 
 class AppPublishabilityTests(unittest.TestCase):
@@ -113,15 +115,14 @@ class AppPublishabilityTests(unittest.TestCase):
         self.assertIn("nothing publishes heatmap", logs.output[0])
 
     def test_an_output_nothing_publishes_withholds_the_app(self) -> None:
-        heatmap = get_builder("heatmap")
+        heatmap = BUILDER_IO["heatmap"]
         with_polygons = replace(
-            heatmap,
-            outputs={
-                **heatmap.outputs,
-                "glands": OutputSpec(
-                    kind=OutputKind.INLINE, empaia={"type": "polygon"}
-                ),
-            },
+            heatmap, outputs={**heatmap.outputs, "glands": {"type": "polygon"}}
+        )
+        spec = get_builder("heatmap")
+        spec = replace(
+            spec,
+            outputs={**spec.outputs, "glands": OutputSpec(kind=OutputKind.INLINE)},
         )
 
         with self.assertLogs("model_service.providers.empaia.apps", "INFO"):
@@ -129,7 +130,8 @@ class AppPublishabilityTests(unittest.TestCase):
                 [model(1)],
                 {"prostate-classifier-1": LISTING},
                 PUBLISHERS,
-                [with_polygons],
+                [spec],
+                {"heatmap": with_polygons},
             )
 
         self.assertEqual(apps, [])
@@ -169,11 +171,10 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
         heatmap = get_builder("heatmap")
         with_score = replace(
             heatmap,
-            outputs={
-                **heatmap.outputs,
-                "score": OutputSpec(kind=OutputKind.INLINE, empaia={"type": "float"}),
-            },
+            outputs={**heatmap.outputs, "score": OutputSpec(kind=OutputKind.INLINE)},
         )
+        io = BUILDER_IO["heatmap"]
+        io = replace(io, outputs={**io.outputs, "score": {"type": "float"}})
         pixelmaps = AsyncMock()
         publishers = PublisherRegistry(
             {
@@ -187,6 +188,7 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
             lambda _context: gateway,  # type: ignore[arg-type, return-value]
             allowed_api_urls=("https://empaia.invalid",),
             publishers=publishers,
+            io={"heatmap": io},
         )
 
         with (
