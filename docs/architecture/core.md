@@ -95,7 +95,15 @@ finish. `POST /v1/executions/lookup` polls many executions at once.
   and model). Tiles are claimed in batches; one 1-CPU facade replica handles
   about 100 tiles/s.
 - Builder replicas return 429 when full; the scheduler requeues without
-  spending an attempt. Synchronous callers get 429 with `Retry-After`.
+  spending an attempt. Ray Serve's own non-JSON 503 (replica queue full, none
+  running) counts the same. Synchronous callers get 429 with `Retry-After`.
+- Only a claim decrypts an execution's provider context, and it is erased once
+  no work is left. A context that cannot be decrypted ends only its execution
+  (`protected_context_unreadable`, or its outcome if it already had one, with
+  no report) and its stored bytes are kept.
+- An EMPAIA 429 on a write is a refusal, so it may be retried; a 5xx may have
+  applied, so its outcome is unknown. The deadline applies to publication too:
+  one that ends past it is recorded as outcome unknown.
 - Delivery is at least once. A lost facade lets its lease expire and another
   attempt runs. Lease renewal survives short database outages.
 - A failed or uncertain EMPAIA publication reports failure to EMPAIA, so the

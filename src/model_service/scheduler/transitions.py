@@ -250,11 +250,7 @@ class ExecutionTransitions:
                 execution=None,
                 rejection=SettlementRejection.STALE_CLAIM,
             )
-        # A finished publication is a fact, however late it arrives.
-        if (
-            not isinstance(settlement, ProviderFinishSucceeded)
-            and self.work_deadline_at(execution) <= now
-        ):
+        if self.work_deadline_at(execution) <= now:
             return SettlementDecision(
                 execution=self.deadline(execution, now),
                 rejection=SettlementRejection.DEADLINE_EXCEEDED,
@@ -399,7 +395,12 @@ class ExecutionTransitions:
         raise TypeError("unknown work settlement")
 
     def unreadable(self, execution: ExecutionRecord, now: datetime) -> ExecutionRecord:
-        """Fail an execution whose provider context cannot be decrypted; nothing can report it."""
+        """End an execution whose provider context cannot be decrypted; nothing can report it.
+
+        One that already ended, and only had a report due, keeps its outcome.
+        """
+        if execution.status in {ExecutionStatus.FAILED, ExecutionStatus.CANCELLED}:
+            return self._clear_work(execution, now)
         return self._terminal_failure(
             execution,
             ExecutionError(

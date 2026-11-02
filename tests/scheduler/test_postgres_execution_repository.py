@@ -1020,6 +1020,16 @@ class PostgresExecutionRepositoryTests(
         self.assertEqual(claim.execution_id, good.execution.id)
         failed = await self.repository.get(bad.execution.id)
         self.assertEqual(failed.status, "failed")
+        async with await AsyncConnection.connect(self.dsn) as connection:
+            cursor = await connection.execute(
+                sql.SQL("SELECT protected_context FROM {} WHERE id = %s").format(
+                    sql.Identifier(self.schema, "executions")
+                ),
+                (bad.execution.id,),
+            )
+            row = await cursor.fetchone()
+        assert row is not None
+        self.assertEqual(bytes(row[0]), b"written with another key")
 
     async def test_a_finished_execution_keeps_no_credential(self) -> None:
         admission = replace(

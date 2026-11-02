@@ -803,14 +803,13 @@ class PostgresExecutionRepository:
             return self._record(row, protected=True)
         except ValueError:  # Includes ProtectedContextError: a bad envelope or key.
             logger.error("execution %s has an unreadable provider context", row.id)
-            await self._persist_state(
-                session, row, self._transitions.unreadable(self._record(row), now)
-            )
+            # Not _persist_state: the stored bytes stay, in case the key was wrong.
+            self._apply_state(row, self._transitions.unreadable(self._record(row), now))
+            await session.flush()
             return None
 
     def _record(self, row: ExecutionRow, *, protected: bool = False) -> ExecutionRecord:
-        """Only a claim needs the provider context, so only a claim decrypts it."""
-        """Convert an ORM row to an immutable domain record and decrypt private provider context."""
+        """Convert an ORM row to an immutable domain record; only a claim decrypts the provider context."""
         error = None
         if row.error_code is not None:
             assert row.error_message is not None
