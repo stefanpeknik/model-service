@@ -88,6 +88,12 @@ class HTTPBuilderDispatch:
         try:
             body = response.json()
         except ValueError as error:
+            # Ray Serve's own 503 (replica queue full, none running): our builder
+            # answers JSON, so the request never reached it.
+            if response.status_code == 503:
+                raise ConfirmedRejectionError(
+                    _retry_after(response.headers.get("retry-after"))
+                ) from error
             raise UnknownOutcomeError("builder returned an invalid response") from error
         if response.status_code == 200:
             try:

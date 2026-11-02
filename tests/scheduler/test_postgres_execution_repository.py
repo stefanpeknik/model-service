@@ -997,11 +997,53 @@ class PostgresExecutionRepositoryTests(
 
         assert row is not None
         self.assertNotIn("secret-job-token", row[0])
-        loaded = await self.repository.get(admitted.execution.id)
-        self.assertEqual(
-            loaded.protected_context,
-            {"credential": "secret-job-token"},
+        claim = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert claim is not None
+        self.assertEqual(claim.protected_context, {"credential": "secret-job-token"})
+
+    async def test_an_unreadable_context_fails_only_its_own_execution(self) -> None:
+        bad = await self.repository.admit(self._admission("unreadable"))
+        good = await self.repository.admit(self._admission("readable"))
+        async with await AsyncConnection.connect(self.dsn) as connection:
+            await connection.execute(
+                sql.SQL("UPDATE {} SET protected_context = %s WHERE id = %s").format(
+                    sql.Identifier(self.schema, "executions")
+                ),
+                (b"written with another key", bad.execution.id),
+            )
+            await connection.commit()
+
+        self.assertIsNone(await self.repository.claim_due("w", timedelta(seconds=30)))
+        claim = await self.repository.claim_due("w", timedelta(seconds=30))
+
+        assert claim is not None
+        self.assertEqual(claim.execution_id, good.execution.id)
+        failed = await self.repository.get(bad.execution.id)
+        self.assertEqual(failed.status, "failed")
+
+    async def test_a_finished_execution_keeps_no_credential(self) -> None:
+        admission = replace(
+            self._admission("finished"), protected_context={"credential": "secret"}
         )
+        admitted = await self.repository.admit(admission)
+        await self.repository.request_cancel(admitted.execution.id)
+        report = await self.repository.claim_due("w", timedelta(seconds=30))
+        assert report is not None
+        self.assertEqual(report.protected_context, {"credential": "secret"})
+        await self.repository.settle(
+            admitted.execution.id, report.fencing_token, ProviderFinishSucceeded()
+        )
+
+        async with await AsyncConnection.connect(self.dsn) as connection:
+            cursor = await connection.execute(
+                sql.SQL("SELECT protected_context FROM {} WHERE id = %s").format(
+                    sql.Identifier(self.schema, "executions")
+                ),
+                (admitted.execution.id,),
+            )
+            row = await cursor.fetchone()
+        assert row is not None
+        self.assertEqual(self.repository._cipher.decrypt(bytes(row[0])), {})
 
     def _repository(
         self, *, schema: str | None = None, per_model_limit: int = 1

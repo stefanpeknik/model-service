@@ -14,6 +14,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import httpx
+import jwt
 
 
 if TYPE_CHECKING:
@@ -89,7 +90,7 @@ async def register_until_done(
         try:
             await marketplace.register(apps)
             return
-        except (httpx.HTTPError, KeyError, ValueError) as error:
+        except (httpx.HTTPError, jwt.InvalidTokenError, KeyError, ValueError) as error:
             logger.warning(
                 "EMPAIA app registration failed, retrying in %.0f s: %s",
                 retry_seconds,

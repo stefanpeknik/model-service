@@ -192,15 +192,6 @@ class HttpEmpaiaGateway:
         """Close the gateway's HTTP client and release its network resources."""
         await self._client.close()
 
-    @property
-    def job_id(self) -> str:
-        """Expose the external job ID for publication metadata."""
-        return self._job_id
-
-    async def slide_metadata(self) -> SlideMetadata:
-        """Fetch validated slide geometry for artifact publication."""
-        return await self._slide_metadata()
-
     async def slide_info(self) -> SlideInfo:
         """The slide with every level's downsample factor, as pixelmap tiles need."""
         return await self._call(self._client.get_input("slide"))
@@ -257,7 +248,8 @@ class HttpEmpaiaGateway:
                 raise EmpaiaGatewayError(
                     "EMPAIA AppService is temporarily unavailable",
                     retryable=True,
-                    outcome_unknown=mutation,
+                    # A 429 refused the request; a 5xx may have applied it.
+                    outcome_unknown=mutation and error.status != 429,
                 ) from error
             if error.status in {401, 403}:
                 raise EmpaiaGatewayError.invalid(

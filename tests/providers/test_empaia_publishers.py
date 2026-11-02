@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 from dataclasses import replace
 from unittest.mock import AsyncMock, patch
+from zipfile import BadZipFile
 
 from model_service.builders.contracts import (
     BuilderResult,
@@ -17,6 +18,7 @@ from model_service.builders.registry import OutputSpec, get_builder
 from model_service.builders.score_grid import MEDIA_TYPE
 from model_service.providers.empaia.apps import AppMode, EmpaiaListing, app_definitions
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
+from model_service.providers.empaia.image_io import _clip
 from model_service.providers.empaia.io import BUILDER_IO
 from model_service.providers.empaia.provider import EmpaiaProviderAdapter
 from model_service.providers.empaia.publishers import (
@@ -100,6 +102,15 @@ class PublisherTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(PUBLISHERS.resolve("continuous_pixelmap", HEATMAP))
 
 
+class RectangleTests(unittest.TestCase):
+    def test_a_rectangle_is_clipped_to_the_slide(self) -> None:
+        self.assertEqual(_clip(10, 20, 100), (10, 20))
+        self.assertEqual(_clip(-100, 200, 1000), (0, 100))
+        self.assertEqual(_clip(90, 20, 100), (90, 10))
+        # Nothing on the slide: not positive, so the writer refuses it.
+        self.assertLessEqual(_clip(-500, 100, 1000)[1], 0)
+
+
 class AppPublishabilityTests(unittest.TestCase):
     def test_only_models_their_publishers_take_become_apps(self) -> None:
         single = app_definitions(
@@ -166,6 +177,37 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(raised.exception.retryable)
         self.assertFalse(raised.exception.outcome_unknown)
         gateway.finalize.assert_not_awaited()
+
+    async def test_an_unreadable_artifact_is_invalid_not_retried(self) -> None:
+        pixelmaps = AsyncMock()
+        pixelmaps.prepare.side_effect = BadZipFile("truncated")
+        gateway = AsyncMock()
+        gateway.set_before_mutation = lambda _callback: None
+        provider = EmpaiaProviderAdapter(
+            lambda _context: gateway,  # type: ignore[arg-type, return-value]
+            allowed_api_urls=("https://empaia.invalid",),
+            publishers=PublisherRegistry(
+                {("continuous_pixelmap", MEDIA_TYPE): pixelmaps}
+            ),
+        )
+
+        with self.assertRaises(ProviderFinishFailureError) as raised:
+            await provider.finish(
+                {"api_url": "https://empaia.invalid", "job_id": "j", "credential": "c"},
+                ProviderSuccess(
+                    BuilderResult(
+                        outputs={
+                            "heatmap": SharedArtifact(
+                                path="/shared/heatmap.npz", media_type=MEDIA_TYPE
+                            )
+                        }
+                    ),
+                    "heatmap",
+                ),
+            )
+
+        self.assertFalse(raised.exception.retryable)
+        self.assertFalse(raised.exception.outcome_unknown)
 
     async def test_an_invalid_output_stops_the_job_before_any_write(self) -> None:
         heatmap = get_builder("heatmap")

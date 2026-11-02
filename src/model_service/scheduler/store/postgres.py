@@ -302,8 +302,11 @@ class PostgresExecutionRepository:
                 row = rows[0] if rows else None
             if row is None:
                 return None
+            execution = await self._claimable(session, row, now)
+            if execution is None:
+                return None
             claimed = self._transitions.claim(
-                self._record(row),
+                execution,
                 owner=owner,
                 fencing_token=str(uuid4()),
                 lease_duration=lease_duration,
@@ -330,8 +333,11 @@ class PostgresExecutionRepository:
             )
             claims = []
             for row in rows:
+                execution = await self._claimable(session, row, now)
+                if execution is None:
+                    continue
                 claimed = self._transitions.claim(
-                    self._record(row),
+                    execution,
                     owner=owner,
                     fencing_token=str(uuid4()),
                     lease_duration=lease_duration,
@@ -395,8 +401,10 @@ class PostgresExecutionRepository:
     ) -> ExecutionRecord:
         """Lock and validate an attempt's outcome, committing deadline changes before raising a stale-claim rejection.
 
-        A raw model response is written to its own file first and kept only if
-        the settlement that records it commits; otherwise the file is removed.
+        A raw model response is written to its own file first and removed only
+        if this settlement was refused and the row does not already point at it:
+        a retry after a lost commit acknowledgment writes the same path. A failed
+        transaction leaves it to the orphan sweep, since it may have committed.
         """
         response = None
         if isinstance(settlement, InferenceSucceeded):
@@ -405,7 +413,7 @@ class PostgresExecutionRepository:
                     execution_id, fencing_token, settlement.content
                 )
             )
-        recorded = False
+        refused = False
         try:
             async with self._transaction() as session:
                 row = await self._fetch(session, execution_id, for_update=True)
@@ -416,6 +424,11 @@ class PostgresExecutionRepository:
                     await self._database_now(session),
                 )
                 accepted = decision.rejection is None and response is not None
+                refused = (
+                    response is not None
+                    and not accepted
+                    and row.response_path != response.path
+                )
                 if decision.execution is not None:
                     await self._persist_state(
                         session,
@@ -423,9 +436,8 @@ class PostgresExecutionRepository:
                         decision.execution,
                         response=response if accepted else None,
                     )
-            recorded = accepted and decision.execution is not None
         finally:
-            if response is not None and not recorded:
+            if response is not None and refused:
                 await self._delete_payloads([response.path])
         return decision.accepted_execution()
 
@@ -673,6 +685,9 @@ class PostgresExecutionRepository:
         if response is not None:
             row.response_path = response.path
             row.response_size = response.size
+        if execution.work_kind is None:
+            # Nothing will use the job's credential again.
+            row.protected_context = self._cipher.encrypt({})
         await session.flush()
         return self._record(row)
 
@@ -780,7 +795,21 @@ class PostgresExecutionRepository:
             )
             return list(found)
 
-    def _record(self, row: ExecutionRow) -> ExecutionRecord:
+    async def _claimable(
+        self, session: AsyncSession, row: ExecutionRow, now: datetime
+    ) -> ExecutionRecord | None:
+        """The record with its context; one that cannot be read fails, not the queue."""
+        try:
+            return self._record(row, protected=True)
+        except ValueError:  # Includes ProtectedContextError: a bad envelope or key.
+            logger.error("execution %s has an unreadable provider context", row.id)
+            await self._persist_state(
+                session, row, self._transitions.unreadable(self._record(row), now)
+            )
+            return None
+
+    def _record(self, row: ExecutionRow, *, protected: bool = False) -> ExecutionRecord:
+        """Only a claim needs the provider context, so only a claim decrypts it."""
         """Convert an ORM row to an immutable domain record and decrypt private provider context."""
         error = None
         if row.error_code is not None:
@@ -797,7 +826,9 @@ class PostgresExecutionRepository:
             model_id=row.model_id,
             status=row.status,
             invocation=row.invocation,
-            protected_context=self._cipher.decrypt(row.protected_context),
+            protected_context=(
+                self._cipher.decrypt(row.protected_context) if protected else {}
+            ),
             deadline_at=row.deadline_at,
             terminal_report_deadline_at=row.terminal_report_deadline_at,
             work_kind=row.work_kind,

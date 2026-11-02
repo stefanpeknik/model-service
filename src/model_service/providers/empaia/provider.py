@@ -257,7 +257,17 @@ class EmpaiaProviderAdapter:
                         publisher = self._publishers.publisher_for(
                             name, io.output_type(name), spec, output
                         )
-                        commits.append(await publisher.prepare(gateway, name, output))
+                        try:
+                            commit = await publisher.prepare(gateway, name, output)
+                        except EmpaiaGatewayError:
+                            raise
+                        except Exception as error:
+                            # Nothing is written yet, and a retry reads the same file.
+                            logger.exception("EMPAIA output %s is unreadable", name)
+                            raise EmpaiaGatewayError.invalid(
+                                f"EMPAIA output {name!r} cannot be published"
+                            ) from error
+                        commits.append(commit)
                     for commit in commits:
                         await commit()
                         mutation_completed = True

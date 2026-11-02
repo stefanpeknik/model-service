@@ -150,7 +150,8 @@ class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
                         transient = status == 429 or status >= 500
                         self.assertEqual(raised.exception.retryable, transient)
                         self.assertEqual(
-                            raised.exception.outcome_unknown, mutation and transient
+                            raised.exception.outcome_unknown,
+                            mutation and status >= 500,
                         )
                         self.assertNotIn("private", str(raised.exception))
                     await gateway.close()

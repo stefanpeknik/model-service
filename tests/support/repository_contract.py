@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
@@ -445,6 +446,19 @@ class ExecutionRepositoryContract:
             path.name.removeprefix(f"{execution_id}.")
             for path in shard.glob(f"{execution_id}.*")
         )
+
+    async def test_a_retried_settlement_keeps_the_recorded_response(self) -> None:
+        execution_id = await self._admit_inference("lost-ack")
+        claim = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert claim is not None
+        settlement = InferenceSucceeded(InferenceResult(None, {}, 8), b"response")
+        await self.repository.settle(execution_id, claim.fencing_token, settlement)
+
+        # The commit's acknowledgment was lost, so the worker settles again.
+        with suppress(StaleWorkClaimError):
+            await self.repository.settle(execution_id, claim.fencing_token, settlement)
+
+        assert await self.repository.inference_content(execution_id) == b"response"
 
     async def test_inference_files_follow_the_execution(self) -> None:
         execution_id = await self._admit_inference("tile", payload=b"request")

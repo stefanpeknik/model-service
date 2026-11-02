@@ -57,6 +57,7 @@ class ExecutionErrorCode(StrEnum):
     MODEL_UNAVAILABLE = "model_unavailable"
     RESULT_TOO_LARGE = "inference_result_too_large"
     REQUEST_UNAVAILABLE = "inference_request_unavailable"
+    PROTECTED_CONTEXT_UNREADABLE = "protected_context_unreadable"
 
 
 # The integration a scheduled execution belongs to; each provider names itself.

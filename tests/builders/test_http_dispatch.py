@@ -98,6 +98,13 @@ class HttpBuilderDispatchTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertLessEqual(request.extensions["timeout"]["read"], 60)
 
+    async def test_ray_serves_own_503_is_a_confirmed_rejection(self) -> None:
+        response = httpx.Response(503, text="queue full", headers={"retry-after": "7"})
+        with self.assertRaises(ConfirmedRejectionError) as raised:
+            await self.dispatch(respond(response))
+
+        self.assertEqual(raised.exception.retry_after, timedelta(seconds=7))
+
     async def test_backpressure_is_a_confirmed_rejection(self) -> None:
         for headers, retry_after in (
             ({"retry-after": "7"}, timedelta(seconds=7)),
@@ -132,7 +139,7 @@ class HttpBuilderDispatchTests(unittest.IsolatedAsyncioTestCase):
             raise httpx.ReadTimeout("lost", request=request)
 
         valid = {"code": "failed", "message": "failed", "retryable": True}
-        bodies: list[object] = [None, [], "failure", {}, {"detail": None}]
+        bodies: list[object] = [[], "failure", {}, {"detail": None}]
         for name, values in (
             ("code", (None, "", 1)),
             ("message", (None, "", 1)),
@@ -141,7 +148,6 @@ class HttpBuilderDispatchTests(unittest.IsolatedAsyncioTestCase):
             bodies.extend({"detail": {**valid, name: value}} for value in values)
         handlers: list[Callable[[httpx.Request], httpx.Response]] = [
             transport_error,
-            lambda _r: httpx.Response(503, text="proxy unavailable"),
             lambda _r: httpx.Response(200, json={"outputs": {"x": {"kind": "?"}}}),
             *(respond(httpx.Response(503, json=body)) for body in bodies),
         ]

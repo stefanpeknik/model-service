@@ -108,10 +108,8 @@ class VipsRectangleMaskWriter:
         try:
             import pyvips
 
-            x = min(max(rectangle.x, 0), slide.width)
-            y = min(max(rectangle.y, 0), slide.height)
-            width = min(rectangle.width, slide.width - x)
-            height = min(rectangle.height, slide.height - y)
+            x, width = _clip(rectangle.x, rectangle.width, slide.width)
+            y, height = _clip(rectangle.y, rectangle.height, slide.height)
             if width <= 0 or height <= 0:
                 raise EmpaiaGatewayError.invalid(
                     "EMPAIA rectangle input does not overlap the slide"
@@ -136,6 +134,12 @@ class VipsRectangleMaskWriter:
             raise EmpaiaGatewayError.unavailable(
                 "EMPAIA rectangle input could not be materialized"
             ) from error
+
+
+def _clip(start: int, length: int, extent: int) -> tuple[int, int]:
+    """The part of a span that lies within 0..extent, as its start and length."""
+    clipped = max(start, 0)
+    return clipped, min(start + length, extent) - clipped
 
 
 MIN_PIXELS_PER_SCORE = 4

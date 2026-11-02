@@ -352,7 +352,7 @@ class InMemoryExecutionRepository:
                 )
                 if decision.rejection is None:
                     self._responses[execution_id] = response
-                else:
+                elif self._responses.get(execution_id) != response:
                     self._released.append(response.path)
             return decision.accepted_execution()
 

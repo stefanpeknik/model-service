@@ -141,9 +141,10 @@ class ExecutionTransitions:
             lease_owner=None,
             fencing_token=None,
             lease_expires_at=None,
-            # A publication's mark is not the report's: left set, recovery
-            # would take the report as already sent and drop it.
+            # A publication's mark and attempts are not the report's: left set,
+            # recovery would take the report as sent, or as out of attempts.
             finish_mutation_started=False,
+            finish_attempts=0,
             updated_at=now,
         )
 
@@ -249,7 +250,11 @@ class ExecutionTransitions:
                 execution=None,
                 rejection=SettlementRejection.STALE_CLAIM,
             )
-        if self.work_deadline_at(execution) <= now:
+        # A finished publication is a fact, however late it arrives.
+        if (
+            not isinstance(settlement, ProviderFinishSucceeded)
+            and self.work_deadline_at(execution) <= now
+        ):
             return SettlementDecision(
                 execution=self.deadline(execution, now),
                 rejection=SettlementRejection.DEADLINE_EXCEEDED,
@@ -392,6 +397,17 @@ class ExecutionTransitions:
                 )
             return self._clear_work(execution, now)
         raise TypeError("unknown work settlement")
+
+    def unreadable(self, execution: ExecutionRecord, now: datetime) -> ExecutionRecord:
+        """Fail an execution whose provider context cannot be decrypted; nothing can report it."""
+        return self._terminal_failure(
+            execution,
+            ExecutionError(
+                code=ExecutionErrorCode.PROTECTED_CONTEXT_UNREADABLE,
+                message="the execution's stored provider context cannot be read",
+            ),
+            now,
+        )
 
     def recover_expired(
         self,

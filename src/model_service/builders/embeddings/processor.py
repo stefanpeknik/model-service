@@ -33,6 +33,7 @@ async def build_embeddings(
 ) -> None:
     """Coordinates are tile origins at the slide level closest to the model's mpp."""
     import h5py
+    from ratiopath.tiling import grid_tiles
 
     from model_service.builders.tile_reader import TileReader, open_slide
 
@@ -102,12 +103,14 @@ async def build_embeddings(
             features[count] = result
 
         try:
-            # Include one padded tile even when the slide is smaller than a tile.
-            for y in range(0, max(0, height - tile_size) + stride, stride):
-                for x in range(0, max(0, width - tile_size) + stride, stride):
-                    if len(tasks) >= max_concurrent_tasks:
-                        await append_oldest()
-                    tasks.append(asyncio.create_task(infer(x, y)))
+            for x, y in grid_tiles(
+                slide_extent=(max(width, tile_size), max(height, tile_size)),
+                tile_extent=(tile_size, tile_size),
+                stride=(stride, stride),
+            ):
+                if len(tasks) >= max_concurrent_tasks:
+                    await append_oldest()
+                tasks.append(asyncio.create_task(infer(x, y)))
             while tasks:
                 await append_oldest()
             if features is None:
