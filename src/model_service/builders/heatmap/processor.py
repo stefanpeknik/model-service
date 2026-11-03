@@ -1,9 +1,8 @@
-"""Build a score map of a slide, or of its region of interest, from model tiles.
+"""Build a whole-slide score map from model tiles.
 
 OpenSlide reads run in a thread pool and predictions run concurrently through the
 predictor. A memory-mapped MaskBuilder averages overlapping scores into a grid
-at the model's output resolution, which is written as a score grid. With a
-region of interest the grid covers only its box.
+at the model's output resolution, which is written as a score grid.
 """
 
 from __future__ import annotations
@@ -95,16 +94,8 @@ class SlideHeatmapProcessor:
         ):
             extent_x, extent_y = slide.level_dimensions[reader.level]
             mpp_x, mpp_y = slide.slide_resolution(reader.level)
-            left, top, right, bottom = reader.region() or (0, 0, extent_x, extent_y)
-            # Back to the first tile that still reaches the box, snapped to the
-            # stride, so the box's cells get the tiles a whole-slide run gives them.
-            origin_x = _snap(max(0, left - tile_size + 1), stride)
-            origin_y = _snap(max(0, top - tile_size + 1), stride)
-            # On to the end of the last tile that starts in the box.
-            span_x = min(extent_x, _snap(right - 1, stride) + tile_size) - origin_x
-            span_y = min(extent_y, _snap(bottom - 1, stride) + tile_size) - origin_y
             mask_builder = MaskBuilder(
-                source_extents=(span_y, span_x),
+                source_extents=(extent_y, extent_x),
                 source_tile_extent=tile_size,
                 output_tile_extent=output_tile_size,
                 stride=stride,
@@ -112,14 +103,11 @@ class SlideHeatmapProcessor:
                 storage="memmap",
             )
             logger.info(
-                "heatmap of %s: level %d (%dx%d px at %d,%d), %d-px tiles, "
-                "stride %d, %s",
+                "heatmap of %s: level %d (%dx%d px), %d-px tiles, stride %d, %s",
                 model.id,
                 reader.level,
-                span_x,
-                span_y,
-                origin_x,
-                origin_y,
+                extent_x,
+                extent_y,
                 tile_size,
                 stride,
                 "no background filter"
@@ -141,7 +129,7 @@ class SlideHeatmapProcessor:
 
                 async def process_tile(x: int, y: int) -> None:
                     tile, read_seconds = await loop.run_in_executor(
-                        executor, timed_read, origin_x + x, origin_y + y
+                        executor, timed_read, x, y
                     )
                     if tile is None:
                         return
@@ -157,7 +145,7 @@ class SlideHeatmapProcessor:
                     )
 
                 for x, y in grid_tiles(
-                    slide_extent=(max(span_x, tile_size), max(span_y, tile_size)),
+                    slide_extent=(max(extent_x, tile_size), max(extent_y, tile_size)),
                     tile_extent=(tile_size, tile_size),
                     stride=(stride, stride),
                 ):
@@ -177,7 +165,7 @@ class SlideHeatmapProcessor:
                             submitted,
                             last_report - started,
                             y,
-                            span_y,
+                            extent_y,
                             reads.count,
                             reads,
                             predictions,
@@ -209,7 +197,6 @@ class SlideHeatmapProcessor:
                         level_size=(extent_x, extent_y),
                         cell_size=float(min(scale_x, scale_y)),
                         mpp=(float(mpp_x), float(mpp_y)),
-                        origin=(origin_x, origin_y),
                     ),
                 )
             finally:
@@ -217,7 +204,3 @@ class SlideHeatmapProcessor:
                     task.cancel()
                 await asyncio.gather(*tasks, return_exceptions=True)
                 mask_builder.cleanup()
-
-
-def _snap(value: int, stride: int) -> int:
-    return value - value % stride

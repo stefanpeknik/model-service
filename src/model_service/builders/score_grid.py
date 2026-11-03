@@ -9,12 +9,10 @@ produced it:
 - `level`: the slide level the scores were computed at;
 - `level_size`: that level's width and height in pixels;
 - `cell_size`: pixels of that level one cell covers along each axis;
-- `mpp`: microns per pixel of that level, x and y;
-- `origin`: the level pixel, x and y, where cell (0, 0) starts; (0, 0) unless
-  the grid covers only a region of interest.
+- `mpp`: microns per pixel of that level, x and y.
 
-Cell (r, c) covers the level's pixels from origin + (c, r) * cell_size; the
-grid may reach past the level's edge. Reading it needs only NumPy (`numpy.load`), and an
+Cell (r, c) covers the level's pixels from (c, r) * cell_size; the grid may
+reach past the level's edge. Reading it needs only NumPy (`numpy.load`), and an
 image of the slide's size is the grid scaled by `cell_size`.
 """
 
@@ -43,7 +41,6 @@ class ScoreGrid:
     level_size: tuple[int, int]
     cell_size: float
     mpp: tuple[float, float]
-    origin: tuple[int, int] = (0, 0)
 
 
 def write_score_grid(path: Path, grid: ScoreGrid) -> None:
@@ -57,7 +54,6 @@ def write_score_grid(path: Path, grid: ScoreGrid) -> None:
             level_size=np.asarray(grid.level_size, dtype=np.int64),
             cell_size=np.float64(grid.cell_size),
             mpp=np.asarray(grid.mpp, dtype=np.float64),
-            origin=np.asarray(grid.origin, dtype=np.int64),
         )
 
 
@@ -65,9 +61,6 @@ def read_score_grid(path: Path) -> ScoreGrid:
     with np.load(path, allow_pickle=False) as stored:
         width, height = (int(value) for value in stored["level_size"])
         mpp_x, mpp_y = (float(value) for value in stored["mpp"])
-        origin_x, origin_y = (
-            (int(value) for value in stored["origin"]) if "origin" in stored else (0, 0)
-        )
         return ScoreGrid(
             values=stored["values"],
             scored=stored["scored"],
@@ -75,5 +68,4 @@ def read_score_grid(path: Path) -> ScoreGrid:
             level_size=(width, height),
             cell_size=float(stored["cell_size"]),
             mpp=(mpp_x, mpp_y),
-            origin=(origin_x, origin_y),
         )

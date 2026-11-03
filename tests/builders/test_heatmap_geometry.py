@@ -193,7 +193,7 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(masked.calls, 24)
         np.testing.assert_array_equal(without_mask.values, with_mask.values)
 
-    async def test_a_region_of_interest_grid_covers_only_its_box(self) -> None:
+    async def test_a_region_of_interest_limits_which_tiles_are_scored(self) -> None:
         whole_predictor, region_predictor = LandmarkPredictor(), LandmarkPredictor()
         with TemporaryDirectory() as directory:
             root = Path(directory)
@@ -202,18 +202,14 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
                 root, 112, 80, predictor=region_predictor, mask="region"
             )
 
-        # The first 32-px tile reaching column 50 starts at 19, snapped to the
-        # 16-px stride; row 40 is reached from 9, snapped to 0.
-        self.assertEqual(region.origin, (16, 0))
-        self.assertEqual(region.cell_size, whole.cell_size)
-        self.assertLess(region.values.size, whole.values.size)
+        self.assertEqual(region.values.shape, whole.values.shape)
         self.assertLess(region_predictor.calls, whole_predictor.calls)
-        # The box's cells, rows 2-3 and columns 3-5 of the slide, score as in a
-        # whole-slide run.
+        # The box's cells, rows 2-3 and columns 3-5, score as in a whole-slide run.
         np.testing.assert_array_equal(
-            region.values[:, 2:4, 2:5], whole.values[:, 2:4, 3:6]
+            region.values[:, 2:4, 3:6], whole.values[:, 2:4, 3:6]
         )
-        self.assertTrue(region.scored[2:4, 2:5].all())
+        self.assertTrue(region.scored[2:4, 3:6].all())
+        self.assertFalse(region.scored[:, 0].any())
 
     async def test_empty_mask_skips_predictions_and_scores_nothing(self) -> None:
         predictor = LandmarkPredictor()

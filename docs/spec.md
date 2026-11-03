@@ -305,13 +305,9 @@ resolution it produced them, shaped (channels, rows, columns), which cells any
 tile scored, the slide level they were computed at with its size and microns
 per pixel, and the cell's size in pixels of that level (256 for the prostate
 model). It reads with NumPy alone; an image of the slide's size is the grid
-scaled by the cell size. With a region of interest the grid covers only its
-box, from the first tile that reaches it, snapped to the stride, to the end of
-the last; its `origin` records where cell (0, 0) lies, and the box's cells
-score as in a whole-slide run. Nothing caps a grid's size yet: a model
-scoring every pixel, such as EPISeg, fits only a region of interest, and no
-app for one is listed. The SDK places such a grid with `ScalarImageOutput.origin_x`/`origin_y`, added on the SDK
-branch `feat/scalar-output-origin`. The builder no longer renders a TIFF: EMPAIA never
+scaled by the cell size. A region of interest limits which tiles are scored,
+through the mask; the grid still covers the whole level, so a model scoring
+every pixel, such as EPISeg, does not fit yet and has no app. The builder no longer renders a TIFF: EMPAIA never
 used it, and it took longer to write than the inference.
 
 EMPAIA outputs. Each builder output declares its media type (`OutputSpec` in

@@ -78,9 +78,6 @@ class FakeTileReader:
     ) -> Iterator[Self]:
         yield cls()
 
-    def region(self) -> None:
-        return None
-
     def read(self, _x: int, _y: int, tile_size: int) -> np.ndarray:
         return np.zeros((3, tile_size, tile_size), dtype=np.uint8)
 
