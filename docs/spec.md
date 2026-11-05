@@ -153,10 +153,10 @@ fits EMPAIA's 30), a short name (at most 10), a description of what the model
 finds, and the modes it runs in. Every builder that accepts the model's
 contract and is listed in `src/model_service/providers/empaia/io.py`, which
 gives the EAD `io` entry of its inputs and outputs (today the heatmap builder,
-not tile embeddings), becomes one app per listed mode: the standalone app takes
-the slide and an optional region of interest, the preprocessing app only the
-slide. Names, namespaces (`org.empaia.rationai.<builder>_<model>_<mode>.v3.0`),
-the mode's sentence of the description, and the image
+not tile embeddings), becomes one app offering every listed mode: in
+standalone mode it takes the slide and a region of interest, in preprocessing
+mode only the slide. Names, namespaces (`org.empaia.rationai.<builder>_<model>.v3.0`),
+a sentence of the description per mode, and the image
 `http::<target>/builders/<builder>/models/<model>` are derived; each EAD is
 validated against the bundled EAD v3 schema.
 

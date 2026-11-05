@@ -73,7 +73,7 @@ class Marketplace:
                 logger.info(
                     "registered EMPAIA app %s (%s, %s on %s)",
                     app.app_id,
-                    app.mode,
+                    ", ".join(app.modes),
                     app.builder_id,
                     app.model_id,
                 )

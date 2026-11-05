@@ -54,49 +54,61 @@ def listings(models: ModelCatalog) -> dict[str, EmpaiaListing]:
 
 
 class AppDefinitionTests(unittest.TestCase):
-    def test_a_listed_model_offers_one_app_per_mode_of_each_publishable_builder(
+    def test_a_listed_model_offers_one_app_with_its_modes_per_builder(
         self,
     ) -> None:
         models = catalog("prostate-classifier-1", "virchow2")
 
-        apps = app_definitions(models, listings(models), PUBLISHERS)
+        (app,) = app_definitions(models, listings(models), PUBLISHERS)
 
         self.assertEqual(
-            [(app.builder_id, app.model_id, app.mode) for app in apps],
-            [
-                ("heatmap", "prostate-classifier-1", AppMode.STANDALONE),
-                ("heatmap", "prostate-classifier-1", AppMode.PREPROCESSING),
-            ],
+            (app.builder_id, app.model_id, app.modes),
+            (
+                "heatmap",
+                "prostate-classifier-1",
+                (AppMode.STANDALONE, AppMode.PREPROCESSING),
+            ),
         )
-        standalone, preprocessing = apps
-        self.assertEqual(standalone.ead["name"], "Prostate cancer heatmap")
+        self.assertEqual(app.ead["name"], "Prostate cancer heatmap")
         self.assertEqual(
-            standalone.ead["modes"],
+            app.ead["namespace"],
+            "org.empaia.rationai.heatmap_prostate_classifier_1.v3.0",
+        )
+        # EMPAIA starts a preprocessing job with a slide alone.
+        self.assertEqual(
+            app.ead["modes"],
             {
                 "standalone": {
                     "inputs": ["slide", "region_of_interest"],
                     "outputs": ["heatmap"],
-                }
+                },
+                "preprocessing": {"inputs": ["slide"], "outputs": ["heatmap"]},
             },
         )
+        self.assertEqual(app.ead["io"]["region_of_interest"]["reference"], "io.slide")
         self.assertEqual(
-            standalone.ead["io"]["region_of_interest"]["reference"], "io.slide"
-        )
-        # EMPAIA starts a preprocessing app with a slide alone.
-        self.assertEqual(
-            preprocessing.ead["modes"],
-            {"preprocessing": {"inputs": ["slide"], "outputs": ["heatmap"]}},
-        )
-        self.assertNotEqual(standalone.app_id, preprocessing.app_id)
-        self.assertEqual(
-            standalone.image("model-service"),
+            app.image("model-service"),
             "http::model-service/builders/heatmap/models/prostate-classifier-1",
         )
+
+    def test_a_preprocessing_only_app_leaves_out_the_region_of_interest(self) -> None:
+        listing = EmpaiaListing(
+            name="Prostate cancer",
+            name_short="ProstHM",
+            description="Finds things.",
+            modes=(AppMode.PREPROCESSING,),
+        )
+        models = catalog("prostate-classifier-1")
+
+        (app,) = app_definitions(models, {"prostate-classifier-1": listing}, PUBLISHERS)
+
+        self.assertNotIn("region_of_interest", app.ead["io"])
+        self.assertEqual(list(app.ead["modes"]), ["preprocessing"])
 
     def test_the_viewer_settings_are_declared_and_given_to_each_app(self) -> None:
         models = catalog("prostate-classifier-1")
 
-        standalone, _ = app_definitions(models, listings(models), PUBLISHERS)
+        (standalone,) = app_definitions(models, listings(models), PUBLISHERS)
 
         self.assertEqual(
             standalone.ead["configuration"]["global"][VIEWER_CONFIG_KEY]["type"],
@@ -163,9 +175,7 @@ class AppDefinitionTests(unittest.TestCase):
         heatmap = BUILDER_IO["heatmap"]
         broken = replace(heatmap, outputs={"heatmap": {"type": "no_such_type"}})
         with self.assertRaises(ValidationError):
-            generate_ead(
-                get_builder("heatmap"), broken, "model", listing, AppMode.STANDALONE
-            )
+            generate_ead(get_builder("heatmap"), broken, "model", listing)
 
 
 def token(lifetime: float) -> str:
@@ -211,7 +221,7 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
         await marketplace.register(apps)
         await marketplace.register(apps)
 
-        self.assertEqual(len(posted), 4)
+        self.assertEqual(len(posted), 2)
         self.assertTrue(all(header.startswith("Bearer ") for header, _ in posted))
         self.assertEqual(tokens, 1, "a valid token is reused")
         app = posted[0][1]["active_app_views"]["v3"]["app"]  # type: ignore[index]
@@ -226,10 +236,11 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_registration_is_retried_until_the_marketplace_answers(self) -> None:
-        # Each app: the portal app, then its viewer configuration.
+        # The app: the portal app, then its viewer configuration.
         answers = [
             httpx.Response(503),
-            *(httpx.Response(201), httpx.Response(200)) * 2,
+            httpx.Response(201),
+            httpx.Response(200),
         ]
 
         def handle(request: httpx.Request) -> httpx.Response:

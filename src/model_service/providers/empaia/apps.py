@@ -1,12 +1,12 @@
-"""EMPAIA apps for the deployed models, one per builder and mode.
+"""EMPAIA apps for the deployed models, one per builder, offering every listed mode.
 
 A model file opts in with an `empaia` block: how the model is presented and in
 which modes it runs. Every builder that accepts the model's contract, is listed
 in `io.BUILDER_IO`, and whose outputs all have a publisher that takes the model
-then becomes one app per mode. A standalone app
-takes all of the builder's EMPAIA inputs (e.g. a region of interest); a
-preprocessing app takes only the required ones, because EMPAIA starts it with a
-slide alone. The app's image is `http::<target>/builders/<builder>/models/<model>`,
+then becomes one app with the listed modes. In standalone mode it takes all
+of the builder's EMPAIA inputs (e.g. a region of interest); in preprocessing
+mode only the required ones, because EMPAIA starts it with a slide alone. The
+app's image is `http::<target>/builders/<builder>/models/<model>`,
 which JES hands to model-service.
 """
 
@@ -53,7 +53,7 @@ class AppMode(StrEnum):
 
 
 _MODE_DESCRIPTION = {
-    AppMode.STANDALONE: ("Runs on the region of interest you draw."),
+    AppMode.STANDALONE: "Runs on the region of interest you draw.",
     AppMode.PREPROCESSING: "Runs on the whole slide when the slide is preprocessed.",
 }
 
@@ -146,7 +146,7 @@ def parse_listings(blocks: Mapping[str, object]) -> dict[str, EmpaiaListing]:
 class AppDefinition:
     builder_id: str
     model_id: str
-    mode: AppMode
+    modes: tuple[AppMode, ...]
     ead: dict[str, Any]
     # Values for the EAD's `configuration.global`, set when the app is registered.
     global_configuration: dict[str, str] = field(default_factory=dict)
@@ -265,12 +265,13 @@ def app_definitions(
                     ", ".join(unpublishable),
                 )
                 continue
-            for mode in listing.modes:
-                ead = generate_ead(spec, builder_io, model.id, listing, mode)
-                configuration = {}
-                if listing.viewer is not None:
-                    configuration[VIEWER_CONFIG_KEY] = listing.viewer.for_io(ead["io"])
-                apps.append(AppDefinition(spec.id, model.id, mode, ead, configuration))
+            ead = generate_ead(spec, builder_io, model.id, listing)
+            configuration = {}
+            if listing.viewer is not None:
+                configuration[VIEWER_CONFIG_KEY] = listing.viewer.for_io(ead["io"])
+            apps.append(
+                AppDefinition(spec.id, model.id, listing.modes, ead, configuration)
+            )
     return apps
 
 
@@ -279,13 +280,22 @@ def generate_ead(
     builder_io: BuilderIo,
     model_id: str,
     listing: EmpaiaListing,
-    mode: AppMode,
 ) -> dict[str, Any]:
-    """Build and schema-validate the EAD of one app."""
+    """Build and schema-validate the EAD of one app, with every listed mode."""
+    offered = [name for name in spec.inputs if name in builder_io.inputs]
+    mode_inputs = {
+        # EMPAIA starts a preprocessing job with the slide alone.
+        mode: [
+            name
+            for name in offered
+            if spec.inputs[name].required or mode is AppMode.STANDALONE
+        ]
+        for mode in listing.modes
+    }
     inputs = {
         name: builder_io.inputs[name]
-        for name, item in spec.inputs.items()
-        if name in builder_io.inputs and (item.required or mode is AppMode.STANDALONE)
+        for name in offered
+        if any(name in names for names in mode_inputs.values())
     }
     outputs = {name: builder_io.outputs[name] for name in spec.outputs}
     io = {}
@@ -302,17 +312,21 @@ def generate_ead(
         "name": f"{listing.name} {spec.id}",
         "name_short": listing.name_short,
         "namespace": (
-            f"org.empaia.rationai.{_identifier(spec.id)}_{_identifier(model_id)}"
-            f"_{mode.value}.v3.0"
+            f"org.empaia.rationai.{_identifier(spec.id)}_{_identifier(model_id)}.v3.0"
         ),
-        "description": f"{listing.description} {_MODE_DESCRIPTION[mode]}",
+        "description": " ".join(
+            [listing.description, *(_MODE_DESCRIPTION[m] for m in listing.modes)]
+        ),
         # The RationAI direct-access route serves apps allowed raw slide access.
         "permissions": {
             "data_transmission_to_external_service_provider": True,
             "wsi_raw_file_access": True,
         },
         "io": io,
-        "modes": {mode.value: {"inputs": list(inputs), "outputs": list(outputs)}},
+        "modes": {
+            mode.value: {"inputs": names, "outputs": list(outputs)}
+            for mode, names in mode_inputs.items()
+        },
     }
     if listing.viewer is not None:
         ead["configuration"] = {
