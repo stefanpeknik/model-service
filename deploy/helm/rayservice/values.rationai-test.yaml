@@ -54,7 +54,7 @@ workers:
 
 rayImage:
   repository: cerit.io/stefanpeknik/model-service-ray
-  tag: empaia-25
+  tag: empaia-26
   pullPolicy: IfNotPresent
 
 storage:
@@ -71,7 +71,7 @@ executionScheduler:
   replicas: 1
   image:
     repository: cerit.io/stefanpeknik/model-service-scheduler
-    tag: empaia-25
+    tag: empaia-26
     pullPolicy: IfNotPresent
   database:
     existingSecret: model-service-db
@@ -101,7 +101,12 @@ empaia:
   slideVolume:
     existingClaim: test-data-storage-pvc
     mountPath: /data/Projects
-  # No registration: the instance's marketplace needs credentials
-  # model-service doesn't have yet.
+  # Registers the prostate app in the instance's marketplace mock, with JES's
+  # own service client (the mds-client); only that model file has an empaia block.
   marketplace:
-    url: ""
+    url: http://test-core-marketplace:10010
+    organizationId: 1a305195-6b85-45bd-85f3-1f96a1a5684c
+    idpUrl: https://login.aai.lifescience-ri.eu/oidc/
+    clientId: da06f769-aa96-49ce-a4ee-0cc28194db14
+    existingSecret: mds-secret
+    clientSecretKey: secret
