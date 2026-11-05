@@ -1,6 +1,6 @@
 inference:
   contract: spatial-scores
-# Offered in EMPAIA as one app per mode; the facade registers them at startup.
+# Offered in EMPAIA as one app with these modes; the facade registers it at startup.
 empaia:
   name: Prostate cancer
   name_short: ProstHM
