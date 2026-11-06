@@ -9,9 +9,10 @@ direct users can be checked differently. All default to letting everyone in.
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any
 
 from fastapi import Depends, Request
 
@@ -51,7 +52,8 @@ class AuthorizationError(Exception):
     """The principal may not perform the action."""
 
 
-class Authenticator(Protocol):
+class Authenticator(ABC):
+    @abstractmethod
     async def authenticate(self, request: Request) -> Principal:
         """Identify the caller of a request.
 
@@ -67,7 +69,8 @@ class Authenticator(Protocol):
         ...
 
 
-class Authorizer(Protocol):
+class Authorizer(ABC):
+    @abstractmethod
     async def authorize(
         self, principal: Principal, action: Action, execution_id: str | None
     ) -> None:

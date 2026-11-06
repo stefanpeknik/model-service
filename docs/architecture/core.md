@@ -35,6 +35,17 @@ behind one public API that can also run builders durably.
 | `src/model_service/scheduler/` | Durable executions: admission, leases with fencing, retries, deadlines, cancellation, provider finish. PostgreSQL with Yoyo migrations. |
 | `src/model_service/providers/` | Providers: standalone (shared storage) and EMPAIA (AppService input and publication). `providers/composition.py` lists them; the facade and the builder ingress compose what each contributes and name none of them. |
 
+### Interfaces
+
+Interfaces between parts are abstract base classes (`ABC` with
+`@abstractmethod`), and every implementation inherits its interface:
+`Builder`, `AccessAdapter`, `ProviderAdapter`, `OutputPublisher`,
+`ExecutionRepository`, `EmpaiaGateway` and the rest. A class missing a method
+then fails when it is created, not when the method is first called. Test fakes
+need not inherit them. Two are `Protocol`s instead: the facade's `Scheduler`,
+because the core scheduler must not import the facade, and
+`EmpaiaGatewayFactory`, which a plain function implements.
+
 ### Providers
 
 A provider is a package that plugs into the facade and the builder replicas

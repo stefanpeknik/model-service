@@ -6,7 +6,8 @@ Adapters translate storage failures into ExecutionRepositoryUnavailableError.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
@@ -25,9 +26,10 @@ if TYPE_CHECKING:
     )
 
 
-class ExecutionRepository(Protocol):
+class ExecutionRepository(ABC):
     """Provide replay-safe admission, leased claims, settlement, and maintenance of durable executions."""
 
+    @abstractmethod
     async def check_ready(self) -> None:
         """Check that storage is accessible without requiring Ray.
 
@@ -36,6 +38,7 @@ class ExecutionRepository(Protocol):
         """
         ...
 
+    @abstractmethod
     async def maintain(self) -> None:
         """Expire deadlines, recover abandoned leases and delete expired inference results.
 
@@ -44,6 +47,7 @@ class ExecutionRepository(Protocol):
         """
         ...
 
+    @abstractmethod
     async def find_submission(
         self,
         identity: SubmissionIdentity,
@@ -62,6 +66,7 @@ class ExecutionRepository(Protocol):
         """
         ...
 
+    @abstractmethod
     async def admit(self, admission: Admission) -> AdmissionResult:
         """Atomically insert a prepared execution (and its inference payload) or return the existing identical submission.
 
@@ -77,6 +82,7 @@ class ExecutionRepository(Protocol):
         """
         ...
 
+    @abstractmethod
     async def get(self, execution_id: str) -> ExecutionRecord:
         """Return the internal record or raise UnknownExecutionError for an absent ID.
 
@@ -92,6 +98,7 @@ class ExecutionRepository(Protocol):
         """
         ...
 
+    @abstractmethod
     async def get_many(self, execution_ids: Collection[str]) -> list[ExecutionRecord]:
         """Return the records that exist, in the order requested.
 
@@ -106,6 +113,7 @@ class ExecutionRepository(Protocol):
         """
         ...
 
+    @abstractmethod
     async def request_cancel(self, execution_id: str) -> ExecutionRecord:
         """Record cancellation and invalidate the active claim, leaving terminal executions unchanged.
 
@@ -121,6 +129,7 @@ class ExecutionRepository(Protocol):
         """
         ...
 
+    @abstractmethod
     async def claim_due(
         self,
         owner: str,
@@ -145,6 +154,7 @@ class ExecutionRepository(Protocol):
         """
         ...
 
+    @abstractmethod
     async def claim_inference(
         self, owner: str, lease_duration: timedelta, limit: int
     ) -> list[WorkClaim]:
@@ -163,6 +173,7 @@ class ExecutionRepository(Protocol):
         """
         ...
 
+    @abstractmethod
     async def inference_content(self, execution_id: str) -> bytes:
         """Return a succeeded inference execution's stored response bytes.
 
@@ -179,6 +190,7 @@ class ExecutionRepository(Protocol):
         """
         ...
 
+    @abstractmethod
     async def renew(
         self,
         execution_id: str,
@@ -201,6 +213,7 @@ class ExecutionRepository(Protocol):
         """
         ...
 
+    @abstractmethod
     async def settle(
         self,
         execution_id: str,
@@ -224,6 +237,7 @@ class ExecutionRepository(Protocol):
         """
         ...
 
+    @abstractmethod
     async def mark_finish_mutation_started(
         self,
         execution_id: str,

@@ -7,6 +7,7 @@ responses.
 from __future__ import annotations
 
 import logging
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated, Any, Protocol
@@ -191,7 +192,8 @@ class Scheduler(Protocol):
         ...
 
 
-class Capacity(Protocol):
+class Capacity(ABC):
+    @abstractmethod
     async def explain(self, execution: ExecutionView) -> ExecutionView:
         """Add a message explaining why a running execution makes no progress.
 

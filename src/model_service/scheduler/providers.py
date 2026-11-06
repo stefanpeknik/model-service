@@ -6,9 +6,10 @@ into the scheduler model. Reading builder inputs belongs to access adapters.
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
@@ -74,11 +75,12 @@ class ProviderFinishFailureError(RuntimeError):
         self.outcome_unknown = outcome_unknown
 
 
-class ProviderAdapter(Protocol):
+class ProviderAdapter(ABC):
     """Translate one integration's replay identity, prepared invocation, and terminal reporting behavior."""
 
     name: ProviderName
 
+    @abstractmethod
     def identify(self, request: ScheduleRequest) -> SubmissionIdentity:
         """Compute submission identity locally without I/O or external side effects.
 
@@ -90,6 +92,7 @@ class ProviderAdapter(Protocol):
         """
         ...
 
+    @abstractmethod
     async def prepare(
         self,
         request: ScheduleRequest,
@@ -106,6 +109,7 @@ class ProviderAdapter(Protocol):
         """
         ...
 
+    @abstractmethod
     async def finish(
         self,
         protected_context: dict[str, JsonValue],

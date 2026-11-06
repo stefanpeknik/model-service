@@ -12,8 +12,9 @@ EMPAIA type takes a publisher and an entry in `default_publishers`.
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
 from model_service.builders.contracts import InlineOutput, SharedArtifact
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
@@ -32,9 +33,10 @@ type PublisherKey = tuple[str, str | None]
 type Commit = Callable[[], Awaitable[None]]
 
 
-class OutputPublisher(Protocol):
+class OutputPublisher(ABC):
     """Publish one kind of declared output through the gateway's guarded writes."""
 
+    @abstractmethod
     def accepts(self, model: ModelBinding) -> bool:
         """Check whether this model's outputs can be published, e.g. by its channel count.
 
@@ -46,6 +48,7 @@ class OutputPublisher(Protocol):
         """
         ...
 
+    @abstractmethod
     async def prepare(
         self, gateway: EmpaiaGateway, name: str, output: BuilderOutput
     ) -> Commit:

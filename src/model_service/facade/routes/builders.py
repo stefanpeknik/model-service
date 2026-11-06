@@ -7,8 +7,9 @@
 from __future__ import annotations
 
 import asyncio
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, Protocol
+from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, Request, Response, status
 
@@ -75,7 +76,8 @@ class BuilderView:
     configuration: dict[str, JsonValue]
 
 
-class BuilderRunner(Protocol):
+class BuilderRunner(ABC):
+    @abstractmethod
     async def run(
         self, builder_id: str, model_id: str, request: ImmediateBuilderRequest
     ) -> BuilderResult:

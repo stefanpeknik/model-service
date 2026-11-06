@@ -10,9 +10,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
 from model_service.builders.score_grid import ScoreGrid, write_score_grid
 
@@ -63,7 +64,8 @@ class _StageTiming:
         return f"{self.seconds / self.count * 1000:.0f} ms"
 
 
-class TilePredictor(Protocol):
+class TilePredictor(ABC):
+    @abstractmethod
     async def predict(self, tile: object) -> object:
         """Score one tile.
 

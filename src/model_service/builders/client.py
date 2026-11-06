@@ -6,8 +6,9 @@ malformed responses leave the outcome unknown, because the builder may have run.
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 import httpx
@@ -29,7 +30,8 @@ if TYPE_CHECKING:
 _ERROR_RESPONSE = TypeAdapter(ErrorResponse)
 
 
-class BuilderDispatch(Protocol):
+class BuilderDispatch(ABC):
+    @abstractmethod
     async def run(
         self,
         builder_id: str,

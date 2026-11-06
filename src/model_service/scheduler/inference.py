@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
 from model_service.scheduler.contracts import (
     INFERENCE_PROVIDER,
@@ -53,7 +54,8 @@ class ResultTooLargeError(RuntimeError):
     pass
 
 
-class InferenceTarget(Protocol):
+class InferenceTarget(ABC):
+    @abstractmethod
     def check(self, model_id: str, payload: bytes) -> None:
         """Check that a model exists and accepts the payload under its current input.
 
@@ -67,6 +69,7 @@ class InferenceTarget(Protocol):
         """
         ...
 
+    @abstractmethod
     async def call(
         self, model_id: str, payload: bytes, headers: Mapping[str, str]
     ) -> ModelResponse:

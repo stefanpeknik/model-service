@@ -10,8 +10,9 @@ provider imports what only one process needs inside the method for it.
 from __future__ import annotations
 
 import importlib
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
@@ -39,10 +40,11 @@ class FacadeContribution:
     background: Callable[[], Coroutine[None, None, None]] | None = None
 
 
-class Provider(Protocol):
+class Provider(ABC):
     # The model files' top-level block it reads, if any.
     catalog_block: str | None
 
+    @abstractmethod
     def facade(
         self, catalog: ModelCatalog, settings: SchedulerSettings
     ) -> FacadeContribution:
@@ -57,6 +59,7 @@ class Provider(Protocol):
         """
         ...
 
+    @abstractmethod
     def input_access(
         self, settings: WorkerSettings
     ) -> Mapping[InputAccessKind, AccessAdapter]:

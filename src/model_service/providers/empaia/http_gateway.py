@@ -8,9 +8,10 @@ uncertain mutation outcomes.
 from __future__ import annotations
 
 import math
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
 from aiohttp import ClientError, ClientResponseError, ContentTypeError
 from rationai.empaia import Client
@@ -86,9 +87,10 @@ class Rectangle:
     height: int
 
 
-class RectangleMaskWriter(Protocol):
+class RectangleMaskWriter(ABC):
     """Define local rasterization of a slide-space rectangle into a mask file."""
 
+    @abstractmethod
     def write(
         self,
         destination: Path,

@@ -6,7 +6,8 @@ HTTP route's LZ4 encoding and the Serve proxy.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Any
 
 from model_service.builders.contracts import BuilderFailure, FailureCode
 
@@ -19,11 +20,13 @@ if TYPE_CHECKING:
     from model_service.builders.contracts import TileEmbeddingModel
 
 
-class EmbeddingPredictor(Protocol):
+class EmbeddingPredictor(ABC):
+    @abstractmethod
     async def verify(self) -> None:
         """Check that the running model matches its catalog declaration."""
         ...
 
+    @abstractmethod
     async def predict(self, tile: NDArray[np.uint8]) -> NDArray[np.float32]:
         """Embed one tile.
 

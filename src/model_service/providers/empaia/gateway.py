@@ -6,6 +6,7 @@ uses it in the builder process.
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated, Protocol
@@ -112,9 +113,10 @@ class EmpaiaJobContext(EmpaiaInputState):
         }
 
 
-class EmpaiaGateway(Protocol):
+class EmpaiaGateway(ABC):
     """Abstract AppService configuration, input acquisition, result publication, and terminal reporting."""
 
+    @abstractmethod
     def set_before_mutation(self, callback: MutationGuard) -> None:
         """Install an async guard to persist the scheduler's mutation marker before external writes.
 
@@ -123,6 +125,7 @@ class EmpaiaGateway(Protocol):
         """
         ...
 
+    @abstractmethod
     async def get_configuration(self) -> dict[str, JsonValue]:
         """Fetch the job's resolved provider configuration as JSON values.
 
@@ -134,6 +137,7 @@ class EmpaiaGateway(Protocol):
         """
         ...
 
+    @abstractmethod
     async def get_mode(self) -> EmpaiaJobMode:
         """Fetch how the job was started.
 
@@ -145,6 +149,7 @@ class EmpaiaGateway(Protocol):
         """
         ...
 
+    @abstractmethod
     async def has_input(self, name: str) -> bool:
         """Check whether the job has the named input; optional builder inputs depend on the app's mode.
 
@@ -159,6 +164,7 @@ class EmpaiaGateway(Protocol):
         """
         ...
 
+    @abstractmethod
     async def materialize_input(
         self,
         name: str,
@@ -178,6 +184,7 @@ class EmpaiaGateway(Protocol):
         """
         ...
 
+    @abstractmethod
     async def post_primitive(
         self, name: str, output_type: str, value: JsonValue
     ) -> None:
@@ -194,6 +201,7 @@ class EmpaiaGateway(Protocol):
         """
         ...
 
+    @abstractmethod
     async def slide_info(self) -> SlideInfo:
         """Fetch the job's slide with every level's downsample factor.
 
@@ -205,6 +213,7 @@ class EmpaiaGateway(Protocol):
         """
         ...
 
+    @abstractmethod
     async def publish_pixelmap(
         self, name: str, slide_id: str, tile_sets: tuple[PixelmapTileSet, ...]
     ) -> None:
@@ -221,6 +230,7 @@ class EmpaiaGateway(Protocol):
         """
         ...
 
+    @abstractmethod
     async def finalize(self) -> None:
         """Mark the external job's successful completion after its outputs are published.
 
@@ -229,6 +239,7 @@ class EmpaiaGateway(Protocol):
         """
         ...
 
+    @abstractmethod
     async def report_failure(self, message: str) -> None:
         """Report a safe failure or cancellation message to the external job.
 
@@ -240,6 +251,7 @@ class EmpaiaGateway(Protocol):
         """
         ...
 
+    @abstractmethod
     async def close(self) -> None:
         """Release the gateway's HTTP resources after admission, input use, or reporting."""
         ...

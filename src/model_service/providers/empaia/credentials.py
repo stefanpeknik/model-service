@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import TYPE_CHECKING, Protocol
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 import jwt
 
@@ -19,7 +20,8 @@ if TYPE_CHECKING:
     import httpx
 
 
-class OutgoingCredentials(Protocol):
+class OutgoingCredentials(ABC):
+    @abstractmethod
     async def authorization(self, client: httpx.AsyncClient) -> str | None:
         """Return the `Authorization` header value, or None to send none.
 

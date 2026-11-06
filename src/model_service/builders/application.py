@@ -9,10 +9,11 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any
 
 from model_service.builders.cleanup import close_resource
 from model_service.builders.contracts import (
@@ -48,7 +49,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class InputAccess(Protocol):
+class InputAccess(ABC):
+    @abstractmethod
     def input_path(self, name: str) -> Path:
         """Resolve a named invocation input to a local file.
 
@@ -60,6 +62,7 @@ class InputAccess(Protocol):
         """
         ...
 
+    @abstractmethod
     def output_path(self, relative_path: str) -> Path:
         """Resolve an output's relative path to the local file to write.
 
@@ -71,6 +74,7 @@ class InputAccess(Protocol):
         """
         ...
 
+    @abstractmethod
     def is_visible_artifact(self, path: Path) -> bool:
         """Check that a returned artifact is a file this access exposes to callers.
 
@@ -82,13 +86,15 @@ class InputAccess(Protocol):
         """
         ...
 
+    @abstractmethod
     async def aclose(self) -> None:
         """Release what the access holds, such as fetched inputs or temporary files."""
         ...
 
 
-class AccessAdapter(Protocol):
+class AccessAdapter(ABC):
     # The model tells an adapter that fetches slides which resolution the builder reads.
+    @abstractmethod
     def create(
         self,
         invocation: Invocation,
@@ -169,7 +175,8 @@ class Builder[
     M: SpatialScoresModel | TileEmbeddingModel,
     C: BaseModel,
     R: BuilderOutputs,
-](Protocol):
+](ABC):
+    @abstractmethod
     async def run(self, context: BuilderContext[M, C]) -> R:
         """Produce the builder's outputs for one invocation.
 
