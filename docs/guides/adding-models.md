@@ -259,9 +259,11 @@ Builders in `src/model_service/builders/` do the whole-slide work; a model only 
    builder, which writes one feature row per selected tile to HDF5.
 3. **Other slide-level outputs** (a slide score, annotations, statistics) need a
    new builder: an entry in `src/model_service/builders/registry.py` declaring the contract it
-   accepts, its inputs, outputs and configuration, and a class with
-   `async run(context) -> BuilderResult`. It then gets the public routes,
-   scheduling and the SDK for free.
+   accepts, its inputs, its configuration and its outputs model (a
+   `BuilderOutputs` subclass, one field per output, with `Artifact` giving a
+   file's media type and default name), and a class implementing
+   `Builder[Model, Configuration, Outputs]` whose `run` returns that model. It
+   then gets the public routes, scheduling and the SDK for free.
 
 ## Next Step
 

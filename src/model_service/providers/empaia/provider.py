@@ -30,7 +30,7 @@ from model_service.builders.contracts import (
     ProviderInput,
     is_json_value,
 )
-from model_service.builders.registry import get_builder
+from model_service.builders.registry import get_builder, parse_result
 from model_service.providers.empaia.apps import VIEWER_CONFIG_KEY
 from model_service.providers.empaia.gateway import (
     INPUT_ACCESS_KIND,
@@ -305,16 +305,22 @@ class EmpaiaProviderAdapter:
             mutation_completed = False
             try:
                 if isinstance(outcome, ProviderSuccess):
+                    try:
+                        outputs = parse_result(outcome.builder_id, outcome.result)
+                    except ValidationError as error:
+                        raise EmpaiaGatewayError.invalid(
+                            "EMPAIA job result does not match its builder's outputs"
+                        ) from error
                     declared = get_builder(outcome.builder_id).outputs
                     io = self._io.get(outcome.builder_id)
+                    if io is None:
+                        raise EmpaiaGatewayError.invalid(
+                            f"builder {outcome.builder_id!r} is not offered in EMPAIA"
+                        )
                     # Every output is checked before the first write.
                     commits = []
-                    for name, output in outcome.result.outputs.items():
-                        spec = declared.get(name)
-                        if spec is None or io is None:
-                            raise EmpaiaGatewayError.invalid(
-                                f"EMPAIA output {name!r} is not declared"
-                            )
+                    for name, output in dict(outputs).items():
+                        spec = declared[name]
                         publisher = self._publishers.publisher_for(
                             name, io.output_type(name), spec, output
                         )

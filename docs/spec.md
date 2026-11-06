@@ -85,8 +85,11 @@ Onboarding a compatible model: add one YAML file, list it in `values.yaml`
 ### Builders
 
 Builders are Python, registered in `src/model_service/builders/registry.py`. Each declares the
-contract it accepts, its inputs and outputs, and a Pydantic configuration with
-defaults. One Ray application per builder (`builders.serve:app`, route
+contract it accepts, its inputs, a Pydantic configuration with defaults, and
+its outputs as a `BuilderOutputs` model, from which the output declaration is
+derived. A builder returns that model; the application checks it and turns it
+into the generic `BuilderResult` that is sent and stored, and
+`registry.parse_result` reads a stored result back as the builder's model. One Ray application per builder (`builders.serve:app`, route
 `/builders/<id>`), with the builder ID in `user_config`.
 
 | Builder | Accepts | Inputs | Output | Defaults |
@@ -310,8 +313,8 @@ through the mask; the grid still covers the whole level, so a model scoring
 every pixel, such as EPISeg, does not fit yet and has no app. The builder no longer renders a TIFF: EMPAIA never
 used it, and it took longer to write than the inference.
 
-EMPAIA outputs. Each builder output declares its media type (`OutputSpec` in
-`src/model_service/builders/registry.py`); EMPAIA's `io.py` gives its EMPAIA
+EMPAIA outputs. Each builder output declares its media type (its `Artifact`
+in the builder's outputs model in `src/model_service/builders/registry.py`); EMPAIA's `io.py` gives its EMPAIA
 type, so builders know nothing of EMPAIA. Then
 `src/model_service/providers/empaia/publishers.py` maps each (type, media
 type) pair to a publisher: the four primitive types (inline values, checked

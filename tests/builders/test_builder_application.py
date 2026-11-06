@@ -42,6 +42,7 @@ from tests.support.builder_fixtures import (
     artifact_output,
     inline_output,
     invocation,
+    outputs_model,
     spec,
 )
 
@@ -518,7 +519,9 @@ class BuilderHTTPTests(unittest.IsolatedAsyncioTestCase):
             application = BuilderApplication(
                 replace(
                     spec(outputs={"path": inline_output()}),
-                    outputs={"path": inline_output(), "artifact": artifact_output()},
+                    result=outputs_model(
+                        {"path": inline_output(), "artifact": artifact_output()}
+                    ),
                 ),
                 FunctionBuilder(build),
                 {"shared_storage": SharedStorageAccessAdapter([Path(directory)])},

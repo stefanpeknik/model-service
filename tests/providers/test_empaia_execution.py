@@ -19,7 +19,7 @@ from model_service.builders.contracts import (
     SharedArtifact,
     SpatialScoresModel,
 )
-from model_service.builders.registry import get_builder
+from model_service.builders.registry import HeatmapOutputs, get_builder
 from model_service.providers.empaia.gateway import (
     EmpaiaGatewayError,
     EmpaiaInputState,
@@ -262,14 +262,7 @@ class CopyInputsBuilder:
         output = context.output_path("heatmap")
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(slide + b"|" + roi)
-        return BuilderResult(
-            outputs={
-                "heatmap": SharedArtifact(
-                    path=str(output),
-                    media_type="application/x-npz",
-                )
-            }
-        )
+        return HeatmapOutputs(heatmap=SharedArtifact(path=str(output)))
 
 
 class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
@@ -425,14 +418,26 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
             service.gateway, allowed_api_urls=(API_URL,), publishers=PUBLISHERS
         )
 
-        await provider.finish(
-            {
-                "api_url": "https://empaia.invalid",
-                "job_id": "job-1",
-                "credential": "credential",
-            },
-            ProviderSuccess(BuilderResult(outputs={}), "heatmap"),
-        )
+        with TemporaryDirectory() as directory:
+            heatmap = Path(directory) / "heatmap.npz"
+            heatmap.touch()
+            await provider.finish(
+                {
+                    "api_url": "https://empaia.invalid",
+                    "job_id": "job-1",
+                    "credential": "credential",
+                },
+                ProviderSuccess(
+                    BuilderResult(
+                        outputs={
+                            "heatmap": SharedArtifact(
+                                path=str(heatmap), media_type="application/x-npz"
+                            )
+                        }
+                    ),
+                    "heatmap",
+                ),
+            )
 
         self.assertTrue(service.finalized)
 

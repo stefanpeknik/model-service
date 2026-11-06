@@ -7,13 +7,12 @@ from typing import TYPE_CHECKING
 from model_service.builders.application import Builder
 from model_service.builders.artifacts import atomic_artifact
 from model_service.builders.contracts import (
-    BuilderResult,
     SharedArtifact,
     TileEmbeddingModel,
 )
 from model_service.builders.embeddings.predictor import RayEmbeddingPredictor
 from model_service.builders.embeddings.processor import build_embeddings
-from model_service.builders.registry import EmbeddingConfiguration
+from model_service.builders.registry import EmbeddingConfiguration, EmbeddingOutputs
 
 
 if TYPE_CHECKING:
@@ -24,7 +23,9 @@ if TYPE_CHECKING:
     from model_service.builders.settings import WorkerSettings
 
 
-class EmbeddingBuilder(Builder[TileEmbeddingModel, EmbeddingConfiguration]):
+class EmbeddingBuilder(
+    Builder[TileEmbeddingModel, EmbeddingConfiguration, EmbeddingOutputs]
+):
     def __init__(
         self,
         settings: WorkerSettings,
@@ -44,7 +45,7 @@ class EmbeddingBuilder(Builder[TileEmbeddingModel, EmbeddingConfiguration]):
 
     async def run(
         self, context: BuilderContext[TileEmbeddingModel, EmbeddingConfiguration]
-    ) -> BuilderResult:
+    ) -> EmbeddingOutputs:
         """Write a slide's tile embeddings to an HDF5 artifact.
 
         Checks the running model against its catalog entry first, then writes
@@ -81,6 +82,4 @@ class EmbeddingBuilder(Builder[TileEmbeddingModel, EmbeddingConfiguration]):
                 num_threads=self._settings.num_threads,
                 max_concurrent_tasks=self._settings.max_concurrent_tasks,
             )
-        return BuilderResult(
-            outputs={"embeddings": SharedArtifact(path=str(destination))}
-        )
+        return EmbeddingOutputs(embeddings=SharedArtifact(path=str(destination)))

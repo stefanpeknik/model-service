@@ -7,15 +7,19 @@ lazily from `implementation` inside Ray replicas.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from model_service.builders.contracts import (
+    Artifact,
+    BuilderOutputs,
     InferenceContract,
+    InlineOutput,
     InvalidInvocation,
     OutputKind,
+    SharedArtifact,
     UnknownBuilderError,
 )
 
@@ -23,7 +27,7 @@ from model_service.builders.contracts import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from model_service.builders.contracts import JsonValue
+    from model_service.builders.contracts import BuilderResult, JsonValue
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,14 +43,50 @@ class OutputSpec:
     default_path: str | None = None
 
 
+def output_specs(outputs: type[BuilderOutputs]) -> dict[str, OutputSpec]:
+    """Derive an output declaration from a builder's outputs model.
+
+    Args:
+        outputs: The builder's `BuilderOutputs` subclass.
+
+    Returns:
+        One `OutputSpec` per field, in field order.
+
+    Raises:
+        TypeError: A field is neither a `SharedArtifact` nor an `InlineOutput`.
+    """
+    specs = {}
+    for name, info in outputs.model_fields.items():
+        if info.annotation is InlineOutput:
+            specs[name] = OutputSpec(kind=OutputKind.INLINE)
+        elif info.annotation is SharedArtifact:
+            artifact = next(
+                (m for m in info.metadata if isinstance(m, Artifact)), Artifact()
+            )
+            specs[name] = OutputSpec(
+                kind=OutputKind.SHARED_ARTIFACT,
+                media_type=artifact.media_type,
+                default_path=artifact.default_path,
+            )
+        else:
+            raise TypeError(f"{outputs.__name__}.{name} is not a builder output")
+    return specs
+
+
 @dataclass(frozen=True, slots=True)
 class BuilderSpec:
     id: str
     accepts: InferenceContract
     inputs: Mapping[str, InputSpec]
-    outputs: Mapping[str, OutputSpec]
+    # What the builder returns; `outputs` is derived from it.
+    result: type[BuilderOutputs]
     configuration: type[BaseModel]
     implementation: str
+    outputs: Mapping[str, OutputSpec] = field(init=False)
+
+    def __post_init__(self) -> None:
+        """Derive the output declaration from the outputs model."""
+        object.__setattr__(self, "outputs", output_specs(self.result))
 
     def resolve_configuration(
         self, overrides: Mapping[str, JsonValue] | None = None
@@ -90,6 +130,20 @@ class EmbeddingConfiguration(BaseModel):
     stride_fraction: _STRIDE = 1.0
 
 
+class HeatmapOutputs(BuilderOutputs):
+    heatmap: Annotated[
+        SharedArtifact,
+        Artifact(media_type="application/x-npz", default_path="heatmap.npz"),
+    ]
+
+
+class EmbeddingOutputs(BuilderOutputs):
+    embeddings: Annotated[
+        SharedArtifact,
+        Artifact(media_type="application/x-hdf5", default_path="embeddings.h5"),
+    ]
+
+
 _SLIDE = InputSpec(media_type="application/vnd.openmicroscopy")
 _REGION_OF_INTEREST = InputSpec(required=False, media_type="image/tiff")
 
@@ -100,13 +154,7 @@ BUILDERS: dict[str, BuilderSpec] = {
             id="heatmap",
             accepts=InferenceContract.SPATIAL_SCORES,
             inputs={"slide": _SLIDE, "region_of_interest": _REGION_OF_INTEREST},
-            outputs={
-                "heatmap": OutputSpec(
-                    kind=OutputKind.SHARED_ARTIFACT,
-                    media_type="application/x-npz",
-                    default_path="heatmap.npz",
-                )
-            },
+            result=HeatmapOutputs,
             configuration=HeatmapConfiguration,
             implementation="model_service.builders.heatmap.builder:HeatmapBuilder",
         ),
@@ -114,13 +162,7 @@ BUILDERS: dict[str, BuilderSpec] = {
             id="tile-embeddings",
             accepts=InferenceContract.TILE_EMBEDDING,
             inputs={"slide": _SLIDE, "region_of_interest": _REGION_OF_INTEREST},
-            outputs={
-                "embeddings": OutputSpec(
-                    kind=OutputKind.SHARED_ARTIFACT,
-                    media_type="application/x-hdf5",
-                    default_path="embeddings.h5",
-                )
-            },
+            result=EmbeddingOutputs,
             configuration=EmbeddingConfiguration,
             implementation="model_service.builders.embeddings.builder:EmbeddingBuilder",
         ),
@@ -144,3 +186,21 @@ def get_builder(builder_id: str) -> BuilderSpec:
         return BUILDERS[builder_id]
     except KeyError as error:
         raise UnknownBuilderError(builder_id) from error
+
+
+def parse_result(builder_id: str, result: BuilderResult) -> BuilderOutputs:
+    """Read a stored or received result as its builder's outputs model.
+
+    Args:
+        builder_id: The builder that produced the result.
+        result: The generic result, as sent and stored.
+
+    Returns:
+        The result as the builder's `BuilderOutputs` subclass.
+
+    Raises:
+        UnknownBuilderError: No builder has this id.
+        ValidationError: The result does not match the builder's current
+            outputs, e.g. an output was renamed since it was stored.
+    """
+    return get_builder(builder_id).result.model_validate(result.outputs)

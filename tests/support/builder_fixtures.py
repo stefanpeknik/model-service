@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated, Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, create_model
 
 from model_service.builders.contracts import (
+    Artifact,
+    BuilderOutput,
+    BuilderOutputs,
     BuilderResult,
     InferenceContract,
+    InlineOutput,
     InputAccessContext,
     Invocation,
     OutputKind,
+    SharedArtifact,
     SpatialScoresModel,
     TileEmbeddingModel,
 )
@@ -57,10 +62,22 @@ def spec(
         id="test-builder",
         accepts=accepts,
         inputs=inputs or {},
-        outputs=outputs or {},
+        result=outputs_model(outputs or {}),
         configuration=configuration,
         implementation="tests.support.builder_fixtures:FunctionBuilder",
     )
+
+
+def outputs_model(outputs: Mapping[str, OutputSpec]) -> type[BuilderOutputs]:
+    """A builder outputs model declaring these outputs, for test specs."""
+    fields: dict[str, Any] = {}
+    for name, output in outputs.items():
+        if output.kind is OutputKind.INLINE:
+            fields[name] = (InlineOutput, ...)
+        else:
+            artifact = Artifact(output.media_type, output.default_path)
+            fields[name] = (Annotated[SharedArtifact, artifact], ...)
+    return create_model("TestOutputs", __base__=BuilderOutputs, **fields)
 
 
 def inline_output() -> OutputSpec:
@@ -83,8 +100,20 @@ class FunctionBuilder:
     ) -> None:
         self._function = function
 
-    async def run(self, context: BuilderContext) -> BuilderResult:
-        return await self._function(context)
+    async def run(self, context: BuilderContext[Any, Any]) -> BuilderOutputs:
+        """Return the function's result as outputs, without validating it.
+
+        Unvalidated, so tests can hand the application wrong names and kinds.
+        """
+        result = await self._function(context)
+        if not isinstance(result, BuilderResult):
+            return result  # type: ignore[return-value]
+        model = create_model(
+            "Returned",
+            __base__=BuilderOutputs,
+            **dict.fromkeys(result.outputs, (BuilderOutput, ...)),  # type: ignore[call-overload]
+        )
+        return model.model_construct(**result.outputs)
 
 
 def invocation(

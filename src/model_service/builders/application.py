@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 from model_service.builders.cleanup import close_resource
 from model_service.builders.contracts import (
     BuilderFailure,
+    BuilderOutputs,
     BuilderResult,
     ContractViolation,
     ExecutionContext,
@@ -164,15 +165,19 @@ class BuilderContext[M: SpatialScoresModel | TileEmbeddingModel, C: BaseModel]:
         return self.access.output_path(self.output_paths[output])
 
 
-class Builder[M: SpatialScoresModel | TileEmbeddingModel, C: BaseModel](Protocol):
-    async def run(self, context: BuilderContext[M, C]) -> BuilderResult:
+class Builder[
+    M: SpatialScoresModel | TileEmbeddingModel,
+    C: BaseModel,
+    R: BuilderOutputs,
+](Protocol):
+    async def run(self, context: BuilderContext[M, C]) -> R:
         """Produce the builder's outputs for one invocation.
 
         Args:
             context: Resolved inputs, configuration, model and deadline.
 
         Returns:
-            One output per declared output name.
+            The builder's outputs model, one field per declared output.
         """
         ...
 
@@ -248,7 +253,7 @@ class BuilderApplication:
     def __init__(
         self,
         spec: BuilderSpec,
-        builder: Builder[Any, Any],
+        builder: Builder[Any, Any, Any],
         access_adapters: Mapping[InputAccessKind, AccessAdapter],
         *,
         cleanup_timeout_seconds: float = 10,
@@ -306,7 +311,7 @@ class BuilderApplication:
                     access = await self._create_access(
                         invocation, execution_context or ExecutionContext(), model
                     )
-                    result = await self._builder.run(
+                    outputs = await self._builder.run(
                         BuilderContext(
                             access=access,
                             input_names=frozenset(invocation.inputs),
@@ -318,7 +323,7 @@ class BuilderApplication:
                             output_paths=self._output_paths(invocation),
                         )
                     )
-                    result = self._validate_result(result, access)
+                    result = self._validate_result(outputs, access)
             except TimeoutError as error:
                 if not timeout.expired():
                     raise
@@ -423,7 +428,7 @@ class BuilderApplication:
             logger.warning("builder resource cleanup failed: %s", type(error).__name__)
 
     def _validate_result(
-        self, result: BuilderResult, access: InputAccess
+        self, outputs: BuilderOutputs, access: InputAccess
     ) -> BuilderResult:
         """Check a builder's result against its output declaration.
 
@@ -431,20 +436,21 @@ class BuilderApplication:
         set on it here, and one it does give must match.
 
         Args:
-            result: What the builder returned.
+            outputs: What the builder returned.
             access: Access used to check that artifacts are visible files.
 
         Returns:
             The result, with each artifact carrying its declared media type.
 
         Raises:
-            ContractViolation: The result is not a `BuilderResult`, its output names
+            ContractViolation: The result is not a `BuilderOutputs`, its output names
                 differ from the declaration, an output has the wrong type or kind, an
                 artifact is not a visible file or has the wrong media type, or an
                 inline value is not JSON.
         """
-        if not isinstance(result, BuilderResult):
+        if not isinstance(outputs, BuilderOutputs):
             raise ContractViolation("builder returned an invalid result")
+        result = outputs.result()
         if result.outputs.keys() != self._spec.outputs.keys():
             raise ContractViolation("outputs do not match the builder declaration")
         for name, spec in self._spec.outputs.items():

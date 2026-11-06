@@ -231,6 +231,38 @@ INVOCATION: TypeAdapter[Invocation] = TypeAdapter(Invocation)
 RESULT: TypeAdapter[BuilderResult] = TypeAdapter(BuilderResult)
 
 
+@dataclass(frozen=True, slots=True)
+class Artifact:
+    """Declares a `SharedArtifact` output field: its media type and default file name.
+
+    Used as `Annotated[SharedArtifact, Artifact(...)]` in a `BuilderOutputs` model.
+    """
+
+    media_type: str | None = None
+    # Output file name when the invocation names no output path.
+    default_path: str | None = None
+
+
+class BuilderOutputs(BaseModel):
+    """A builder's outputs, one field per output.
+
+    A field is a `SharedArtifact`, annotated with `Artifact`, or an
+    `InlineOutput`. A builder returns its own subclass; the registry derives the
+    builder's output declaration from the fields, and the application turns it
+    into the generic `BuilderResult` that is sent and stored.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    def result(self) -> BuilderResult:
+        """Return the outputs as the generic result that is sent and stored.
+
+        Returns:
+            A `BuilderResult` with one entry per field.
+        """
+        return BuilderResult(outputs=dict(self))
+
+
 class FailureCode(StrEnum):
     DEADLINE_EXCEEDED = "builder_deadline_exceeded"
     INTERNAL_ERROR = "builder_internal_error"

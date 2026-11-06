@@ -30,6 +30,7 @@ from model_service.scheduler.providers import (
     ProviderFinishFailureError,
     ProviderSuccess,
 )
+from tests.support.builder_fixtures import outputs_model
 
 
 PUBLISHERS = default_publishers()
@@ -133,7 +134,9 @@ class AppPublishabilityTests(unittest.TestCase):
         spec = get_builder("heatmap")
         spec = replace(
             spec,
-            outputs={**spec.outputs, "glands": OutputSpec(kind=OutputKind.INLINE)},
+            result=outputs_model(
+                {**spec.outputs, "glands": OutputSpec(kind=OutputKind.INLINE)}
+            ),
         )
 
         with self.assertLogs("model_service.providers.empaia.apps", "INFO"):
@@ -213,7 +216,9 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
         heatmap = get_builder("heatmap")
         with_score = replace(
             heatmap,
-            outputs={**heatmap.outputs, "score": OutputSpec(kind=OutputKind.INLINE)},
+            result=outputs_model(
+                {**heatmap.outputs, "score": OutputSpec(kind=OutputKind.INLINE)}
+            ),
         )
         io = BUILDER_IO["heatmap"]
         io = replace(io, outputs={**io.outputs, "score": {"type": "float"}})
@@ -236,6 +241,10 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch(
                 "model_service.providers.empaia.provider.get_builder",
+                return_value=with_score,
+            ),
+            patch(
+                "model_service.builders.registry.get_builder",
                 return_value=with_score,
             ),
             self.assertRaises(ProviderFinishFailureError) as raised,

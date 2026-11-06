@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 from model_service.builders.application import Builder
 from model_service.builders.artifacts import atomic_artifact
 from model_service.builders.contracts import (
-    BuilderResult,
     SharedArtifact,
     SpatialScoresModel,
 )
@@ -16,7 +15,7 @@ from model_service.builders.heatmap.processor import (
     HeatmapRequest,
     SlideHeatmapProcessor,
 )
-from model_service.builders.registry import HeatmapConfiguration
+from model_service.builders.registry import HeatmapConfiguration, HeatmapOutputs
 
 
 if TYPE_CHECKING:
@@ -24,7 +23,7 @@ if TYPE_CHECKING:
     from model_service.builders.settings import WorkerSettings
 
 
-class HeatmapBuilder(Builder[SpatialScoresModel, HeatmapConfiguration]):
+class HeatmapBuilder(Builder[SpatialScoresModel, HeatmapConfiguration, HeatmapOutputs]):
     def __init__(self, settings: WorkerSettings) -> None:
         """Configure the builder for a replica.
 
@@ -35,7 +34,7 @@ class HeatmapBuilder(Builder[SpatialScoresModel, HeatmapConfiguration]):
 
     async def run(
         self, context: BuilderContext[SpatialScoresModel, HeatmapConfiguration]
-    ) -> BuilderResult:
+    ) -> HeatmapOutputs:
         """Write a slide's score grid to an `.npz` artifact.
 
         Checks the running model against its catalog entry first, then writes
@@ -77,4 +76,4 @@ class HeatmapBuilder(Builder[SpatialScoresModel, HeatmapConfiguration]):
                     skip_background=config.skip_background,
                 ),
             )
-        return BuilderResult(outputs={"heatmap": SharedArtifact(path=str(destination))})
+        return HeatmapOutputs(heatmap=SharedArtifact(path=str(destination)))
