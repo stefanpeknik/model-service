@@ -5,7 +5,6 @@
 # model-service-db, mlflow-public-credentials and huggingface-secret.
 models:
   - peknik/prostate-classifier-1
-  - peknik/constant-classifier
   - peknik/virchow2
 
 builders:
