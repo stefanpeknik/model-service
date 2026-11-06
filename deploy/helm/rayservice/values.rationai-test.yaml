@@ -53,7 +53,7 @@ workers:
 
 rayImage:
   repository: cerit.io/stefanpeknik/model-service-ray
-  tag: empaia-26
+  tag: empaia-28
   pullPolicy: IfNotPresent
 
 storage:
@@ -71,7 +71,7 @@ executionScheduler:
   replicas: 2
   image:
     repository: cerit.io/stefanpeknik/model-service-scheduler
-    tag: empaia-27
+    tag: empaia-28
     pullPolicy: IfNotPresent
   database:
     existingSecret: model-service-db
