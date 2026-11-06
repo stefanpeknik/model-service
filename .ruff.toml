@@ -1,6 +1,8 @@
 fix = true
 line-length = 88
 target-version = "py312"
+src = ["src", "."]
+extend-exclude = ["prototypes/empaia-control-plane"]
 
 [format]
 docstring-code-format = true # Enable reformatting of code snippets in docstrings.
@@ -50,3 +52,10 @@ lines-after-imports = 2
 
 [lint.pydocstyle]
 convention = "google"
+
+[lint.flake8-type-checking]
+# Pydantic resolves field annotations at runtime.
+runtime-evaluated-base-classes = [
+    "pydantic.BaseModel",
+    "model_service.providers.standalone.BuilderRequest",
+]

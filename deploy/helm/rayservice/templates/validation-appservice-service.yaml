@@ -1,0 +1,21 @@
+{{- if .Values.validation }}
+{{- if .Values.validation.appService.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-appservice
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: model-service-validation-appservice
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: model-service-validation-appservice
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+{{- end }}
+{{- end }}

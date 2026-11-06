@@ -1,0 +1,16 @@
+.git
+.aws
+.agents
+.codex
+.venv
+.cache
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.env
+.env.*
+__pycache__
+**/__pycache__
+*.pyc
+downloads
+site

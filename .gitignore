@@ -164,3 +164,6 @@ cython_debug/
 .idea/
 
 # Project
+
+# Wheels baked into code-refresh images
+deploy/images/wheels/*.whl

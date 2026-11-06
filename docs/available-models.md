@@ -1,6 +1,9 @@
 # Available Models & Endpoints
 
-This document outlines the models currently running on the Model Service. It provides the necessary details for SDK developers and clients to construct valid requests, including the endpoints, expected input formats, and output formats.
+This document describes implemented model endpoints and their request and response
+formats. It is not a live deployment inventory; enabled applications depend on
+the deployment profile. For builders and durable executions, see
+[the architecture](architecture/core.md).
 
 ## Overview of Endpoints
 
@@ -12,7 +15,6 @@ All endpoints receive and return data over HTTP using `POST` requests. To minimi
 | **Episeg 1**              | `/episeg-1`              | Semantic Segmentation         |
 | **Virchow2**              | `/virchow2`              | Foundation Model / Embeddings |
 | **Prov-GigaPath**         | `/prov-gigapath`         | Foundation Model / Embeddings |
-| **Heatmap Builder**       | `/heatmap-builder`       | Pipeline / Custom Builder     |
 
 ---
 
@@ -105,27 +107,34 @@ with Client() as client:
   print(emb.shape)
 ```
 
-### 5. Heatmap Builder (`/heatmap-builder`)
+### 5. Builders (`/v1/builders/...` on the facade)
 
-A processing pipeline element for aggregating inferences into spatial heatmaps.
+Builders run a model over a whole slide. They are called through the facade's
+public API, not on the Ray route, and take the model as a parameter:
 
-- **Input**: Typically takes standard HTTP POST requests with localized predictions to stitch into a global heatmap representations.
-- **Output**: Heatmap data structure (format depends on the implemented builder logic).
-- **SDK example**:
+| Builder | Accepts | Output |
+| --- | --- | --- |
+| `heatmap` | `spatial-scores` models (classifiers, segmentation) | score grid (`.npz`): scores per cell with the slide geometry |
+| `tile-embeddings` | `tile-embedding` models (Virchow2, Prov-GigaPath) | HDF5 with one feature row per tile |
+
+`GET /v1/models` lists the deployed models and the builders each works with.
 
 ```python
 from rationai import Client
+from rationai.types import BuilderRequest, InputAccess, SharedPathInput
 
-with Client() as client:
-  client.slide.heatmap(
-    model="prostate-classifier-1",
-    slide_path="/mnt/data/slide.mrxs",
-    tissue_mask_path="/mnt/data/mask.tif",
-    output_path="/mnt/data/output_heatmap.tif",
-    stride_fraction=0.5,
-    output_bigtiff_tile_height=512,
-    output_bigtiff_tile_width=512,
-    timeout=1000,
+with Client(base_url="http://<facade>:8080") as client:
+  result = client.builders.run(
+    "heatmap",
+    BuilderRequest(
+      model_id="prostate-classifier-1",
+      inputs={
+        "slide": SharedPathInput("slides/slide.mrxs"),
+        "region_of_interest": SharedPathInput("masks/mask.tif"),  # optional
+      },
+      input_access=InputAccess("shared_storage", {"root": "/mnt/data"}),
+      output_path="outputs/heatmap.tif",
+    ),
   )
 ```
 
@@ -164,3 +173,30 @@ with Client() as client:
   )
   print(f"Embedding shape: {embedding.shape}")
 ```
+
+### Scheduling many tiles
+
+When you tile slides yourself, schedule the tiles instead of keeping one
+request open per tile. Model-service stores each tile, runs it once a model
+replica is up (a cold GPU worker takes a few minutes), and keeps the response
+for 24 hours.
+
+```python
+with Client() as client:
+  ids = [
+    client.models.schedule("virchow2", tile, output_dtype=np.float16).execution.id
+    for tile in tiles  # uint8 RGB arrays of the model's tile size
+  ]
+  finished = client.executions.wait(ids)  # polls up to 1000 at a time
+  embeddings = [
+    client.executions.result(execution.id).array(np.float16)
+    for execution in finished
+    if execution.status == "succeeded"
+  ]
+```
+
+A classifier's response decodes with `.json()`. The HTTP form is
+`POST /v1/models/{model}/schedule` with the raw route's body and an
+`Idempotency-Key` header; see [the specification](spec.md#scheduled-raw-inference).
+Concurrent requests to a batching model can differ slightly from a request run
+alone (Virchow2: up to about 0.1%), because Ray batches them together.

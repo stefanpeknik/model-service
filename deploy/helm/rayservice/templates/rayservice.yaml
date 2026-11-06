@@ -1,0 +1,81 @@
+apiVersion: ray.io/v1
+kind: RayService
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  rayClusterConfig:
+    rayVersion: 2.58.0
+    enableInTreeAutoscaling: true
+    autoscalerOptions:
+      idleTimeoutSeconds: 60
+      securityContext:
+        runAsUser: 1000
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+    headGroupSpec:
+      rayStartParams:
+        num-cpus: "0"
+        dashboard-host: "0.0.0.0"
+      template:
+        spec:
+          securityContext:
+            fsGroupChangePolicy: OnRootMismatch
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: ray-head
+              image: "{{ .Values.rayImage.repository }}:{{ .Values.rayImage.tag }}"
+              imagePullPolicy: {{ .Values.rayImage.pullPolicy }}
+              resources:
+                limits:
+                  cpu: 0
+                  memory: 4Gi
+                requests:
+                  cpu: 0
+                  memory: 4Gi
+              env:
+                - name: HTTPS_PROXY
+                  value: http://proxy.ics.muni.cz:3128
+              ports:
+                - containerPort: 6379
+                  name: gcs-server
+                - containerPort: 8265
+                  name: dashboard
+                - containerPort: 10001
+                  name: client
+                - containerPort: 8000
+                  name: serve
+              securityContext:
+                runAsUser: 1000
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+    workerGroupSpecs:
+{{- range $workerName := .Values.workers }}
+{{- $workerContent := tpl (printf "workers/%s.yaml" $workerName | $.Files.Get) $ | fromYaml }}
+      - {{ toYaml $workerContent | nindent 8 | trim }}
+{{- end }}
+  serveConfigV2: |
+    applications:
+{{- range $path := .Values.models }}
+{{- $model := tpl (printf "models/%s.yaml" $path | $.Files.Get) $ | fromYaml }}
+{{- if not $model.serve }}{{ fail (printf "models/%s.yaml has no serve block" $path) }}{{ end }}
+      - {{ toYaml $model.serve | nindent 8 | trim }}
+{{- end }}
+{{- range $id, $builder := .Values.builders }}
+      - name: builder-{{ $id }}
+        import_path: model_service.builders.serve:app
+        route_prefix: /builders/{{ $id }}
+        deployments:
+          - name: BuilderDeployment
+            {{- toYaml $builder.deployment | nindent 12 }}
+            user_config:
+              builder_id: {{ $id }}
+              shared_storage_roots: {{ toJson $.Values.sharedStorageRoots }}
+              {{- with $builder.userConfig }}
+              {{- toYaml . | nindent 14 }}
+              {{- end }}
+{{- end }}

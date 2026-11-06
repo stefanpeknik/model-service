@@ -5,7 +5,7 @@ This guide focuses on one goal: get a model running on Kubernetes through the He
 ## What This Guide Covers
 
 - Deploying a model after it has been exported to ONNX, uploaded to MLflow, and wired into a Python entrypoint.
-- Deploying a Serve app from `helm/rayservice/applications/`.
+- Deploying a model from `deploy/helm/rayservice/models/`.
 - Monitoring rollout health.
 - Running a quick endpoint smoke test.
 - Updating code/config/model artifact without breaking traffic.
@@ -30,37 +30,51 @@ Before deployment, confirm:
 
 ## Step 1: Prepare the Python Entry Point
 
-If you still need to export the model or upload it to MLflow, do that first in [Adding New Models](adding-models.md). Once the artifact exists, create the model class in `models/` and wire `__init__`, `reconfigure`, `predict`, and `root` as described there.
+If you still need to export the model or upload it to MLflow, do that first in [Adding New Models](adding-models.md). Once the artifact exists, create the model class in `src/model_service/models/` and wire `__init__`, `reconfigure`, `predict`, and `root` as described there.
 
 ## Step 2: Create or Update App Definition
 
-Create a file in `helm/rayservice/applications/` (for example `my-model.yaml`) with at least:
+Create a file in `deploy/helm/rayservice/models/` (for example `my-model.yaml`). The
+`serve` block is a Ray Serve application and is passed to Ray unchanged; the
+`inference` block feeds the facade's model catalog:
 
 ```yaml
-- name: my-model
+inference:
+  contract: spatial-scores      # or tile-embedding (then also mpp, summaries)
+serve:
+  name: my-model
   import_path: models.my_model:app
-  route_prefix: /my-model
-  runtime_env:
-    working_dir: https://github.com/RationAI/model-service/archive/refs/heads/feature/my-model.zip
+  route_prefix: /my-model       # must be /<name>
   deployments:
     - name: MyModel
       autoscaling_config:
         min_replicas: 0
         max_replicas: 4
+      user_config:
+        tile_size: 512
+        output_tile_size: 1
+        n_channels: 1
+        mpp: 0.468
+        model:
+          _target_: model_service.models.artifacts:mlflow
+          artifact_uri: mlflow-artifacts:/...
 ```
 
-- Add the new application file name to `helm/rayservice/values.yaml` under `applications`.
+- Add `my-model` to `deploy/helm/rayservice/values.yaml` under `models`.
 
 Notes:
 
-- Use a dedicated branch in `working_dir` during development.
-- If code changed but URL did not, append a cache-busting suffix (for example `?v=2`).
+- Deployed model files run the code baked into the image. While developing a
+  new implementation you may add `runtime_env.working_dir` with a branch ZIP to
+  the `serve` block; remove it before merging so model and builder code cannot
+  drift apart.
+- If code changed but the ZIP URL did not, append a cache-busting suffix (for example `?v=2`).
 - Keep advanced tuning in YAML, but use [Configuration Reference](configuration-reference.md) as the source of truth for field meanings.
 
 ## Step 3: Deploy With Helm
 
 ```bash
-helm upgrade --install <release-name> helm/rayservice -n rationai-jobs-ns
+helm upgrade --install <release-name> deploy/helm/rayservice -n rationai-jobs-ns
 ```
 
 Use a dedicated release name while testing (for example `rayservice-model-my-model`).
@@ -115,7 +129,7 @@ Additionally, you can use the SDK client to send requests with the same payload 
 2. Redeploy:
 
 ```bash
-helm upgrade --install <release-name> helm/rayservice -n rationai-jobs-ns
+helm upgrade --install <release-name> deploy/helm/rayservice -n rationai-jobs-ns
 ```
 
 3. If old code is still used, bump `working_dir` cache key (`?v=<n>`) and deploy again.
@@ -151,7 +165,7 @@ Ray caches `runtime_env.working_dir` by URL string. If URL stays identical, code
 
 ## Multi-Model Deployment
 
-You can deploy multiple models by adding multiple files in `helm/rayservice/applications/`. Helm renders them into one `serveConfigV2`.
+You can deploy multiple models by adding multiple files in `deploy/helm/rayservice/models/` and listing them under `models`. Helm renders them, plus one application per builder, into one `serveConfigV2`.
 
 Keep routes unique and validate each endpoint separately after deploy.
 
