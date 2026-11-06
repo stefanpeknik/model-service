@@ -71,7 +71,7 @@ executionScheduler:
   replicas: 1
   image:
     repository: cerit.io/stefanpeknik/model-service-scheduler
-    tag: empaia-26
+    tag: empaia-27
     pullPolicy: IfNotPresent
   database:
     existingSecret: model-service-db
