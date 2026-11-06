@@ -14,6 +14,13 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
 spec:
   replicas: {{ .Values.executionScheduler.replicas }}
+  # A model or config change restarts the facade; replace it one pod at a time,
+  # never dropping below the set replicas, so the API stays up.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: model-service-execution-scheduler

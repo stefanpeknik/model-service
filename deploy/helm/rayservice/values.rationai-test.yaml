@@ -68,7 +68,8 @@ validation:
 
 executionScheduler:
   enabled: true
-  replicas: 1
+  # Two, so a restart (e.g. for a new model) never takes the API down.
+  replicas: 2
   image:
     repository: cerit.io/stefanpeknik/model-service-scheduler
     tag: empaia-27
