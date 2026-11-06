@@ -103,7 +103,17 @@ class EmpaiaProviderAdapter:
         publishers: PublisherRegistry | None = None,
         io: Mapping[str, BuilderIo] = BUILDER_IO,
     ) -> None:
-        """Only `allowed_api_urls` origins or path prefixes receive job credentials; none, no job."""
+        """Only `allowed_api_urls` origins or path prefixes receive job credentials; none, no job.
+
+        Args:
+            gateway_factory: Creates the gateway of each job.
+            allowed_api_urls: App Service origins or path prefixes allowed to receive
+                job credentials.
+            workspace_root: The root of the job workspaces finish removes; None
+                removes nothing.
+            publishers: The output publishers; `default_publishers()` if omitted.
+            io: The EAD io entries, by builder ID.
+        """
         self._gateway_factory = gateway_factory
         self._publishers = publishers or default_publishers()
         self._io = io
@@ -111,7 +121,19 @@ class EmpaiaProviderAdapter:
         self._workspace_root = workspace_root
 
     def identify(self, request: ScheduleRequest) -> SubmissionIdentity:
-        """Key admission by installation and job, fingerprinting stable request fields while excluding renewable credentials."""
+        """Key admission by installation and job, fingerprinting stable request fields.
+
+        Renewable credentials are left out of the fingerprint.
+
+        Args:
+            request: The schedule request.
+
+        Returns:
+            The identity keyed `<installation_id>:<job_id>`.
+
+        Raises:
+            InvalidScheduleRequestError: If the body is not a valid EMPAIA payload.
+        """
         context = _schedule_payload(request.body)
         canonical = json.dumps(
             {
@@ -136,7 +158,30 @@ class EmpaiaProviderAdapter:
         request: ScheduleRequest,
         deadline_at: datetime,
     ) -> PreparedInvocation:
-        """Fetch and resolve configuration, record the job's mode, create provider input references, and separate public job state from protected credentials. Cap deadlines at credential expiry."""
+        """Admit an EMPAIA job as an invocation of provider inputs.
+
+        Fetches and resolves configuration, records the job's mode, creates provider
+        input references, and separates public job state from protected credentials.
+        Configuration keys the builder does not take are dropped and logged, except
+        the viewer's. Optional inputs are taken only if the job has them. Deadlines
+        are capped at credential expiry.
+
+        Args:
+            request: The schedule request; its body is the EMPAIA schedule payload.
+            deadline_at: The requested deadline.
+
+        Returns:
+            The invocation with its protected job context; standalone jobs get high
+            priority, as someone waits for them.
+
+        Raises:
+            InvalidScheduleRequestError: If the payload is invalid, the API URL is not
+                allowed, the credential has no valid expiry, the configuration is not
+                JSON or not valid for the builder, the invocation fails validation, or
+                the App Service rejects a request.
+            SchedulingUnavailableError: If the gateway cannot be created or closed, or
+                the App Service is temporarily unavailable.
+        """
         context = _schedule_payload(request.body)
         if not _allowed(context.api_url, self._allowed_api_urls):
             raise InvalidScheduleRequestError(
@@ -230,7 +275,23 @@ class EmpaiaProviderAdapter:
         *,
         before_mutation: BeforeMutation | None = None,
     ) -> None:
-        """Publish stored outputs and finalize, or report failure/cancellation."""
+        """Publish stored outputs and finalize, or report failure/cancellation.
+
+        Every output is prepared before the first write. The workspace is removed
+        before a failure or cancellation report, but only after a successful
+        publication, since a failed one needs the outputs to retry.
+
+        Args:
+            protected_context: The job's stored protected context.
+            outcome: The execution's outcome.
+            before_mutation: Installed on the gateway to run before each write.
+
+        Raises:
+            InvalidScheduleRequestError: If the protected context is malformed.
+            ProviderFinishFailureError: If the gateway cannot be created, an output is
+                undeclared or cannot be published, or a write fails; its outcome is
+                unknown once any output was written or when the gateway says so.
+        """
         context = _job_context(protected_context)
         if not isinstance(outcome, ProviderSuccess):
             # A failure or cancellation report needs nothing from the workspace.
@@ -288,7 +349,11 @@ class EmpaiaProviderAdapter:
             await self._remove_workspace(context)
 
     async def _remove_workspace(self, context: EmpaiaJobContext) -> None:
-        """Remove every attempt's inputs and outputs of the job."""
+        """Remove every attempt's inputs and outputs of the job.
+
+        Args:
+            context: The job whose workspace to remove.
+        """
         if self._workspace_root is None:
             return
         directory = job_workspace(self._workspace_root, context.api_url, context.job_id)
@@ -300,7 +365,24 @@ async def _preparation_gateway(
     factory: EmpaiaGatewayFactory,
     context: EmpaiaJobContext,
 ) -> AsyncIterator[EmpaiaGateway]:
-    """Own a preparation gateway and translate acquisition/cleanup failures without replacing a primary preparation error."""
+    """Own a preparation gateway and translate acquisition/cleanup failures.
+
+    A failure in the body closes the gateway, logging cleanup errors, and is
+    re-raised unchanged.
+
+    Args:
+        factory: Creates the gateway.
+        context: The job's connection settings.
+
+    Yields:
+        The gateway.
+
+    Raises:
+        SchedulingUnavailableError: If creating or closing the gateway fails
+            retryably or unexpectedly.
+        InvalidScheduleRequestError: If creating or closing the gateway fails
+            with a non-retryable gateway error.
+    """
     try:
         gateway = factory(context)
     except EmpaiaGatewayError as error:
@@ -329,7 +411,22 @@ async def _finish_gateway(
     factory: EmpaiaGatewayFactory,
     context: EmpaiaJobContext,
 ) -> AsyncIterator[EmpaiaGateway]:
-    """Own a finish gateway, translate acquisition failures, and preserve the external completion outcome if cleanup fails."""
+    """Own a finish gateway and translate acquisition failures.
+
+    A failure in the body closes the gateway and is re-raised unchanged; cleanup
+    errors are only logged, so the external completion outcome is kept.
+
+    Args:
+        factory: Creates the gateway.
+        context: The job's connection settings.
+
+    Yields:
+        The gateway.
+
+    Raises:
+        ProviderFinishFailureError: If creating the gateway fails; retryable when
+            the failure is not a gateway error.
+    """
     try:
         gateway = factory(context)
     except EmpaiaGatewayError as error:
@@ -352,7 +449,11 @@ async def _finish_gateway(
 
 
 async def _close_preserving_outcome(gateway: EmpaiaGateway) -> None:
-    """Close a gateway and log cleanup errors without replacing an already established outcome."""
+    """Close a gateway and log cleanup errors without replacing an already established outcome.
+
+    Args:
+        gateway: The gateway to close.
+    """
     try:
         await gateway.close()
     except Exception as error:
@@ -360,14 +461,32 @@ async def _close_preserving_outcome(gateway: EmpaiaGateway) -> None:
 
 
 def _raise_preparation_error(error: EmpaiaGatewayError) -> Never:
-    """Map retryable gateway errors to scheduling unavailability and other errors to invalid requests."""
+    """Map a gateway error to the scheduler's admission errors.
+
+    Args:
+        error: The gateway error.
+
+    Returns:
+        Never; it always raises.
+
+    Raises:
+        SchedulingUnavailableError: If the error is retryable.
+        InvalidScheduleRequestError: Otherwise.
+    """
     if error.retryable:
         raise SchedulingUnavailableError(error.safe_message) from error
     raise InvalidScheduleRequestError(error.safe_message) from error
 
 
 def _finish_failure(error: EmpaiaGatewayError) -> ProviderFinishFailureError:
-    """Translate safe gateway retry and uncertainty metadata into a provider finish failure."""
+    """Translate safe gateway retry and uncertainty metadata into a provider finish failure.
+
+    Args:
+        error: The gateway error.
+
+    Returns:
+        The finish failure, with the same message, retry flag and outcome.
+    """
     return ProviderFinishFailureError(
         code=EmpaiaErrorCode.FINISH_FAILED,
         safe_message=error.safe_message,
@@ -377,12 +496,33 @@ def _finish_failure(error: EmpaiaGatewayError) -> ProviderFinishFailureError:
 
 
 def _allowed(api_url: str, allowed: tuple[str, ...]) -> bool:
+    """Check whether an API URL equals or lies below an allowed prefix.
+
+    Trailing slashes are ignored, and a prefix matches whole path segments only.
+
+    Args:
+        api_url: The job's App Service URL.
+        allowed: The allowed prefixes, without trailing slashes.
+
+    Returns:
+        True if the URL is allowed.
+    """
     url = api_url.rstrip("/")
     return any(url == prefix or url.startswith(prefix + "/") for prefix in allowed)
 
 
 def _schedule_payload(values: dict[str, JsonValue]) -> EmpaiaSchedulePayload:
-    """Validate provider admission fields, hiding detailed credential-bearing validation input from public errors."""
+    """Validate provider admission fields, hiding credential-bearing validation input from public errors.
+
+    Args:
+        values: The schedule request body.
+
+    Returns:
+        The schedule payload.
+
+    Raises:
+        InvalidScheduleRequestError: If the body is not a valid payload.
+    """
     try:
         return EmpaiaSchedulePayload.model_validate(values)
     except ValidationError as error:
@@ -392,7 +532,18 @@ def _schedule_payload(values: dict[str, JsonValue]) -> EmpaiaSchedulePayload:
 
 
 def _job_context(values: dict[str, JsonValue]) -> EmpaiaJobContext:
-    """Validate stored protected job context and return a safe error if it is malformed."""
+    """Validate a stored protected job context.
+
+    Args:
+        values: The stored protected context.
+
+    Returns:
+        The job context.
+
+    Raises:
+        InvalidScheduleRequestError: If the context is malformed; the message
+            holds no context values.
+    """
     try:
         return EmpaiaJobContext.model_validate(values)
     except ValidationError as error:
@@ -402,7 +553,20 @@ def _job_context(values: dict[str, JsonValue]) -> EmpaiaJobContext:
 
 
 def _credential_expiry(credential: str) -> datetime:
-    """Read a numeric exp claim from the credential to cap deadlines. This parses the JWT payload without verifying its signature."""
+    """Read the numeric `exp` claim of the credential to cap deadlines.
+
+    This parses the JWT payload without verifying its signature.
+
+    Args:
+        credential: The job's token.
+
+    Returns:
+        The expiry, in UTC.
+
+    Raises:
+        InvalidScheduleRequestError: If the credential is not a JWT or its `exp`
+            is missing, not a finite number, or out of range.
+    """
     try:
         claims = jwt.decode(
             credential,

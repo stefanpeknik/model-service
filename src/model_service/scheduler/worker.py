@@ -86,6 +86,25 @@ class ExecutionWorker:
         inference_target: InferenceTarget | None = None,
         max_concurrent_inference: int = 0,
     ) -> None:
+        """Store collaborators and size the builder and inference slot pools.
+
+        Inference gets no slots without an inference target.
+
+        Args:
+            repository: Durable execution store.
+            providers: Provider adapters by provider name.
+            dispatch: Client that runs builders.
+            resolve_model: Resolver of the current model binding for a builder and model.
+            owner: Lease owner ID of this worker.
+            lease_duration: How long a claim stays valid without renewal.
+            active_work: Registry of local tasks, used for prompt cancellation.
+            max_concurrent: Builder and provider attempts run at once.
+            inference_target: Model client for raw inference, or None.
+            max_concurrent_inference: Inference attempts run at once.
+
+        Raises:
+            ValueError: max_concurrent is not positive or max_concurrent_inference is negative.
+        """
         if max_concurrent <= 0 or max_concurrent_inference < 0:
             raise ValueError("concurrency limits must be positive")
         self._repository = repository
@@ -104,6 +123,15 @@ class ExecutionWorker:
         }
 
     async def run(self, stop: asyncio.Event, *, poll_interval: float) -> None:
+        """Run maintenance and the claim loop until stop is set.
+
+        Args:
+            stop: Event that ends the loop; running attempts are then cancelled.
+            poll_interval: Seconds between polls when no work was claimed.
+
+        Raises:
+            ValueError: poll_interval is not positive.
+        """
         if poll_interval <= 0:
             raise ValueError("poll_interval must be positive")
         maintenance_task = asyncio.create_task(
@@ -116,6 +144,12 @@ class ExecutionWorker:
             await asyncio.gather(maintenance_task, return_exceptions=True)
 
     async def _maintain(self, stop: asyncio.Event, *, poll_interval: float) -> None:
+        """Run repository maintenance every poll interval until stop is set, logging failures.
+
+        Args:
+            stop: Event that ends the loop.
+            poll_interval: Seconds between maintenance runs.
+        """
         while not stop.is_set():
             try:
                 await self._repository.maintain()
@@ -125,6 +159,16 @@ class ExecutionWorker:
                 await asyncio.wait_for(stop.wait(), timeout=poll_interval)
 
     async def _run_claims(self, stop: asyncio.Event, *, poll_interval: float) -> None:
+        """Claim work into free slots and start a task per claim until stop is set.
+
+        Inference is claimed in batches of a quarter of its slots, or fewer once a poll
+        interval has passed. Claim failures are logged and the loop continues. On exit
+        all running attempts are cancelled and awaited.
+
+        Args:
+            stop: Event that ends the loop.
+            poll_interval: Seconds to wait when nothing was claimed and slots are free.
+        """
         running: dict[Operation, set[asyncio.Task[None]]] = {
             operation: set() for operation in Operation
         }
@@ -183,7 +227,14 @@ class ExecutionWorker:
             await asyncio.gather(stopping, *pending, return_exceptions=True)
 
     async def run_once(self) -> bool:
-        """Claim and fully process one due attempt; False when nothing is due."""
+        """Claim and fully process one due attempt.
+
+        Returns:
+            True if an attempt was processed, False when nothing is due.
+
+        Raises:
+            ExecutionRepositoryUnavailableError: The repository is unavailable for the claim, or for the settlement during a whole lease.
+        """
         claim = await self._repository.claim_due(
             self._owner,
             self._lease_duration,
@@ -195,6 +246,11 @@ class ExecutionWorker:
         return True
 
     async def _process_logged(self, claim: WorkClaim) -> None:
+        """Process a claim, logging any exception instead of raising it.
+
+        Args:
+            claim: Leased attempt.
+        """
         try:
             await self._process(claim)
         except Exception as error:
@@ -207,7 +263,16 @@ class ExecutionWorker:
             )
 
     async def _process(self, claim: WorkClaim) -> None:
-        """Run one claim while renewing its lease; settle only a completed outcome."""
+        """Run one claim while renewing its lease; settle only a completed outcome.
+
+        Nothing is settled when renewal stops the attempt or the execution was cancelled.
+
+        Args:
+            claim: Leased attempt.
+
+        Raises:
+            asyncio.CancelledError: The worker itself is being cancelled.
+        """
         task = asyncio.create_task(self._execute(claim))
         self._active_work.register(claim.execution_id, claim.fencing_token, task)
         renewal_task = asyncio.create_task(self._renew_while_running(claim, task))
@@ -240,7 +305,16 @@ class ExecutionWorker:
 
         Losing it would rerun finished work, or exhaust its attempts. A retry is
         safe: a settlement that did land, or a lease that was given up meanwhile,
-        makes the claim stale.
+        makes the claim stale, and a stale claim ends the retries quietly.
+
+        Args:
+            claim: Leased attempt.
+            settlement: Outcome of the attempt.
+
+        Raises:
+            TimeoutError: Writes kept timing out for a whole lease.
+            OSError: Writes kept failing for a whole lease.
+            ExecutionRepositoryUnavailableError: The repository stayed unavailable for a whole lease.
         """
         loop = asyncio.get_running_loop()
         give_up_at = loop.time() + self._lease_duration.total_seconds()
@@ -271,10 +345,18 @@ class ExecutionWorker:
     async def _renew_while_running(
         self, claim: WorkClaim, task: asyncio.Task[Settlement]
     ) -> RenewDirective:
-        """Renew about every third of a lease.
+        """Renew about every third of a lease while the attempt runs.
 
         A failed renewal is retried until the lease would have expired, so a short
         database outage does not abort long processing that still owns its lease.
+
+        Args:
+            claim: Leased attempt.
+            task: Task running the attempt.
+
+        Returns:
+            CONTINUE once the task finishes, LEASE_LOST if renewals failed for a whole
+            lease, or the first other directive the repository returns.
         """
         interval = max(self._lease_duration.total_seconds() / 3, 0.001)
         loop = asyncio.get_running_loop()
@@ -303,6 +385,19 @@ class ExecutionWorker:
         return RenewDirective.CONTINUE
 
     async def _execute(self, claim: WorkClaim) -> Settlement:
+        """Run the claimed work: builder or inference processing, or a provider finish or report.
+
+        Provider finish marks the mutation boundary before its first external write.
+
+        Args:
+            claim: Leased attempt.
+
+        Returns:
+            The attempt's settlement.
+
+        Raises:
+            RuntimeError: The claim lacks what its work kind needs.
+        """
         if claim.kind is WorkKind.PROCESSING:
             if claim.operation is Operation.INFERENCE:
                 return await self._run_inference(claim)
@@ -334,6 +429,19 @@ class ExecutionWorker:
             )
 
     async def _run_inference(self, claim: WorkClaim) -> Settlement:
+        """Recheck the payload against the model's current input, then call the model.
+
+        Args:
+            claim: Leased attempt.
+
+        Returns:
+            The settlement from the model's response, or a failure: permanent for a
+            missing request, unknown model, incompatible input or oversized response;
+            retryable when the model did not answer.
+
+        Raises:
+            RuntimeError: No inference target is configured or the claim is not an inference invocation.
+        """
         if self._inference is None or not isinstance(
             claim.invocation, InferenceInvocation
         ):
@@ -385,6 +493,19 @@ class ExecutionWorker:
         return inference.settlement(response)
 
     async def _run_builder(self, claim: WorkClaim) -> Settlement:
+        """Resolve the model's current binding and dispatch the builder.
+
+        Args:
+            claim: Leased attempt.
+
+        Returns:
+            Success with the builder result; a rejection for confirmed backpressure; or
+            a failure, permanent for an unknown or incompatible model and retryable for
+            an unknown dispatch outcome.
+
+        Raises:
+            RuntimeError: The claim has no builder invocation.
+        """
         if claim.builder_id is None or isinstance(
             claim.invocation, InferenceInvocation
         ):
@@ -438,7 +559,17 @@ class ExecutionWorker:
 
 
 def _finish_outcome(claim: WorkClaim) -> ProviderFinishOutcome:
-    """Convert a provider claim into success, failure, or cancellation, requiring the corresponding stored result or error."""
+    """Convert a provider claim into success, failure, or cancellation.
+
+    Args:
+        claim: Leased attempt.
+
+    Returns:
+        The outcome for the provider to publish or report.
+
+    Raises:
+        RuntimeError: The claim lacks the stored result or error its kind requires, or its kind is not provider work.
+    """
     if claim.kind is WorkKind.PROVIDER_FINISH:
         if not isinstance(claim.result, BuilderResult) or claim.builder_id is None:
             raise RuntimeError("provider finish requires a durable builder result")

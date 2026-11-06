@@ -41,6 +41,15 @@ class SharedStorageAccess:
         *,
         processing_attempt_id: str | None = None,
     ) -> None:
+        """Hold the resolved root, the inputs and the attempt's output prefix.
+
+        Args:
+            root: The resolved shared-storage root, already checked against the allowed roots.
+            inputs: The invocation's builder inputs by name.
+            processing_attempt_id: The scheduled attempt's ID; outputs go below
+                `.attempts/<sha256 of it>/`. None for synchronous runs, which write to
+                the requested path directly.
+        """
         self._root = root
         self._inputs = inputs
         self._output_prefix = (
@@ -50,6 +59,19 @@ class SharedStorageAccess:
         )
 
     def input_path(self, name: str) -> Path:
+        """Resolve a shared-path input to an existing regular file below the root.
+
+        Args:
+            name: The builder input name.
+
+        Returns:
+            The resolved file path.
+
+        Raises:
+            InvalidInvocation: If the input is not a shared path, its path is not
+                relative and traversal-free, it is missing or escapes the root, or it
+                is not a regular file.
+        """
         value = self._inputs.get(name)
         if not isinstance(value, SharedPathInput):
             raise InvalidInvocation(f"input {name!r} is not a shared path")
@@ -59,14 +81,37 @@ class SharedStorageAccess:
         return path
 
     def output_path(self, relative_path: str) -> Path:
+        """Resolve an output path below the root and the attempt's prefix.
+
+        The file need not exist yet.
+
+        Args:
+            relative_path: The relative POSIX path the builder writes to.
+
+        Returns:
+            The resolved output path.
+
+        Raises:
+            InvalidInvocation: If the path is not relative and traversal-free, or
+                resolves outside the root.
+        """
         return self._resolve(
             relative_path, must_exist=False, prefix=self._output_prefix
         )
 
     async def aclose(self) -> None:
+        """Release nothing; shared-storage access holds no resources."""
         return None
 
     def is_visible_artifact(self, path: Path) -> bool:
+        """Check that a path is an existing file below the root once symlinks are resolved.
+
+        Args:
+            path: The artifact path a builder reported.
+
+        Returns:
+            True if the path resolves to a file inside the root.
+        """
         try:
             resolved = path.resolve(strict=True)
             resolved.relative_to(self._root)
@@ -77,6 +122,21 @@ class SharedStorageAccess:
     def _resolve(
         self, relative_path: str, *, must_exist: bool, prefix: str = ""
     ) -> Path:
+        """Resolve a relative POSIX path below the root, rejecting traversal and symlink escapes.
+
+        Args:
+            relative_path: The caller's relative path.
+            must_exist: Whether the path must already exist.
+            prefix: A relative directory placed between the root and the path.
+
+        Returns:
+            The resolved path.
+
+        Raises:
+            InvalidInvocation: If the path is absolute or contains a backslash, NUL,
+                or an empty, `.` or `..` part; or if it is missing when it must exist,
+                or resolves outside the root.
+        """
         path = PurePosixPath(relative_path)
         if (
             "\\" in relative_path
@@ -100,9 +160,26 @@ class SharedStorageAccess:
 
 class SharedStorageAccessAdapter:
     def __init__(self, allowed_roots: Iterable[Path]) -> None:
+        """Keep the roots callers may name.
+
+        Args:
+            allowed_roots: Directories a requested root must lie within.
+        """
         self._allowed_roots = tuple(allowed_roots)
 
     def root(self, state: Mapping[str, object]) -> Path:
+        """Validate and resolve the root an invocation's input access state names.
+
+        Args:
+            state: The input access state; it must hold only `root`.
+
+        Returns:
+            The resolved root directory.
+
+        Raises:
+            InvalidInvocation: If the state has fields other than `root`, or the root
+                does not exist, is not a directory, or lies outside every allowed root.
+        """
         try:
             requested = SharedStorageState.model_validate(state).root
         except ValidationError as error:
@@ -129,6 +206,19 @@ class SharedStorageAccessAdapter:
         execution_context: ExecutionContext,
         model: ModelBinding | None = None,
     ) -> SharedStorageAccess:
+        """Create shared-storage access for one invocation.
+
+        Args:
+            invocation: The invocation; its input access state names the root.
+            execution_context: Supplies the processing attempt ID that scopes outputs.
+            model: Unused.
+
+        Returns:
+            Access to the invocation's inputs and outputs below the root.
+
+        Raises:
+            InvalidInvocation: If the root is invalid or not allowed on this server.
+        """
         del model
         return SharedStorageAccess(
             self.root(invocation.input_access.state),

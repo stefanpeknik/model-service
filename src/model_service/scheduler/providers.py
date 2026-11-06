@@ -59,7 +59,14 @@ class ProviderFinishFailureError(RuntimeError):
         retryable: bool,
         outcome_unknown: bool = False,
     ) -> None:
-        """Capture finish failure metadata without exposing the underlying provider exception to callers."""
+        """Capture finish failure metadata without exposing the underlying provider exception to callers.
+
+        Args:
+            code: Stable error code to record.
+            safe_message: Message safe to show to callers.
+            retryable: Whether the worker may retry the finish.
+            outcome_unknown: Whether a remote mutation may have happened before the failure.
+        """
         super().__init__(safe_message)
         self.code = code
         self.safe_message = safe_message
@@ -73,7 +80,14 @@ class ProviderAdapter(Protocol):
     name: ProviderName
 
     def identify(self, request: ScheduleRequest) -> SubmissionIdentity:
-        """Compute submission identity locally without I/O or external side effects."""
+        """Compute submission identity locally without I/O or external side effects.
+
+        Args:
+            request: Provider schedule request.
+
+        Returns:
+            The replay identity of the request.
+        """
         ...
 
     async def prepare(
@@ -81,7 +95,15 @@ class ProviderAdapter(Protocol):
         request: ScheduleRequest,
         deadline_at: datetime,
     ) -> PreparedInvocation:
-        """Resolve and validate new inputs and configuration before admission, returning protected context and deadline limits."""
+        """Resolve and validate new inputs and configuration before admission.
+
+        Args:
+            request: Provider schedule request.
+            deadline_at: Execution deadline the preparation must respect.
+
+        Returns:
+            The prepared invocation with protected context and deadline limits.
+        """
         ...
 
     async def finish(
@@ -91,5 +113,17 @@ class ProviderAdapter(Protocol):
         *,
         before_mutation: BeforeMutation,
     ) -> None:
-        """Publish or report a stored outcome, awaiting before_mutation before the first external change. Scheduling and retries remain worker-owned."""
+        """Publish or report a stored outcome to the provider.
+
+        Awaits before_mutation before the first external change. Scheduling and
+        retries remain worker-owned.
+
+        Args:
+            protected_context: Provider context stored at admission.
+            outcome: Success, failure or cancellation to report.
+            before_mutation: Callback to await before the first external change.
+
+        Raises:
+            ProviderFinishFailureError: Publication failed; carries retry permission and whether the outcome is unknown.
+        """
         ...

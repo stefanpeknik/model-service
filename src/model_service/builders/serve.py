@@ -40,6 +40,15 @@ async def invalid_request(
     _request: Request, _error: RequestValidationError
 ) -> JSONResponse:
     # Do not echo the request: it may contain provider credentials.
+    """Answer a malformed request without echoing it, since it may hold credentials.
+
+    Args:
+        _request: The rejected request.
+        _error: The validation error.
+
+    Returns:
+        A 422 response with the invalid-invocation envelope.
+    """
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content={
@@ -53,6 +62,17 @@ async def invalid_request(
 
 
 def build_application(config: DeploymentSettings) -> BuilderApplication:
+    """Load the configured builder and its providers' access adapters.
+
+    Args:
+        config: Deployment settings naming the builder and worker settings.
+
+    Returns:
+        The builder application the deployment serves.
+
+    Raises:
+        UnknownBuilderError: `builder_id` names no registered builder.
+    """
     spec = get_builder(config.builder_id)
     module_name, _, class_name = spec.implementation.partition(":")
     implementation = getattr(importlib.import_module(module_name), class_name)
@@ -67,6 +87,7 @@ def build_application(config: DeploymentSettings) -> BuilderApplication:
 @serve.ingress(fastapi)
 class BuilderDeployment:
     def __init__(self) -> None:
+        """Route model-service logs to Serve's handlers; the builder waits for config."""
         self._application: BuilderApplication | None = None
         # Serve only sets up its own logger; without this, model-service INFO logs
         # never reach the replica log or the dashboard.
@@ -76,6 +97,11 @@ class BuilderDeployment:
         package_logger.propagate = False
 
     def reconfigure(self, values: dict[str, object]) -> None:
+        """Rebuild the builder application from new user_config.
+
+        Args:
+            values: Ray Serve user_config, validated as `DeploymentSettings`.
+        """
         self._application = build_application(DeploymentSettings.model_validate(values))
 
     @fastapi.post(
@@ -84,6 +110,18 @@ class BuilderDeployment:
         responses={code: {"model": ErrorResponse} for code in (422, 500, 503)},
     )
     async def run(self, body: RunRequest) -> BuilderResult:
+        """Run one builder invocation over HTTP.
+
+        Args:
+            body: Invocation, model and execution context of the attempt.
+
+        Returns:
+            The builder's result.
+
+        Raises:
+            HTTPException: 503 before the first reconfigure, or the error envelope
+                from `run_http`.
+        """
         if self._application is None:
             raise error(
                 status.HTTP_503_SERVICE_UNAVAILABLE,

@@ -37,6 +37,15 @@ class ServeCapacity:
         cache_seconds: float = 10,
         clock: Callable[[], float] = time.time,
     ) -> None:
+        """Configure where to read Serve application state and how long to wait.
+
+        Args:
+            client: Shared HTTP client, owned by the caller.
+            origin: Ray dashboard origin.
+            grace_seconds: How long a replica may stay unplaced before it is reported.
+            cache_seconds: How long one dashboard answer is reused.
+            clock: Returns the current Unix time in seconds.
+        """
         self._client = client
         self._url = f"{origin.rstrip('/')}/api/serve/applications/"
         self._grace = grace_seconds
@@ -47,7 +56,15 @@ class ServeCapacity:
         self._lock = asyncio.Lock()
 
     async def explain(self, execution: ExecutionView) -> ExecutionView:
-        """Add a message to a running execution whose model or builder cannot be placed."""
+        """Add a message to a running execution whose model or builder cannot be placed.
+
+        Args:
+            execution: The execution to explain.
+
+        Returns:
+            The execution with a `waiting for capacity` message, or unchanged if
+            it is not running, everything is placed, or the dashboard is unreachable.
+        """
         if execution.status is not ExecutionStatus.RUNNING:
             return execution
         # Serve application names as deployed by the Helm chart.
@@ -60,6 +77,14 @@ class ServeCapacity:
         return execution if message is None else replace(execution, message=message)
 
     async def _waiting(self, applications: dict[str, str]) -> str | None:
+        """Describe the first application unplaced for longer than the grace period.
+
+        Args:
+            applications: Serve application names mapped to labels for the message.
+
+        Returns:
+            The message, or None if no application has waited past the grace period.
+        """
         details = await self._details()
         now = self._clock()
         for application, label in applications.items():
@@ -72,6 +97,11 @@ class ServeCapacity:
         return None
 
     async def _details(self) -> dict[str, object]:
+        """Return Serve application details, refetched once the cache expires.
+
+        Returns:
+            Application details by name; empty if the last fetch failed.
+        """
         async with self._lock:
             now = self._clock()
             if (
@@ -83,6 +113,11 @@ class ServeCapacity:
             return self._applications
 
     async def _fetch(self) -> dict[str, object]:
+        """Read Serve application details from the Ray dashboard.
+
+        Returns:
+            Application details by name; empty on any HTTP, status or parse failure.
+        """
         try:
             response = await self._client.get(self._url, timeout=5)
             body = response.json() if response.status_code == 200 else None
@@ -93,7 +128,17 @@ class ServeCapacity:
 
 
 def _unplaced_since(application: object) -> float | None:
-    """When the oldest unplaced replica started, if some deployment has no running replica."""
+    """Find when the oldest unplaced replica started, if a deployment has none running.
+
+    A replica is unplaced when it is `STARTING` with no node.
+
+    Args:
+        application: One application's details from the Ray dashboard, unvalidated.
+
+    Returns:
+        The oldest unplaced replica's start time in Unix seconds, or None if
+        every deployment has a running replica or the data is malformed.
+    """
     if not isinstance(application, dict):
         return None
     deployments = application.get("deployments")

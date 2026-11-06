@@ -35,11 +35,24 @@ class DeploymentHealth:
     def __init__(
         self, client: httpx.AsyncClient, *, origin: str, routes: Iterable[str]
     ) -> None:
+        """Configure the Ray Serve origin and the routes that must be deployed.
+
+        Args:
+            client: Shared HTTP client, owned by the caller.
+            origin: Ray Serve origin.
+            routes: Route prefixes every builder and model must expose.
+        """
         self._client = client
         self._origin = origin.rstrip("/")
         self._routes = tuple(sorted(set(routes)))
 
     async def check(self) -> DeploymentStatus:
+        """Compare Ray Serve's `/-/routes` with the expected routes.
+
+        Returns:
+            `UNREACHABLE` if Serve does not answer with a route map,
+            `MISSING_APPLICATIONS` with the missing routes, or `READY`.
+        """
         try:
             response = await self._client.get(f"{self._origin}/-/routes", timeout=5)
             routes = response.json() if response.status_code == 200 else None

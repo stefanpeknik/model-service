@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from model_service.builders.application import Builder
 from model_service.builders.artifacts import atomic_artifact
 from model_service.builders.contracts import (
     BuilderResult,
@@ -23,7 +24,7 @@ if TYPE_CHECKING:
     from model_service.builders.settings import WorkerSettings
 
 
-class EmbeddingBuilder:
+class EmbeddingBuilder(Builder[TileEmbeddingModel, EmbeddingConfiguration]):
     def __init__(
         self,
         settings: WorkerSettings,
@@ -32,14 +33,37 @@ class EmbeddingBuilder:
             RayEmbeddingPredictor
         ),
     ) -> None:
+        """Configure the builder for a replica.
+
+        Args:
+            settings: Replica settings for thread and concurrency limits.
+            predictor: Factory creating a predictor for a model; replaceable in tests.
+        """
         self._settings = settings
         self._predictor = predictor
 
-    async def run(self, context: BuilderContext) -> BuilderResult:
+    async def run(
+        self, context: BuilderContext[TileEmbeddingModel, EmbeddingConfiguration]
+    ) -> BuilderResult:
+        """Write a slide's tile embeddings to an HDF5 artifact.
+
+        Checks the running model against its catalog entry first, then writes
+        through a temporary file so a failed run leaves no partial artifact.
+
+        Args:
+            context: The run's inputs, model and configuration.
+
+        Returns:
+            The `embeddings` artifact.
+
+        Raises:
+            BuilderFailure: The model's configuration differs from its catalog
+                entry, a model request fails, or the model returns invalid features.
+            InvalidInvocation: The slide or region of interest is unreadable, or the
+                output would replace an input.
+        """
         model = context.model
         config = context.configuration
-        assert isinstance(model, TileEmbeddingModel)
-        assert isinstance(config, EmbeddingConfiguration)
         predictor = self._predictor(model)
         await predictor.verify()
         slide = context.input_path("slide")
@@ -58,9 +82,5 @@ class EmbeddingBuilder:
                 max_concurrent_tasks=self._settings.max_concurrent_tasks,
             )
         return BuilderResult(
-            outputs={
-                "embeddings": SharedArtifact(
-                    path=str(destination), media_type="application/x-hdf5"
-                )
-            }
+            outputs={"embeddings": SharedArtifact(path=str(destination))}
         )

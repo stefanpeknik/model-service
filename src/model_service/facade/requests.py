@@ -27,4 +27,9 @@ class ScheduledBuilderRequest(BuilderRequest):
     requested_timeout_seconds: Annotated[int, Field(strict=True, gt=0)] | None = None
 
     def builder_request(self) -> dict[str, JsonValue]:
+        """Serialize the builder request without the scheduling timeout.
+
+        Returns:
+            The JSON body stored with the execution.
+        """
         return self.model_dump(mode="json", exclude={"requested_timeout_seconds"})

@@ -64,6 +64,14 @@ class BuilderRequest(BaseModel):
     output_path: Annotated[str, Field(strict=True, min_length=1)] | None = None
 
     def invocation(self, deadline_at: Deadline) -> Invocation:
+        """Build the invocation of this request; the attempt resolves the configuration.
+
+        Args:
+            deadline_at: When the execution must finish.
+
+        Returns:
+            The invocation, with no resolved configuration.
+        """
         return Invocation(
             inputs=self.inputs,
             resolved_configuration=None,
@@ -77,9 +85,29 @@ class StandaloneProviderAdapter:
     name = NAME
 
     def __init__(self, shared_storage: SharedStorageAccessAdapter) -> None:
+        """Keep the shared-storage adapter that checks inputs at admission.
+
+        Args:
+            shared_storage: The adapter for the allowed shared-storage roots.
+        """
         self._shared_storage = shared_storage
 
     def identify(self, request: ScheduleRequest) -> SubmissionIdentity:
+        """Identify a submission by its idempotency key and a fingerprint of the request.
+
+        The fingerprint hashes the canonical JSON of builder, model, body and
+        requested timeout, so reusing a key for a different request is detected.
+
+        Args:
+            request: The schedule request.
+
+        Returns:
+            The submission identity.
+
+        Raises:
+            InvalidScheduleRequestError: If the idempotency key is missing or the
+                request holds values JSON cannot encode.
+        """
         if not request.idempotency_key:
             raise InvalidScheduleRequestError(
                 "standalone scheduling requires an idempotency key"
@@ -109,7 +137,21 @@ class StandaloneProviderAdapter:
     async def prepare(
         self, request: ScheduleRequest, deadline_at: datetime
     ) -> PreparedInvocation:
-        """Check inputs exist now; processing settings are chosen per attempt."""
+        """Check inputs exist now; processing settings are chosen per attempt.
+
+        Args:
+            request: The schedule request; its body is a `BuilderRequest`.
+            deadline_at: When the execution must finish; validation runs as of just
+                before it.
+
+        Returns:
+            The invocation, with no protected context.
+
+        Raises:
+            InvalidScheduleRequestError: If the body is invalid, the invocation fails
+                the builder's validation, input access is not shared storage, or a
+                shared input is not a regular file below an allowed root.
+        """
         try:
             body = BuilderRequest.model_validate(request.body)
         except ValidationError as error:
@@ -140,6 +182,13 @@ class StandaloneProviderAdapter:
         *,
         before_mutation: BeforeMutation,
     ) -> None:
+        """Do nothing; the outputs already sit in shared storage.
+
+        Args:
+            _protected_context: Unused; standalone executions have none.
+            _outcome: Unused.
+            before_mutation: Unused; nothing is written.
+        """
         del before_mutation
 
 
@@ -151,6 +200,17 @@ class StandaloneProvider:
     def facade(
         self, catalog: ModelCatalog, settings: SchedulerSettings
     ) -> FacadeContribution:
+        """Contribute the standalone scheduler adapter, with no routes or background work.
+
+        The facade's public builder routes submit these jobs.
+
+        Args:
+            catalog: Unused.
+            settings: Supplies the allowed shared-storage roots.
+
+        Returns:
+            The facade contribution.
+        """
         from model_service.providers.composition import FacadeContribution
         from model_service.providers.shared_storage import SharedStorageAccessAdapter
 
@@ -162,6 +222,14 @@ class StandaloneProvider:
         )
 
     def input_access(self, settings: WorkerSettings) -> Mapping[str, AccessAdapter]:
+        """Give builder replicas shared-storage access below the allowed roots.
+
+        Args:
+            settings: Supplies the allowed shared-storage roots.
+
+        Returns:
+            The shared-storage adapter, keyed by `SHARED_STORAGE`.
+        """
         from model_service.providers.shared_storage import SharedStorageAccessAdapter
 
         return {

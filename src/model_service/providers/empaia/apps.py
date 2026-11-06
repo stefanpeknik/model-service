@@ -96,7 +96,16 @@ class ViewerConfig(BaseModel):
     outputs: dict[str, ViewerOutput] = Field(default_factory=dict)
 
     def for_io(self, keys: Iterable[str]) -> str:
-        """The configuration value for an app with these io keys."""
+        """Serialize the configuration value for an app with these io keys.
+
+        Entries for io keys the app lacks are left out.
+
+        Args:
+            keys: The app's EAD io keys.
+
+        Returns:
+            A JSON string with `inputs` and `outputs`, unset fields omitted.
+        """
         keys = set(keys)
         return json.dumps(
             {
@@ -130,7 +139,17 @@ class EmpaiaListing(BaseModel):
 
 
 def parse_listings(blocks: Mapping[str, object]) -> dict[str, EmpaiaListing]:
-    """The listings of the models whose file has an `empaia` block."""
+    """Validate the `empaia` blocks of the model files into listings.
+
+    Args:
+        blocks: Each model's `empaia` block, by model ID.
+
+    Returns:
+        The listings, by model ID.
+
+    Raises:
+        ValueError: If a block is not a valid listing; the message names the model.
+    """
     listings = {}
     for model_id, block in blocks.items():
         try:
@@ -152,12 +171,27 @@ class AppDefinition:
     global_configuration: dict[str, str] = field(default_factory=dict)
 
     def image(self, target: str) -> str:
+        """Build the app's image reference, which JES hands to model-service.
+
+        Args:
+            target: model-service's name in JES's HTTP targets.
+
+        Returns:
+            `http::<target>/builders/<builder>/models/<model>`.
+        """
         return f"http::{target}/builders/{self.builder_id}/models/{self.model_id}"
 
     def portal_app(self, target: str, organization_id: str) -> dict[str, Any]:
-        """The marketplace mock's portal app.
+        """Build the marketplace mock's portal app.
 
         Its IDs derive from the namespace, so registering it again replaces it.
+
+        Args:
+            target: model-service's name in JES's HTTP targets, part of the image.
+            organization_id: The organization that creates, owns and reviews the app.
+
+        Returns:
+            The portal app body: listed, approved, with the EAD and image.
         """
         namespace = self.ead["namespace"]
         version = namespace[namespace.rfind(".") - 2 :]
@@ -224,7 +258,15 @@ class AppDefinition:
 
 
 def stable_id(kind: str, namespace: str) -> str:
-    """A UUID derived from the namespace, shaped as version 4 as the marketplace requires."""
+    """Derive a UUID from the namespace, shaped as version 4 as the marketplace requires.
+
+    Args:
+        kind: What the ID names, e.g. `empaia-app`; keeps one namespace's IDs apart.
+        namespace: The EAD namespace.
+
+    Returns:
+        The UUID as a string.
+    """
     return str(UUID(bytes=uuid5(NAMESPACE_URL, f"{kind}:{namespace}").bytes, version=4))
 
 
@@ -235,7 +277,27 @@ def app_definitions(
     builders: Iterable[BuilderSpec] = BUILDERS.values(),
     io: Mapping[str, BuilderIo] = BUILDER_IO,
 ) -> list[AppDefinition]:
-    """Every app the listed models offer."""
+    """Build every app the listed models offer.
+
+    A model without a listing offers none. A builder becomes an app of a model
+    when it accepts the model's contract, has an `io` entry, and every one of its
+    outputs has a publisher that accepts the model; otherwise it is skipped and
+    logged.
+
+    Args:
+        models: The deployed models.
+        listings: The EMPAIA listings, by model ID.
+        publishers: The publishers outputs are checked against.
+        builders: The builders to consider; all registered ones by default.
+        io: The EAD io entries, by builder ID.
+
+    Returns:
+        One app per offered builder and model.
+
+    Raises:
+        ValueError: If an io entry references an input the app does not take.
+        jsonschema.ValidationError: If a generated EAD fails the EAD v3 schema.
+    """
     builders = list(builders)
     apps = []
     for model in models:
@@ -281,7 +343,24 @@ def generate_ead(
     model_id: str,
     listing: EmpaiaListing,
 ) -> dict[str, Any]:
-    """Build and schema-validate the EAD of one app, with every listed mode."""
+    """Build and schema-validate the EAD of one app, with every listed mode.
+
+    Standalone mode takes every input both the builder and `io` have;
+    preprocessing mode only the required ones, as EMPAIA starts it with a slide.
+
+    Args:
+        spec: The builder.
+        builder_io: The builder's EAD io entries.
+        model_id: The model, part of the namespace.
+        listing: How the model appears in EMPAIA.
+
+    Returns:
+        The EAD.
+
+    Raises:
+        ValueError: If an io entry references an input the app does not take.
+        jsonschema.ValidationError: If the EAD fails the EAD v3 schema.
+    """
     offered = [name for name in spec.inputs if name in builder_io.inputs]
     mode_inputs = {
         # EMPAIA starts a preprocessing job with the slide alone.
@@ -342,4 +421,12 @@ def generate_ead(
 
 
 def _identifier(value: str) -> str:
+    """Replace each non-alphanumeric character with `_` for use in a namespace.
+
+    Args:
+        value: A builder or model ID.
+
+    Returns:
+        The identifier.
+    """
     return "".join(c if c.isalnum() else "_" for c in value)

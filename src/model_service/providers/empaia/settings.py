@@ -36,6 +36,15 @@ class EmpaiaSettings(BaseSettings):
 
     @model_validator(mode="after")
     def _complete(self) -> Self:
+        """Check that settings that go together are set together.
+
+        Returns:
+            The settings.
+
+        Raises:
+            ValueError: If a marketplace URL has no organization ID, or an identity
+                provider URL lacks the client ID or secret.
+        """
         if self.marketplace_url is not None and not self.organization_id:
             raise ValueError("EMPAIA_ORGANIZATION_ID is required with a marketplace")
         if self.idp_url is not None and (

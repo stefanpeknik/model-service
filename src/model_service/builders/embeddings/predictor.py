@@ -20,20 +20,42 @@ if TYPE_CHECKING:
 
 
 class EmbeddingPredictor(Protocol):
-    async def verify(self) -> None: ...
+    async def verify(self) -> None:
+        """Check that the running model matches its catalog declaration."""
+        ...
 
-    async def predict(self, tile: NDArray[np.uint8]) -> NDArray[np.float32]: ...
+    async def predict(self, tile: NDArray[np.uint8]) -> NDArray[np.float32]:
+        """Embed one tile.
+
+        Args:
+            tile: CHW uint8 RGB tile.
+
+        Returns:
+            A `(dim,)` vector, or `(len(summaries), dim)` for several summaries.
+        """
+        ...
 
 
-class RayEmbeddingPredictor:
+class RayEmbeddingPredictor(EmbeddingPredictor):
     def __init__(
         self, model: TileEmbeddingModel, handle: DeploymentHandle[Any] | None = None
     ) -> None:
+        """Bind the predictor to a model deployment.
+
+        Args:
+            model: Catalog declaration of the model.
+            handle: Deployment handle to use; looked up by model id on first use
+                when omitted.
+        """
         self._model = model
         self._handle = handle
 
     async def verify(self) -> None:
-        """Fail when the running model's tile size or summaries differ from the catalog."""
+        """Fail when the running model's tile size or summaries differ from the catalog.
+
+        Raises:
+            BuilderFailure: The running configuration differs (not retryable).
+        """
         values = await self._deployment().get_config.remote()
         expected = {
             "tile_size": self._model.tile_size,
@@ -53,7 +75,18 @@ class RayEmbeddingPredictor:
             )
 
     async def predict(self, tile: NDArray[np.uint8]) -> NDArray[np.float32]:
-        """Return a `(dim,)` vector, or `(len(summaries), dim)` for several summaries."""
+        """Embed one tile through the model's `embed` method.
+
+        Args:
+            tile: CHW uint8 RGB tile.
+
+        Returns:
+            A `(dim,)` vector, or `(len(summaries), dim)` for several summaries.
+
+        Raises:
+            BuilderFailure: The model call failed (retryable) or returned invalid
+                features (not retryable).
+        """
         try:
             result = await self._deployment().embed.remote(tile)
         except Exception as error:
@@ -65,6 +98,11 @@ class RayEmbeddingPredictor:
         return checked_features(result, self._model)
 
     def _deployment(self) -> DeploymentHandle[Any]:
+        """Return the model's deployment handle, looking it up on first use.
+
+        Returns:
+            The handle of the Ray Serve application named after the model id.
+        """
         if self._handle is None:
             from ray import serve
 
@@ -73,6 +111,19 @@ class RayEmbeddingPredictor:
 
 
 def checked_features(value: object, model: TileEmbeddingModel) -> NDArray[np.float32]:
+    """Check that a model returned finite float32 features of the declared shape.
+
+    Args:
+        value: What the model returned.
+        model: Declaration giving the number of summaries.
+
+    Returns:
+        The value, unchanged.
+
+    Raises:
+        BuilderFailure: The value is not a finite, non-empty float32 array with
+            one row per summary (or a vector for one summary).
+    """
     import numpy as np
 
     summaries = len(model.summaries)

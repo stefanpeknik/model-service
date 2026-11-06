@@ -9,19 +9,33 @@ from model_service.builders.contracts import (
     FailureCode,
     SpatialScoresModel,
 )
+from model_service.builders.heatmap.processor import TilePredictor
 
 
 if TYPE_CHECKING:
     from ray.serve.handle import DeploymentHandle
 
 
-class RayModelPredictor:
+class RayModelPredictor(TilePredictor):
     def __init__(self, model_id: str) -> None:
+        """Bind the predictor to a model's Ray Serve application.
+
+        Args:
+            model_id: Model id, which is also the application name.
+        """
         self._model_id = model_id
         self._handle: DeploymentHandle[Any] | None = None
 
     async def verify(self, declared: SpatialScoresModel) -> None:
-        """Fail when the running model's geometry differs from its declaration."""
+        """Fail when the running model's geometry differs from its declaration.
+
+        Args:
+            declared: Catalog declaration of the model.
+
+        Raises:
+            BuilderFailure: The running configuration is invalid or differs from the
+                declaration (not retryable).
+        """
         values = await self._model().get_config.remote()
         try:
             running = SpatialScoresModel.model_validate({"id": declared.id, **values})
@@ -42,9 +56,22 @@ class RayModelPredictor:
             )
 
     async def predict(self, tile: object) -> object:
+        """Score one tile through the model's `predict` method.
+
+        Args:
+            tile: CHW uint8 tile.
+
+        Returns:
+            The model's `n_channels x output_tile_size²` scores.
+        """
         return await self._model().predict.remote(tile)
 
     def _model(self) -> DeploymentHandle[Any]:
+        """Return the model's deployment handle, looking it up on first use.
+
+        Returns:
+            The handle of the Ray Serve application named after the model id.
+        """
         if self._handle is None:
             from ray import serve
 

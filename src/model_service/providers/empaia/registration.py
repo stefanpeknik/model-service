@@ -40,6 +40,17 @@ class Marketplace:
         timeout: float = 30,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
+        """Keep the marketplace connection settings.
+
+        Args:
+            url: The marketplace's base URL; the mock's routes are below
+                `/v1/custom-mock`.
+            organization_id: The organization that owns the apps.
+            target: model-service's name in JES's HTTP targets, part of each image.
+            credentials: Supplies the `Authorization` header.
+            timeout: The HTTP timeout, in seconds.
+            transport: An httpx transport, e.g. for tests; the default if None.
+        """
         self._mock = f"{url.rstrip('/')}/v1/custom-mock"
         self._organization_id = organization_id
         self._target = target
@@ -48,6 +59,18 @@ class Marketplace:
         self._transport = transport
 
     async def register(self, apps: Sequence[AppDefinition]) -> None:
+        """Post each app as a portal app, then its global configuration if it has one.
+
+        Registering again replaces an app.
+
+        Args:
+            apps: The apps to register.
+
+        Raises:
+            httpx.HTTPError: If a request fails or is answered with an error status.
+            jwt.InvalidTokenError: If the credentials' token cannot be decoded.
+            KeyError: If a token response or discovery document lacks a field.
+        """
         async with httpx.AsyncClient(
             timeout=self._timeout, transport=self._transport
         ) as client:
@@ -85,7 +108,16 @@ async def register_until_done(
     *,
     retry_seconds: float = RETRY_SECONDS,
 ) -> None:
-    """Keep trying until every app is registered; failures are logged, not raised."""
+    """Keep trying until every app is registered; failures are logged, not raised.
+
+    HTTP, token, `KeyError` and `ValueError` failures are retried; anything else
+    propagates.
+
+    Args:
+        marketplace: The marketplace to register in.
+        apps: The apps to register.
+        retry_seconds: The wait between attempts.
+    """
     while True:
         try:
             await marketplace.register(apps)

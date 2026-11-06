@@ -37,18 +37,49 @@ class ScoreGridPublisher:
     """
 
     def __init__(self, tile_size: int = 512) -> None:
-        """Require a provider tile size between 256 and 2048 pixels."""
+        """Require a provider tile size between 256 and 2048 pixels.
+
+        Args:
+            tile_size: The pixelmap tile width and height, in pixels.
+
+        Raises:
+            ValueError: If `tile_size` is outside 256 to 2048.
+        """
         if not 256 <= tile_size <= 2048:
             raise ValueError("EMPAIA pixelmap tile size must be between 256 and 2048")
         self._tile_size = tile_size
 
     def accepts(self, model: ModelBinding) -> bool:
         # The SDK uploads single-channel pixelmaps only.
+        """Accept single-channel spatial-score models; the SDK uploads single-channel pixelmaps only.
+
+        Args:
+            model: The model whose outputs would be published.
+
+        Returns:
+            True for a spatial-score model with one channel.
+        """
         return isinstance(model, SpatialScoresModel) and model.n_channels == 1
 
     async def prepare(
         self, gateway: EmpaiaGateway, name: str, output: BuilderOutput
     ) -> Commit:
+        """Read the score grid and build its pixelmap pyramid without writing.
+
+        Args:
+            gateway: The job's gateway; slide info is read now, the upload happens on
+                commit.
+            name: The EMPAIA output key, also the pixelmap's name.
+            output: The builder output; must be a score grid artifact.
+
+        Returns:
+            The commit that uploads the pixelmap.
+
+        Raises:
+            EmpaiaGatewayError: Not retryable if the output is not a shared artifact,
+                not a readable score grid, has more than one channel, or scores no part
+                of the slide; as the gateway raises it if reading slide info fails.
+        """
         if not isinstance(output, SharedArtifact):
             raise EmpaiaGatewayError.invalid(
                 "EMPAIA shared output must be a score grid"
@@ -102,7 +133,19 @@ class VipsRectangleMaskWriter:
         slide: SlideMetadata,
         rectangle: Rectangle,
     ) -> None:
-        """Clip the rectangle to slide bounds and save an 8-bit tiled mask with slide- derived resolution; reject an empty intersection."""
+        """Clip the rectangle to the slide and save an 8-bit tiled pyramidal mask.
+
+        The mask's resolution derives from the slide's pixel size.
+
+        Args:
+            destination: The TIFF file to write.
+            slide: The slide the rectangle lies on.
+            rectangle: The region, in slide level-0 pixels.
+
+        Raises:
+            EmpaiaGatewayError: Not retryable if the rectangle does not overlap the
+                slide; retryable for any other failure, including missing libvips.
+        """
         try:
             import pyvips
 
@@ -135,7 +178,16 @@ class VipsRectangleMaskWriter:
 
 
 def _clip(start: int, length: int, extent: int) -> tuple[int, int]:
-    """The part of a span that lies within 0..extent, as its start and length."""
+    """Return the part of a span that lies within 0..extent, as its start and length.
+
+    Args:
+        start: The span's start.
+        length: The span's length.
+        extent: The upper bound.
+
+    Returns:
+        The clipped start and length; the length is not positive if nothing is left.
+    """
     clipped = max(start, 0)
     return clipped, min(start + length, extent) - clipped
 
@@ -146,7 +198,16 @@ MIN_PIXELS_PER_SCORE = 4
 def _coarsest_level(
     levels: tuple[SlideLevel, ...], level: SlideLevel, spacing: float
 ) -> SlideLevel:
-    """The coarsest level at least `MIN_PIXELS_PER_SCORE` pixels per score."""
+    """Pick the coarsest level that keeps at least `MIN_PIXELS_PER_SCORE` pixels per score.
+
+    Args:
+        levels: The slide's pyramid levels.
+        level: The level the scores were computed at.
+        spacing: The score cell size, in pixels of `level`.
+
+    Returns:
+        The coarsest qualifying level, or `level` if none coarser qualifies.
+    """
     best = level
     for candidate in levels:
         downsample = max(level.width / candidate.width, level.height / candidate.height)
@@ -163,7 +224,16 @@ def _matching_level(
     width: int,
     height: int,
 ) -> SlideLevel:
-    """Choose the pyramid level minimizing the total absolute width and height mismatch."""
+    """Choose the pyramid level minimizing the total absolute width and height mismatch.
+
+    Args:
+        levels: The slide's pyramid levels.
+        width: The width to match.
+        height: The height to match.
+
+    Returns:
+        The closest level.
+    """
     return min(
         levels,
         key=lambda level: abs(level.width - width) + abs(level.height - height),

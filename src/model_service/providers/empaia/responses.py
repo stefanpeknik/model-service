@@ -26,7 +26,17 @@ class EmpaiaResponse(BaseModel):
 
     @classmethod
     def parse(cls, value: object) -> Self:
-        """Validate decoded provider data without exposing raw response content in errors."""
+        """Validate decoded provider data without exposing raw response content in errors.
+
+        Args:
+            value: The decoded JSON response.
+
+        Returns:
+            The validated response.
+
+        Raises:
+            EmpaiaGatewayError: Not retryable if the data fails validation.
+        """
         try:
             return cls.model_validate(value)
         except ValidationError as error:
@@ -44,7 +54,14 @@ class ConfigurationResponse(EmpaiaResponse):
     )
 
     def merged(self) -> dict[str, JsonValue]:
-        """Combine configuration sections only when their keys are disjoint, rejecting ambiguous values."""
+        """Combine configuration sections only when their keys are disjoint, rejecting ambiguous values.
+
+        Returns:
+            The global and customer values in one mapping.
+
+        Raises:
+            EmpaiaGatewayError: Not retryable if both sections set a key.
+        """
         if self.global_values.keys() & self.customer_values.keys():
             raise EmpaiaGatewayError(
                 "EMPAIA configuration contains ambiguous values", retryable=False

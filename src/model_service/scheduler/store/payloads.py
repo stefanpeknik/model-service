@@ -40,24 +40,68 @@ class PayloadMissingError(RuntimeError):
 
 class PayloadStore:
     def __init__(self, root: Path, *, io_threads: int = 32) -> None:
+        """Use a dedicated thread pool for file I/O under the payload root.
+
+        Args:
+            root: Directory holding the shard directories.
+            io_threads: Threads for file operations; the default executor would queue slow ones.
+        """
         self._root = root
         # The default executor (CPUs + 4 threads) would queue slow file operations.
         self._io = ThreadPoolExecutor(io_threads, thread_name_prefix="payload-io")
 
     def close(self) -> None:
+        """Shut down the I/O thread pool without waiting for running operations."""
         self._io.shutdown(wait=False)
 
     async def write_request(self, execution_id: str, content: bytes) -> StoredPayload:
+        """Write an execution's request file.
+
+        Args:
+            execution_id: ID of the execution.
+            content: Request body.
+
+        Returns:
+            The file's relative path and size.
+
+        Raises:
+            OSError: The file cannot be written.
+        """
         return await self._write(_name(execution_id, "request"), content)
 
     async def write_response(
         self, execution_id: str, fencing_token: str, content: bytes
     ) -> StoredPayload:
+        """Write an attempt's response file, named by its fencing token so a stale attempt never overwrites the accepted one.
+
+        Args:
+            execution_id: ID of the execution.
+            fencing_token: Token of the attempt that produced the response.
+            content: Response body.
+
+        Returns:
+            The file's relative path and size.
+
+        Raises:
+            OSError: The file cannot be written.
+        """
         return await self._write(
             _name(execution_id, f"response-{fencing_token}"), content
         )
 
     async def read(self, payload: StoredPayload) -> bytes:
+        """Read a stored file and check it has its recorded size.
+
+        Args:
+            payload: Recorded path and size.
+
+        Returns:
+            The file's contents.
+
+        Raises:
+            PayloadMissingError: The file is absent or its size differs from the record.
+            OSError: The file cannot be read.
+        """
         try:
             content = await self._run(self._resolve(payload.path).read_bytes)
         except FileNotFoundError as error:
@@ -67,7 +111,15 @@ class PayloadStore:
         return content
 
     async def delete(self, paths: Collection[str]) -> None:
-        """Remove files; missing ones are ignored."""
+        """Remove files; missing ones are ignored.
+
+        Args:
+            paths: Relative paths of the files.
+
+        Raises:
+            ValueError: A path escapes the payload root.
+            OSError: A file cannot be removed.
+        """
         resolved = [self._resolve(path) for path in paths]
         await asyncio.gather(*(self._run(_unlink, path) for path in resolved))
 
@@ -78,8 +130,14 @@ class PayloadStore:
     ) -> None:
         """Remove files older than `older_than` seconds that belong to no execution.
 
-        `existing` reports which of the given IDs still have rows. Such files are
-        left by a crash between writing a file and recording it.
+        Such files are left by a crash between writing a file and recording it.
+
+        Args:
+            existing: Callback reporting which of the given IDs still have rows; called with up to 1000 IDs at a time.
+            older_than: Minimum file age in seconds.
+
+        Raises:
+            OSError: A shard cannot be listed or a file cannot be removed.
         """
         shards = [f"{value:02x}" for value in range(256)]
         listings = await asyncio.gather(*(self._run(self._list, s) for s in shards))
@@ -105,15 +163,44 @@ class PayloadStore:
         )
 
     async def _write(self, relative: str, content: bytes) -> StoredPayload:
+        """Write a file under a relative path.
+
+        Args:
+            relative: Path relative to the payload root.
+            content: File contents.
+
+        Returns:
+            The file's relative path and size.
+        """
         await self._run(_write_file, self._resolve(relative), content)
         return StoredPayload(relative, len(content))
 
     async def _run[*Ts, T](self, function: Callable[[*Ts], T], *args: *Ts) -> T:
+        """Run a blocking function on the I/O thread pool.
+
+        Args:
+            function: Function to run.
+            *args: Arguments passed to function.
+
+        Returns:
+            The function's return value.
+        """
         return await asyncio.get_running_loop().run_in_executor(
             self._io, function, *args
         )
 
     def _resolve(self, relative: str) -> Path:
+        """Turn a stored relative path into a path under the root.
+
+        Args:
+            relative: Path relative to the payload root.
+
+        Returns:
+            The path under the root.
+
+        Raises:
+            ValueError: The path is empty, absolute, or contains `..`.
+        """
         # Lexical only: resolving would stat every component on the event loop.
         path = PurePosixPath(relative)
         if not path.parts or path.is_absolute() or ".." in path.parts:
@@ -121,6 +208,14 @@ class PayloadStore:
         return self._root.joinpath(*path.parts)
 
     def _list(self, shard: str) -> list[str]:
+        """List the execution files in one shard directory.
+
+        Args:
+            shard: Two-character shard name.
+
+        Returns:
+            Relative paths of files whose names start with an execution ID; empty if the shard does not exist.
+        """
         try:
             names = os.listdir(self._root / shard)
         except FileNotFoundError:
@@ -129,6 +224,14 @@ class PayloadStore:
         return [f"{shard}/{name}" for name in names if _is_uuid(name[:36])]
 
     def _modified(self, relative: str) -> float | None:
+        """Return a file's modification time.
+
+        Args:
+            relative: Path relative to the payload root.
+
+        Returns:
+            The modification time in seconds since the epoch, or None if the file is gone.
+        """
         try:
             return self._resolve(relative).stat().st_mtime
         except FileNotFoundError:
@@ -136,6 +239,14 @@ class PayloadStore:
 
 
 def _write_file(path: Path, content: bytes) -> None:
+    """Write a file atomically through a temporary name, fsynced before the rename.
+
+    Creates the shard directory on first use; the temporary file is removed on failure.
+
+    Args:
+        path: Final path of the file.
+        content: File contents.
+    """
     temporary = path.with_name(f"{path.name}.{uuid4().hex}.tmp")
     try:
         file = temporary.open("wb")
@@ -154,14 +265,36 @@ def _write_file(path: Path, content: bytes) -> None:
 
 
 def _unlink(path: Path) -> None:
+    """Remove a file if it exists.
+
+    Args:
+        path: Path of the file.
+    """
     path.unlink(missing_ok=True)
 
 
 def _name(execution_id: str, kind: str) -> str:
+    """Build an execution file's relative path in its shard.
+
+    Args:
+        execution_id: ID of the execution; its first two characters name the shard.
+        kind: Suffix such as `request` or `response-<token>`.
+
+    Returns:
+        The path `<shard>/<id>.<kind>`.
+    """
     return f"{execution_id[:2]}/{execution_id}.{kind}"
 
 
 def _is_uuid(value: str) -> bool:
+    """Return whether a value is a UUID in canonical form.
+
+    Args:
+        value: Candidate execution ID.
+
+    Returns:
+        True if the value round-trips through UUID unchanged.
+    """
     try:
         return str(UUID(value)) == value
     except ValueError:

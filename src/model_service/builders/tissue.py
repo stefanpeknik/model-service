@@ -33,11 +33,21 @@ class TissueMask:
 
     @property
     def fraction(self) -> float:
+        """Share of the level's pixels that are tissue, in [0, 1]."""
         return float(self.pixels.mean())
 
 
 def find_tissue(slide: OpenSlide) -> TissueMask | None:
-    """Tissue on the level closest to `TISSUE_MPP`; None when no level is small enough."""
+    """Find tissue on the level closest to `TISSUE_MPP`.
+
+    Uses the coarsest level when the slide lacks an mpp.
+
+    Args:
+        slide: Open slide.
+
+    Returns:
+        The tissue mask, or None when the level exceeds `MAX_PIXELS`.
+    """
     if (
         PROPERTY_NAME_MPP_X in slide.properties
         and PROPERTY_NAME_MPP_Y in slide.properties
@@ -53,6 +63,17 @@ def find_tissue(slide: OpenSlide) -> TissueMask | None:
 
 
 def tissue_pixels(rgb: NDArray[np.uint8]) -> NDArray[np.bool_]:
+    """Classify pixels as tissue by blurred saturation and an Otsu threshold.
+
+    The threshold is at least `MIN_SATURATION`, so a slide of nearly only glass
+    is not split into tissue by noise.
+
+    Args:
+        rgb: RGB image, shaped (height, width, 3).
+
+    Returns:
+        True where a pixel is tissue.
+    """
     brightest = rgb.max(axis=-1).astype(np.float32)
     darkest = rgb.min(axis=-1).astype(np.float32)
     saturation = _box_blur(
@@ -67,7 +88,14 @@ def tissue_pixels(rgb: NDArray[np.uint8]) -> NDArray[np.bool_]:
 
 
 def _box_blur(values: NDArray[np.float32]) -> NDArray[np.float32]:
-    """3x3 mean, so single noisy glass pixels do not pass as tissue."""
+    """Take the 3x3 mean, so single noisy glass pixels do not pass as tissue.
+
+    Args:
+        values: 2-D array; edges are padded by repetition.
+
+    Returns:
+        The blurred array, same shape.
+    """
     padded = np.pad(values, 1, mode="edge")
     height, width = values.shape
     total = np.zeros_like(values)
@@ -79,7 +107,14 @@ def _box_blur(values: NDArray[np.float32]) -> NDArray[np.float32]:
 
 
 def _otsu(values: NDArray[np.float32]) -> float:
-    """The threshold in [0, 1] that best separates two classes of `values`."""
+    """Find the threshold in [0, 1] that best separates two classes of `values`.
+
+    Args:
+        values: Values in [0, 1].
+
+    Returns:
+        The histogram bin center maximizing between-class variance.
+    """
     histogram, edges = np.histogram(values, bins=256, range=(0.0, 1.0))
     centers = (edges[:-1] + edges[1:]) / 2
     weight_low = np.cumsum(histogram)

@@ -9,10 +9,10 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from model_service.builders.cleanup import close_resource
 from model_service.builders.contracts import (
@@ -38,6 +38,8 @@ if TYPE_CHECKING:
         InputAccessKind,
         Invocation,
         ModelBinding,
+        SpatialScoresModel,
+        TileEmbeddingModel,
     )
     from model_service.builders.registry import BuilderSpec
 
@@ -46,13 +48,42 @@ logger = logging.getLogger(__name__)
 
 
 class InputAccess(Protocol):
-    def input_path(self, name: str) -> Path: ...
+    def input_path(self, name: str) -> Path:
+        """Resolve a named invocation input to a local file.
 
-    def output_path(self, relative_path: str) -> Path: ...
+        Args:
+            name: Input name from the builder's declaration.
 
-    def is_visible_artifact(self, path: Path) -> bool: ...
+        Returns:
+            Local path the builder can read the input from.
+        """
+        ...
 
-    async def aclose(self) -> None: ...
+    def output_path(self, relative_path: str) -> Path:
+        """Resolve an output's relative path to the local file to write.
+
+        Args:
+            relative_path: Output path relative to the invocation's output location.
+
+        Returns:
+            Local path the builder writes the artifact to.
+        """
+        ...
+
+    def is_visible_artifact(self, path: Path) -> bool:
+        """Check that a returned artifact is a file this access exposes to callers.
+
+        Args:
+            path: Artifact path a builder returned in its result.
+
+        Returns:
+            True when the path is a file inside the access's visible output area.
+        """
+        ...
+
+    async def aclose(self) -> None:
+        """Release what the access holds, such as fetched inputs or temporary files."""
+        ...
 
 
 class AccessAdapter(Protocol):
@@ -62,35 +93,105 @@ class AccessAdapter(Protocol):
         invocation: Invocation,
         execution_context: ExecutionContext,
         model: ModelBinding,
-    ) -> InputAccess | Awaitable[InputAccess]: ...
+    ) -> InputAccess | Awaitable[InputAccess]:
+        """Create the input access for one invocation attempt.
+
+        Args:
+            invocation: Invocation whose inputs and outputs the access resolves.
+            execution_context: Attempt identity and protected provider state.
+            model: Model binding; tells an adapter that fetches slides which
+                resolution the builder reads.
+
+        Returns:
+            The access, or an awaitable resolving to it.
+        """
+        ...
 
 
 @dataclass(frozen=True, slots=True)
-class BuilderContext:
+class BuilderContext[M: SpatialScoresModel | TileEmbeddingModel, C: BaseModel]:
+    """What one builder run gets; `M` and `C` are its model and configuration types.
+
+    The application checks the model against the builder's contract and resolves
+    the configuration with the builder's own class before building it, so a
+    builder can rely on these types without checking them again.
+    """
+
     access: InputAccess
     input_names: frozenset[str]
-    configuration: BaseModel
-    model: ModelBinding
+    configuration: C
+    model: M
     deadline_at: datetime
     output_paths: Mapping[str, str]
 
     def input_path(self, name: str) -> Path:
+        """Return the local path of a required input.
+
+        Args:
+            name: Input name from the builder's declaration.
+
+        Returns:
+            Local path of the input.
+        """
         return self.access.input_path(name)
 
     def optional_input_path(self, name: str) -> Path | None:
+        """Return the local path of an optional input, if the invocation supplied it.
+
+        Args:
+            name: Input name from the builder's declaration.
+
+        Returns:
+            Local path of the input, or None when the invocation omitted it.
+        """
         return self.access.input_path(name) if name in self.input_names else None
 
     def output_path(self, output: str) -> Path:
+        """Return where to write a declared artifact output.
+
+        Uses the invocation's `output_path` override when it set one, otherwise the
+        output's default path.
+
+        Args:
+            output: Output name from the builder's declaration.
+
+        Returns:
+            Local path for the output file.
+
+        Raises:
+            KeyError: The output has no path, i.e. it is not an artifact output.
+        """
         return self.access.output_path(self.output_paths[output])
 
 
-class Builder(Protocol):
-    async def run(self, context: BuilderContext) -> BuilderResult: ...
+class Builder[M: SpatialScoresModel | TileEmbeddingModel, C: BaseModel](Protocol):
+    async def run(self, context: BuilderContext[M, C]) -> BuilderResult:
+        """Produce the builder's outputs for one invocation.
+
+        Args:
+            context: Resolved inputs, configuration, model and deadline.
+
+        Returns:
+            One output per declared output name.
+        """
+        ...
 
 
 def validate_invocation(
     spec: BuilderSpec, invocation: Invocation, *, now: datetime | None = None
 ) -> None:
+    """Check an invocation against a builder's declaration before running it.
+
+    Args:
+        spec: Declaration of the builder to run.
+        invocation: Invocation to check.
+        now: Time to compare the deadline against; defaults to the current UTC time.
+
+    Raises:
+        InvalidInvocation: The deadline lacks a timezone or has passed, inputs are
+            unknown or missing, the configuration is invalid, or `output_path` is
+            set for a builder without exactly one artifact output.
+    """
     deadline = invocation.deadline_at
     if deadline.tzinfo is None or deadline.utcoffset() is None:
         raise InvalidInvocation("deadline_at must include a timezone")
@@ -113,6 +214,15 @@ def validate_invocation(
 
 
 def validate_model(spec: BuilderSpec, model: ModelBinding) -> None:
+    """Check that a model's inference contract is the one the builder accepts.
+
+    Args:
+        spec: Declaration of the builder to run.
+        model: Model binding resolved for the attempt.
+
+    Raises:
+        IncompatibleModelError: The model's contract differs from `spec.accepts`.
+    """
     if model.contract != spec.accepts:
         raise IncompatibleModelError(
             f"model {model.id!r} ({model.contract}) is incompatible with "
@@ -121,6 +231,15 @@ def validate_model(spec: BuilderSpec, model: ModelBinding) -> None:
 
 
 def _artifact_output(spec: BuilderSpec) -> str | None:
+    """Find the single artifact output an invocation's `output_path` can place.
+
+    Args:
+        spec: Builder declaration.
+
+    Returns:
+        The name of the only output with a default path, or None when there are
+        none or several.
+    """
     names = [name for name, output in spec.outputs.items() if output.default_path]
     return names[0] if len(names) == 1 else None
 
@@ -129,11 +248,19 @@ class BuilderApplication:
     def __init__(
         self,
         spec: BuilderSpec,
-        builder: Builder,
+        builder: Builder[Any, Any],
         access_adapters: Mapping[InputAccessKind, AccessAdapter],
         *,
         cleanup_timeout_seconds: float = 10,
     ) -> None:
+        """Bind a builder to its declaration and access adapters.
+
+        Args:
+            spec: Declaration the invocations and results are checked against.
+            builder: Builder implementation to run.
+            access_adapters: Adapter per input access kind an invocation may name.
+            cleanup_timeout_seconds: Time allowed for closing the input access.
+        """
         self._spec = spec
         self._builder = builder
         self._access_adapters = dict(access_adapters)
@@ -145,6 +272,28 @@ class BuilderApplication:
         model: ModelBinding,
         execution_context: ExecutionContext | None = None,
     ) -> BuilderResult:
+        """Validate, run the builder before the deadline, check its result, and clean up.
+
+        The input access is always closed. A cleanup failure is raised only when the
+        run itself succeeded; otherwise it is logged and the original error wins.
+
+        Args:
+            invocation: Invocation to run.
+            model: Model binding resolved for this attempt.
+            execution_context: Attempt identity and protected provider state; an
+                empty context when omitted.
+
+        Returns:
+            The builder's validated result.
+
+        Raises:
+            InvalidInvocation: The invocation, its access kind or its configuration is
+                invalid, or the model is incompatible.
+            ContractViolation: The builder returned outputs that differ from its
+                declaration.
+            BuilderFailure: The deadline passed (not retryable), the builder or the
+                cleanup failed unexpectedly (retryable), or the builder raised one.
+        """
         validate_invocation(self._spec, invocation)
         validate_model(self._spec, model)
         access: InputAccess | None = None
@@ -169,7 +318,7 @@ class BuilderApplication:
                             output_paths=self._output_paths(invocation),
                         )
                     )
-                    self._validate_result(result, access)
+                    result = self._validate_result(result, access)
             except TimeoutError as error:
                 if not timeout.expired():
                     raise
@@ -198,6 +347,15 @@ class BuilderApplication:
         return result
 
     def _output_paths(self, invocation: Invocation) -> dict[str, str]:
+        """Map each artifact output to the path the builder writes it to.
+
+        Args:
+            invocation: Invocation whose `output_path` may override the default path
+                of the single artifact output.
+
+        Returns:
+            Output name to relative path, for outputs that have one.
+        """
         paths = {
             name: output.default_path
             for name, output in self._spec.outputs.items()
@@ -214,6 +372,19 @@ class BuilderApplication:
         execution_context: ExecutionContext,
         model: ModelBinding,
     ) -> InputAccess:
+        """Create the input access through the adapter the invocation names.
+
+        Args:
+            invocation: Invocation whose `input_access.kind` selects the adapter.
+            execution_context: Attempt identity and protected provider state.
+            model: Model binding passed on to the adapter.
+
+        Returns:
+            The created input access.
+
+        Raises:
+            InvalidInvocation: No adapter is registered for the access kind.
+        """
         adapter = self._access_adapters.get(invocation.input_access.kind)
         if adapter is None:
             raise InvalidInvocation("unsupported input access kind")
@@ -225,6 +396,17 @@ class BuilderApplication:
     async def _close(
         self, access: InputAccess, primary_failure: BaseException | None
     ) -> None:
+        """Close the input access within the cleanup timeout.
+
+        Args:
+            access: Access to close.
+            primary_failure: Error the run already raised, if any; when set, a
+                cleanup failure is only logged.
+
+        Raises:
+            asyncio.CancelledError: The cleanup was cancelled.
+            BuilderFailure: Cleanup failed and the run had not failed already.
+        """
         try:
             await close_resource(
                 access.aclose, timeout_seconds=self._cleanup_timeout_seconds
@@ -240,7 +422,27 @@ class BuilderApplication:
                 ) from error
             logger.warning("builder resource cleanup failed: %s", type(error).__name__)
 
-    def _validate_result(self, result: BuilderResult, access: InputAccess) -> None:
+    def _validate_result(
+        self, result: BuilderResult, access: InputAccess
+    ) -> BuilderResult:
+        """Check a builder's result against its output declaration.
+
+        A builder need not repeat an artifact's media type: the declared one is
+        set on it here, and one it does give must match.
+
+        Args:
+            result: What the builder returned.
+            access: Access used to check that artifacts are visible files.
+
+        Returns:
+            The result, with each artifact carrying its declared media type.
+
+        Raises:
+            ContractViolation: The result is not a `BuilderResult`, its output names
+                differ from the declaration, an output has the wrong type or kind, an
+                artifact is not a visible file or has the wrong media type, or an
+                inline value is not JSON.
+        """
         if not isinstance(result, BuilderResult):
             raise ContractViolation("builder returned an invalid result")
         if result.outputs.keys() != self._spec.outputs.keys():
@@ -254,7 +456,7 @@ class BuilderApplication:
             if isinstance(output, SharedArtifact):
                 if not access.is_visible_artifact(Path(output.path)):
                     raise ContractViolation(f"artifact {name!r} is not a visible file")
-                if spec.media_type is not None and output.media_type != spec.media_type:
+                if output.media_type not in {None, spec.media_type}:
                     raise ContractViolation(
                         f"artifact {name!r} has the wrong media type"
                     )
@@ -262,3 +464,14 @@ class BuilderApplication:
                 output.value
             ):
                 raise ContractViolation(f"inline output {name!r} is not JSON")
+        return replace(
+            result,
+            outputs={
+                name: (
+                    replace(output, media_type=self._spec.outputs[name].media_type)
+                    if isinstance(output, SharedArtifact)
+                    else output
+                )
+                for name, output in result.outputs.items()
+            },
+        )

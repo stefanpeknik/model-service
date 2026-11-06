@@ -51,6 +51,14 @@ class ModelView:
 
 
 def model_view(model: ModelBinding) -> ModelView:
+    """Describe a model for the public catalog.
+
+    Args:
+        model: The model binding.
+
+    Returns:
+        The model's ID, contract, contract parameters and compatible builders.
+    """
     from model_service.facade.catalog import ModelCatalog
 
     return ModelView(
@@ -80,6 +88,18 @@ def create_router(
     max_request_bytes: int,
     access: Access,
 ) -> APIRouter:
+    """Build the `/v1/models` router: the catalog and direct or scheduled inference.
+
+    Args:
+        scheduler: Admits durable inference executions.
+        catalog: Deployed models.
+        inference: Runs raw model requests; None makes `/run` answer 503.
+        max_request_bytes: Largest raw request body accepted, in bytes.
+        access: Guards the routes.
+
+    Returns:
+        The router.
+    """
     router = APIRouter(prefix="/v1/models")
 
     @router.get(
@@ -181,6 +201,18 @@ def create_router(
 
 
 async def _read_body(request: Request, limit: int) -> bytes:
+    """Read the request body, stopping as soon as it exceeds the limit.
+
+    Args:
+        request: The incoming request.
+        limit: Largest body accepted, in bytes.
+
+    Returns:
+        The body.
+
+    Raises:
+        HTTPException: 413 if `Content-Length` or the streamed body exceeds the limit.
+    """
     declared = request.headers.get("content-length", "")
     if declared.isdigit() and int(declared) > limit:
         raise _payload_too_large(limit)
@@ -193,6 +225,14 @@ async def _read_body(request: Request, limit: int) -> bytes:
 
 
 def _payload_too_large(limit: int) -> HTTPException:
+    """Build the 413 for a body over the limit.
+
+    Args:
+        limit: The limit in bytes, named in the message.
+
+    Returns:
+        The HTTP error to raise.
+    """
     return http_error(
         413, ApiErrorCode.PAYLOAD_TOO_LARGE, f"request body exceeds {limit} bytes"
     )

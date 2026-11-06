@@ -45,6 +45,12 @@ class ScoreGrid:
 
 def write_score_grid(path: Path, grid: ScoreGrid) -> None:
     # A file object, so NumPy keeps the name as given.
+    """Write a score grid as a compressed `.npz` archive.
+
+    Args:
+        path: File to write; NumPy keeps the name as given.
+        grid: Scores and their placement on the slide level.
+    """
     with path.open("wb") as file:
         np.savez_compressed(
             file,
@@ -58,6 +64,14 @@ def write_score_grid(path: Path, grid: ScoreGrid) -> None:
 
 
 def read_score_grid(path: Path) -> ScoreGrid:
+    """Read a score grid written by `write_score_grid`.
+
+    Args:
+        path: `.npz` file to read; pickled arrays are refused.
+
+    Returns:
+        The score grid.
+    """
     with np.load(path, allow_pickle=False) as stored:
         width, height = (int(value) for value in stored["level_size"])
         mpp_x, mpp_y = (float(value) for value in stored["mpp"])

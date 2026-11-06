@@ -35,6 +35,25 @@ class EmpaiaProvider:
     def facade(
         self, catalog: ModelCatalog, settings: SchedulerSettings
     ) -> FacadeContribution:
+        """Contribute the EMPAIA scheduler adapter, JES routes and app registration.
+
+        Apps come from the models whose file has an `empaia` block. Registration runs
+        in the background, and only when a marketplace is configured, so the API
+        serves while the marketplace is down.
+
+        Args:
+            catalog: The deployed models and their `empaia` blocks.
+            settings: Unused; EMPAIA reads its own `EMPAIA_*` settings.
+
+        Returns:
+            The facade contribution.
+
+        Raises:
+            pydantic.ValidationError: If the `EMPAIA_*` settings are invalid.
+            ValueError: If a model's listing is invalid or an app's EAD references an
+                unknown input.
+            jsonschema.ValidationError: If a generated EAD fails the EAD v3 schema.
+        """
         from model_service.providers.empaia.apps import app_definitions, parse_listings
         from model_service.providers.empaia.provider import EmpaiaProviderAdapter
         from model_service.providers.empaia.publishers import default_publishers
@@ -66,6 +85,17 @@ class EmpaiaProvider:
         )
 
     def input_access(self, settings: WorkerSettings) -> Mapping[str, AccessAdapter]:
+        """Give builder replicas access to EMPAIA job inputs through the App Service.
+
+        Args:
+            settings: Unused; EMPAIA reads its own `EMPAIA_*` settings.
+
+        Returns:
+            The EMPAIA input access adapter, keyed by `INPUT_ACCESS_KIND`.
+
+        Raises:
+            pydantic.ValidationError: If the `EMPAIA_*` settings are invalid.
+        """
         from model_service.providers.empaia.input_access import (
             EmpaiaInputAccessAdapter,
         )
@@ -80,6 +110,16 @@ class EmpaiaProvider:
 
 
 def _marketplace(settings: EmpaiaSettings) -> Marketplace | None:
+    """Build the marketplace client the settings describe.
+
+    It uses client credentials when an identity provider is set, otherwise none.
+
+    Args:
+        settings: The EMPAIA settings.
+
+    Returns:
+        The marketplace, or None without a marketplace URL and organization ID.
+    """
     from model_service.providers.empaia.credentials import (
         ClientCredentials,
         NoCredentials,

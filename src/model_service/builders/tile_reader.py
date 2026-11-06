@@ -31,7 +31,18 @@ if TYPE_CHECKING:
 
 @contextmanager
 def open_slide(path: Path, name: str) -> Iterator[OpenSlide]:
-    """Open an input slide; an unreadable file is the caller's error, not a retry."""
+    """Open an input slide; an unreadable file is the caller's error, not a retry.
+
+    Args:
+        path: Slide file.
+        name: Input name used in the error message.
+
+    Yields:
+        The open slide, closed on exit.
+
+    Raises:
+        InvalidInvocation: OpenSlide cannot read the file.
+    """
     try:
         slide = OpenSlide(str(path))
     except OpenSlideError as error:
@@ -41,7 +52,15 @@ def open_slide(path: Path, name: str) -> Iterator[OpenSlide]:
 
 
 def select_mask_level(mask: OpenSlide, target_mpp: float | tuple[float, float]) -> int:
-    """Use the mask's resolution when it has one; otherwise its finest level."""
+    """Use the mask's resolution when it has one; otherwise its finest level.
+
+    Args:
+        mask: Open mask slide.
+        target_mpp: Resolution to match.
+
+    Returns:
+        The mask level to read.
+    """
     if (
         PROPERTY_NAME_MPP_X in mask.properties
         and PROPERTY_NAME_MPP_Y in mask.properties
@@ -58,6 +77,14 @@ class TileReader:
         mpp: float,
         tissue: TissueMask | None = None,
     ) -> None:
+        """Pick the slide level for the model and scale mask and tissue to it.
+
+        Args:
+            slide: Open slide to read tiles from.
+            mask: Open region-of-interest mask, if any.
+            mpp: Model resolution; the closest slide level is read.
+            tissue: Tissue mask for skipping background, if any.
+        """
         self.slide = slide
         self.level = slide.closest_level(mpp)
         self.tissue = tissue
@@ -83,6 +110,20 @@ class TileReader:
         *,
         skip_background: bool = False,
     ) -> Iterator[TileReader]:
+        """Open a reader, with the mask file and tissue detection when requested.
+
+        Args:
+            slide: Open slide to read tiles from.
+            mask_path: Region-of-interest mask file, if any.
+            mpp: Model resolution.
+            skip_background: Detect tissue and skip tiles without it.
+
+        Yields:
+            The reader; the mask is closed on exit.
+
+        Raises:
+            InvalidInvocation: The mask is not a readable slide.
+        """
         tissue = find_tissue(slide) if skip_background else None
         if mask_path is None:
             yield cls(slide, None, mpp, tissue)
@@ -91,7 +132,16 @@ class TileReader:
             yield cls(slide, mask, mpp, tissue)
 
     def read(self, x: int, y: int, tile_size: int) -> NDArray[np.uint8] | None:
-        """Return a CHW uint8 tile, or None when the mask window is empty."""
+        """Read one tile unless the tissue or mask window excludes it.
+
+        Args:
+            x: Tile origin x at the selected level.
+            y: Tile origin y at the selected level.
+            tile_size: Tile width and height in pixels.
+
+        Returns:
+            A CHW uint8 tile, or None when the tissue or mask window is empty.
+        """
         # The tissue check is an array lookup; the mask check reads the mask file.
         if self.tissue is not None and not self._has_tissue(x, y, tile_size):
             return None
@@ -103,6 +153,16 @@ class TileReader:
         return tile.transpose(2, 0, 1)
 
     def _has_tissue(self, x: int, y: int, tile_size: int) -> bool:
+        """Check whether the tile's window in the tissue mask has tissue.
+
+        Args:
+            x: Tile origin x at the selected level.
+            y: Tile origin y at the selected level.
+            tile_size: Tile width and height in pixels.
+
+        Returns:
+            True when any tissue pixel falls in the window.
+        """
         assert self.tissue is not None
         left, top = floor(x * self._tissue_scale_x), floor(y * self._tissue_scale_y)
         right = ceil((x + tile_size) * self._tissue_scale_x)
@@ -110,6 +170,19 @@ class TileReader:
         return bool(self.tissue.pixels[top:bottom, left:right].any())
 
     def _mask_selects(self, x: int, y: int, tile_size: int) -> bool:
+        """Check whether the tile's window in the mask has a nonzero pixel.
+
+        The window is rounded outward so a downsampled mask keeps every
+        intersecting pixel.
+
+        Args:
+            x: Tile origin x at the selected level.
+            y: Tile origin y at the selected level.
+            tile_size: Tile width and height in pixels.
+
+        Returns:
+            True when the window contains a nonzero mask pixel.
+        """
         assert self._mask is not None
         # Round outward so a downsampled mask keeps every intersecting pixel.
         mask_x, mask_y = floor(x * self._scale_x), floor(y * self._scale_y)

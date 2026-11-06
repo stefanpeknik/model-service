@@ -54,6 +54,15 @@ class InvocationType(TypeDecorator[StoredInvocation]):
     def process_bind_param(
         self, value: StoredInvocation | None, dialect: Dialect
     ) -> object:
+        """Serialize a stored invocation to JSON for the JSONB column.
+
+        Args:
+            value: The invocation, or None.
+            dialect: Database dialect in use.
+
+        Returns:
+            The JSON-compatible value, or None.
+        """
         if value is None:
             return None
         return STORED_INVOCATION.dump_python(value, mode="json")
@@ -61,6 +70,18 @@ class InvocationType(TypeDecorator[StoredInvocation]):
     def process_result_value(
         self, value: object, dialect: Dialect
     ) -> StoredInvocation | None:
+        """Validate the column's JSON back into a stored invocation.
+
+        Args:
+            value: JSON from the JSONB column, or None.
+            dialect: Database dialect in use.
+
+        Returns:
+            The stored invocation, or None.
+
+        Raises:
+            pydantic.ValidationError: The JSON does not match the stored invocation schema.
+        """
         return STORED_INVOCATION.validate_python(value) if value is not None else None
 
 
@@ -71,6 +92,15 @@ class ResultType(TypeDecorator[StoredResult]):
     def process_bind_param(
         self, value: StoredResult | None, dialect: Dialect
     ) -> object:
+        """Serialize a stored result to JSON for the JSONB column.
+
+        Args:
+            value: The result, or None.
+            dialect: Database dialect in use.
+
+        Returns:
+            The JSON-compatible value, or None.
+        """
         return (
             STORED_RESULT.dump_python(value, mode="json") if value is not None else None
         )
@@ -78,6 +108,18 @@ class ResultType(TypeDecorator[StoredResult]):
     def process_result_value(
         self, value: object, dialect: Dialect
     ) -> StoredResult | None:
+        """Validate the column's JSON back into a stored result.
+
+        Args:
+            value: JSON from the JSONB column, or None.
+            dialect: Database dialect in use.
+
+        Returns:
+            The stored result, or None.
+
+        Raises:
+            pydantic.ValidationError: The JSON does not match the stored result schema.
+        """
         return STORED_RESULT.validate_python(value) if value is not None else None
 
 

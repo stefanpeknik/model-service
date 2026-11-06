@@ -34,7 +34,17 @@ _SECONDS = TypeAdapter(FiniteFloat)
 
 
 def _duration_from_seconds(value: object) -> timedelta | float:
-    """Accept typed durations or finite numeric seconds for duration validation."""
+    """Accept typed durations or finite numeric seconds for duration validation.
+
+    Args:
+        value: A `timedelta` or a number of seconds.
+
+    Returns:
+        The `timedelta` unchanged, or the seconds as a float.
+
+    Raises:
+        ValidationError: If the value is not a finite number.
+    """
     return value if isinstance(value, timedelta) else _SECONDS.validate_python(value)
 
 
@@ -159,7 +169,21 @@ class SchedulerSettings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        """Keep direct construction isolated; from_environment selects the environment source."""
+        """Read settings only from constructor arguments.
+
+        Direct construction stays isolated from the environment; `from_environment`
+        selects the environment source.
+
+        Args:
+            settings_cls: The settings class.
+            init_settings: Constructor arguments.
+            env_settings: Environment variables; unused.
+            dotenv_settings: The dotenv file; unused.
+            file_secret_settings: Secret files; unused.
+
+        Returns:
+            Only the constructor source.
+        """
         return (init_settings,)
 
     @classmethod
@@ -167,7 +191,19 @@ class SchedulerSettings(BaseSettings):
         cls,
         environment: Mapping[str, str] | None = None,
     ) -> SchedulerSettings:
-        """Parse required and optional environment settings, validating model origins and numeric bounds."""
+        """Parse settings from environment variables.
+
+        Model origins and numeric bounds are validated.
+
+        Args:
+            environment: Variables to read instead of the process environment.
+
+        Returns:
+            The settings.
+
+        Raises:
+            ValidationError: If a required setting is missing or a value is invalid.
+        """
         source = EnvSettingsSource(cls)
         if environment is not None:
             source.env_vars = dict(environment)
@@ -180,14 +216,29 @@ class SchedulerSettings(BaseSettings):
     )
     @classmethod
     def _empty_optional_setting(cls, value: object) -> object:
-        """Treat blank optional origins as absent."""
+        """Treat blank optional origins as absent.
+
+        Args:
+            value: The raw setting.
+
+        Returns:
+            None for a blank string, the stripped string, or the value unchanged.
+        """
         if isinstance(value, str):
             return value.strip() or None
         return value
 
     @model_validator(mode="after")
     def _validate_policy_bounds(self) -> Self:
-        """Reject maximum backoff or deadline values shorter than their corresponding initial/default values."""
+        """Reject a maximum backoff or deadline shorter than its initial or default value.
+
+        Returns:
+            The settings unchanged.
+
+        Raises:
+            ValueError: If maximum backoff is shorter than initial backoff, or
+                maximum deadline is shorter than default deadline.
+        """
         if self.maximum_backoff < self.initial_backoff:
             raise ValueError("maximum backoff must not be shorter than initial backoff")
         if self.maximum_deadline < self.default_deadline:

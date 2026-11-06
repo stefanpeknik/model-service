@@ -67,7 +67,27 @@ class ExecutionScheduler:
         inference_target: InferenceTarget | None = None,
         max_concurrent_inference: int = 0,
     ) -> None:
-        """Validate timing settings and wire a worker with a private local cancellation registry. No tasks start here."""
+        """Validate timing settings and wire a worker with a private local cancellation registry.
+
+        No tasks start here; `running` starts the worker.
+
+        Args:
+            repository: Durable execution store.
+            dispatch: Client that runs builders.
+            providers: Provider adapters by provider name.
+            resolve_model: Resolver of the current model binding for a builder and model.
+            default_timeout: Execution timeout when the request gives none.
+            maximum_timeout: Upper bound on a requested timeout.
+            clock: Source of the current time; defaults to UTC now.
+            lease_duration: How long a claim stays valid without renewal.
+            poll_interval: Seconds between worker polls for due work.
+            max_concurrent: Maximum builder executions this process runs at once.
+            inference_target: Model client for scheduled inference, or None to disable it.
+            max_concurrent_inference: Maximum inference executions this process runs at once.
+
+        Raises:
+            ValueError: lease_duration or poll_interval is not positive.
+        """
         if lease_duration <= timedelta(0):
             raise ValueError("lease_duration must be positive")
         if poll_interval <= 0:
@@ -98,7 +118,16 @@ class ExecutionScheduler:
 
     @asynccontextmanager
     async def running(self) -> AsyncIterator[None]:
-        """Start and join worker tasks for this context's lifetime."""
+        """Start and join worker tasks for this context's lifetime.
+
+        On exit the worker is stopped and cancelled.
+
+        Yields:
+            None while the worker runs.
+
+        Raises:
+            RuntimeError: The scheduler is already running.
+        """
         if self._running:
             raise RuntimeError("execution scheduler is already running")
         self._running = True
@@ -124,7 +153,11 @@ class ExecutionScheduler:
         return self._worker_task is not None and not self._worker_task.done()
 
     async def check_ready(self) -> None:
-        """Translate repository readiness failures into a public scheduling availability error."""
+        """Translate repository readiness failures into a public scheduling availability error.
+
+        Raises:
+            SchedulingUnavailableError: The execution repository is unavailable.
+        """
         try:
             await self._repository.check_ready()
         except ExecutionRepositoryUnavailableError as error:
@@ -133,7 +166,25 @@ class ExecutionScheduler:
             ) from error
 
     async def schedule(self, request: ScheduleRequest) -> ScheduleResult:
-        """Identify and replay a submission, prepare new inputs, then admit the complete execution."""
+        """Identify and replay a submission, prepare new inputs, then admit the complete execution.
+
+        A replayed submission returns the existing execution without preparing again.
+        The deadline is the requested timeout, shortened to the provider's deadline cap.
+
+        Args:
+            request: Provider schedule request.
+
+        Returns:
+            The execution view and whether this call created it.
+
+        Raises:
+            UnknownBuilderError: The resolver does not know the builder.
+            UnknownModelError: The resolver does not know the model.
+            IncompatibleModelError: The model does not fit the builder.
+            InvalidScheduleRequestError: The provider is unknown, the timeout is not positive, or the effective deadline has already passed.
+            ScheduleConflictError: The idempotency key was used for a different request.
+            SchedulingUnavailableError: The execution repository is unavailable.
+        """
         self._resolve_model(request.builder_id, request.model_id)
         try:
             provider = self._providers[request.provider]
@@ -171,7 +222,18 @@ class ExecutionScheduler:
     ) -> ScheduleResult:
         """Check the payload against the model, then store it with the execution.
 
-        Raises UnknownModelError or IncompatibleInputError before admission.
+        Args:
+            request: Raw inference request with payload and headers.
+
+        Returns:
+            The execution view and whether this call created it.
+
+        Raises:
+            SchedulingUnavailableError: Scheduled inference is not configured or the repository is unavailable.
+            UnknownModelError: The model is not in the catalog; raised before admission.
+            IncompatibleInputError: The payload does not fit the model's input; raised before admission.
+            InvalidScheduleRequestError: The requested timeout is not positive.
+            ScheduleConflictError: The idempotency key was used for a different request.
         """
         if self._inference is None:
             raise SchedulingUnavailableError("scheduled inference is not configured")
@@ -198,6 +260,18 @@ class ExecutionScheduler:
         )
 
     async def _find(self, identity: SubmissionIdentity) -> ExecutionRecord | None:
+        """Look up an earlier execution with the same submission identity.
+
+        Args:
+            identity: Replay identity of the submission.
+
+        Returns:
+            The existing execution, or None if this is a new submission.
+
+        Raises:
+            ScheduleConflictError: The key was used for a request with a different fingerprint.
+            SchedulingUnavailableError: The execution repository is unavailable.
+        """
         try:
             return await self._repository.find_submission(identity)
         except ExecutionRepositoryUnavailableError as error:
@@ -206,6 +280,18 @@ class ExecutionScheduler:
             ) from error
 
     async def _admit(self, admission: Admission) -> ScheduleResult:
+        """Store a new execution, or return the one a concurrent submission admitted first.
+
+        Args:
+            admission: Complete execution to admit.
+
+        Returns:
+            The execution view and whether this call created it.
+
+        Raises:
+            ScheduleConflictError: A concurrent submission used the key for a different request.
+            SchedulingUnavailableError: The execution repository is unavailable.
+        """
         try:
             admitted = await self._repository.admit(admission)
         except ExecutionRepositoryUnavailableError as error:
@@ -215,7 +301,18 @@ class ExecutionScheduler:
         return ScheduleResult(self._view(admitted.execution), created=admitted.created)
 
     async def get(self, execution_id: str) -> ExecutionView:
-        """Read a durable record and project only its caller-visible status and terminal outcome."""
+        """Read a durable record and project only its caller-visible status and terminal outcome.
+
+        Args:
+            execution_id: ID of the execution.
+
+        Returns:
+            The public execution view.
+
+        Raises:
+            UnknownExecutionError: No execution has this ID.
+            SchedulingUnavailableError: The execution repository is unavailable.
+        """
         try:
             execution = await self._repository.get(execution_id)
         except ExecutionRepositoryUnavailableError as error:
@@ -225,7 +322,17 @@ class ExecutionScheduler:
         return self._view(execution)
 
     async def get_many(self, execution_ids: list[str]) -> list[ExecutionView]:
-        """Views of the executions that exist, in the requested order."""
+        """Read several executions, skipping IDs that do not exist.
+
+        Args:
+            execution_ids: IDs to read.
+
+        Returns:
+            Views of the executions that exist, in the requested order.
+
+        Raises:
+            SchedulingUnavailableError: The execution repository is unavailable.
+        """
         try:
             executions = await self._repository.get_many(execution_ids)
         except ExecutionRepositoryUnavailableError as error:
@@ -237,7 +344,19 @@ class ExecutionScheduler:
     async def inference_result(
         self, execution_id: str
     ) -> tuple[InferenceResult, bytes]:
-        """Raise UnknownExecutionError or ResultUnavailableError when there is none."""
+        """Read the stored response of an inference execution.
+
+        Args:
+            execution_id: ID of the inference execution.
+
+        Returns:
+            The response metadata and its body.
+
+        Raises:
+            UnknownExecutionError: No execution has this ID.
+            ResultUnavailableError: The execution has no stored inference response.
+            SchedulingUnavailableError: The execution repository is unavailable.
+        """
         try:
             execution = await self._repository.get(execution_id)
             if not isinstance(execution.result, InferenceResult):
@@ -250,7 +369,18 @@ class ExecutionScheduler:
         return execution.result, content
 
     async def cancel(self, execution_id: str) -> ExecutionView:
-        """Record cancellation and fence the current claim before requesting cancellation of any local task."""
+        """Record cancellation and fence the current claim, then cancel any local task.
+
+        Args:
+            execution_id: ID of the execution to cancel.
+
+        Returns:
+            The execution view after the cancellation request.
+
+        Raises:
+            UnknownExecutionError: No execution has this ID.
+            SchedulingUnavailableError: The execution repository is unavailable.
+        """
         try:
             execution = await self._repository.request_cancel(execution_id)
         except ExecutionRepositoryUnavailableError as error:
@@ -261,7 +391,17 @@ class ExecutionScheduler:
         return self._view(execution)
 
     def _requested_timeout(self, seconds: int | None) -> timedelta:
-        """Use the default timeout or clamp a positive requested timeout to the configured maximum."""
+        """Use the default timeout or clamp a positive requested timeout to the configured maximum.
+
+        Args:
+            seconds: Requested timeout in seconds, or None for the default.
+
+        Returns:
+            The timeout to apply.
+
+        Raises:
+            InvalidScheduleRequestError: The requested timeout is not positive.
+        """
         if seconds is None:
             return self._default_timeout
         if seconds <= 0:
@@ -270,7 +410,16 @@ class ExecutionScheduler:
 
     @staticmethod
     def _view(execution: ExecutionRecord) -> ExecutionView:
-        """Hide internal fields and unfinished results when converting a record to the public execution view."""
+        """Convert a record to the public execution view.
+
+        Hides internal fields; the result appears only on success and the error only on failure.
+
+        Args:
+            execution: Durable execution record.
+
+        Returns:
+            The caller-visible view, with provider_pending set while a provider report is outstanding.
+        """
         return ExecutionView(
             id=execution.id,
             operation=execution.operation,

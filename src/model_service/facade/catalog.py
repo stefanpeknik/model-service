@@ -79,6 +79,21 @@ class CatalogError(ValueError):
 
 
 def model_binding(document: ModelDocument) -> ModelBinding:
+    """Build a model binding from one model document.
+
+    Contract parameters come from the first deployment's `user_config` or from
+    the `inference` block, depending on the contract.
+
+    Args:
+        document: A parsed model YAML document.
+
+    Returns:
+        The validated binding.
+
+    Raises:
+        CatalogError: If the route prefix is not `/<model id>`, a parameter is
+            declared in the wrong place or missing, or the values are invalid.
+    """
     model_id = document.serve.name
     if document.serve.route_prefix != f"/{model_id}":
         raise CatalogError(f"model {model_id!r} must use route_prefix /{model_id}")
@@ -116,6 +131,15 @@ class ModelCatalog:
         models: list[ModelBinding],
         blocks: Mapping[str, Mapping[str, object]] | None = None,
     ) -> None:
+        """Index models by ID and keep the provider blocks.
+
+        Args:
+            models: Model bindings.
+            blocks: Provider blocks by block key, then by model ID.
+
+        Raises:
+            CatalogError: If two models share an ID.
+        """
         self._models = {model.id: model for model in models}
         if len(self._models) != len(models):
             raise CatalogError("model IDs must be unique")
@@ -125,7 +149,19 @@ class ModelCatalog:
     def from_documents(
         cls, documents: object, provider_blocks: Collection[str] = ()
     ) -> ModelCatalog:
-        """`provider_blocks` are the top-level keys providers read."""
+        """Build the catalog from the JSON list Helm renders from the model YAML files.
+
+        Args:
+            documents: The decoded JSON, expected to be a list of model documents.
+            provider_blocks: The top-level keys providers read.
+
+        Returns:
+            The catalog.
+
+        Raises:
+            CatalogError: If `documents` is not a list, a document is invalid,
+                a document has a block no provider takes, or a binding is invalid.
+        """
         if not isinstance(documents, list):
             raise CatalogError("model catalog must be a list")
         try:
@@ -147,6 +183,18 @@ class ModelCatalog:
     def from_file(
         cls, path: Path, provider_blocks: Collection[str] = ()
     ) -> ModelCatalog:
+        """Build the catalog from the rendered JSON file.
+
+        Args:
+            path: The catalog JSON file.
+            provider_blocks: The top-level keys providers read.
+
+        Returns:
+            The catalog.
+
+        Raises:
+            CatalogError: If the file cannot be read or decoded, or its content is invalid.
+        """
         try:
             documents = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as error:
@@ -154,21 +202,57 @@ class ModelCatalog:
         return cls.from_documents(documents, provider_blocks)
 
     def provider_block(self, key: str) -> dict[str, object]:
-        """Each model's `key` block, by model ID; models without one are absent."""
+        """Return each model's `key` block, by model ID.
+
+        Args:
+            key: The provider's top-level block key.
+
+        Returns:
+            A copy mapping model IDs to their block; models without one are absent.
+        """
         return dict(self._blocks.get(key, {}))
 
     def get(self, model_id: str) -> ModelBinding:
+        """Look up a deployed model.
+
+        Args:
+            model_id: The model ID.
+
+        Returns:
+            The model binding.
+
+        Raises:
+            UnknownModelError: If no model has this ID.
+        """
         try:
             return self._models[model_id]
         except KeyError as error:
             raise UnknownModelError(model_id) from error
 
     def __iter__(self) -> Iterator[ModelBinding]:
+        """Iterate over the model bindings.
+
+        Returns:
+            An iterator over the bindings in catalog order.
+        """
         return iter(self._models.values())
 
     def __len__(self) -> int:
+        """Count the models.
+
+        Returns:
+            The number of models in the catalog.
+        """
         return len(self._models)
 
     @staticmethod
     def compatible_builders(model: ModelBinding) -> list[str]:
+        """List the registered builders that accept the model's contract.
+
+        Args:
+            model: The model binding.
+
+        Returns:
+            IDs of the compatible builders.
+        """
         return [spec.id for spec in BUILDERS.values() if spec.accepts == model.contract]

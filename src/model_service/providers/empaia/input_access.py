@@ -50,13 +50,29 @@ class EmpaiaInputAccess:
         gateway: EmpaiaGateway,
         paths: dict[str, Path],
     ) -> None:
-        """Retain the workspace, materialized input mapping, and gateway to close after the builder ran."""
+        """Retain the workspace, materialized input mapping, and gateway to close after the builder ran.
+
+        Args:
+            root: The attempt's workspace.
+            gateway: The job's gateway, closed by `aclose`.
+            paths: The materialized file of each builder input, by name.
+        """
         self._gateway = gateway
         self._paths = paths
         self._root = root
 
     def input_path(self, name: str) -> Path:
-        """Return an existing materialized file for a declared input or raise an invocation error."""
+        """Return the existing materialized file of a declared input.
+
+        Args:
+            name: The builder input name.
+
+        Returns:
+            The file path.
+
+        Raises:
+            InvalidInvocation: If the input is unknown or its file is missing.
+        """
         try:
             path = self._paths[name]
         except KeyError as error:
@@ -66,7 +82,17 @@ class EmpaiaInputAccess:
         return path
 
     def output_path(self, relative_path: str) -> Path:
-        """Resolve an output under the workspace and reject targets that escape its root."""
+        """Resolve an output below the workspace's `outputs` and reject targets that escape the root.
+
+        Args:
+            relative_path: The path below `outputs`.
+
+        Returns:
+            The output path; it need not exist.
+
+        Raises:
+            InvalidInvocation: If the path escapes the attempt workspace.
+        """
         path = self._root / "outputs" / relative_path
         try:
             path.resolve().relative_to(self._root.resolve())
@@ -77,7 +103,14 @@ class EmpaiaInputAccess:
         return path
 
     def is_visible_artifact(self, path: Path) -> bool:
-        """Require an existing file contained within the resolved attempt workspace."""
+        """Check that a path is an existing file within the resolved attempt workspace.
+
+        Args:
+            path: The artifact path a builder reported.
+
+        Returns:
+            True if the path is a file inside the workspace.
+        """
         try:
             path.resolve(strict=True).relative_to(self._root.resolve(strict=True))
         except (OSError, ValueError):
@@ -96,7 +129,16 @@ class EmpaiaInputAccess:
 
 
 def job_workspace(root: Path, api_url: str, job_id: str) -> Path:
-    """All attempt workspaces of one EMPAIA job; provider finish removes it."""
+    """Return the directory of all attempt workspaces of one EMPAIA job; provider finish removes it.
+
+    Args:
+        root: The workspace root.
+        api_url: The job's App Service URL.
+        job_id: The EMPAIA job ID.
+
+    Returns:
+        `root` joined with a SHA-256 of the API URL and job ID.
+    """
     return root / hashlib.sha256(f"{api_url}\0{job_id}".encode()).hexdigest()
 
 
@@ -108,7 +150,12 @@ class EmpaiaInputAccessAdapter:
         gateway_factory: EmpaiaGatewayFactory,
         workspace_root: Path,
     ) -> None:
-        """Retain the gateway factory and parent directory for isolated processing workspaces."""
+        """Retain the gateway factory and parent directory for isolated processing workspaces.
+
+        Args:
+            gateway_factory: Creates the gateway of each job.
+            workspace_root: The parent of the job workspaces.
+        """
         self._gateway_factory = gateway_factory
         self._workspace_root = workspace_root
 
@@ -118,7 +165,27 @@ class EmpaiaInputAccessAdapter:
         execution_context: ExecutionContext,
         model: ModelBinding | None = None,
     ) -> EmpaiaInputAccess:
-        """Validate matching job contexts and an attempt ID, hash the workspace identity, and materialize every provider input. Close acquired resources if creation fails."""
+        """Materialize every provider input of an attempt in its own workspace.
+
+        The public and protected job contexts must match, and the workspace is named
+        by a hash of the job and the attempt ID. On failure the gateway is closed and
+        the workspace removed.
+
+        Args:
+            invocation: The invocation; its input access state names the job.
+            execution_context: The protected job context and processing attempt ID.
+            model: Unused.
+
+        Returns:
+            Access to the materialized inputs and the attempt's outputs.
+
+        Raises:
+            InvalidInvocation: If a context is malformed, the contexts name different
+                jobs, there is no attempt ID, an input is not a provider input, or the
+                gateway returns a path outside the input's directory or not a file.
+            BuilderFailure: With `INPUT_UNAVAILABLE` and the gateway's safe message and
+                retry flag, if materializing raises `EmpaiaGatewayError`.
+        """
         try:
             state = EmpaiaInputState.model_validate(invocation.input_access.state)
             context = EmpaiaJobContext.model_validate(

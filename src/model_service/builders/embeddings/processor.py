@@ -31,7 +31,26 @@ async def build_embeddings(
     num_threads: int,
     max_concurrent_tasks: int,
 ) -> None:
-    """Coordinates are tile origins at the slide level closest to the model's mpp."""
+    """Embed a slide's grid tiles and write them to an HDF5 file.
+
+    Coordinates are tile origins at the slide level closest to the model's mpp.
+    Tiles the mask excludes get no row; rows follow grid order.
+
+    Args:
+        slide_path: Slide to tile.
+        mask_path: Optional region-of-interest mask limiting which tiles are read.
+        output_path: HDF5 file to create.
+        predictor: Predictor that embeds each tile.
+        model: Declaration giving tile size, mpp and summary names.
+        stride_fraction: Stride as a fraction of the tile size.
+        num_threads: Threads for slide reads.
+        max_concurrent_tasks: Tiles in flight at once.
+
+    Raises:
+        InvalidInvocation: The slide or mask is not a readable slide.
+        BuilderFailure: Feature dimensions change between tiles, or the predictor
+            fails.
+    """
     import h5py
     from ratiopath.tiling import grid_tiles
 

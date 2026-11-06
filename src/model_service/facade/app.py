@@ -36,6 +36,16 @@ if TYPE_CHECKING:
 
 
 def model_resolver(catalog: ModelCatalog) -> ModelResolver:
+    """Make the scheduler's resolver from builder and model IDs to a validated model.
+
+    Args:
+        catalog: Deployed models to look up.
+
+    Returns:
+        A function that returns the model binding, raising `UnknownBuilderError`,
+        `UnknownModelError` or `IncompatibleModelError` when the pair is unusable.
+    """
+
     def resolve(builder_id: str, model_id: str) -> ModelBinding:
         spec = get_builder(builder_id)
         model = catalog.get(model_id)
@@ -46,6 +56,22 @@ def model_resolver(catalog: ModelCatalog) -> ModelResolver:
 
 
 def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
+    """Wire the production facade: catalog, repository, providers, scheduler and API.
+
+    The repository is initialized, provider background tasks start and the
+    scheduler runs only inside the app lifespan.
+
+    Args:
+        settings: Process settings; None reads them from the environment.
+
+    Returns:
+        The FastAPI application served by Uvicorn.
+
+    Raises:
+        CatalogError: If the model catalog file cannot be read or is invalid.
+        UnknownBuilderError: If `BUILDER_IDS` names a builder that is not registered.
+        ValueError: If the provider context key is not a valid base64 key.
+    """
     config = settings or SchedulerSettings.from_environment()
     providers = load_providers()
     catalog = ModelCatalog.from_file(

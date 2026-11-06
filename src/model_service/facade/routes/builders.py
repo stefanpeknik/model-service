@@ -78,12 +78,42 @@ class BuilderView:
 class BuilderRunner(Protocol):
     async def run(
         self, builder_id: str, model_id: str, request: ImmediateBuilderRequest
-    ) -> BuilderResult: ...
+    ) -> BuilderResult:
+        """Run a builder with a model while the caller waits.
+
+        Args:
+            builder_id: The builder to run.
+            model_id: The model the builder uses.
+            request: Inputs, configuration and deadline.
+
+        Returns:
+            The builder's result.
+
+        Raises:
+            UnknownBuilderError: If the builder is not registered.
+            UnknownModelError: If the model is not deployed.
+            IncompatibleModelError: If the builder does not accept the model.
+            InvalidInvocation: If the request is invalid.
+            ConfirmedRejectionError: If the builder refused for lack of capacity.
+            RemoteFailureError: If the builder failed.
+            UnknownOutcomeError: If it is unknown whether the builder ran.
+        """
+        ...
 
 
 def create_router(
     scheduler: Scheduler, builder_runner: BuilderRunner | None, access: Access
 ) -> APIRouter:
+    """Build the `/v1/builders` router: the catalog, synchronous runs and scheduling.
+
+    Args:
+        scheduler: Admits durable executions.
+        builder_runner: Runs builders synchronously; None makes `/run` answer 503.
+        access: Guards the routes.
+
+    Returns:
+        The router.
+    """
     router = APIRouter(prefix="/v1/builders")
 
     @router.get(
@@ -194,7 +224,18 @@ def create_router(
 
 
 async def _run_while_connected[T](request: Request, operation: Awaitable[T]) -> T:
-    """Cancel the operation if the client disconnects first."""
+    """Await the operation, cancelling it if the client disconnects first.
+
+    Args:
+        request: The request whose connection is watched.
+        operation: The work to run.
+
+    Returns:
+        The operation's result.
+
+    Raises:
+        asyncio.CancelledError: If the client disconnects before the operation ends.
+    """
     operation_task = asyncio.ensure_future(operation)
     disconnect_task = asyncio.create_task(_wait_for_disconnect(request))
     try:
@@ -212,6 +253,11 @@ async def _run_while_connected[T](request: Request, operation: Awaitable[T]) -> 
 
 
 async def _wait_for_disconnect(request: Request) -> None:
+    """Return once the client disconnects.
+
+    Args:
+        request: The request whose ASGI messages are read.
+    """
     while True:
         message = await request.receive()
         if message["type"] == "http.disconnect":

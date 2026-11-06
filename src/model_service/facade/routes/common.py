@@ -77,40 +77,160 @@ ERRORS: dict[int | str, dict[str, Any]] = {
 
 class Scheduler(Protocol):
     @property
-    def alive(self) -> bool: ...
+    def alive(self) -> bool:
+        """Whether the scheduler's worker is still running."""
+        ...
 
-    async def check_ready(self) -> None: ...
+    async def check_ready(self) -> None:
+        """Check that durable storage is reachable.
 
-    async def schedule(self, request: ScheduleRequest) -> ScheduleResult: ...
+        Raises:
+            SchedulingUnavailableError: If the execution repository is unavailable.
+        """
+        ...
+
+    async def schedule(self, request: ScheduleRequest) -> ScheduleResult:
+        """Admit a durable builder execution, or return the one its idempotency key names.
+
+        Args:
+            request: The builder, model, provider, body and idempotency key.
+
+        Returns:
+            The execution and whether it was created.
+
+        Raises:
+            UnknownBuilderError: If the builder is not registered.
+            UnknownModelError: If the model is not deployed.
+            IncompatibleModelError: If the builder does not accept the model.
+            ScheduleConflictError: If the idempotency key names a different request.
+            InvalidScheduleRequestError: If the request is invalid.
+            SchedulingUnavailableError: If the execution repository is unavailable.
+        """
+        ...
 
     async def schedule_inference(
         self, request: InferenceScheduleRequest
-    ) -> ScheduleResult: ...
+    ) -> ScheduleResult:
+        """Admit a durable raw inference execution, or return the one its key names.
 
-    async def get(self, execution_id: str) -> ExecutionView: ...
+        Args:
+            request: The model, payload, headers and idempotency key.
 
-    async def get_many(self, execution_ids: list[str]) -> list[ExecutionView]: ...
+        Returns:
+            The execution and whether it was created.
+
+        Raises:
+            UnknownModelError: If the model is not deployed.
+            IncompatibleInputError: If the payload is not a valid tile for the model.
+            ScheduleConflictError: If the idempotency key names a different request.
+            InvalidScheduleRequestError: If the request is invalid.
+            SchedulingUnavailableError: If the execution repository is unavailable.
+        """
+        ...
+
+    async def get(self, execution_id: str) -> ExecutionView:
+        """Read one execution.
+
+        Args:
+            execution_id: The execution ID.
+
+        Returns:
+            The execution's public view.
+
+        Raises:
+            UnknownExecutionError: If no execution has this ID.
+            SchedulingUnavailableError: If the execution repository is unavailable.
+        """
+        ...
+
+    async def get_many(self, execution_ids: list[str]) -> list[ExecutionView]:
+        """Read the listed executions that exist.
+
+        Args:
+            execution_ids: The execution IDs.
+
+        Returns:
+            Views of the existing executions; unknown IDs are left out.
+
+        Raises:
+            SchedulingUnavailableError: If the execution repository is unavailable.
+        """
+        ...
 
     async def inference_result(
         self, execution_id: str
-    ) -> tuple[InferenceResult, bytes]: ...
+    ) -> tuple[InferenceResult, bytes]:
+        """Read the stored model response of a succeeded inference execution.
 
-    async def cancel(self, execution_id: str) -> ExecutionView: ...
+        Args:
+            execution_id: The execution ID.
+
+        Returns:
+            The response's media type and headers, and its body.
+
+        Raises:
+            UnknownExecutionError: If no execution has this ID.
+            ResultUnavailableError: If the execution has no stored response.
+            SchedulingUnavailableError: If the execution repository is unavailable.
+        """
+        ...
+
+    async def cancel(self, execution_id: str) -> ExecutionView:
+        """Cancel an execution.
+
+        Args:
+            execution_id: The execution ID.
+
+        Returns:
+            The execution's view after the cancellation request.
+
+        Raises:
+            UnknownExecutionError: If no execution has this ID.
+            SchedulingUnavailableError: If the execution repository is unavailable.
+        """
+        ...
 
 
 class Capacity(Protocol):
-    async def explain(self, execution: ExecutionView) -> ExecutionView: ...
+    async def explain(self, execution: ExecutionView) -> ExecutionView:
+        """Add a message explaining why a running execution makes no progress.
+
+        Args:
+            execution: The execution to explain.
+
+        Returns:
+            The execution, with a message if one applies.
+        """
+        ...
 
 
 class NoCapacityInfo:
     async def explain(self, execution: ExecutionView) -> ExecutionView:
+        """Leave the execution unexplained, for deployments without a Ray dashboard.
+
+        Args:
+            execution: The execution.
+
+        Returns:
+            The execution unchanged.
+        """
         return execution
 
 
 def require_idempotency_key(
     idempotency_key: Annotated[str | None, Header(min_length=1)] = None,
 ) -> str:
-    """Require the `Idempotency-Key` header that names a durable submission."""
+    """Require the `Idempotency-Key` header that names a durable submission.
+
+    Args:
+        idempotency_key: The header value, or None if absent.
+
+    Returns:
+        The idempotency key.
+
+    Raises:
+        HTTPException: 422 if the header is missing.
+    """
     if idempotency_key is None:
         raise http_error(
             422, ApiErrorCode.INVALID_REQUEST, "Idempotency-Key header is required"
@@ -123,6 +243,24 @@ async def submit(
     request: ScheduleRequest | InferenceScheduleRequest,
     response: Response,
 ) -> ScheduleResult:
+    """Admit a builder or inference execution and map refusals to API errors.
+
+    Refusals are logged, since callers may not log the response body.
+
+    Args:
+        scheduler: Admits the execution.
+        request: A builder or raw inference schedule request.
+        response: The outgoing response; its status becomes 202 when the
+            execution is created and 200 when an existing one is returned.
+
+    Returns:
+        The execution and whether it was created.
+
+    Raises:
+        HTTPException: 404 for an unknown builder or model, 409 for an
+            idempotency conflict, 422 for an incompatible model or invalid
+            request, 503 if scheduling is unavailable.
+    """
     try:
         if isinstance(request, InferenceScheduleRequest):
             result = await scheduler.schedule_inference(request)
@@ -151,6 +289,12 @@ async def submit(
 def _log_refusal(
     request: ScheduleRequest | InferenceScheduleRequest, error: Exception
 ) -> None:
+    """Log why a schedule request was refused.
+
+    Args:
+        request: The refused request.
+        error: The refusal; its message is safe to log.
+    """
     # The callers (JES among them) may not log the response body, so the
     # reason is kept here; error messages are the safe public ones.
     if isinstance(request, InferenceScheduleRequest):
@@ -161,12 +305,29 @@ def _log_refusal(
 
 
 def unavailable(error: SchedulingUnavailableError) -> HTTPException:
+    """Map a storage outage to a retryable 503.
+
+    Args:
+        error: The scheduling outage.
+
+    Returns:
+        The HTTP error to raise.
+    """
     return http_error(
         503, ApiErrorCode.SCHEDULING_UNAVAILABLE, str(error), retryable=True
     )
 
 
 def lookup_error(error: Exception) -> HTTPException:
+    """Map a builder or model lookup failure to an HTTP error.
+
+    Args:
+        error: An `UnknownBuilderError`, `UnknownModelError` or
+            `IncompatibleModelError`.
+
+    Returns:
+        404 for an unknown builder or model; otherwise 422 for an incompatible model.
+    """
     if isinstance(error, UnknownBuilderError):
         return http_error(404, ApiErrorCode.UNKNOWN_BUILDER, "builder does not exist")
     if isinstance(error, UnknownModelError):
@@ -182,6 +343,18 @@ def http_error(
     retryable: bool = False,
     headers: dict[str, str] | None = None,
 ) -> HTTPException:
+    """Build an HTTP error with the API's `{code, message, retryable}` detail.
+
+    Args:
+        status_code: The HTTP status.
+        code: The API error code.
+        message: A message safe to show the caller.
+        retryable: Whether the caller may retry the same request.
+        headers: Extra response headers.
+
+    Returns:
+        The exception to raise.
+    """
     return HTTPException(
         status_code=status_code,
         detail={"code": code, "message": message, "retryable": retryable},

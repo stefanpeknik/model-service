@@ -51,7 +51,18 @@ class BuilderSpec:
     def resolve_configuration(
         self, overrides: Mapping[str, JsonValue] | None = None
     ) -> BaseModel:
-        """Apply caller or provider overrides to the builder's current defaults."""
+        """Apply caller or provider overrides to the builder's current defaults.
+
+        Args:
+            overrides: Configuration fields to override; none uses the defaults.
+
+        Returns:
+            The validated configuration.
+
+        Raises:
+            InvalidInvocation: The overrides are invalid; the message names the
+                fields only, since values may come from callers.
+        """
         try:
             return self.configuration.model_validate(dict(overrides or {}))
         except ValidationError as error:
@@ -118,6 +129,17 @@ BUILDERS: dict[str, BuilderSpec] = {
 
 
 def get_builder(builder_id: str) -> BuilderSpec:
+    """Look up a builder declaration by id.
+
+    Args:
+        builder_id: Registered builder id.
+
+    Returns:
+        The builder's declaration.
+
+    Raises:
+        UnknownBuilderError: No builder has that id.
+    """
     try:
         return BUILDERS[builder_id]
     except KeyError as error:

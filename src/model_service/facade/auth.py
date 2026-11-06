@@ -52,19 +52,48 @@ class AuthorizationError(Exception):
 
 
 class Authenticator(Protocol):
-    async def authenticate(self, request: Request) -> Principal: ...
+    async def authenticate(self, request: Request) -> Principal:
+        """Identify the caller of a request.
+
+        Args:
+            request: The incoming HTTP request.
+
+        Returns:
+            The calling principal.
+
+        Raises:
+            AuthenticationError: If the request carries no acceptable credentials.
+        """
+        ...
 
 
 class Authorizer(Protocol):
     async def authorize(
         self, principal: Principal, action: Action, execution_id: str | None
     ) -> None:
-        """Return to allow; raise AuthorizationError to refuse."""
+        """Decide whether the principal may perform the action; return to allow.
+
+        Args:
+            principal: The authenticated caller.
+            action: What the caller wants to do.
+            execution_id: The execution the route names, or None.
+
+        Raises:
+            AuthorizationError: If the principal may not perform the action.
+        """
         ...
 
 
 class AllowAnonymous:
     async def authenticate(self, request: Request) -> Principal:
+        """Accept every request as anonymous.
+
+        Args:
+            request: The incoming HTTP request; ignored.
+
+        Returns:
+            The anonymous principal.
+        """
         return ANONYMOUS
 
 
@@ -72,6 +101,13 @@ class AllowAll:
     async def authorize(
         self, principal: Principal, action: Action, execution_id: str | None
     ) -> None:
+        """Allow every action.
+
+        Args:
+            principal: The caller; ignored.
+            action: The requested action; ignored.
+            execution_id: The execution the route names; ignored.
+        """
         return None
 
 
@@ -81,7 +117,18 @@ class Access:
     authorizer: Authorizer = field(default_factory=AllowAll)
 
     def require(self, action: Action) -> Any:
-        """A route dependency checking `action`, on the route's `execution_id` if it has one."""
+        """Make a route dependency that authenticates the caller and authorizes `action`.
+
+        The check runs on the route's `execution_id` path parameter if it has one.
+        The dependency answers 401 (with `WWW-Authenticate: Bearer`) when
+        authentication fails and 403 when authorization fails.
+
+        Args:
+            action: The action the route performs.
+
+        Returns:
+            A FastAPI `Depends` marker resolving to the caller's `Principal`.
+        """
 
         async def check(request: Request) -> Principal:
             try:

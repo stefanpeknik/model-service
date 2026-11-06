@@ -23,7 +23,17 @@ def link_direct_input(direct: DirectAccess, directory: Path) -> Path:
 
     The name is kept because slide readers pick the format by extension, and a
     MIRAX `.mrxs` file is linked together with its same-named data directory.
-    Filesystem failures become retryable gateway errors.
+
+    Args:
+        direct: The shared file and whether direct access is supported.
+        directory: The directory to link into; created if missing.
+
+    Returns:
+        The link to the file.
+
+    Raises:
+        EmpaiaGatewayError: Not retryable if the input does not support direct
+            access; retryable if the file is missing or linking fails.
     """
     if not direct.supported:
         raise EmpaiaGatewayError(
@@ -54,7 +64,18 @@ def write_rectangle_input(
     slide: SlideMetadata,
     rectangle: Rectangle,
 ) -> None:
-    """Create the destination directory and invoke the mask writer, preserving classified gateway errors and translating unexpected failures."""
+    """Create the destination directory and invoke the mask writer.
+
+    Args:
+        writer: Rasterizes the rectangle.
+        destination: The mask file to write.
+        slide: The slide the rectangle lies on.
+        rectangle: The region, in slide level-0 pixels.
+
+    Raises:
+        EmpaiaGatewayError: As the writer classified it; retryable for any other
+            failure.
+    """
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
         writer.write(destination, slide, rectangle)

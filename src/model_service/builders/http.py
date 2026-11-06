@@ -57,6 +57,17 @@ class ErrorResponse:
 def error(
     status_code: int, code: str, message: str, *, retryable: bool
 ) -> HTTPException:
+    """Build the internal error envelope as an HTTP exception.
+
+    Args:
+        status_code: HTTP status to answer with.
+        code: Stable error code.
+        message: Message safe to show callers.
+        retryable: Whether a retry may succeed.
+
+    Returns:
+        The exception for FastAPI to answer with.
+    """
     return HTTPException(
         status_code=status_code,
         detail={"code": code, "message": message, "retryable": retryable},
@@ -66,7 +77,19 @@ def error(
 async def run_http(
     application: BuilderApplication, request: RunRequest
 ) -> BuilderResult:
-    """Translate builder exceptions into the safe internal error envelope."""
+    """Run an invocation and translate builder exceptions into the safe error envelope.
+
+    Args:
+        application: Builder application to run.
+        request: Invocation, model and execution context of the attempt.
+
+    Returns:
+        The builder's result.
+
+    Raises:
+        HTTPException: 422 for an invalid invocation or a non-retryable failure,
+            500 for a contract violation, 503 for a retryable failure.
+    """
     try:
         return await application.run(
             request.invocation, request.model, request.execution_context

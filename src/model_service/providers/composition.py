@@ -45,11 +45,30 @@ class Provider(Protocol):
 
     def facade(
         self, catalog: ModelCatalog, settings: SchedulerSettings
-    ) -> FacadeContribution: ...
+    ) -> FacadeContribution:
+        """Build what this provider adds to the facade.
+
+        Args:
+            catalog: The deployed models, with each model file's provider blocks.
+            settings: The facade's scheduler settings.
+
+        Returns:
+            The provider's scheduler adapter, and its routes and background work if any.
+        """
+        ...
 
     def input_access(
         self, settings: WorkerSettings
-    ) -> Mapping[InputAccessKind, AccessAdapter]: ...
+    ) -> Mapping[InputAccessKind, AccessAdapter]:
+        """Build the adapters builder replicas use for the inputs this provider hands out.
+
+        Args:
+            settings: The builder replica's settings.
+
+        Returns:
+            The access adapters by the input access kind they serve.
+        """
+        ...
 
 
 PROVIDERS = (
@@ -59,6 +78,18 @@ PROVIDERS = (
 
 
 def load_providers(names: tuple[str, ...] = PROVIDERS) -> list[Provider]:
+    """Import the providers named as `module:attribute`.
+
+    Args:
+        names: Provider references, in the order to compose them.
+
+    Returns:
+        The providers, in the order of `names`.
+
+    Raises:
+        ImportError: If a named module cannot be imported.
+        AttributeError: If a module lacks the named attribute.
+    """
     providers = []
     for name in names:
         module, _, attribute = name.partition(":")

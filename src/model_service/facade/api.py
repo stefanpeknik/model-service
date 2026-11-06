@@ -35,7 +35,13 @@ if TYPE_CHECKING:
 
 
 class DeploymentHealth(Protocol):
-    async def check(self) -> DeploymentStatus: ...
+    async def check(self) -> DeploymentStatus:
+        """Report whether Ray Serve exposes every expected builder and model route.
+
+        Returns:
+            The deployment state and any missing routes.
+        """
+        ...
 
 
 def create_app(
@@ -51,7 +57,25 @@ def create_app(
     access: Access | None = None,
     provider_routes: Sequence[RouteFactory] = (),
 ) -> FastAPI:
-    """`access` guards the public API and allows everyone by default; providers guard their own routes."""
+    """Build the FastAPI app with health checks, public routes and provider routes.
+
+    Args:
+        scheduler: Admits, reads and cancels durable executions.
+        catalog: Deployed models served under `/v1/models`.
+        builder_runner: Runs builders synchronously; None makes `/run` answer 503.
+        inference_target: Runs raw model requests; None makes direct inference answer 503.
+        lifespan: Startup and shutdown context for the app.
+        deployment_health: Checks Ray Serve routes; None reports `not_configured`.
+        inference_max_request_bytes: Largest raw inference body accepted, in bytes.
+        capacity: Explains running executions stuck waiting for Ray capacity;
+            None adds no explanation.
+        access: Guards the public API; the default lets everyone in. Providers
+            guard their own routes.
+        provider_routes: Router factories contributed by providers.
+
+    Returns:
+        The assembled application.
+    """
     capacity = capacity or NoCapacityInfo()
     access = access or Access()
     app = FastAPI(title="model-service", lifespan=lifespan)

@@ -69,7 +69,14 @@ class HttpInferenceProxy:
         model_origins: Mapping[str, str] | None = None,
         timeout: float = 900,
     ) -> None:
-        """Normalize configured origins and retain the caller-owned client and inference timeout."""
+        """Normalize configured origins and keep the caller-owned client and timeout.
+
+        Args:
+            client: Shared HTTP client, owned by the caller.
+            origin: Default origin for models without their own.
+            model_origins: Origins by model route prefix, overriding `origin`.
+            timeout: Per-request timeout in seconds.
+        """
         self._client = client
         self._origin = origin.rstrip("/")
         self._model_origins = {
@@ -80,9 +87,20 @@ class HttpInferenceProxy:
     async def forward(
         self, request: InferenceRequest, *, max_content: int | None = None
     ) -> InferenceResponse:
-        """POST unchanged payload bytes and query parameters, preserving upstream status while filtering transport headers.
+        """POST the payload and query unchanged to the model's origin.
 
-        Raises ResultTooLargeError once the response exceeds `max_content` bytes.
+        The upstream status is kept; transport headers are dropped from the response.
+
+        Args:
+            request: The model path, query, payload and allowed headers.
+            max_content: Largest response body accepted, in bytes; None for no limit.
+
+        Returns:
+            The upstream status, body and forwardable headers.
+
+        Raises:
+            ResultTooLargeError: Once the response exceeds `max_content` bytes.
+            InferenceProxyUnavailableError: If the upstream request fails.
         """
         path = request.path.lstrip("/")
         origin = self._model_origins.get(path.partition("/")[0], self._origin)
@@ -121,6 +139,14 @@ def check_tile(model: ModelBinding, payload: bytes) -> None:
 
     Decompression stops one byte past the expected size, so a small payload
     cannot expand into unbounded memory.
+
+    Args:
+        model: The target model, whose `tile_size` sets the expected size.
+        payload: The raw request body.
+
+    Raises:
+        IncompatibleInputError: If the payload is not an LZ4 frame, or does not
+            decompress to exactly one tile with nothing left over.
     """
     expected = model.tile_size * model.tile_size * 3
     decompressor = lz4.frame.LZ4FrameDecompressor()
@@ -145,16 +171,47 @@ class ModelInference:
         *,
         max_result_bytes: int,
     ) -> None:
+        """Keep the catalog, proxy and response size limit.
+
+        Args:
+            catalog: Deployed models.
+            proxy: Forwards requests to Ray Serve.
+            max_result_bytes: Largest model response accepted, in bytes.
+        """
         self._catalog = catalog
         self._proxy = proxy
         self._max_result_bytes = max_result_bytes
 
     def check(self, model_id: str, payload: bytes) -> None:
+        """Check that the payload is a valid tile for the model.
+
+        Args:
+            model_id: The target model ID.
+            payload: The raw request body.
+
+        Raises:
+            UnknownModelError: If the model is not in the catalog.
+            IncompatibleInputError: If the payload is not one LZ4 tile of the model's size.
+        """
         check_tile(self._catalog.get(model_id), payload)
 
     async def call(
         self, model_id: str, payload: bytes, headers: Mapping[str, str]
     ) -> ModelResponse:
+        """Send one raw request to the model through the proxy.
+
+        Args:
+            model_id: The target model ID.
+            payload: The raw request body.
+            headers: Allowed inference headers to forward.
+
+        Returns:
+            The model's status, body and headers, with lower-cased header names.
+
+        Raises:
+            ModelUnavailableError: If the upstream request fails.
+            ResultTooLargeError: If the response exceeds the result size limit.
+        """
         try:
             response = await self._proxy.forward(
                 InferenceRequest(
@@ -172,7 +229,16 @@ class ModelInference:
 
 
 def inference_headers(headers: Mapping[str, str]) -> dict[str, str]:
-    """Keep only the supported inference request headers, excluding unrelated or credential-bearing headers."""
+    """Keep only the supported inference request headers.
+
+    Unrelated and credential-bearing headers are dropped.
+
+    Args:
+        headers: The incoming request headers.
+
+    Returns:
+        `x-output-dtype` and `x-pool-tokens`, if present, with lower-cased names.
+    """
     return {
         name.lower(): value
         for name, value in headers.items()

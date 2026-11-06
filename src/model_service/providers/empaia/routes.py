@@ -59,7 +59,16 @@ class EmpaiaExecutionStatus:
 def create_router(
     scheduler: Scheduler, capacity: Capacity, access: Access | None = None
 ) -> APIRouter:
-    """`access` guards the routes; everyone is let in by default."""
+    """Build JES's remote execution routes under `/v1/empaia`.
+
+    Args:
+        scheduler: Admits, reads and cancels executions.
+        capacity: Explains a polled execution's status.
+        access: Guards the routes; everyone is let in by default.
+
+    Returns:
+        The router.
+    """
     access = access or Access()
     router = APIRouter(prefix="/v1/empaia")
 
@@ -132,10 +141,17 @@ def create_router(
 
 
 def remote_status(execution: ExecutionView) -> EmpaiaExecutionStatus:
-    """A failure or cancellation is final only once EMPAIA has been told.
+    """Translate an execution into JES's status; a failure or cancellation is final only once EMPAIA has been told.
 
     JES ends the job as soon as it sees a final status; if the App Service had
     not received the failure report yet, the job would end without its reason.
+
+    Args:
+        execution: The execution.
+
+    Returns:
+        `RUNNING` while provider finish is pending; otherwise the execution's
+        status, with its error message if it failed.
     """
     if execution.provider_pending:
         return EmpaiaExecutionStatus(ExecutionStatus.RUNNING)
@@ -146,4 +162,9 @@ def remote_status(execution: ExecutionView) -> EmpaiaExecutionStatus:
 
 
 def _unknown_execution() -> Exception:
+    """Build the 404 error for an execution that does not exist.
+
+    Returns:
+        The HTTP error to raise.
+    """
     return http_error(404, ApiErrorCode.UNKNOWN_EXECUTION, "execution does not exist")

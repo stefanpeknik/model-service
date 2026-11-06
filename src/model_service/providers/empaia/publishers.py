@@ -36,13 +36,32 @@ class OutputPublisher(Protocol):
     """Publish one kind of declared output through the gateway's guarded writes."""
 
     def accepts(self, model: ModelBinding) -> bool:
-        """Whether this model's outputs can be published, e.g. its channel count."""
+        """Check whether this model's outputs can be published, e.g. by its channel count.
+
+        Args:
+            model: The model whose outputs would be published.
+
+        Returns:
+            True if this publisher can publish them.
+        """
         ...
 
     async def prepare(
         self, gateway: EmpaiaGateway, name: str, output: BuilderOutput
     ) -> Commit:
-        """Read and validate the output without writing; return its write."""
+        """Read and validate the output without writing; return its write.
+
+        Args:
+            gateway: The job's gateway, written through on commit.
+            name: The EMPAIA output key.
+            output: The builder output.
+
+        Returns:
+            The commit that writes the output.
+
+        Raises:
+            EmpaiaGatewayError: If the output cannot be published.
+        """
         ...
 
 
@@ -50,16 +69,46 @@ class PrimitivePublisher:
     """Post an inline value as the primitive type its output declares."""
 
     def __init__(self, output_type: str) -> None:
+        """Keep the primitive type to post.
+
+        Args:
+            output_type: `bool`, `integer`, `float` or `string`.
+
+        Raises:
+            ValueError: If EMPAIA has no such primitive.
+        """
         if output_type not in _PRIMITIVE_VALUES:
             raise ValueError(f"EMPAIA has no {output_type!r} primitive")
         self._type = output_type
 
     def accepts(self, model: ModelBinding) -> bool:
+        """Accept every model; a primitive does not depend on it.
+
+        Args:
+            model: Unused.
+
+        Returns:
+            True.
+        """
         return True
 
     async def prepare(
         self, gateway: EmpaiaGateway, name: str, output: BuilderOutput
     ) -> Commit:
+        """Check the inline value fits the primitive type and return its post.
+
+        Args:
+            gateway: The job's gateway, posted through on commit.
+            name: The EMPAIA output key.
+            output: The builder output; must be inline.
+
+        Returns:
+            The commit that posts the primitive.
+
+        Raises:
+            EmpaiaGatewayError: Not retryable if the output is not inline or its value
+                does not fit the type; an empty string does not fit.
+        """
         if not isinstance(output, InlineOutput) or not _PRIMITIVE_VALUES[self._type](
             output.value
         ):
@@ -83,11 +132,26 @@ class PublisherRegistry:
     """Publishers by the EMPAIA type and media type an output declares."""
 
     def __init__(self, publishers: Mapping[PublisherKey, OutputPublisher]) -> None:
+        """Keep the publishers.
+
+        Args:
+            publishers: Publishers by EMPAIA type and media type; the media type is
+                None for inline outputs.
+        """
         self._publishers = dict(publishers)
 
     def resolve(
         self, output_type: str | None, spec: OutputSpec
     ) -> OutputPublisher | None:
+        """Find the publisher of an output's declared EMPAIA type and media type.
+
+        Args:
+            output_type: The output's EMPAIA type; None if `io` declares none.
+            spec: The builder's declaration of the output.
+
+        Returns:
+            The publisher, or None if none matches.
+        """
         if output_type is None:
             return None
         return self._publishers.get((output_type, spec.media_type))
@@ -99,7 +163,21 @@ class PublisherRegistry:
         spec: OutputSpec,
         output: BuilderOutput,
     ) -> OutputPublisher:
-        """The publisher of a produced output, which must be what was declared."""
+        """Return the publisher of a produced output, which must be what was declared.
+
+        Args:
+            name: The output name.
+            output_type: The output's EMPAIA type; None if `io` declares none.
+            spec: The builder's declaration of the output.
+            output: The produced output.
+
+        Returns:
+            The publisher.
+
+        Raises:
+            EmpaiaGatewayError: Not retryable if no publisher matches, or the output's
+                kind or media type differs from the declaration.
+        """
         publisher = self.resolve(output_type, spec)
         if publisher is None:
             raise EmpaiaGatewayError.invalid(f"EMPAIA output {name!r} has no publisher")
@@ -115,6 +193,14 @@ class PublisherRegistry:
 
 
 def default_publishers() -> PublisherRegistry:
+    """Build the publishers of the supported EMPAIA types.
+
+    Inline outputs publish as any primitive type, score grids as continuous
+    pixelmaps.
+
+    Returns:
+        The registry.
+    """
     from model_service.builders.score_grid import MEDIA_TYPE as SCORE_GRID
     from model_service.providers.empaia.image_io import ScoreGridPublisher
 

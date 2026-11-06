@@ -30,6 +30,17 @@ _JSON_VALUE: TypeAdapter[PydanticJsonValue] = TypeAdapter(
 
 
 def _validate_json_value(value: object) -> PydanticJsonValue:
+    """Validate a value as strict JSON, rejecting NaN and infinities.
+
+    Args:
+        value: Value to validate.
+
+    Returns:
+        The validated value.
+
+    Raises:
+        pydantic.ValidationError: The value is not strict JSON.
+    """
     return _JSON_VALUE.validate_python(value, strict=True)
 
 
@@ -39,6 +50,14 @@ type _JsonObject = Annotated[dict[str, JsonValue], Field(strict=True)]
 
 
 def is_json_value(value: object) -> bool:
+    """Check whether a value is strict JSON, without NaN or infinities.
+
+    Args:
+        value: Value to check.
+
+    Returns:
+        True when the value is strict JSON.
+    """
     try:
         _JSON_VALUE.validate_python(value, strict=True)
     except ValidationError:
@@ -142,6 +161,17 @@ class ExecutionContext:
 
 
 def _iso_datetime(value: object) -> datetime:
+    """Parse a deadline from an ISO 8601 string, passing datetimes through.
+
+    Args:
+        value: Datetime or ISO 8601 string.
+
+    Returns:
+        The parsed datetime.
+
+    Raises:
+        ValueError: The value is neither a datetime nor a valid ISO 8601 string.
+    """
     if isinstance(value, datetime):
         return value
     if not isinstance(value, str):
@@ -235,6 +265,13 @@ class BuilderFailure(RuntimeError):  # noqa: N818
     """A caller-safe failure with a stable code and a retry decision."""
 
     def __init__(self, *, code: str, safe_message: str, retryable: bool) -> None:
+        """Record a caller-safe failure.
+
+        Args:
+            code: Stable failure code, usually a `FailureCode`.
+            safe_message: Message safe to show callers.
+            retryable: Whether a retry may succeed.
+        """
         super().__init__(safe_message)
         self.code = code
         self.safe_message = safe_message

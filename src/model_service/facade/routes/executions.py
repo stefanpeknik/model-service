@@ -36,6 +36,16 @@ class ExecutionLookup:
 def create_router(
     scheduler: Scheduler, capacity: Capacity, access: Access
 ) -> APIRouter:
+    """Build the `/v1/executions` router: status, lookup, results and cancellation.
+
+    Args:
+        scheduler: Reads and cancels executions.
+        capacity: Explains running executions waiting for Ray capacity.
+        access: Guards the routes.
+
+    Returns:
+        The router.
+    """
     router = APIRouter(prefix="/v1/executions")
 
     @router.get(
@@ -108,4 +118,9 @@ def create_router(
 
 
 def _unknown_execution() -> HTTPException:
+    """Build the 404 for an execution that does not exist.
+
+    Returns:
+        The HTTP error to raise.
+    """
     return http_error(404, ApiErrorCode.UNKNOWN_EXECUTION, "execution does not exist")

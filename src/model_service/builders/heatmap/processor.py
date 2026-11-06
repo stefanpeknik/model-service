@@ -44,10 +44,20 @@ class _StageTiming:
     seconds: float = 0.0
 
     def add(self, seconds: float) -> None:
+        """Record one tile's duration.
+
+        Args:
+            seconds: Time the stage took for the tile.
+        """
         self.count += 1
         self.seconds += seconds
 
     def __str__(self) -> str:
+        """Format the mean duration per tile for progress logs.
+
+        Returns:
+            The mean in milliseconds, or "none" before any tile was timed.
+        """
         if not self.count:
             return "none"
         return f"{self.seconds / self.count * 1000:.0f} ms"
@@ -55,7 +65,14 @@ class _StageTiming:
 
 class TilePredictor(Protocol):
     async def predict(self, tile: object) -> object:
-        """Return `n_channels x output_tile_size²` scores for one CHW uint8 tile."""
+        """Score one tile.
+
+        Args:
+            tile: CHW uint8 tile.
+
+        Returns:
+            `n_channels x output_tile_size²` scores for the tile.
+        """
         ...
 
 
@@ -63,6 +80,16 @@ class SlideHeatmapProcessor:
     def __init__(
         self, predictor: TilePredictor, *, num_threads: int, max_concurrent_tasks: int
     ) -> None:
+        """Configure the processor.
+
+        Args:
+            predictor: Predictor that scores each tile.
+            num_threads: Threads for slide reads.
+            max_concurrent_tasks: Tiles in flight at once.
+
+        Raises:
+            ValueError: A limit is not positive.
+        """
         if num_threads <= 0 or max_concurrent_tasks <= 0:
             raise ValueError("heatmap thread and concurrency limits must be positive")
         self._predictor = predictor
@@ -70,6 +97,17 @@ class SlideHeatmapProcessor:
         self._max_concurrent_tasks = max_concurrent_tasks
 
     async def build(self, model: SpatialScoresModel, request: HeatmapRequest) -> None:
+        """Score a slide's grid tiles and write the averaged score grid.
+
+        Overlapping tile scores are averaged; progress is logged every minute.
+
+        Args:
+            model: Declaration giving tile size, output geometry and mpp.
+            request: Slide, mask, output path and tiling options.
+
+        Raises:
+            InvalidInvocation: The slide or mask is not a readable slide.
+        """
         import numpy as np
         from ratiopath.masks.mask_builders import MaskBuilder
         from ratiopath.tiling import grid_tiles

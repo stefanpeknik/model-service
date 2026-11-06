@@ -26,7 +26,15 @@ class MigrationSettings(BaseSettings):
 
 
 async def initialize_execution_schema(dsn: str, *, schema: str) -> None:
-    """Apply pending migrations in a worker thread, closing all database connections."""
+    """Apply pending migrations in a worker thread, closing all database connections.
+
+    Args:
+        dsn: libpq DSN or PostgreSQL URL.
+        schema: PostgreSQL schema to create and migrate.
+
+    Raises:
+        ExecutionRepositoryUnavailableError: The database is unreachable or the migrations cannot be applied.
+    """
     try:
         await asyncio.to_thread(_apply_migrations, dsn, schema)
     except (Error, BadMigration, LockTimeout, MigrationConflict) as error:
@@ -36,7 +44,18 @@ async def initialize_execution_schema(dsn: str, *, schema: str) -> None:
 
 
 def _apply_migrations(dsn: str, schema: str) -> None:
-    """Bootstrap the target schema and apply migrations under initialization locks."""
+    """Bootstrap the target schema and apply migrations under initialization locks.
+
+    A session advisory lock serializes schema creation and Yoyo's own bootstrap, not just the migration steps.
+
+    Args:
+        dsn: libpq DSN or PostgreSQL URL.
+        schema: PostgreSQL schema to create and migrate.
+
+    Raises:
+        BadMigration: The migration directory is empty or migrations remain unapplied afterwards.
+        psycopg.Error: The database cannot be reached or a statement fails.
+    """
     migrations = read_migrations(str(MIGRATIONS_DIRECTORY))
     if not migrations:
         raise BadMigration("execution migration directory is empty")

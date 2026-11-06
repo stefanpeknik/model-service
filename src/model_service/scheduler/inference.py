@@ -55,17 +55,50 @@ class ResultTooLargeError(RuntimeError):
 
 class InferenceTarget(Protocol):
     def check(self, model_id: str, payload: bytes) -> None:
-        """Raise UnknownModelError or IncompatibleInputError."""
+        """Check that a model exists and accepts the payload under its current input.
+
+        Args:
+            model_id: Catalog ID of the model.
+            payload: Raw request body.
+
+        Raises:
+            UnknownModelError: The model is not in the catalog.
+            IncompatibleInputError: The payload does not fit the model's current input.
+        """
         ...
 
     async def call(
         self, model_id: str, payload: bytes, headers: Mapping[str, str]
     ) -> ModelResponse:
-        """Raise ModelUnavailableError or ResultTooLargeError."""
+        """Send the payload to the model and return its HTTP response.
+
+        Args:
+            model_id: Catalog ID of the model.
+            payload: Raw request body.
+            headers: Caller headers to forward with the request.
+
+        Returns:
+            The model's status, body and headers.
+
+        Raises:
+            ModelUnavailableError: The request got no HTTP response.
+            ResultTooLargeError: The response body exceeds the size limit.
+        """
         ...
 
 
 def identify(request: InferenceScheduleRequest) -> SubmissionIdentity:
+    """Compute the replay identity of an inference request.
+
+    The fingerprint hashes the model ID, sorted headers, requested timeout and the
+    payload's SHA-256, so a reused idempotency key with different content is detected.
+
+    Args:
+        request: Inference request to identify.
+
+    Returns:
+        The identity scoped to the inference provider and the request's idempotency key.
+    """
     canonical = json.dumps(
         {
             "model_id": request.model_id,
@@ -87,7 +120,18 @@ _BACKPRESSURE = frozenset({429, 503})
 
 
 def settlement(response: ModelResponse) -> Settlement:
-    """Map the model's HTTP response to an attempt outcome."""
+    """Map the model's HTTP response to an attempt outcome.
+
+    2xx succeeds with the body and its `x-` headers (except `x-request-id`); 429
+    and 503 are backpressure honouring `Retry-After`; 400, 413, 415 and 422 fail
+    permanently as rejected input; any other status fails retryably.
+
+    Args:
+        response: The model's HTTP response.
+
+    Returns:
+        The settlement for the attempt.
+    """
     status = response.status_code
     if 200 <= status < 300:
         return InferenceSucceeded(
@@ -121,6 +165,14 @@ def settlement(response: ModelResponse) -> Settlement:
 
 
 def _retry_after(value: str | None) -> timedelta | None:
+    """Parse a `Retry-After` header given in seconds.
+
+    Args:
+        value: Header value, or None when absent.
+
+    Returns:
+        The delay, or None when absent, not a number, or outside 0 to 3600 seconds.
+    """
     try:
         seconds = float(value) if value is not None else None
     except ValueError:

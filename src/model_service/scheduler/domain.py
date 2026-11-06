@@ -71,7 +71,16 @@ class RetryPolicy:
             raise ValueError("maximum_backoff cannot be shorter than initial_backoff")
 
     def backoff(self, attempt: int) -> timedelta:
-        """Return the delay for a one-based attempt, doubling until the configured maximum without overflow."""
+        """Return the delay before retrying after a one-based attempt.
+
+        The delay doubles per attempt up to the configured maximum, without overflowing timedelta.
+
+        Args:
+            attempt: One-based number of the attempt that just failed.
+
+        Returns:
+            The delay before the next attempt; zero when the initial backoff is zero.
+        """
         delay = self.initial_backoff
         if delay == timedelta(0):
             return delay

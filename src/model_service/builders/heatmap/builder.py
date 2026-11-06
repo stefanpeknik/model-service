@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from model_service.builders.application import Builder
 from model_service.builders.artifacts import atomic_artifact
 from model_service.builders.contracts import (
     BuilderResult,
@@ -16,7 +17,6 @@ from model_service.builders.heatmap.processor import (
     SlideHeatmapProcessor,
 )
 from model_service.builders.registry import HeatmapConfiguration
-from model_service.builders.score_grid import MEDIA_TYPE
 
 
 if TYPE_CHECKING:
@@ -24,15 +24,37 @@ if TYPE_CHECKING:
     from model_service.builders.settings import WorkerSettings
 
 
-class HeatmapBuilder:
+class HeatmapBuilder(Builder[SpatialScoresModel, HeatmapConfiguration]):
     def __init__(self, settings: WorkerSettings) -> None:
+        """Configure the builder for a replica.
+
+        Args:
+            settings: Replica settings for thread and concurrency limits.
+        """
         self._settings = settings
 
-    async def run(self, context: BuilderContext) -> BuilderResult:
+    async def run(
+        self, context: BuilderContext[SpatialScoresModel, HeatmapConfiguration]
+    ) -> BuilderResult:
+        """Write a slide's score grid to an `.npz` artifact.
+
+        Checks the running model against its catalog entry first, then writes
+        through a temporary file so a failed run leaves no partial artifact.
+
+        Args:
+            context: The run's inputs, model and configuration.
+
+        Returns:
+            The `heatmap` artifact.
+
+        Raises:
+            BuilderFailure: The model's configuration is invalid or differs from its
+                catalog entry.
+            InvalidInvocation: The slide or region of interest is unreadable, or the
+                output would replace an input.
+        """
         model = context.model
         config = context.configuration
-        assert isinstance(model, SpatialScoresModel)
-        assert isinstance(config, HeatmapConfiguration)
         predictor = RayModelPredictor(model.id)
         await predictor.verify(model)
         processor = SlideHeatmapProcessor(
@@ -55,8 +77,4 @@ class HeatmapBuilder:
                     skip_background=config.skip_background,
                 ),
             )
-        return BuilderResult(
-            outputs={
-                "heatmap": SharedArtifact(path=str(destination), media_type=MEDIA_TYPE)
-            }
-        )
+        return BuilderResult(outputs={"heatmap": SharedArtifact(path=str(destination))})

@@ -83,7 +83,26 @@ class PostgresExecutionRepository:
         finish_policy: RetryPolicy | None = None,
         pool_size: int = 10,
     ) -> None:
-        """Validate schema and capacity, configure a pooled async engine, and retain context encryption and retry policies. No database connection opens here."""
+        """Validate schema and capacity, configure a pooled async engine, and retain context encryption and retry policies.
+
+        No database connection opens here. Connections are pooled because a new one
+        per transaction made PostgreSQL the bottleneck under many scheduled tiles.
+
+        Args:
+            dsn: libpq DSN or PostgreSQL URL.
+            cipher: Cipher for the stored provider context.
+            payloads: File store for inference requests and responses.
+            schema: PostgreSQL schema holding the execution table.
+            per_model_limit: Concurrent builder executions allowed per model.
+            per_model_inference_limit: Concurrent inference executions allowed per model.
+            inference_retention: How long finished inference executions are kept.
+            processing_policy: Processing retry policy; defaults to 3 attempts, 5 s to 1 min backoff.
+            finish_policy: Provider finish retry policy; same default.
+            pool_size: Pooled connections, with as many again allowed as overflow.
+
+        Raises:
+            ValueError: schema is not an identifier or a per-model limit is not positive.
+        """
         if not schema or not schema.replace("_", "a").isalnum():
             raise ValueError("PostgreSQL schema must be an identifier")
         if per_model_limit <= 0 or per_model_inference_limit <= 0:
@@ -133,6 +152,7 @@ class PostgresExecutionRepository:
         )
 
     async def aclose(self) -> None:
+        """Dispose of the connection pool and close the payload store."""
         await self._engine.dispose()
         self._payloads.close()
 
@@ -141,14 +161,22 @@ class PostgresExecutionRepository:
         await initialize_execution_schema(self._dsn, schema=self._schema)
 
     async def check_ready(self) -> None:
-        """Query the execution table to confirm database connectivity and schema availability."""
+        """Query the execution table to confirm database connectivity and schema availability.
+
+        Raises:
+            ExecutionRepositoryUnavailableError: The database is unavailable.
+        """
         async with self._transaction() as session:
             await session.execute(select(ExecutionRow.id).limit(1))
 
     async def maintain(self) -> None:
         """Expire deadlines, recover abandoned claims and delete expired inference results.
 
-        Every few minutes it also removes payload files no execution owns.
+        Every few minutes it also removes payload files no execution owns; a failed
+        sweep is logged, not raised.
+
+        Raises:
+            ExecutionRepositoryUnavailableError: The database is unavailable.
         """
         async with self._transaction() as session:
             now = await self._database_now(session)
@@ -168,7 +196,18 @@ class PostgresExecutionRepository:
         self,
         identity: SubmissionIdentity,
     ) -> ExecutionRecord | None:
-        """Read by provider and replay key, decrypt the record, and reject a different request fingerprint."""
+        """Read by provider and replay key, decrypt the record, and reject a different request fingerprint.
+
+        Args:
+            identity: Replay identity of the submission.
+
+        Returns:
+            The existing execution, or None.
+
+        Raises:
+            ScheduleConflictError: The key was used for a request with a different fingerprint.
+            ExecutionRepositoryUnavailableError: The database is unavailable.
+        """
         async with self._transaction() as session:
             row = await self._find_submission(session, identity)
             if row is None:
@@ -182,6 +221,16 @@ class PostgresExecutionRepository:
 
         An inference request is written to its file first; a replay, conflict or
         failed insert removes the unused file.
+
+        Args:
+            admission: Prepared execution to store.
+
+        Returns:
+            The stored execution and whether this call created it.
+
+        Raises:
+            ScheduleConflictError: A concurrent submission used the key for a different request.
+            ExecutionRepositoryUnavailableError: The database or payload storage is unavailable.
         """
         encrypted_context = self._cipher.encrypt(admission.protected_context)
         execution_id = str(uuid4())
@@ -208,6 +257,22 @@ class PostgresExecutionRepository:
         encrypted_context: bytes,
         request: StoredPayload | None,
     ) -> AdmissionResult:
+        """Insert the execution row, or read the row a concurrent submission inserted first.
+
+        Args:
+            admission: Prepared execution to store.
+            execution_id: ID for the new execution.
+            encrypted_context: Encrypted provider context.
+            request: Stored inference request file, or None.
+
+        Returns:
+            The stored execution and whether this call created it.
+
+        Raises:
+            ScheduleConflictError: The existing row has a different fingerprint.
+            RuntimeError: The conflicting row disappeared before it could be read.
+            ExecutionRepositoryUnavailableError: The database is unavailable.
+        """
         async with self._transaction() as session:
             execution = self._transitions.admit(
                 admission, execution_id, await self._database_now(session)
@@ -254,12 +319,33 @@ class PostgresExecutionRepository:
             return AdmissionResult(execution, created=False)
 
     async def get(self, execution_id: str) -> ExecutionRecord:
-        """Read and decode a domain record, raising UnknownExecutionError for an absent ID."""
+        """Read and decode a domain record, raising UnknownExecutionError for an absent ID.
+
+        Args:
+            execution_id: ID of the execution.
+
+        Returns:
+            The record, without its protected context.
+
+        Raises:
+            UnknownExecutionError: No execution has this ID.
+            ExecutionRepositoryUnavailableError: The database is unavailable.
+        """
         async with self._transaction() as session:
             return self._record(await self._fetch(session, execution_id))
 
     async def get_many(self, execution_ids: Collection[str]) -> list[ExecutionRecord]:
-        """Read existing records in the requested order, ignoring unknown IDs."""
+        """Read existing records in the requested order, ignoring unknown IDs.
+
+        Args:
+            execution_ids: IDs to read; ones that are not UUIDs are skipped without a query.
+
+        Returns:
+            The existing records in request order.
+
+        Raises:
+            ExecutionRepositoryUnavailableError: The database is unavailable.
+        """
         valid = [value for value in execution_ids if _is_uuid(value)]
         if not valid:
             return []
@@ -271,7 +357,20 @@ class PostgresExecutionRepository:
         return [found[value] for value in valid if value in found]
 
     async def request_cancel(self, execution_id: str) -> ExecutionRecord:
-        """Lock the execution row and persist cancellation with the old claim invalidated; terminal outcomes remain unchanged."""
+        """Lock the execution row and persist cancellation with the old claim invalidated.
+
+        Terminal outcomes remain unchanged.
+
+        Args:
+            execution_id: ID of the execution to cancel.
+
+        Returns:
+            The record after the request.
+
+        Raises:
+            UnknownExecutionError: No execution has this ID.
+            ExecutionRepositoryUnavailableError: The database is unavailable.
+        """
         async with self._transaction() as session:
             row = await self._fetch(session, execution_id, for_update=True)
             execution = self._record(row)
@@ -288,7 +387,20 @@ class PostgresExecutionRepository:
         lease_duration: timedelta,
         operations: Collection[Operation] | None = None,
     ) -> WorkClaim | None:
-        """Run maintenance, then lease due provider work before capacity-limited processing using database time."""
+        """Run maintenance, then lease due provider work before capacity-limited processing using database time.
+
+        Args:
+            owner: ID of the claiming worker.
+            lease_duration: How long the claim stays valid without renewal.
+            operations: Operations to claim from, or None for all. Provider work is claimed only when builders are allowed.
+
+        Returns:
+            The claim, with its payload for inference, or None when nothing is due or
+            the selected row's context is unreadable.
+
+        Raises:
+            ExecutionRepositoryUnavailableError: The database is unavailable.
+        """
         allowed = frozenset(Operation if operations is None else operations)
         async with self._transaction() as session:
             now = await self._database_now(session)
@@ -321,7 +433,21 @@ class PostgresExecutionRepository:
     async def claim_inference(
         self, owner: str, lease_duration: timedelta, limit: int
     ) -> list[WorkClaim]:
-        """Lease up to `limit` due inference attempts, with payloads, in one transaction."""
+        """Lease up to `limit` due inference attempts, with payloads, in one transaction.
+
+        Payload files are read after commit, not while the row locks are held.
+
+        Args:
+            owner: ID of the claiming worker.
+            lease_duration: How long each claim stays valid without renewal.
+            limit: Maximum number of claims.
+
+        Returns:
+            The claims; empty when nothing is due or limit is not positive.
+
+        Raises:
+            ExecutionRepositoryUnavailableError: The database is unavailable.
+        """
         if limit <= 0:
             return []
         async with self._transaction() as session:
@@ -356,7 +482,19 @@ class PostgresExecutionRepository:
         )
 
     async def inference_content(self, execution_id: str) -> bytes:
-        """Return the stored response of a succeeded inference execution."""
+        """Return the stored response of a succeeded inference execution.
+
+        Args:
+            execution_id: ID of the inference execution.
+
+        Returns:
+            The response body.
+
+        Raises:
+            UnknownExecutionError: No execution has this ID.
+            ResultUnavailableError: The execution has no stored response or its file cannot be read.
+            ExecutionRepositoryUnavailableError: The database is unavailable.
+        """
         async with self._transaction() as session:
             row = await self._fetch(session, execution_id)
             response = None
@@ -380,7 +518,20 @@ class PostgresExecutionRepository:
         fencing_token: str,
         lease_duration: timedelta,
     ) -> RenewDirective:
-        """Lock a record, check its token and deadline, and commit a valid lease extension or stop decision."""
+        """Lock a record, check its token and deadline, and commit a valid lease extension or stop decision.
+
+        Args:
+            execution_id: ID of the claimed execution.
+            fencing_token: Token of the renewing attempt.
+            lease_duration: Extension to apply from now.
+
+        Returns:
+            The directive the worker must follow.
+
+        Raises:
+            UnknownExecutionError: No execution has this ID.
+            ExecutionRepositoryUnavailableError: The database is unavailable.
+        """
         async with self._transaction() as session:
             row = await self._fetch(session, execution_id, for_update=True)
             decision = self._transitions.decide_renewal(
@@ -405,6 +556,19 @@ class PostgresExecutionRepository:
         if this settlement was refused and the row does not already point at it:
         a retry after a lost commit acknowledgment writes the same path. A failed
         transaction leaves it to the orphan sweep, since it may have committed.
+
+        Args:
+            execution_id: ID of the claimed execution.
+            fencing_token: Token of the settling attempt.
+            settlement: Outcome of the attempt.
+
+        Returns:
+            The record after the outcome.
+
+        Raises:
+            UnknownExecutionError: No execution has this ID.
+            StaleWorkClaimError: The token or lease is no longer current, the deadline passed, or the outcome does not fit the work.
+            ExecutionRepositoryUnavailableError: The database or payload storage is unavailable.
         """
         response = None
         if isinstance(settlement, InferenceSucceeded):
@@ -446,7 +610,17 @@ class PostgresExecutionRepository:
         execution_id: str,
         fencing_token: str,
     ) -> None:
-        """Lock and validate the provider claim before committing its external-mutation marker."""
+        """Lock and validate the provider claim before committing its external-mutation marker.
+
+        Args:
+            execution_id: ID of the claimed execution.
+            fencing_token: Token of the provider attempt.
+
+        Raises:
+            UnknownExecutionError: No execution has this ID.
+            StaleWorkClaimError: The claim is not provider work or is no longer current.
+            ExecutionRepositoryUnavailableError: The database is unavailable.
+        """
         async with self._transaction() as session:
             row = await self._fetch(session, execution_id, for_update=True)
             marked = self._transitions.mark_finish_mutation_started(
@@ -459,7 +633,15 @@ class PostgresExecutionRepository:
     async def _select_finish(
         self, session: AsyncSession, now: datetime
     ) -> ExecutionRow | None:
-        """Lock the earliest eligible provider attempt with SKIP LOCKED, excluding expired work deadlines."""
+        """Lock the earliest eligible provider attempt with SKIP LOCKED, excluding expired work deadlines.
+
+        Args:
+            session: Session of the caller's transaction.
+            now: Current database time.
+
+        Returns:
+            The highest-priority due provider row, or None.
+        """
         reports = (
             WorkKind.PROVIDER_FAILURE_REPORT,
             WorkKind.PROVIDER_CANCELLATION_REPORT,
@@ -502,11 +684,20 @@ class PostgresExecutionRepository:
         *,
         limit: int,
     ) -> list[ExecutionRow]:
-        """Up to `limit` oldest eligible processing rows within each model's capacity.
+        """Lock up to `limit` oldest eligible processing rows within each model's capacity.
 
         Builders and raw inference have separate limits per model. A
         transaction-scoped advisory lock per (operation, model) serializes the
-        capacity check across scheduler replicas.
+        capacity check across scheduler replicas; a model whose lock is held elsewhere is skipped.
+
+        Args:
+            session: Session of the caller's transaction.
+            now: Current database time.
+            operations: Operations to select from.
+            limit: Maximum number of rows.
+
+        Returns:
+            The locked rows, by model priority and age.
         """
         eligible = (
             ExecutionRow.work_kind == WorkKind.PROCESSING,
@@ -573,7 +764,12 @@ class PostgresExecutionRepository:
     async def _recover_expired_leases(
         self, session: AsyncSession, now: datetime
     ) -> None:
-        """Lock available expired claims with SKIP LOCKED and persist their recovery decisions."""
+        """Lock available expired claims with SKIP LOCKED and persist their recovery decisions.
+
+        Args:
+            session: Session of the caller's transaction.
+            now: Current database time.
+        """
         rows = await session.scalars(
             select(ExecutionRow)
             .where(
@@ -587,7 +783,12 @@ class PostgresExecutionRepository:
             await self._persist_state(session, row, recovered)
 
     async def _expire_deadlines(self, session: AsyncSession, now: datetime) -> None:
-        """Lock overdue active executions and terminal reports, skipping busy rows, and apply deadline transitions."""
+        """Lock overdue active executions and terminal reports, skipping busy rows, and apply deadline transitions.
+
+        Args:
+            session: Session of the caller's transaction.
+            now: Current database time.
+        """
         rows = await session.scalars(
             select(ExecutionRow)
             .where(
@@ -637,9 +838,13 @@ class PostgresExecutionRepository:
     async def _delete_expired_inference(
         self, session: AsyncSession, now: datetime
     ) -> None:
-        """Delete finished inference executions after retention.
+        """Delete up to 1000 finished inference executions past retention.
 
         Their files are removed once the deletion commits.
+
+        Args:
+            session: Session of the caller's transaction.
+            now: Current database time.
         """
         expired = (
             select(ExecutionRow.id)
@@ -671,7 +876,17 @@ class PostgresExecutionRepository:
         """Flush the new state within the caller's transaction; return a decoded snapshot.
 
         A finished inference keeps only its response; its request file is removed
-        once the transaction commits.
+        once the transaction commits. Finished work also drops its provider context,
+        since nothing will use the job's credential again.
+
+        Args:
+            session: Session of the caller's transaction.
+            row: Locked row to update.
+            execution: New state.
+            response: Stored response file to attach, or None.
+
+        Returns:
+            The record read back from the row, without its protected context.
         """
         self._apply_state(row, execution)
         if (
@@ -693,6 +908,12 @@ class PostgresExecutionRepository:
 
     @staticmethod
     def _apply_state(row: ExecutionRow, execution: ExecutionRecord) -> None:
+        """Copy the mutable fields of a record onto its row without flushing.
+
+        Args:
+            row: Row to update.
+            execution: New state.
+        """
         row.status = execution.status
         row.work_kind = execution.work_kind
         row.next_attempt_at = execution.next_attempt_at
@@ -713,7 +934,19 @@ class PostgresExecutionRepository:
     async def _fetch(
         self, session: AsyncSession, execution_id: str, *, for_update: bool = False
     ) -> ExecutionRow:
-        """Read a row by ID, optionally locking it, or raise UnknownExecutionError."""
+        """Read a row by ID, optionally locking it, or raise UnknownExecutionError.
+
+        Args:
+            session: Session of the caller's transaction.
+            execution_id: ID of the execution.
+            for_update: Whether to lock the row for the transaction.
+
+        Returns:
+            The row.
+
+        Raises:
+            UnknownExecutionError: The ID is not a UUID or no row has it.
+        """
         if not _is_uuid(execution_id):
             raise UnknownExecutionError(execution_id)
         statement = select(ExecutionRow).where(ExecutionRow.id == execution_id)
@@ -728,7 +961,15 @@ class PostgresExecutionRepository:
     async def _find_submission(
         session: AsyncSession, identity: SubmissionIdentity
     ) -> ExecutionRow | None:
-        """Query the unique provider/key identity in the caller's session without comparing its fingerprint."""
+        """Query the unique provider/key identity in the caller's session without comparing its fingerprint.
+
+        Args:
+            session: Session of the caller's transaction.
+            identity: Replay identity of the submission.
+
+        Returns:
+            The matching row, or None.
+        """
         return await session.scalar(
             select(ExecutionRow).where(
                 ExecutionRow.provider == identity.provider,
@@ -738,7 +979,14 @@ class PostgresExecutionRepository:
 
     @staticmethod
     async def _database_now(session: AsyncSession) -> datetime:
-        """Read PostgreSQL clock_timestamp so workers share the database's lease clock."""
+        """Read PostgreSQL clock_timestamp so workers share the database's lease clock.
+
+        Args:
+            session: Session of the caller's transaction.
+
+        Returns:
+            The database's current time.
+        """
         result = await session.execute(select(func.clock_timestamp()))
         return result.scalar_one()
 
@@ -747,6 +995,12 @@ class PostgresExecutionRepository:
         """Own one session and transaction, committing on success and translating database errors into availability failures.
 
         Payload files the transaction released are removed only after it commits.
+
+        Yields:
+            The session of the open transaction.
+
+        Raises:
+            ExecutionRepositoryUnavailableError: The database is unavailable.
         """
         try:
             async with self._sessions.begin() as session:
@@ -759,6 +1013,17 @@ class PostgresExecutionRepository:
         await self._delete_payloads(released)
 
     async def _write_payload(self, write: Awaitable[StoredPayload]) -> StoredPayload:
+        """Await a payload file write, translating file errors into availability failures.
+
+        Args:
+            write: Pending write from the payload store.
+
+        Returns:
+            The stored file's path and size.
+
+        Raises:
+            ExecutionRepositoryUnavailableError: Payload storage failed.
+        """
         try:
             return await write
         except OSError as error:
@@ -767,6 +1032,11 @@ class PostgresExecutionRepository:
             ) from error
 
     async def _delete_payloads(self, paths: Collection[str]) -> None:
+        """Delete payload files, logging instead of raising on failure.
+
+        Args:
+            paths: Payload file paths to delete.
+        """
         # Leftovers are harmless: retention or the orphan sweep removes them.
         try:
             await self._payloads.delete(paths)
@@ -779,6 +1049,13 @@ class PostgresExecutionRepository:
         """Attach the request bytes.
 
         A missing file leaves the payload empty, and the worker fails the execution.
+
+        Args:
+            claim: Inference claim.
+            request: Stored request file, or None.
+
+        Returns:
+            The claim with its payload, or unchanged when there is no readable file.
         """
         if request is None:
             return claim
@@ -789,6 +1066,17 @@ class PostgresExecutionRepository:
             return claim
 
     async def _existing_ids(self, execution_ids: list[str]) -> list[str]:
+        """Return which of the given execution IDs still have rows; used by the orphan sweep.
+
+        Args:
+            execution_ids: IDs to check.
+
+        Returns:
+            The IDs that exist.
+
+        Raises:
+            ExecutionRepositoryUnavailableError: The database is unavailable.
+        """
         async with self._transaction() as session:
             found = await session.scalars(
                 select(ExecutionRow.id).where(ExecutionRow.id.in_(execution_ids))
@@ -798,7 +1086,19 @@ class PostgresExecutionRepository:
     async def _claimable(
         self, session: AsyncSession, row: ExecutionRow, now: datetime
     ) -> ExecutionRecord | None:
-        """The record with its context; one that cannot be read fails, not the queue."""
+        """Decode a row with its provider context for claiming.
+
+        A record that cannot be read fails, not the queue: it is ended in place, and
+        its stored bytes stay in case the key was wrong.
+
+        Args:
+            session: Session of the caller's transaction.
+            row: Locked candidate row.
+            now: Current database time.
+
+        Returns:
+            The record with its decrypted context, or None if the context is unreadable.
+        """
         try:
             return self._record(row, protected=True)
         except ValueError:  # Includes ProtectedContextError: a bad envelope or key.
@@ -809,7 +1109,19 @@ class PostgresExecutionRepository:
             return None
 
     def _record(self, row: ExecutionRow, *, protected: bool = False) -> ExecutionRecord:
-        """Convert an ORM row to an immutable domain record; only a claim decrypts the provider context."""
+        """Convert an ORM row to an immutable domain record; only a claim decrypts the provider context.
+
+        Args:
+            row: Row to convert.
+            protected: Whether to decrypt the provider context.
+
+        Returns:
+            The domain record, with an empty context unless protected is set.
+
+        Raises:
+            ValueError: protected is set and the context cannot be decrypted; includes ProtectedContextError.
+            TypeError: protected is set and the context is not a JSON object.
+        """
         error = None
         if row.error_code is not None:
             assert row.error_message is not None
@@ -852,7 +1164,15 @@ class PostgresExecutionRepository:
         execution: ExecutionRecord,
         identity: SubmissionIdentity,
     ) -> None:
-        """Reject reuse of a provider/key identity with different request contents."""
+        """Reject reuse of a provider/key identity with different request contents.
+
+        Args:
+            execution: Stored execution with that identity.
+            identity: Identity of the new submission.
+
+        Raises:
+            ScheduleConflictError: The fingerprints differ.
+        """
         if execution.identity.fingerprint != identity.fingerprint:
             raise ScheduleConflictError(
                 "submission identity was reused with a different request"
@@ -860,6 +1180,14 @@ class PostgresExecutionRepository:
 
 
 def _is_uuid(value: str) -> bool:
+    """Return whether a value is a UUID in canonical form.
+
+    Args:
+        value: Candidate execution ID.
+
+    Returns:
+        True if the value round-trips through UUID unchanged.
+    """
     try:
         return str(UUID(value)) == value
     except ValueError:
@@ -872,10 +1200,24 @@ _TERMINAL = frozenset(
 
 
 def _stored_request(row: ExecutionRow) -> StoredPayload | None:
+    """Return the row's stored inference request file.
+
+    Args:
+        row: Execution row.
+
+    Returns:
+        The request file, or None if the row has none.
+    """
     if row.request_path is None or row.request_size is None:
         return None
     return StoredPayload(row.request_path, row.request_size)
 
 
 def _delete_after_commit(session: AsyncSession, paths: Collection[str]) -> None:
+    """Queue payload files for deletion once the session's transaction commits.
+
+    Args:
+        session: Session of the open transaction.
+        paths: Payload file paths to delete.
+    """
     session.info.setdefault(_DELETE_AFTER_COMMIT, []).extend(paths)

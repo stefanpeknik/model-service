@@ -26,6 +26,14 @@ class BuilderIo:
     outputs: Mapping[str, IoEntry]
 
     def output_type(self, name: str) -> str | None:
+        """Return the EMPAIA type an output's io entry declares.
+
+        Args:
+            name: The builder output name.
+
+        Returns:
+            The entry's `type`, or None if the output has no entry or no string type.
+        """
         output_type = self.outputs.get(name, {}).get("type")
         return output_type if isinstance(output_type, str) else None
 
