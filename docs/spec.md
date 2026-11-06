@@ -395,6 +395,14 @@ heatmap builder's own background filter stands in.
 
 Ideas with a reason, not commitments:
 
+- Remove `deploy/images/Dockerfile.code-refresh` once images are built from
+  their own Dockerfiles again. It swaps only our code into the October
+  checkpoint images, so test images build in a minute, but their dependencies
+  are that base plus hand-picked extras and can drift from `pyproject.toml`
+  (the facade once crashed on a missing `jsonschema`). Before then, check that
+  `Dockerfile.ray-gpu`, `Dockerfile.cpu` and `Dockerfile.execution-scheduler`
+  still build with the current code.
+
 - Fewer slide reads in the heatmap builder. With stride 0.5 neighbouring
   tiles overlap by half, so each tissue pixel is read and decoded about four
   times over NFS; OpenSlide's cache absorbs only part of it. Reading a band

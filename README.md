@@ -13,7 +13,10 @@ src/model_service/
   models/        inference implementations (Ray Serve)
 deploy/
   helm/rayservice/models/<id>.yaml   one file per trained model
-  images/  k8s/  empaia/             Dockerfiles, manifests, EADs
+  images/                            Dockerfiles; Dockerfile.code-refresh only
+                                     swaps our code into an existing image, for test
+                                     deployments, and is to be removed (docs/spec.md)
+  k8s/                               manifests the chart does not create
 testing/         deployable test doubles (constant classifier, mock AppService)
 tests/           unit and PostgreSQL tests
 ```
