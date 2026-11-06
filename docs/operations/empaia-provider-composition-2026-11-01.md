@@ -47,3 +47,16 @@ slice; the engine is now cached under `trt_cache/binary-classifier-1/b256`):
 | Engine cached, scoring starts | 01:44:55 |
 | Scoring: 69,426 positions, 70 tiles in the region (read 29 ms, model 62 ms) | 10 s |
 | Published and finalized | 01:45:06 |
+
+A preprocessing job of the registered app (EMPAIA `5b37eb3b`, execution
+`d8aa30de`) succeeded in 96 s with a cold GPU worker, and its heatmap shows in
+the case browser.
+
+The standalone results do not show: the case browser reports "1 result, but
+none could be read back". Model-service published them like the preprocessing
+one (output, tiles and finalize accepted), and the workbench serves the
+pixelmap in the job's own scope (`GET /v3/scopes/<job scope>/pixelmaps/<id>`
+answered 200). The browser reads results through another scope and never
+requests these. A standalone job's outputs belong to the scope that ran it,
+while preprocessing outputs are shared, so this looks like the case browser's
+handling of standalone results; it is open with its maintainers.
