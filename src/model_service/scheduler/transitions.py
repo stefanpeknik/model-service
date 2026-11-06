@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Never
 
 from model_service.scheduler.contracts import (
     ExecutionError,
@@ -63,25 +63,38 @@ class SettlementRejection(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class SettlementDecision:
-    """Carry an accepted state update or a rejection, including deadline changes that must still be persisted."""
+class SettlementAccepted:
+    """An accepted outcome and the state it leads to."""
 
-    execution: ExecutionRecord | None
-    rejection: SettlementRejection | None = None
+    execution: ExecutionRecord
 
     def accepted_execution(self) -> ExecutionRecord:
-        """Return the accepted record once any required state update is persisted.
+        """Return the record after the settlement, once it is persisted.
 
         Returns:
             The record after the accepted settlement.
+        """
+        return self.execution
+
+
+@dataclass(frozen=True, slots=True)
+class SettlementRejected:
+    """A refused outcome, with any deadline change that must still be persisted."""
+
+    rejection: SettlementRejection
+    # Set when the rejection itself changes state (a passed deadline).
+    execution: ExecutionRecord | None = None
+
+    def accepted_execution(self) -> Never:
+        """Refuse, once any required state update is persisted.
 
         Raises:
-            StaleWorkClaimError: The settlement was rejected as stale or past its deadline.
+            StaleWorkClaimError: Always; the settlement was stale or past its deadline.
         """
-        if self.rejection is not None:
-            raise StaleWorkClaimError(self.rejection.value)
-        assert self.execution is not None
-        return self.execution
+        raise StaleWorkClaimError(self.rejection.value)
+
+
+type SettlementDecision = SettlementAccepted | SettlementRejected
 
 
 class ExecutionTransitions:
@@ -206,7 +219,8 @@ class ExecutionTransitions:
         Raises:
             StaleWorkClaimError: The execution has no due work.
         """
-        if execution.work_kind is None:
+        work_kind = execution.work_kind
+        if work_kind is None:
             raise StaleWorkClaimError("execution has no due work")
         processing_attempts = execution.processing_attempts
         finish_attempts = execution.finish_attempts
@@ -229,8 +243,6 @@ class ExecutionTransitions:
             lease_expires_at=now + lease_duration,
             updated_at=now,
         )
-        assert claimed.work_kind is not None
-        assert claimed.fencing_token is not None
         return ClaimDecision(
             execution=claimed,
             claim=WorkClaim(
@@ -238,11 +250,11 @@ class ExecutionTransitions:
                 builder_id=claimed.builder_id,
                 model_id=claimed.model_id,
                 provider=claimed.identity.provider,
-                kind=claimed.work_kind,
+                kind=work_kind,
                 invocation=claimed.invocation,
                 protected_context=claimed.protected_context,
                 attempt=claimed.current_attempt,
-                fencing_token=claimed.fencing_token,
+                fencing_token=fencing_token,
                 result=claimed.result,
                 error=claimed.error,
                 operation=claimed.operation,
@@ -323,21 +335,14 @@ class ExecutionTransitions:
             TypeError: The settlement type is unknown.
         """
         if execution.fencing_token != fencing_token:
-            return SettlementDecision(
-                execution=None,
-                rejection=SettlementRejection.STALE_CLAIM,
-            )
+            return SettlementRejected(SettlementRejection.STALE_CLAIM)
         if self.work_deadline_at(execution) <= now:
-            return SettlementDecision(
-                execution=self.deadline(execution, now),
-                rejection=SettlementRejection.DEADLINE_EXCEEDED,
+            return SettlementRejected(
+                SettlementRejection.DEADLINE_EXCEEDED, self.deadline(execution, now)
             )
         if execution.lease_expires_at is None or execution.lease_expires_at <= now:
-            return SettlementDecision(
-                execution=None,
-                rejection=SettlementRejection.STALE_CLAIM,
-            )
-        return SettlementDecision(self.settle(execution, settlement, now))
+            return SettlementRejected(SettlementRejection.STALE_CLAIM)
+        return SettlementAccepted(self.settle(execution, settlement, now))
 
     def mark_finish_mutation_started(
         self,

@@ -26,12 +26,14 @@ from model_service.builders.contracts import (
     SharedPathInput,
 )
 from model_service.builders.registry import get_builder
+from model_service.providers.composition import Provider
 from model_service.scheduler.contracts import (
     InvalidScheduleRequestError,
     ProviderName,
     ScheduleRequest,
 )
 from model_service.scheduler.domain import PreparedInvocation, SubmissionIdentity
+from model_service.scheduler.providers import ProviderAdapter
 
 
 if TYPE_CHECKING:
@@ -81,7 +83,7 @@ class BuilderRequest(BaseModel):
         )
 
 
-class StandaloneProviderAdapter:
+class StandaloneProviderAdapter(ProviderAdapter):
     name = NAME
 
     def __init__(self, shared_storage: SharedStorageAccessAdapter) -> None:
@@ -192,7 +194,7 @@ class StandaloneProviderAdapter:
         del before_mutation
 
 
-class StandaloneProvider:
+class StandaloneProvider(Provider):
     """Shared-storage jobs, through the public builder routes the facade serves."""
 
     catalog_block = None

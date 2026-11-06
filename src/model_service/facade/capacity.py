@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 from httpx import HTTPError
 
+from model_service.facade.routes.common import Capacity
 from model_service.scheduler.contracts import ExecutionStatus
 
 
@@ -27,7 +28,7 @@ if TYPE_CHECKING:
     from model_service.scheduler.contracts import ExecutionView
 
 
-class ServeCapacity:
+class ServeCapacity(Capacity):
     def __init__(
         self,
         client: httpx.AsyncClient,

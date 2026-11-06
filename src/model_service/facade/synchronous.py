@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from model_service.builders.application import validate_invocation, validate_model
 from model_service.builders.contracts import ExecutionContext
 from model_service.builders.registry import get_builder
+from model_service.facade.routes.builders import BuilderRunner
 
 
 if TYPE_CHECKING:
@@ -16,7 +17,7 @@ if TYPE_CHECKING:
     from model_service.facade.requests import ImmediateBuilderRequest
 
 
-class SynchronousBuilderService:
+class SynchronousBuilderService(BuilderRunner):
     def __init__(self, catalog: ModelCatalog, dispatch: BuilderDispatch) -> None:
         """Keep the catalog and builder dispatch.
 

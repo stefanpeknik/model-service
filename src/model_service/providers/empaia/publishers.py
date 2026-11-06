@@ -65,7 +65,7 @@ class OutputPublisher(Protocol):
         ...
 
 
-class PrimitivePublisher:
+class PrimitivePublisher(OutputPublisher):
     """Post an inline value as the primitive type its output declares."""
 
     def __init__(self, output_type: str) -> None:

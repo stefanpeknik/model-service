@@ -56,6 +56,7 @@ from model_service.scheduler.domain import (
     SubmissionIdentity,
 )
 from model_service.scheduler.providers import (
+    ProviderAdapter,
     ProviderCancellation,
     ProviderFailure,
     ProviderFinishFailureError,
@@ -89,7 +90,7 @@ class EmpaiaSchedulePayload(EmpaiaJobContext):
 logger = logging.getLogger(__name__)
 
 
-class EmpaiaProviderAdapter:
+class EmpaiaProviderAdapter(ProviderAdapter):
     """Implement provider-scoped admission and terminal publication for EMPAIA jobs."""
 
     name = PROVIDER_NAME
@@ -471,9 +472,6 @@ def _raise_preparation_error(error: EmpaiaGatewayError) -> Never:
 
     Args:
         error: The gateway error.
-
-    Returns:
-        Never; it always raises.
 
     Raises:
         SchedulingUnavailableError: If the error is retryable.

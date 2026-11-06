@@ -204,7 +204,7 @@ class Capacity(Protocol):
         ...
 
 
-class NoCapacityInfo:
+class NoCapacityInfo(Capacity):
     async def explain(self, execution: ExecutionView) -> ExecutionView:
         """Leave the execution unexplained, for deployments without a Ray dashboard.
 

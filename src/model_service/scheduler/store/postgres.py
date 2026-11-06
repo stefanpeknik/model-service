@@ -45,9 +45,15 @@ from model_service.scheduler.domain import (
 )
 from model_service.scheduler.store.models import DEFAULT_SCHEMA, ExecutionRow
 from model_service.scheduler.store.payloads import PayloadMissingError, StoredPayload
-from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
+from model_service.scheduler.store.repository import (
+    ExecutionRepository,
+    ExecutionRepositoryUnavailableError,
+)
 from model_service.scheduler.store.schema import initialize_execution_schema
-from model_service.scheduler.transitions import ExecutionTransitions
+from model_service.scheduler.transitions import (
+    ExecutionTransitions,
+    SettlementAccepted,
+)
 
 
 if TYPE_CHECKING:
@@ -66,7 +72,7 @@ ORPHAN_AGE = timedelta(hours=1)
 _ORPHAN_SWEEP_SECONDS = 600.0
 
 
-class PostgresExecutionRepository:
+class PostgresExecutionRepository(ExecutionRepository):
     """Provide durable replay-safe admission, leased claims, and recovery using the shared state machine."""
 
     def __init__(
@@ -587,7 +593,9 @@ class PostgresExecutionRepository:
                     settlement,
                     await self._database_now(session),
                 )
-                accepted = decision.rejection is None and response is not None
+                accepted = (
+                    isinstance(decision, SettlementAccepted) and response is not None
+                )
                 refused = (
                     response is not None
                     and not accepted
@@ -726,18 +734,19 @@ class PostgresExecutionRepository:
             )
             if not locked:
                 continue
-            active = await session.scalar(
-                select(func.count())
-                .select_from(ExecutionRow)
-                .where(
-                    ExecutionRow.model_id == model_id,
-                    ExecutionRow.operation == operation,
-                    ExecutionRow.work_kind == WorkKind.PROCESSING,
-                    ExecutionRow.fencing_token.is_not(None),
-                    ExecutionRow.lease_expires_at > now,
+            active = (
+                await session.execute(
+                    select(func.count())
+                    .select_from(ExecutionRow)
+                    .where(
+                        ExecutionRow.model_id == model_id,
+                        ExecutionRow.operation == operation,
+                        ExecutionRow.work_kind == WorkKind.PROCESSING,
+                        ExecutionRow.fencing_token.is_not(None),
+                        ExecutionRow.lease_expires_at > now,
+                    )
                 )
-            )
-            assert active is not None
+            ).scalar_one()
             wanted = min(self._limits[operation] - active, limit - len(selected))
             if wanted <= 0:
                 continue
@@ -1124,7 +1133,10 @@ class PostgresExecutionRepository:
         """
         error = None
         if row.error_code is not None:
-            assert row.error_message is not None
+            if row.error_message is None:
+                raise ValueError(
+                    f"execution {row.id} has an error code without a message"
+                )
             error = ExecutionError(row.error_code, row.error_message)
         return ExecutionRecord(
             id=row.id,

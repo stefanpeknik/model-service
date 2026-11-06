@@ -29,6 +29,7 @@ from model_service.facade.routes.common import (
     unavailable,
 )
 from model_service.providers.empaia.gateway import PROVIDER_NAME
+from model_service.providers.empaia.provider import EmpaiaSchedulePayload
 from model_service.scheduler.contracts import (
     ExecutionStatus,
     ScheduleRequest,
@@ -97,13 +98,13 @@ def create_router(
                 builder_id=builder_id,
                 model_id=model_id,
                 provider=PROVIDER_NAME,
-                body={
+                body=EmpaiaSchedulePayload(
                     # Job IDs are unique per installation; its App API URL names it.
-                    "installation_id": body.app_api.rstrip("/"),
-                    "api_url": body.app_api,
-                    "job_id": body.job_id,
-                    "credential": body.access_token,
-                },
+                    installation_id=body.app_api.rstrip("/"),
+                    api_url=body.app_api,
+                    job_id=body.job_id,
+                    credential=body.access_token,
+                ).model_dump(mode="json", exclude={"mode"}),
             ),
             response,
         )

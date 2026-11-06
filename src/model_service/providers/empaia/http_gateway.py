@@ -17,6 +17,7 @@ from rationai.empaia import Client
 from rationai.empaia.typing import primitives
 
 from model_service.providers.empaia.gateway import (
+    EmpaiaGateway,
     EmpaiaGatewayError,
     EmpaiaJobContext,
     EmpaiaJobMode,
@@ -108,7 +109,7 @@ class RectangleMaskWriter(Protocol):
         ...
 
 
-class HttpEmpaiaGateway:
+class HttpEmpaiaGateway(EmpaiaGateway):
     """Access one EMPAIA job through authenticated HTTP and pluggable image adapters."""
 
     def __init__(

@@ -32,7 +32,7 @@ class OutgoingCredentials(Protocol):
         ...
 
 
-class NoCredentials:
+class NoCredentials(OutgoingCredentials):
     async def authorization(self, client: httpx.AsyncClient) -> str | None:
         """Send no `Authorization` header.
 
@@ -45,7 +45,7 @@ class NoCredentials:
         return None
 
 
-class ClientCredentials:
+class ClientCredentials(OutgoingCredentials):
     def __init__(self, idp_url: str, client_id: str, client_secret: str) -> None:
         """Keep the client's credentials; the first call fetches a token.
 

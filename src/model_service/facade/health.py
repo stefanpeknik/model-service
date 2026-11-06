@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from httpx import HTTPError
 
@@ -31,7 +31,17 @@ class DeploymentStatus:
     missing_routes: tuple[str, ...] = ()
 
 
-class DeploymentHealth:
+class DeploymentHealthCheck(Protocol):
+    async def check(self) -> DeploymentStatus:
+        """Report whether Ray Serve exposes every expected builder and model route.
+
+        Returns:
+            The deployment state and any missing routes.
+        """
+        ...
+
+
+class DeploymentHealth(DeploymentHealthCheck):
     def __init__(
         self, client: httpx.AsyncClient, *, origin: str, routes: Iterable[str]
     ) -> None:

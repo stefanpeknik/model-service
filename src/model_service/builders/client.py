@@ -81,7 +81,7 @@ class RemoteFailureError(RuntimeError):
         self.retryable = retryable
 
 
-class HTTPBuilderDispatch:
+class HTTPBuilderDispatch(BuilderDispatch):
     def __init__(self, client: httpx.AsyncClient, *, origin: str) -> None:
         """Dispatch builder runs to a Ray Serve origin.
 

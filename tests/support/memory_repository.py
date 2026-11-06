@@ -51,7 +51,10 @@ from model_service.scheduler.store.payloads import (
     PayloadStore,
     StoredPayload,
 )
-from model_service.scheduler.transitions import ExecutionTransitions
+from model_service.scheduler.transitions import (
+    ExecutionTransitions,
+    SettlementAccepted,
+)
 
 
 if TYPE_CHECKING:
@@ -350,7 +353,7 @@ class InMemoryExecutionRepository:
                 response = await self._payloads.write_response(
                     execution_id, fencing_token, settlement.content
                 )
-                if decision.rejection is None:
+                if isinstance(decision, SettlementAccepted):
                     self._responses[execution_id] = response
                 elif self._responses.get(execution_id) != response:
                     self._released.append(response.path)

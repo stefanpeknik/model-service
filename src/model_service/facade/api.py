@@ -5,14 +5,18 @@ Readiness checks durable storage; `/healthz/deployments` checks Ray.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from model_service.facade.auth import Access
-from model_service.facade.health import DeploymentState, DeploymentStatus
+from model_service.facade.health import (
+    DeploymentHealthCheck,
+    DeploymentState,
+    DeploymentStatus,
+)
 from model_service.facade.routes import builders, executions, models
 from model_service.facade.routes.common import (
     ApiErrorCode,
@@ -34,16 +38,6 @@ if TYPE_CHECKING:
     from model_service.scheduler.inference import InferenceTarget
 
 
-class DeploymentHealth(Protocol):
-    async def check(self) -> DeploymentStatus:
-        """Report whether Ray Serve exposes every expected builder and model route.
-
-        Returns:
-            The deployment state and any missing routes.
-        """
-        ...
-
-
 def create_app(
     scheduler: Scheduler,
     *,
@@ -51,7 +45,7 @@ def create_app(
     builder_runner: BuilderRunner | None = None,
     inference_target: InferenceTarget | None = None,
     lifespan: Lifespan[FastAPI] | None = None,
-    deployment_health: DeploymentHealth | None = None,
+    deployment_health: DeploymentHealthCheck | None = None,
     inference_max_request_bytes: int = 2 * 1024 * 1024,
     capacity: Capacity | None = None,
     access: Access | None = None,

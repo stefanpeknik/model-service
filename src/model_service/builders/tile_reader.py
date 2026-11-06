@@ -143,19 +143,24 @@ class TileReader:
             A CHW uint8 tile, or None when the tissue or mask window is empty.
         """
         # The tissue check is an array lookup; the mask check reads the mask file.
-        if self.tissue is not None and not self._has_tissue(x, y, tile_size):
+        if self.tissue is not None and not self._has_tissue(
+            self.tissue, x, y, tile_size
+        ):
             return None
-        if self._mask is not None and not self._mask_selects(x, y, tile_size):
+        if self._mask is not None and not self._mask_selects(
+            self._mask, x, y, tile_size
+        ):
             return None
         tile = self.slide.read_tile(
             x=x, y=y, extent_x=tile_size, extent_y=tile_size, level=self.level
         )
         return tile.transpose(2, 0, 1)
 
-    def _has_tissue(self, x: int, y: int, tile_size: int) -> bool:
+    def _has_tissue(self, tissue: TissueMask, x: int, y: int, tile_size: int) -> bool:
         """Check whether the tile's window in the tissue mask has tissue.
 
         Args:
+            tissue: The slide's tissue mask.
             x: Tile origin x at the selected level.
             y: Tile origin y at the selected level.
             tile_size: Tile width and height in pixels.
@@ -163,19 +168,19 @@ class TileReader:
         Returns:
             True when any tissue pixel falls in the window.
         """
-        assert self.tissue is not None
         left, top = floor(x * self._tissue_scale_x), floor(y * self._tissue_scale_y)
         right = ceil((x + tile_size) * self._tissue_scale_x)
         bottom = ceil((y + tile_size) * self._tissue_scale_y)
-        return bool(self.tissue.pixels[top:bottom, left:right].any())
+        return bool(tissue.pixels[top:bottom, left:right].any())
 
-    def _mask_selects(self, x: int, y: int, tile_size: int) -> bool:
+    def _mask_selects(self, mask: OpenSlide, x: int, y: int, tile_size: int) -> bool:
         """Check whether the tile's window in the mask has a nonzero pixel.
 
         The window is rounded outward so a downsampled mask keeps every
         intersecting pixel.
 
         Args:
+            mask: The region-of-interest mask.
             x: Tile origin x at the selected level.
             y: Tile origin y at the selected level.
             tile_size: Tile width and height in pixels.
@@ -183,12 +188,11 @@ class TileReader:
         Returns:
             True when the window contains a nonzero mask pixel.
         """
-        assert self._mask is not None
         # Round outward so a downsampled mask keeps every intersecting pixel.
         mask_x, mask_y = floor(x * self._scale_x), floor(y * self._scale_y)
         width = ceil((x + tile_size) * self._scale_x) - mask_x
         height = ceil((y + tile_size) * self._scale_y) - mask_y
-        window = self._mask.read_region_relative(
+        window = mask.read_region_relative(
             (mask_x, mask_y), self._mask_level, (width, height)
         )
         return bool(np.asarray(window.convert("L")).any())

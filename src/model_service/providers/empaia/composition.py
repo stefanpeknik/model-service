@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from model_service.providers.composition import FacadeContribution
+from model_service.providers.composition import FacadeContribution, Provider
 from model_service.providers.empaia.gateway import INPUT_ACCESS_KIND
 from model_service.providers.empaia.http_gateway import http_gateway_factory
 from model_service.providers.empaia.settings import EmpaiaSettings
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 CATALOG_BLOCK = "empaia"
 
 
-class EmpaiaProvider:
+class EmpaiaProvider(Provider):
     catalog_block = CATALOG_BLOCK
 
     def facade(
@@ -127,20 +127,20 @@ def _marketplace(settings: EmpaiaSettings) -> Marketplace | None:
     )
     from model_service.providers.empaia.registration import Marketplace
 
-    if settings.marketplace_url is None or settings.organization_id is None:
+    target = settings.marketplace
+    if target is None:
         return None
     credentials: OutgoingCredentials = NoCredentials()
-    if settings.idp_url is not None:
-        assert settings.client_id is not None and settings.client_secret is not None
+    if target.client is not None:
         credentials = ClientCredentials(
-            settings.idp_url,
-            settings.client_id,
-            settings.client_secret.get_secret_value(),
+            target.client.idp_url,
+            target.client.client_id,
+            target.client.client_secret.get_secret_value(),
         )
     return Marketplace(
-        settings.marketplace_url,
-        settings.organization_id,
-        settings.jes_target,
+        target.url,
+        target.organization_id,
+        target.jes_target,
         credentials,
         timeout=settings.app_service_timeout_seconds,
     )

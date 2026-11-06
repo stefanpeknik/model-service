@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
+from model_service.builders.application import AccessAdapter, InputAccess
 from model_service.builders.cleanup import close_resource
 from model_service.builders.contracts import (
     BuilderFailure,
@@ -41,7 +42,7 @@ if TYPE_CHECKING:
     )
 
 
-class EmpaiaInputAccess:
+class EmpaiaInputAccess(InputAccess):
     """Expose materialized job inputs and completed artifacts within one attempt's workspace."""
 
     def __init__(
@@ -142,7 +143,7 @@ def job_workspace(root: Path, api_url: str, job_id: str) -> Path:
     return root / hashlib.sha256(f"{api_url}\0{job_id}".encode()).hexdigest()
 
 
-class EmpaiaInputAccessAdapter:
+class EmpaiaInputAccessAdapter(AccessAdapter):
     """Create per-attempt local access by resolving inputs through an EMPAIA gateway."""
 
     def __init__(

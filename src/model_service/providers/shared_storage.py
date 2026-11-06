@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from model_service.builders.application import AccessAdapter, InputAccess
 from model_service.builders.contracts import InvalidInvocation, SharedPathInput
 
 
@@ -33,7 +34,7 @@ class SharedStorageState(BaseModel):
     root: Annotated[str, Field(min_length=1)]
 
 
-class SharedStorageAccess:
+class SharedStorageAccess(InputAccess):
     def __init__(
         self,
         root: Path,
@@ -158,7 +159,7 @@ class SharedStorageAccess:
         return resolved
 
 
-class SharedStorageAccessAdapter:
+class SharedStorageAccessAdapter(AccessAdapter):
     def __init__(self, allowed_roots: Iterable[Path]) -> None:
         """Keep the roots callers may name.
 

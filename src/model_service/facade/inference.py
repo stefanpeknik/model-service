@@ -16,6 +16,7 @@ import lz4.frame
 
 from model_service.scheduler.inference import (
     IncompatibleInputError,
+    InferenceTarget,
     ModelResponse,
     ModelUnavailableError,
     ResultTooLargeError,
@@ -161,7 +162,7 @@ def check_tile(model: ModelBinding, payload: bytes) -> None:
         )
 
 
-class ModelInference:
+class ModelInference(InferenceTarget):
     """Scheduled raw requests against catalog models through the inference proxy."""
 
     def __init__(

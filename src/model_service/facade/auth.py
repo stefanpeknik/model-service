@@ -84,7 +84,7 @@ class Authorizer(Protocol):
         ...
 
 
-class AllowAnonymous:
+class AllowAnonymous(Authenticator):
     async def authenticate(self, request: Request) -> Principal:
         """Accept every request as anonymous.
 
@@ -97,7 +97,7 @@ class AllowAnonymous:
         return ANONYMOUS
 
 
-class AllowAll:
+class AllowAll(Authorizer):
     async def authorize(
         self, principal: Principal, action: Action, execution_id: str | None
     ) -> None:

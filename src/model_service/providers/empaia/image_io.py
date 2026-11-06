@@ -13,7 +13,8 @@ from typing import TYPE_CHECKING
 from model_service.builders.contracts import SharedArtifact, SpatialScoresModel
 from model_service.builders.score_grid import read_score_grid
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
-from model_service.providers.empaia.http_gateway import SlideLevel
+from model_service.providers.empaia.http_gateway import RectangleMaskWriter, SlideLevel
+from model_service.providers.empaia.publishers import OutputPublisher
 
 
 if TYPE_CHECKING:
@@ -26,7 +27,7 @@ if TYPE_CHECKING:
     from model_service.providers.empaia.publishers import Commit
 
 
-class ScoreGridPublisher:
+class ScoreGridPublisher(OutputPublisher):
     """Publish the heatmap builder's score grid as an EMPAIA continuous pixelmap.
 
     The SDK builds the pyramid from the grid: exactly what the model produced,
@@ -124,7 +125,7 @@ class ScoreGridPublisher:
         return lambda: gateway.publish_pixelmap(name, slide.id, tile_sets)
 
 
-class VipsRectangleMaskWriter:
+class VipsRectangleMaskWriter(RectangleMaskWriter):
     """Rasterize the intersection of a rectangle and slide into a pyramidal TIFF region mask."""
 
     def write(
