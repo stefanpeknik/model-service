@@ -120,18 +120,38 @@ class AppDefinitionTests(unittest.TestCase):
         )
         self.assertEqual(viewer["outputs"]["heatmap"]["shader"]["type"], "heatmap")
 
+    def test_an_invalid_listing_leaves_only_its_model_out(self) -> None:
+        valid = {
+            "name": "Prostate",
+            "name_short": "Pros",
+            "description": "Finds.",
+            "modes": ["preprocessing"],
+        }
+        with self.assertLogs("model_service.providers.empaia.apps", "ERROR") as logs:
+            parsed = parse_listings(
+                {
+                    "good": valid,
+                    "typo": {**valid, "mods": ["preprocessing"]},
+                    "unknown-builder": {**valid, "viewer": {"heatmapp": {}}},
+                }
+            )
+        self.assertEqual(list(parsed), ["good"])
+        self.assertEqual(len(logs.output), 2)
+
     def test_viewer_entries_for_io_an_app_lacks_are_left_out(self) -> None:
         listing = EmpaiaListing(
             name="Prostate cancer",
             name_short="ProstHM",
             description="Finds things.",
             modes=(AppMode.PREPROCESSING,),
-            viewer=ViewerConfig.model_validate(
-                {
-                    "inputs": {"region_of_interest": {"label": "ROI"}},
-                    "outputs": {"heatmap": {"render": "shader"}},
-                }
-            ),
+            viewer={
+                "heatmap": ViewerConfig.model_validate(
+                    {
+                        "inputs": {"region_of_interest": {"label": "ROI"}},
+                        "outputs": {"heatmap": {"render": "shader"}},
+                    }
+                )
+            },
         )
         models = catalog("prostate-classifier-1")
 
@@ -239,6 +259,8 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
         # The app: the portal app, then its viewer configuration.
         answers = [
             httpx.Response(503),
+            httpx.Response(401),
+            httpx.Response(401),
             httpx.Response(201),
             httpx.Response(200),
         ]
@@ -258,9 +280,15 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
         assert marketplace is not None
         marketplace._transport = httpx.MockTransport(handle)
 
-        await register_until_done(marketplace, apps, retry_seconds=0)
+        with self.assertLogs("model_service.providers.empaia.registration") as logs:
+            await register_until_done(marketplace, apps, retry_seconds=0)
 
         self.assertEqual(answers, [])
+        # Repeated failures are a setting, not an outage: errors from the third.
+        self.assertEqual(
+            [r.levelname for r in logs.records][:3], ["WARNING", "WARNING", "ERROR"]
+        )
+        self.assertIn("HTTP 401 from https://marketplace.example/", logs.output[2])
 
     def test_a_marketplace_needs_an_organization(self) -> None:
         with self.assertRaises(SettingsError):

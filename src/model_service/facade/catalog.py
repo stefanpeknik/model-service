@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from model_service.builders.contracts import (
     MODEL_BINDING,
+    MODEL_CLASSES,
     InferenceContract,
     UnknownModelError,
 )
@@ -35,11 +36,10 @@ if TYPE_CHECKING:
 
 
 class InferenceDeclaration(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    # Besides the contract, the fields its model class takes from here.
+    model_config = ConfigDict(frozen=True, extra="allow")
 
     contract: InferenceContract
-    mpp: Annotated[float, Field(gt=0, allow_inf_nan=False)] | None = None
-    summaries: tuple[str, ...] | None = None
 
 
 class _ServeDeployment(BaseModel):
@@ -64,16 +64,6 @@ class ModelDocument(BaseModel):
     serve: _ServeApplication
 
 
-# Parameters each contract reads from user_config, and from the inference block.
-_PARAMETERS: dict[InferenceContract, tuple[tuple[str, ...], tuple[str, ...]]] = {
-    InferenceContract.SPATIAL_SCORES: (
-        ("tile_size", "output_tile_size", "n_channels", "mpp"),
-        (),
-    ),
-    InferenceContract.TILE_EMBEDDING: (("tile_size",), ("mpp", "summaries")),
-}
-
-
 class CatalogError(ValueError):
     pass
 
@@ -81,8 +71,9 @@ class CatalogError(ValueError):
 def model_binding(document: ModelDocument) -> ModelBinding:
     """Build a model binding from one model document.
 
-    Contract parameters come from the first deployment's `user_config` or from
-    the `inference` block, depending on the contract.
+    Each field of the contract's model class comes from the `inference` block if
+    the class lists it in `inference_fields`, otherwise from the first
+    deployment's `user_config`.
 
     Args:
         document: A parsed model YAML document.
@@ -98,25 +89,31 @@ def model_binding(document: ModelDocument) -> ModelBinding:
     if document.serve.route_prefix != f"/{model_id}":
         raise CatalogError(f"model {model_id!r} must use route_prefix /{model_id}")
     inference = document.inference
-    from_user_config, from_inference = _PARAMETERS[inference.contract]
-    declared_values = {"mpp": inference.mpp, "summaries": inference.summaries}
-    declared = {name for name, value in declared_values.items() if value is not None}
-    if extra := declared - set(from_inference):
+    model_class = MODEL_CLASSES[inference.contract]
+    from_inference = set(model_class.inference_fields)
+    from_user_config = (
+        model_class.model_fields.keys()
+        - from_inference
+        - {
+            "id",
+            "contract",
+        }
+    )
+    declared = inference.model_extra or {}
+    if extra := declared.keys() - from_inference:
         raise CatalogError(
             f"model {model_id!r} declares {', '.join(sorted(extra))} in inference; "
             f"{inference.contract} reads it from user_config"
         )
     user_config = document.serve.deployments[0].user_config
     values: dict[str, object] = {"id": model_id, "contract": inference.contract}
-    for name in from_user_config:
-        if name not in user_config:
-            raise CatalogError(f"model {model_id!r} user_config lacks {name}")
-        values[name] = user_config[name]
-    for name in from_inference:
-        value = declared_values[name]
-        if value is None:
-            raise CatalogError(f"model {model_id!r} inference lacks {name}")
-        values[name] = value
+    for name, source, where in (
+        *((n, user_config, "user_config") for n in sorted(from_user_config)),
+        *((n, declared, "inference") for n in sorted(from_inference)),
+    ):
+        if name not in source:
+            raise CatalogError(f"model {model_id!r} {where} lacks {name}")
+        values[name] = source[name]
     try:
         return MODEL_BINDING.validate_python(values)
     except ValidationError as error:

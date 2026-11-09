@@ -22,7 +22,14 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from jsonschema import Draft7Validator
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    ValidationError,
+    field_validator,
+)
 
 from model_service.builders.registry import BUILDERS
 from model_service.providers.empaia.io import BUILDER_IO
@@ -134,30 +141,53 @@ class EmpaiaListing(BaseModel):
     # What the model finds, for someone choosing an app; the mode adds a sentence.
     description: Annotated[str, Field(min_length=3, max_length=900)]
     modes: Annotated[tuple[AppMode, ...], Field(min_length=1)]
-    # Entries for io keys an app lacks are left out of that app's value.
-    viewer: ViewerConfig | None = None
+    # Viewer settings per builder ID, since each builder is its own app with its
+    # own outputs; entries for io keys an app lacks are left out of its value.
+    viewer: dict[str, ViewerConfig] = Field(default_factory=dict)
+
+    @field_validator("viewer")
+    @classmethod
+    def _known_builders(
+        cls, viewer: dict[str, ViewerConfig]
+    ) -> dict[str, ViewerConfig]:
+        """Reject viewer settings for a builder that is not registered.
+
+        Args:
+            viewer: The viewer settings, by builder ID.
+
+        Returns:
+            The settings, unchanged.
+
+        Raises:
+            ValueError: If a key is not a registered builder ID.
+        """
+        if unknown := sorted(viewer.keys() - BUILDERS.keys()):
+            raise ValueError(f"viewer names unknown builders: {', '.join(unknown)}")
+        return viewer
 
 
 def parse_listings(blocks: Mapping[str, object]) -> dict[str, EmpaiaListing]:
     """Validate the `empaia` blocks of the model files into listings.
 
+    An invalid block is logged and its model left out of EMPAIA, so a mistake in
+    one listing does not stop the facade or the other models' apps.
+
     Args:
         blocks: Each model's `empaia` block, by model ID.
 
     Returns:
-        The listings, by model ID.
-
-    Raises:
-        ValueError: If a block is not a valid listing; the message names the model.
+        The valid listings, by model ID.
     """
     listings = {}
     for model_id, block in blocks.items():
         try:
             listings[model_id] = EmpaiaListing.model_validate(block)
         except ValidationError as error:
-            raise ValueError(
-                f"model {model_id!r} has an invalid EMPAIA listing: {error}"
-            ) from error
+            logger.error(
+                "model %r is not offered in EMPAIA: its listing is invalid: %s",
+                model_id,
+                error,
+            )
     return listings
 
 
@@ -329,8 +359,8 @@ def app_definitions(
                 continue
             ead = generate_ead(spec, builder_io, model.id, listing)
             configuration = {}
-            if listing.viewer is not None:
-                configuration[VIEWER_CONFIG_KEY] = listing.viewer.for_io(ead["io"])
+            if (viewer := listing.viewer.get(spec.id)) is not None:
+                configuration[VIEWER_CONFIG_KEY] = viewer.for_io(ead["io"])
             apps.append(
                 AppDefinition(spec.id, model.id, listing.modes, ead, configuration)
             )
@@ -407,7 +437,7 @@ def generate_ead(
             for mode, names in mode_inputs.items()
         },
     }
-    if listing.viewer is not None:
+    if spec.id in listing.viewer:
         ead["configuration"] = {
             "global": {
                 VIEWER_CONFIG_KEY: {

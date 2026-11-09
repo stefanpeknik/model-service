@@ -27,6 +27,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 RETRY_SECONDS = 60.0
+# Failures in a row after which they are logged as errors: by then it is a
+# setting (URL, organization, client secret), not an outage.
+ERROR_AFTER = 3
 
 
 class Marketplace:
@@ -118,14 +121,33 @@ async def register_until_done(
         apps: The apps to register.
         retry_seconds: The wait between attempts.
     """
+    failures = 0
     while True:
         try:
             await marketplace.register(apps)
             return
         except (httpx.HTTPError, jwt.InvalidTokenError, KeyError, ValueError) as error:
-            logger.warning(
-                "EMPAIA app registration failed, retrying in %.0f s: %s",
+            failures += 1
+            logger.log(
+                logging.ERROR if failures >= ERROR_AFTER else logging.WARNING,
+                "EMPAIA app registration failed %d time(s), retrying in %.0f s: %s",
+                failures,
                 retry_seconds,
-                type(error).__name__,
+                _reason(error),
             )
         await asyncio.sleep(retry_seconds)
+
+
+def _reason(error: Exception) -> str:
+    """Describe a registration failure without credentials.
+
+    Args:
+        error: The failure.
+
+    Returns:
+        The status and URL of a rejected request, else the error's type.
+    """
+    if isinstance(error, httpx.HTTPStatusError):
+        # The URL carries no secret: credentials travel in headers.
+        return f"HTTP {error.response.status_code} from {error.request.url}"
+    return type(error).__name__

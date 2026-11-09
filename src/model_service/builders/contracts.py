@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 from pydantic import (
     BaseModel,
@@ -77,7 +77,16 @@ class InferenceContract(StrEnum):
 
 
 class _ModelBinding(BaseModel):
+    """A model's catalog declaration: what builders need to drive it.
+
+    A model file gives each field in its `inference` block if the field is in
+    `inference_fields`, otherwise in its first deployment's `user_config`, which
+    the model implementation also reads.
+    """
+
     model_config = ConfigDict(frozen=True, extra="forbid")
+
+    inference_fields: ClassVar[tuple[str, ...]] = ()
 
     id: Annotated[str, Field(min_length=1)]
     tile_size: Annotated[int, Field(strict=True, gt=0)]
@@ -95,7 +104,10 @@ class SpatialScoresModel(_ModelBinding):
 
 
 class TileEmbeddingModel(_ModelBinding):
-    """HTTP model returning one float32 vector per summary name for an RGB tile."""
+    """Ray-handle model returning one float32 vector per summary name for an RGB tile."""
+
+    # The implementation hard-codes these; the file states them for the catalog.
+    inference_fields = ("mpp", "summaries")
 
     contract: Literal[InferenceContract.TILE_EMBEDDING] = (
         InferenceContract.TILE_EMBEDDING
@@ -109,6 +121,13 @@ type ModelBinding = Annotated[
     SpatialScoresModel | TileEmbeddingModel, Field(discriminator="contract")
 ]
 MODEL_BINDING: TypeAdapter[ModelBinding] = TypeAdapter(ModelBinding)
+# The declaration class of each contract.
+MODEL_CLASSES: dict[
+    InferenceContract, type[SpatialScoresModel | TileEmbeddingModel]
+] = {
+    model.model_fields["contract"].default: model
+    for model in (SpatialScoresModel, TileEmbeddingModel)
+}
 
 
 class InputKind(StrEnum):
