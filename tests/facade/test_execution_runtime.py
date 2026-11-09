@@ -8,6 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+import lz4.frame
 from httpx import ASGITransport, AsyncClient, MockTransport, Request, Response
 
 from model_service.facade.app import create_app
@@ -89,6 +90,44 @@ class ExecutionRuntimeTests(RuntimeTestCase):
 
         self.assertEqual(health.status_code, 503)
         self.assertEqual(health.json()["missing_routes"], ["/virchow2"])
+
+    async def test_raw_inference_uses_separate_and_per_model_origins(self) -> None:
+        forwarded: list[Request] = []
+
+        def serve(request: Request) -> Response:
+            forwarded.append(request)
+            return Response(200, json=request.url.host)
+
+        settings = self.settings(
+            INFERENCE_SERVE_ORIGIN="http://model-serve",
+            INFERENCE_MODEL_ORIGINS='{"prostate-classifier-1":"http://builder-serve"}',
+        )
+        async with AsyncClient(transport=MockTransport(serve)) as serve_client:
+            with patch(
+                "model_service.facade.app.httpx.AsyncClient", return_value=serve_client
+            ):
+                app = create_app(settings)
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://model-service"
+            ) as client:
+                named = await client.post(
+                    "/v1/models/prostate-classifier-1/run",
+                    content=lz4.frame.compress(bytes(512 * 512 * 3)),
+                    headers={"x-output-dtype": "float32"},
+                )
+                fallback = await client.post(
+                    "/v1/models/virchow2/run",
+                    content=lz4.frame.compress(bytes(224 * 224 * 3)),
+                )
+
+        self.assertEqual(named.json(), "builder-serve")
+        self.assertEqual(fallback.json(), "model-serve")
+        self.assertEqual(
+            forwarded[0].url, "http://builder-serve/prostate-classifier-1/"
+        )
+        self.assertEqual(forwarded[0].headers["x-output-dtype"], "float32")
+        self.assertEqual(forwarded[0].extensions["timeout"]["read"], 900)
+        self.assertEqual(forwarded[1].url, "http://model-serve/virchow2/")
 
 
 if __name__ == "__main__":

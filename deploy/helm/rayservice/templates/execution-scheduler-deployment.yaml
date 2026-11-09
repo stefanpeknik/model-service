@@ -51,6 +51,16 @@ spec:
               value: /etc/model-service/model-catalog.json
             - name: BUILDER_IDS
               value: {{ keys .Values.builders | sortAlpha | toJson | quote }}
+            {{- if .Values.executionScheduler.inferenceServeOrigin }}
+            - name: INFERENCE_SERVE_ORIGIN
+              value: {{ .Values.executionScheduler.inferenceServeOrigin | quote }}
+            {{- end }}
+            {{- if .Values.executionScheduler.inferenceModelOrigins }}
+            - name: INFERENCE_MODEL_ORIGINS
+              value: {{ .Values.executionScheduler.inferenceModelOrigins | toJson | quote }}
+            {{- end }}
+            - name: INFERENCE_TIMEOUT_SECONDS
+              value: {{ default 900 .Values.executionScheduler.inferenceTimeoutSeconds | quote }}
           readinessProbe:
             httpGet:
               path: /healthz

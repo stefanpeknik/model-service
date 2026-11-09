@@ -8,9 +8,20 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from model_service.builders.contracts import UnknownBuilderError, UnknownModelError
+
 
 class ApiErrorCode(StrEnum):
+    INVALID_REQUEST = "invalid_request"
+    UNKNOWN_BUILDER = "unknown_builder"
     UNKNOWN_MODEL = "unknown_model"
+    INCOMPATIBLE_MODEL = "incompatible_model"
+    BUILDER_BACKPRESSURE = "builder_backpressure"
+    BUILDER_UNAVAILABLE = "builder_unavailable"
+    PAYLOAD_TOO_LARGE = "payload_too_large"
+    MODEL_UNAVAILABLE = "model_inference_unavailable"
+    UNAUTHENTICATED = "unauthenticated"
+    FORBIDDEN = "forbidden"
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,8 +37,25 @@ class ErrorResponse:
 
 
 ERRORS: dict[int | str, dict[str, Any]] = {
-    code: {"model": ErrorResponse} for code in (404,)
+    code: {"model": ErrorResponse} for code in (404, 413, 422, 429, 503)
 }
+
+
+def lookup_error(error: Exception) -> HTTPException:
+    """Map a builder or model lookup failure to an HTTP error.
+
+    Args:
+        error: An `UnknownBuilderError`, `UnknownModelError` or
+            `IncompatibleModelError`.
+
+    Returns:
+        404 for an unknown builder or model; otherwise 422 for an incompatible model.
+    """
+    if isinstance(error, UnknownBuilderError):
+        return http_error(404, ApiErrorCode.UNKNOWN_BUILDER, "builder does not exist")
+    if isinstance(error, UnknownModelError):
+        return http_error(404, ApiErrorCode.UNKNOWN_MODEL, "model is not deployed")
+    return http_error(422, ApiErrorCode.INCOMPATIBLE_MODEL, str(error))
 
 
 def http_error(

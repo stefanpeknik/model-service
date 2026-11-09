@@ -1,11 +1,16 @@
-"""`/v1/models`: the model catalog."""
+"""`/v1/models`: the model catalog and raw inference.
+
+A raw request is one LZ4-compressed RGB tile of the model's `tile_size`, with
+optional `x-output-dtype` and `x-pool-tokens` headers. The model's response is
+returned as the model produced it.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request, Response
 
 from model_service.builders.contracts import (
     InferenceContract,
@@ -13,11 +18,19 @@ from model_service.builders.contracts import (
     ModelBinding,
     UnknownModelError,
 )
-from model_service.facade.errors import ERRORS, ApiErrorCode, http_error
+from model_service.facade.auth import Access, Action
+from model_service.facade.errors import ERRORS, ApiErrorCode, http_error, lookup_error
+from model_service.facade.inference import (
+    IncompatibleInputError,
+    ModelUnavailableError,
+    ResultTooLargeError,
+    inference_headers,
+)
 
 
 if TYPE_CHECKING:
     from model_service.facade.catalog import ModelCatalog
+    from model_service.facade.inference import InferenceTarget
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,28 +60,136 @@ def model_view(model: ModelBinding) -> ModelView:
     )
 
 
-def create_router(catalog: ModelCatalog) -> APIRouter:
-    """Build the `/v1/models` router: the model catalog.
+_BINARY_BODY = {
+    "requestBody": {
+        "required": True,
+        "content": {
+            "application/octet-stream": {
+                "schema": {"type": "string", "format": "binary"}
+            }
+        },
+    }
+}
+
+
+def create_router(
+    catalog: ModelCatalog,
+    inference: InferenceTarget | None,
+    max_request_bytes: int,
+    access: Access,
+) -> APIRouter:
+    """Build the `/v1/models` router: the catalog and raw inference.
 
     Args:
         catalog: Deployed models.
+        inference: Runs raw model requests; None makes `/run` answer 503.
+        max_request_bytes: Largest raw request body accepted, in bytes.
+        access: Guards the routes.
 
     Returns:
         The router.
     """
     router = APIRouter(prefix="/v1/models")
 
-    @router.get("")
+    @router.get(
+        "",
+        dependencies=[access.require(Action.READ_CATALOG)],
+    )
     async def list_models() -> list[ModelView]:
         return [model_view(model) for model in catalog]
 
-    @router.get("/{model_id}", responses=ERRORS)
+    @router.get(
+        "/{model_id}",
+        responses=ERRORS,
+        dependencies=[access.require(Action.READ_CATALOG)],
+    )
     async def get_model(model_id: str) -> ModelView:
         try:
             return model_view(catalog.get(model_id))
         except UnknownModelError as error:
+            raise lookup_error(error) from error
+
+    @router.post(
+        "/{model_id}/run",
+        responses={200: {"content": {"application/octet-stream": {}}}, **ERRORS},
+        openapi_extra=_BINARY_BODY,
+        dependencies=[access.require(Action.RUN)],
+    )
+    async def run_inference(model_id: str, request: Request) -> Response:
+        """Send one raw request to the model and return its response."""
+        if inference is None:
             raise http_error(
-                404, ApiErrorCode.UNKNOWN_MODEL, "model is not deployed"
+                503,
+                ApiErrorCode.MODEL_UNAVAILABLE,
+                "model inference is unavailable",
+                retryable=True,
+            )
+        payload = await _read_body(request, max_request_bytes)
+        try:
+            inference.check(model_id, payload)
+            response = await inference.call(
+                model_id, payload, inference_headers(request.headers)
+            )
+        except UnknownModelError as error:
+            raise lookup_error(error) from error
+        except IncompatibleInputError as error:
+            raise http_error(422, ApiErrorCode.INVALID_REQUEST, str(error)) from error
+        except ModelUnavailableError as error:
+            raise http_error(
+                503, ApiErrorCode.MODEL_UNAVAILABLE, str(error), retryable=True
             ) from error
+        except ResultTooLargeError as error:
+            raise http_error(
+                502,
+                ApiErrorCode.MODEL_UNAVAILABLE,
+                "model response exceeds the result limit",
+            ) from error
+        return Response(
+            status_code=response.status_code,
+            content=response.content,
+            headers={
+                name: value
+                for name, value in response.headers.items()
+                if name == "content-type" or name.startswith("x-")
+            },
+        )
 
     return router
+
+
+async def _read_body(request: Request, limit: int) -> bytes:
+    """Read the request body, stopping as soon as it exceeds the limit.
+
+    Args:
+        request: The incoming request.
+        limit: Largest body accepted, in bytes.
+
+    Returns:
+        The body.
+
+    Raises:
+        HTTPException: 413 if `Content-Length` or the streamed body exceeds the limit.
+    """
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > limit:
+        raise _payload_too_large(limit)
+    body = bytearray()
+    async for chunk in request.stream():
+        body += chunk
+        if len(body) > limit:
+            raise _payload_too_large(limit)
+    return bytes(body)
+
+
+def _payload_too_large(limit: int) -> HTTPException:
+    """Build the 413 for a body over the limit.
+
+    Args:
+        limit: The limit in bytes, named in the message.
+
+    Returns:
+        The HTTP error to raise.
+    """
+    return http_error(
+        413, ApiErrorCode.PAYLOAD_TOO_LARGE, f"request body exceeds {limit} bytes"
+    )

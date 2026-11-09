@@ -47,6 +47,7 @@ executionScheduler:
     tag: ""
     pullPolicy: IfNotPresent
   rayServeOrigin: ""
+  inferenceModelOrigins: {}
   resources:
     requests:
       cpu: 100m
