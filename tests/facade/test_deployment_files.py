@@ -16,7 +16,7 @@ from model_service.builders.registry import BUILDERS
 from model_service.catalog import ModelCatalog
 from model_service.providers.empaia.ead import app_definitions, parse_listings
 from model_service.providers.empaia.provider import CATALOG_BLOCK
-from model_service.providers.empaia.publishers import default_publishers
+from model_service.providers.empaia.publishing.publishers import default_publishers
 
 
 CHART = Path(__file__).parents[2] / "deploy/helm/rayservice"

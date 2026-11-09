@@ -1,4 +1,4 @@
-"""Admission shared by the public routes: the idempotency key and scheduling refusals."""
+"""Admission shared by public and provider routes: the idempotency key and scheduling refusals."""
 
 from __future__ import annotations
 

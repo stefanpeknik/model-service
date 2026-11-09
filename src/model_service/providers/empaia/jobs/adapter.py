@@ -34,13 +34,13 @@ from model_service.providers.empaia.app_service.gateway import (
     EmpaiaJobMode,
 )
 from model_service.providers.empaia.ead_builder_io import BUILDER_IO
-from model_service.providers.empaia.job_inputs import job_workspace
-from model_service.providers.empaia.job_mapping import (
+from model_service.providers.empaia.jobs.inputs import job_workspace
+from model_service.providers.empaia.jobs.mapping import (
     builder_configuration,
     job_inputs,
     raise_preparation_error,
 )
-from model_service.providers.empaia.publishers import default_publishers
+from model_service.providers.empaia.publishing.publishers import default_publishers
 from model_service.scheduler.executions import (
     InvalidScheduleRequestError,
     ScheduleRequest,
@@ -68,7 +68,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from model_service.providers.empaia.ead_builder_io import BuilderIo
-    from model_service.providers.empaia.publishers import PublisherRegistry
+    from model_service.providers.empaia.publishing.publishers import PublisherRegistry
     from model_service.scheduler.provider_adapter import BeforeMutation
     from model_service.wire.json import JsonValue
 

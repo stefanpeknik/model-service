@@ -16,7 +16,7 @@ from model_service.builder_service.runner import BuilderApplication
 from model_service.builders.registry import BUILDERS, get_builder
 from model_service.cleanup import close_resource
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
-from model_service.providers.empaia.job_inputs import EmpaiaInputAccessAdapter
+from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessAdapter
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
 from model_service.providers.standalone import StandaloneProviderAdapter
 from model_service.scheduler.active_work import ActiveWorkRegistry

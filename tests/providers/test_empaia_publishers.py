@@ -14,9 +14,9 @@ from model_service.inference.contracts import SpatialScoresModel
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.ead import AppMode, EmpaiaListing, app_definitions
 from model_service.providers.empaia.ead_builder_io import BUILDER_IO
-from model_service.providers.empaia.job_adapter import EmpaiaProviderAdapter
-from model_service.providers.empaia.pixelmap_publisher import _clip
-from model_service.providers.empaia.publishers import (
+from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
+from model_service.providers.empaia.publishing.pixelmap import _clip
+from model_service.providers.empaia.publishing.publishers import (
     PrimitivePublisher,
     PublisherRegistry,
     default_publishers,
@@ -241,7 +241,7 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "model_service.providers.empaia.job_adapter.get_builder",
+                "model_service.providers.empaia.jobs.adapter.get_builder",
                 return_value=with_score,
             ),
             patch(

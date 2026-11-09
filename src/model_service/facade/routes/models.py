@@ -20,7 +20,7 @@ from model_service.facade.http_errors import (
     lookup_error,
 )
 from model_service.facade.raw_inference_proxy import inference_headers
-from model_service.facade.routes.common import require_idempotency_key, submit
+from model_service.facade.submission import require_idempotency_key, submit
 from model_service.inference.contracts import (  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
     InferenceContract,
     ModelBinding,

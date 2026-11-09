@@ -17,7 +17,7 @@ from model_service.providers.empaia.app_service.types import (
     RectangleMaskWriter,
     SlideLevel,
 )
-from model_service.providers.empaia.publishers import OutputPublisher
+from model_service.providers.empaia.publishing.publishers import OutputPublisher
 from model_service.wire.result import SharedArtifact
 
 
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
         Rectangle,
         SlideMetadata,
     )
-    from model_service.providers.empaia.publishers import Commit
+    from model_service.providers.empaia.publishing.publishers import Commit
     from model_service.wire.result import BuilderOutput
 
 

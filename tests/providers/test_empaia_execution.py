@@ -20,9 +20,12 @@ from model_service.providers.empaia.app_service.gateway import (
     EmpaiaJobContext,
     EmpaiaJobMode,
 )
-from model_service.providers.empaia.job_adapter import EmpaiaProviderAdapter
-from model_service.providers.empaia.job_inputs import EmpaiaInputAccessAdapter
-from model_service.providers.empaia.publishers import Commit, PublisherRegistry
+from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
+from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessAdapter
+from model_service.providers.empaia.publishing.publishers import (
+    Commit,
+    PublisherRegistry,
+)
 from model_service.scheduler.active_work import ActiveWorkRegistry
 from model_service.scheduler.executions import (
     InvalidScheduleRequestError,

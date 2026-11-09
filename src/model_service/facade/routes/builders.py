@@ -26,7 +26,7 @@ from model_service.facade.request_bodies import (
     ImmediateBuilderRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations.
     ScheduledBuilderRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations.
 )
-from model_service.facade.routes.common import require_idempotency_key, submit
+from model_service.facade.submission import require_idempotency_key, submit
 from model_service.inference.contracts import (
     InferenceContract,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )

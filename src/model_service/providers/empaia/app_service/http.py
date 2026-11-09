@@ -33,7 +33,7 @@ from model_service.providers.empaia.app_service.types import (
     SlideLevel,
     SlideMetadata,
 )
-from model_service.providers.empaia.job_inputs import (
+from model_service.providers.empaia.jobs.inputs import (
     link_direct_input,
     write_rectangle_input,
 )
@@ -89,7 +89,7 @@ class HttpEmpaiaGateway(EmpaiaGateway):
         self._job_id = job_id
         self._client = client or Client(api_url, job_id, credential)
         if rectangle_writer is None:
-            from model_service.providers.empaia.pixelmap_publisher import (
+            from model_service.providers.empaia.publishing.pixelmap import (
                 VipsRectangleMaskWriter,
             )
 

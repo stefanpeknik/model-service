@@ -17,7 +17,7 @@ from model_service.builders.heatmap.score_grid import (
 )
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.app_service.http import HttpEmpaiaGateway
-from model_service.providers.empaia.pixelmap_publisher import ScoreGridPublisher
+from model_service.providers.empaia.publishing.pixelmap import ScoreGridPublisher
 from model_service.wire.result import SharedArtifact
 from tests.providers.empaia_fixtures import SLIDE_ID
 

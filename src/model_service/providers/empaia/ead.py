@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     from model_service.builders.declarations import BuilderSpec
     from model_service.inference.contracts import ModelBinding
     from model_service.providers.empaia.ead_builder_io import BuilderIo
-    from model_service.providers.empaia.publishers import PublisherRegistry
+    from model_service.providers.empaia.publishing.publishers import PublisherRegistry
 
 
 EAD_SCHEMA_URL = "https://gitlab.com/empaia/integration/definitions/-/raw/main/ead/ead-schema.v3.json"

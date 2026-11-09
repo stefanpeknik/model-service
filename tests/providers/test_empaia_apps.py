@@ -28,7 +28,7 @@ from model_service.providers.empaia.ead import (
 )
 from model_service.providers.empaia.ead_builder_io import BUILDER_IO
 from model_service.providers.empaia.provider import CATALOG_BLOCK
-from model_service.providers.empaia.publishers import default_publishers
+from model_service.providers.empaia.publishing.publishers import default_publishers
 from model_service.providers.empaia.registration import (
     Marketplace,
     register_until_done,

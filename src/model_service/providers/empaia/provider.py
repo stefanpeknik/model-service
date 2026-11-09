@@ -55,8 +55,10 @@ class EmpaiaProvider(Provider):
             jsonschema.ValidationError: If a generated EAD fails the EAD v3 schema.
         """
         from model_service.providers.empaia.ead import app_definitions, parse_listings
-        from model_service.providers.empaia.job_adapter import EmpaiaProviderAdapter
-        from model_service.providers.empaia.publishers import default_publishers
+        from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
+        from model_service.providers.empaia.publishing.publishers import (
+            default_publishers,
+        )
         from model_service.providers.empaia.registration import register_until_done
         from model_service.providers.empaia.routes import create_router
 
@@ -98,7 +100,7 @@ class EmpaiaProvider(Provider):
         Raises:
             pydantic.ValidationError: If the `EMPAIA_*` settings are invalid.
         """
-        from model_service.providers.empaia.job_inputs import (
+        from model_service.providers.empaia.jobs.inputs import (
             EmpaiaInputAccessAdapter,
         )
 
