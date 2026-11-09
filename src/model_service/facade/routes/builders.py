@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import asyncio
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 
@@ -29,21 +28,14 @@ from model_service.builders.contracts import (
 )
 from model_service.builders.registry import BUILDERS
 from model_service.facade.auth import Access, Action
+from model_service.facade.errors import ERRORS, ApiErrorCode, http_error, lookup_error
 
 # FastAPI reads these annotations at runtime.
 from model_service.facade.requests import (
     ImmediateBuilderRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations.
     ScheduledBuilderRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations.
 )
-from model_service.facade.routes.common import (
-    ERRORS,
-    ApiErrorCode,
-    Scheduler,
-    http_error,
-    lookup_error,
-    require_idempotency_key,
-    submit,
-)
+from model_service.facade.routes.common import require_idempotency_key, submit
 from model_service.providers.standalone import NAME as STANDALONE
 from model_service.scheduler.contracts import (
     ScheduleRequest,
@@ -53,6 +45,8 @@ from model_service.scheduler.contracts import (
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
+
+    from model_service.facade.ports import BuilderRunner, Scheduler
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,33 +68,6 @@ class BuilderView:
     inputs: dict[str, BuilderInputView]
     outputs: dict[str, BuilderOutputView]
     configuration: dict[str, JsonValue]
-
-
-class BuilderRunner(ABC):
-    @abstractmethod
-    async def run(
-        self, builder_id: str, model_id: str, request: ImmediateBuilderRequest
-    ) -> BuilderResult:
-        """Run a builder with a model while the caller waits.
-
-        Args:
-            builder_id: The builder to run.
-            model_id: The model the builder uses.
-            request: Inputs, configuration and deadline.
-
-        Returns:
-            The builder's result.
-
-        Raises:
-            UnknownBuilderError: If the builder is not registered.
-            UnknownModelError: If the model is not deployed.
-            IncompatibleModelError: If the builder does not accept the model.
-            InvalidInvocation: If the request is invalid.
-            ConfirmedRejectionError: If the builder refused for lack of capacity.
-            RemoteFailureError: If the builder failed.
-            UnknownOutcomeError: If it is unknown whether the builder ran.
-        """
-        ...
 
 
 def create_router(

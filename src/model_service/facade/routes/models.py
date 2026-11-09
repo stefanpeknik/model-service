@@ -19,16 +19,9 @@ from model_service.builders.contracts import (
     UnknownModelError,
 )
 from model_service.facade.auth import Access, Action
+from model_service.facade.errors import ERRORS, ApiErrorCode, http_error, lookup_error
 from model_service.facade.inference import inference_headers
-from model_service.facade.routes.common import (
-    ERRORS,
-    ApiErrorCode,
-    Scheduler,
-    http_error,
-    lookup_error,
-    require_idempotency_key,
-    submit,
-)
+from model_service.facade.routes.common import require_idempotency_key, submit
 from model_service.scheduler.contracts import InferenceScheduleRequest, ScheduleResult
 from model_service.scheduler.inference import (
     IncompatibleInputError,
@@ -39,6 +32,7 @@ from model_service.scheduler.inference import (
 
 if TYPE_CHECKING:
     from model_service.facade.catalog import ModelCatalog
+    from model_service.facade.ports import Scheduler
     from model_service.scheduler.inference import InferenceTarget
 
 

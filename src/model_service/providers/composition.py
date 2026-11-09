@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from model_service.builders.contracts import InputAccessKind
     from model_service.builders.settings import WorkerSettings
     from model_service.facade.catalog import ModelCatalog
-    from model_service.facade.routes.common import Capacity, Scheduler
+    from model_service.facade.ports import Capacity, Scheduler
     from model_service.facade.settings import SchedulerSettings
     from model_service.scheduler.providers import ProviderAdapter
 

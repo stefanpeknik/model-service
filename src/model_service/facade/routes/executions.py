@@ -3,26 +3,23 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import Field
 
 from model_service.facade.auth import Access, Action
-from model_service.facade.routes.common import (
-    ERRORS,
-    ApiErrorCode,
-    Capacity,
-    Scheduler,
-    http_error,
-    unavailable,
-)
+from model_service.facade.errors import ERRORS, ApiErrorCode, http_error, unavailable
 from model_service.scheduler.contracts import (
     ExecutionView,
     ResultUnavailableError,
     SchedulingUnavailableError,
     UnknownExecutionError,
 )
+
+
+if TYPE_CHECKING:
+    from model_service.facade.ports import Capacity, Scheduler
 
 
 MAX_LOOKUP_IDS = 1000

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from model_service.builders.contracts import ExecutionContext
 from model_service.builders.registry import get_builder
-from model_service.facade.routes.builders import BuilderRunner
+from model_service.facade.ports import BuilderRunner
 
 
 if TYPE_CHECKING:

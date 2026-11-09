@@ -12,17 +12,14 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from model_service.facade.auth import Access
+from model_service.facade.errors import ApiErrorCode, http_error
 from model_service.facade.health import (
     DeploymentHealthCheck,
     DeploymentState,
     DeploymentStatus,
 )
+from model_service.facade.ports import NoCapacityInfo
 from model_service.facade.routes import builders, executions, models
-from model_service.facade.routes.common import (
-    ApiErrorCode,
-    NoCapacityInfo,
-    http_error,
-)
 from model_service.scheduler.contracts import SchedulingUnavailableError
 
 
@@ -32,8 +29,7 @@ if TYPE_CHECKING:
     from starlette.types import Lifespan
 
     from model_service.facade.catalog import ModelCatalog
-    from model_service.facade.routes.builders import BuilderRunner
-    from model_service.facade.routes.common import Capacity, Scheduler
+    from model_service.facade.ports import BuilderRunner, Capacity, Scheduler
     from model_service.providers.composition import RouteFactory
     from model_service.scheduler.inference import InferenceTarget
 

@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 
 from httpx import HTTPError
 
-from model_service.facade.routes.common import Capacity
+from model_service.facade.ports import Capacity
 from model_service.scheduler.contracts import ExecutionStatus
 
 
