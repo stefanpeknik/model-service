@@ -39,6 +39,7 @@ class ExecutionErrorCode(StrEnum):
     DEADLINE_EXCEEDED = "execution_deadline_exceeded"
     UNKNOWN_MODEL = "unknown_model"
     INCOMPATIBLE_MODEL = "incompatible_model"
+    PROTECTED_CONTEXT_UNREADABLE = "protected_context_unreadable"
 
 
 # The integration a scheduled execution belongs to; each provider names itself.

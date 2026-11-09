@@ -483,6 +483,29 @@ class ExecutionTransitions:
             return self._clear_work(execution, now)
         raise TypeError("unknown work settlement")
 
+    def unreadable(self, execution: ExecutionRecord, now: datetime) -> ExecutionRecord:
+        """End an execution whose provider context cannot be decrypted; nothing can report it.
+
+        One that already ended, and only had a report due, keeps its outcome.
+
+        Args:
+            execution: Current execution record.
+            now: Current database time.
+
+        Returns:
+            The failed record with no pending work, or the ended record with its work cleared.
+        """
+        if execution.status in {ExecutionStatus.FAILED, ExecutionStatus.CANCELLED}:
+            return self._clear_work(execution, now)
+        return self._terminal_failure(
+            execution,
+            ExecutionError(
+                code=ExecutionErrorCode.PROTECTED_CONTEXT_UNREADABLE,
+                message="the execution's stored provider context cannot be read",
+            ),
+            now,
+        )
+
     def recover_expired(
         self,
         execution: ExecutionRecord,

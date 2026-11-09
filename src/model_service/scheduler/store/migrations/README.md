@@ -6,7 +6,8 @@ Application queries remain ORM-based. SQL here describes schema changes only.
 
 ## Apply migrations
 
-To apply pending migrations, set `DATABASE_URL` through your normal secret
+Scheduler startup applies pending migrations automatically before starting its
+worker. To apply them separately, set `DATABASE_URL` through your normal secret
 configuration, then run from the repository root:
 
 ```sh
@@ -18,10 +19,11 @@ The default schema is `model_service`. `--schema NAME` selects an isolated targe
 for local tests. PostgreSQL URLs and libpq DSNs are both supported. Credentials
 are read from the environment, not passed as command-line arguments.
 
-The initializer creates the target schema and serializes initialization with a
+The initializer creates the target schema and serializes startup with a
 PostgreSQL advisory lock. Yoyo also locks migration execution and tracks applied
 versions in that schema, independently of other test or application schemas.
 Each migration is transactional; the entire sequence is not one transaction.
+An initialization failure prevents scheduler startup.
 
 ## Change the schema
 
@@ -40,13 +42,13 @@ Each migration is transactional; the entire sequence is not one transaction.
    A template can also be created with `uv run yoyo new --sql` and this directory
    as its destination. No `yoyo.ini` or credentials file is required.
 3. Test both a fresh database and a database at the previous revision. Preserve
-   records and defaults, check repeated initialization, and check failure rollback.
-   `tests/scheduler/test_execution_schema.py` has examples. Its
+   records and defaults, check repeated startup, and check failure rollback.
+   `tests/scheduler/test_postgres_execution_repository.py` has examples. Its
    `TEST_POSTGRES_DSN` must point to a disposable local test database.
 
    ```sh
    UV_CACHE_DIR=.cache/uv uv run --locked --offline python -m unittest \
-     tests.scheduler.test_execution_schema -v
+     tests.scheduler.test_postgres_execution_repository -v
    ```
 
 Never edit or rename an applied migration. Add a new migration instead. SQL
@@ -64,4 +66,4 @@ its history marker are separate commits in Yoyo.
 
 See the [Yoyo documentation](https://ollycope.com/software/yoyo/latest/) for SQL
 dependencies, authoring commands, and operator recovery commands. Use the
-initializer above to keep schema creation and its locking consistent.
+initializer above to keep schema creation and startup locking consistent.

@@ -1,4 +1,4 @@
-"""Claim ordering, per-model capacity and fencing every repository must keep."""
+"""Claim ordering, per-model capacity and fencing shared by both repositories."""
 
 from __future__ import annotations
 

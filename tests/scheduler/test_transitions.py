@@ -11,7 +11,7 @@ from model_service.builders.contracts import (
     InputAccessContext,
     Invocation,
 )
-from model_service.scheduler.contracts import ExecutionStatus
+from model_service.scheduler.contracts import ExecutionErrorCode, ExecutionStatus
 from model_service.scheduler.domain import (
     Admission,
     RetryPolicy,
@@ -67,3 +67,21 @@ class TransitionTests(unittest.TestCase):
 
         self.assertIs(cancelled.work_kind, WorkKind.PROVIDER_CANCELLATION_REPORT)
         self.assertEqual(cancelled.finish_attempts, 0)
+
+    def test_an_unreadable_context_fails_without_a_report(self) -> None:
+        failed = TRANSITIONS.unreadable(publishing(), NOW)
+
+        self.assertIs(failed.status, ExecutionStatus.FAILED)
+        self.assertIsNone(failed.work_kind)
+        assert failed.error is not None
+        self.assertEqual(
+            failed.error.code, ExecutionErrorCode.PROTECTED_CONTEXT_UNREADABLE
+        )
+
+    def test_an_unreadable_context_keeps_an_outcome_already_reached(self) -> None:
+        cancelled = TRANSITIONS.cancel(publishing(), NOW)
+
+        ended = TRANSITIONS.unreadable(cancelled, NOW)
+
+        self.assertIs(ended.status, ExecutionStatus.CANCELLED)
+        self.assertIsNone(ended.work_kind)
