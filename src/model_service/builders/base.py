@@ -1,11 +1,14 @@
-"""What a builder author implements and receives: `Builder` and `BuilderContext`."""
+"""What a builder author implements and receives: `Builder` and `BuilderContext`.
+
+See `docs/guides/adding-builders.md`.
+"""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from model_service.builders.artifacts import atomic_artifact
 from model_service.builders.contracts import (
@@ -13,6 +16,7 @@ from model_service.builders.contracts import (
     BuilderOutputs,
     SharedArtifact,
 )
+from model_service.builders.model_clients import ModelClient
 
 
 if TYPE_CHECKING:
@@ -23,22 +27,22 @@ if TYPE_CHECKING:
     from pydantic import BaseModel
 
     from model_service.builders.access import InputAccess
-    from model_service.builders.contracts import ModelBinding
 
 
 @dataclass(frozen=True, slots=True)
-class BuilderContext[I: BuilderInputs, C: BaseModel]:
+class BuilderContext[K: ModelClient[Any], I: BuilderInputs, C: BaseModel]:
     """What one builder run gets: its model, inputs and configuration, typed.
 
-    The application checks the model against the builder's contract, resolves
-    the inputs to local files and the configuration with the builder's own
-    classes before building it, so a builder can rely on these types without
-    checking them again.
+    The application checks the model against the builder's contract and its
+    running deployment against its declaration, resolves the inputs to local files
+    and the configuration with the builder's own classes before building it, so
+    a builder can rely on these types without checking them again.
     """
 
     access: InputAccess
-    # The model's declaration, of the contract the builder accepts.
-    model: ModelBinding
+    # The verified client of the model's contract; `model.declaration` is what
+    # the caller declared for it.
+    model: K
     inputs: I
     configuration: C
     deadline_at: datetime
@@ -99,18 +103,24 @@ class PendingArtifact:
         return SharedArtifact(path=str(self.destination))
 
 
-class Builder[I: BuilderInputs, C: BaseModel, R: BuilderOutputs](ABC):
+class Builder[
+    K: ModelClient[Any],
+    I: BuilderInputs,
+    C: BaseModel,
+    R: BuilderOutputs,
+](ABC):
     """Produces a builder's outputs from a slide and a model.
 
-    `I`, `C` and `R` are its declared inputs, configuration and outputs models.
+    `K` is the model client of the contract it accepts; `I`, `C` and `R` are its
+    declared inputs, configuration and outputs models.
     """
 
     @abstractmethod
-    async def run(self, context: BuilderContext[I, C]) -> R:
+    async def run(self, context: BuilderContext[K, I, C]) -> R:
         """Produce the builder's outputs for one invocation.
 
         Args:
-            context: Model declaration, resolved inputs, configuration and
+            context: Verified model client, resolved inputs, configuration and
                 deadline.
 
         Returns:

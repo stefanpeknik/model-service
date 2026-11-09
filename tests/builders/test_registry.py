@@ -99,7 +99,8 @@ class BuilderWiringTests(unittest.TestCase):
                 (base,) = [
                     b for b in implementation.__orig_bases__ if get_origin(b) is Builder
                 ]
-                inputs, configuration, outputs = get_args(base)
+                client, inputs, configuration, outputs = get_args(base)
+                self.assertEqual(client.contract, spec.accepts)
                 self.assertIs(inputs, spec.input_model)
                 self.assertIs(configuration, spec.configuration)
                 self.assertIs(outputs, spec.output_model)

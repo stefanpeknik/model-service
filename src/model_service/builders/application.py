@@ -1,8 +1,9 @@
 """Run one builder invocation behind validation, a deadline and resource cleanup.
 
 The application checks the invocation and the model against the builder's
-declaration, opens the inputs through the provider's access adapter, runs the
-builder before the deadline, checks its outputs and always closes the access.
+declaration, verifies the running model through its contract's client, opens the
+inputs through the provider's access adapter, runs the builder before the
+deadline, checks its outputs and always closes the access.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from model_service.builders.contracts import (
     SharedArtifact,
     is_json_value,
 )
+from model_service.builders.model_clients import client_for, ray_handle
 
 
 if TYPE_CHECKING:
@@ -43,6 +45,7 @@ if TYPE_CHECKING:
         Invocation,
         ModelBinding,
     )
+    from model_service.builders.model_clients import HandleLookup
     from model_service.builders.spec import BuilderSpec
 
 
@@ -53,10 +56,11 @@ class BuilderApplication:
     def __init__(
         self,
         spec: BuilderSpec,
-        builder: Builder[Any, Any, Any],
+        builder: Builder[Any, Any, Any, Any],
         access_adapters: Mapping[InputAccessKind, AccessAdapter],
         *,
         cleanup_timeout_seconds: float = 10,
+        model_handles: HandleLookup = ray_handle,
     ) -> None:
         """Bind a builder to its declaration and access adapters.
 
@@ -65,11 +69,14 @@ class BuilderApplication:
             builder: Builder implementation to run.
             access_adapters: Adapter per input access kind an invocation may name.
             cleanup_timeout_seconds: Time allowed for closing the input access.
+            model_handles: Looks up a model's deployment handle by id; replaceable
+                in tests.
         """
         self._spec = spec
         self._builder = builder
         self._access_adapters = dict(access_adapters)
         self._cleanup_timeout_seconds = cleanup_timeout_seconds
+        self._model_handles = model_handles
 
     async def run(self, invocation: Invocation, model: ModelBinding) -> BuilderResult:
         """Validate, run the builder before the deadline, check its result, and clean up.
@@ -89,8 +96,10 @@ class BuilderApplication:
                 invalid, or the model is incompatible.
             ContractViolation: The builder returned outputs that differ from its
                 declaration.
-            BuilderFailure: The deadline passed (not retryable), the builder or the
-                cleanup failed unexpectedly (retryable), or the builder raised one.
+            BuilderFailure: The running model differs from its declaration, the
+                deadline passed (both not retryable), the builder or the cleanup
+                failed unexpectedly (retryable), or the model client or builder
+                raised one.
         """
         self._spec.check_invocation(invocation)
         self._spec.check_model(model)
@@ -101,11 +110,15 @@ class BuilderApplication:
             timeout = asyncio.timeout(max(0, remaining))
             try:
                 async with timeout:
+                    # Before input access: a mismatched model fails without
+                    # fetching inputs.
+                    client = client_for(model, self._model_handles)
+                    await client.verify()
                     access = await self._create_access(invocation, model)
                     outputs = await self._builder.run(
                         BuilderContext(
                             access=access,
-                            model=model,
+                            model=client,
                             inputs=self._resolve_inputs(invocation, access),
                             configuration=self._spec.resolve_configuration(
                                 invocation.resolved_configuration

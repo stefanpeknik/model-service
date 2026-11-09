@@ -14,6 +14,7 @@ from model_service.builders.contracts import (
     InvalidInvocation,
 )
 from tests.support.builder_fixtures import (
+    DECLARED,
     SPATIAL_MODEL,
     FunctionBuilder,
     invocation,
@@ -30,7 +31,9 @@ async def empty(_context: BuilderContext) -> BuilderResult:
 
 
 def application(builder: Any, adapter: Any, **options: Any) -> BuilderApplication:
-    return BuilderApplication(spec(), builder, {"test": adapter}, **options)
+    return BuilderApplication(
+        spec(), builder, {"test": adapter}, model_handles=DECLARED, **options
+    )
 
 
 class Adapter:

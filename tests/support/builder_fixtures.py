@@ -1,4 +1,4 @@
-"""Shared fixtures for builder runtime tests: test specs and models."""
+"""Shared fixtures for builder runtime tests: test specs, models and native slides."""
 
 from __future__ import annotations
 
@@ -30,7 +30,11 @@ from model_service.builders.spec import BuilderSpec, InputSpec, OutputSpec
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
 
+    import numpy as np
+
     from model_service.builders.base import BuilderContext
+    from model_service.builders.contracts import ModelBinding
+    from model_service.builders.model_clients import HandleLookup
 
 
 SPATIAL_MODEL = SpatialScoresModel(
@@ -76,6 +80,45 @@ def inputs_model(inputs: Mapping[str, InputSpec]) -> type[BuilderInputs]:
         else:
             fields[name] = (Annotated[Path | None, marker], None)
     return create_model("TestInputs", __base__=BuilderInputs, **fields)
+
+
+class _Method:
+    def __init__(self, function: Callable[..., object]) -> None:
+        self.function = function
+        self.calls = 0
+
+    async def remote(self, *args: object) -> object:
+        self.calls += 1
+        return self.function(*args)
+
+
+class FakeDeployment:
+    """Stands in for a model's Ray Serve handle: `get_config` plus given methods."""
+
+    def __init__(
+        self, config: Mapping[str, object], **methods: Callable[..., object]
+    ) -> None:
+        self.get_config = _Method(lambda: dict(config))
+        for name, function in methods.items():
+            setattr(self, name, _Method(function))
+
+
+def running_config(model: ModelBinding) -> dict[str, object]:
+    """What a deployment of exactly this declaration reports from `get_config`."""
+    return model.model_dump(exclude={"id", "contract"})
+
+
+def deployments(*models: ModelBinding, **by_id: FakeDeployment) -> HandleLookup:
+    """A handle lookup serving each model as declared, or the given deployments by id."""
+    handles: dict[str, object] = {
+        model.id: FakeDeployment(running_config(model)) for model in models
+    }
+    handles.update(by_id)
+    return handles.__getitem__  # type: ignore[return-value]
+
+
+# The fixture models, running as declared.
+DECLARED = deployments(SPATIAL_MODEL, EMBEDDING_MODEL)
 
 
 def outputs_model(outputs: Mapping[str, OutputSpec]) -> type[BuilderOutputs]:
@@ -139,3 +182,33 @@ def invocation(
     }
     values.update(overrides)
     return Invocation(**values)  # type: ignore[arg-type]
+
+
+def write_slide(
+    path: Path,
+    pixels: np.ndarray,
+    *,
+    mpp: float = 0.5,
+    pyramid: bool = False,
+    tile: int = 128,
+) -> None:
+    """Write an Aperio-style pyramidal TIFF with the given level-0 resolution."""
+    import pyvips
+
+    height, width = pixels.shape[:2]
+    image = pyvips.Image.new_from_array(pixels)
+    image.set_type(
+        pyvips.GValue.gstr_type,
+        "image-description",
+        f"Aperio Image Library v12.0.0\n{width}x{height} |AppMag = 20|MPP = {mpp}",
+    )
+    image.tiffsave(
+        str(path),
+        tile=True,
+        tile_width=tile,
+        tile_height=tile,
+        compression="deflate",
+        xres=1000 / mpp,
+        yres=1000 / mpp,
+        pyramid=pyramid,
+    )

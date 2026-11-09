@@ -15,6 +15,7 @@ from model_service.builders.contracts import (
     BuilderFailure,
     BuilderResult,
     ContractViolation,
+    FailureCode,
     IncompatibleModelError,
     InlineOutput,
     InvalidInvocation,
@@ -23,12 +24,16 @@ from model_service.builders.contracts import (
 )
 from model_service.builders.spec import InputSpec
 from tests.support.builder_fixtures import (
+    DECLARED,
     EMBEDDING_MODEL,
     SPATIAL_MODEL,
+    FakeDeployment,
     FunctionBuilder,
     artifact_output,
+    deployments,
     inline_output,
     invocation,
+    running_config,
     spec,
 )
 
@@ -104,6 +109,7 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
             spec(**spec_options),
             builder,
             {"test": FixedAccessAdapter(self.root)},
+            model_handles=DECLARED,
         )
 
     async def test_artifact_is_published_atomically_at_default_path(self) -> None:
@@ -209,9 +215,25 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
             spec(),
             run(build),
             {"test": RaisingAdapter(AssertionError("access must not open"))},
+            model_handles=DECLARED,
         )
         with self.assertRaises(IncompatibleModelError):
             await application.run(invocation("test"), EMBEDDING_MODEL)
+
+    async def test_a_mismatched_model_fails_before_inputs_are_fetched(self) -> None:
+        async def build(_context: BuilderContext) -> BuilderResult:
+            self.fail("a mismatched model must not run")
+
+        running = FakeDeployment(running_config(SPATIAL_MODEL) | {"tile_size": 64})
+        application = BuilderApplication(
+            spec(),
+            run(build),
+            {"test": RaisingAdapter(AssertionError("access must not open"))},
+            model_handles=deployments(classifier=running),
+        )
+        with self.assertRaises(BuilderFailure) as raised:
+            await application.run(invocation("test"), SPATIAL_MODEL)
+        self.assertEqual(raised.exception.code, FailureCode.MODEL_CONTRACT_MISMATCH)
 
     async def test_output_contract_violations(self) -> None:
         artifact = self.root / "result.tiff"
@@ -294,7 +316,9 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
             "cleanup timeout": FixedAccessAdapter(self.root, TimingOutCloseAccess),
         }
         for name, adapter in adapters.items():
-            application = BuilderApplication(spec(), run(build), {"test": adapter})
+            application = BuilderApplication(
+                spec(), run(build), {"test": adapter}, model_handles=DECLARED
+            )
             with self.subTest(name), self.assertRaises(BuilderFailure) as raised:
                 await application.run(invocation("test"), SPATIAL_MODEL)
             self.assertEqual(raised.exception.code, "builder_internal_error")
