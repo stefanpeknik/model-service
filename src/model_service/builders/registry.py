@@ -1,6 +1,7 @@
 """The available builders, one declaration per builder package.
 
-Adding a builder adds its `declaration.SPEC` to `BUILDERS`.
+Adding a builder adds its `declaration.SPEC` here; see
+`docs/guides/adding-builders.md`.
 """
 
 from __future__ import annotations
@@ -8,6 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from model_service.builders.contracts import UnknownBuilderError
+from model_service.builders.heatmap.declaration import SPEC as HEATMAP
 
 
 if TYPE_CHECKING:
@@ -15,7 +17,7 @@ if TYPE_CHECKING:
     from model_service.builders.spec import BuilderSpec
 
 
-BUILDERS: dict[str, BuilderSpec] = {}
+BUILDERS: dict[str, BuilderSpec] = {spec.id: spec for spec in (HEATMAP,)}
 
 
 def get_builder(builder_id: str) -> BuilderSpec:

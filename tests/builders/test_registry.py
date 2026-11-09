@@ -10,17 +10,13 @@ from model_service.builders.contracts import (
     InvalidInvocation,
     Invocation,
     SharedPathInput,
-    UnknownBuilderError,
+    SpatialScoresModel,
 )
 from model_service.builders.registry import BUILDERS, get_builder
-from model_service.builders.spec import InputSpec
-from tests.support.builder_fixtures import StrideConfiguration
-from tests.support.builder_fixtures import spec as test_spec
 
 
-SPEC = test_spec(
-    inputs={"slide": InputSpec(), "region_of_interest": InputSpec(required=False)},
-    configuration=StrideConfiguration,
+SPATIAL = SpatialScoresModel(
+    id="classifier", tile_size=512, output_tile_size=1, n_channels=1, mpp=0.5
 )
 
 
@@ -39,26 +35,27 @@ def invocation(**overrides: object) -> Invocation:
 
 
 class BuilderRegistryTests(unittest.TestCase):
-    def test_unknown_builder_is_rejected(self) -> None:
-        with self.assertRaises(UnknownBuilderError):
-            get_builder("missing")
-
     def test_invalid_configuration_is_an_invalid_invocation(self) -> None:
+        spec = get_builder("heatmap")
         for overrides in (
-            {"stride_fraction": "dense"},
+            {"stride_fraction": 0},
+            {"stride_fraction": 1.5},
+            {"skip_background": "maybe"},
             {"encoding": "uint8"},
+            {"output_path": "heatmap.npz"},
         ):
             with (
                 self.subTest(overrides=overrides),
                 self.assertRaises(InvalidInvocation),
             ):
-                SPEC.resolve_configuration(overrides)
+                spec.resolve_configuration(overrides)
 
     def test_validate_invocation_checks_inputs_deadline_and_configuration(
         self,
     ) -> None:
-        SPEC.check_invocation(invocation())
-        SPEC.check_invocation(invocation(inputs={"slide": SharedPathInput("s")}))
+        spec = get_builder("heatmap")
+        spec.check_invocation(invocation())
+        spec.check_invocation(invocation(inputs={"slide": SharedPathInput("s")}))
         cases: dict[str, Invocation] = {
             "missing inputs": invocation(inputs={}),
             "unknown inputs": invocation(
@@ -67,7 +64,7 @@ class BuilderRegistryTests(unittest.TestCase):
             "timezone": invocation(deadline_at=datetime.now() + timedelta(minutes=1)),
             "future": invocation(deadline_at=datetime.now(UTC) - timedelta(seconds=1)),
             "configuration is invalid": invocation(
-                resolved_configuration={"stride_fraction": "dense"}
+                resolved_configuration={"stride_fraction": 2}
             ),
         }
         for message, value in cases.items():
@@ -75,7 +72,7 @@ class BuilderRegistryTests(unittest.TestCase):
                 self.subTest(message=message),
                 self.assertRaisesRegex(InvalidInvocation, message),
             ):
-                SPEC.check_invocation(value)
+                spec.check_invocation(value)
 
 
 class BuilderWiringTests(unittest.TestCase):

@@ -12,9 +12,9 @@ import types
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Union, get_args, get_origin
+from typing import TYPE_CHECKING, Annotated, Union, get_args, get_origin
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from model_service.builders.contracts import (
     Artifact,
@@ -34,6 +34,12 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from model_service.builders.contracts import Invocation, JsonValue, ModelBinding
+
+
+# Input and configuration fields builders share.
+Slide = Annotated[Path, Input(media_type="application/vnd.openmicroscopy")]
+RegionOfInterest = Annotated[Path | None, Input(media_type="image/tiff")]
+StrideFraction = Annotated[float, Field(gt=0, le=1, allow_inf_nan=False)]
 
 
 @dataclass(frozen=True, slots=True)
