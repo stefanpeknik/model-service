@@ -1,9 +1,10 @@
-"""Run a builder while the caller waits."""
+"""Run a builder while the caller waits, without a durable execution record."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from model_service.builders.contracts import ExecutionContext
 from model_service.builders.registry import get_builder
 from model_service.facade.ports import BuilderRunner
 
@@ -50,4 +51,6 @@ class SynchronousBuilderService(BuilderRunner):
         spec.check_model(model)
         invocation = request.invocation(request.deadline_at)
         spec.check_invocation(invocation)
-        return await self._dispatch.run(builder_id, invocation, model)
+        return await self._dispatch.run(
+            builder_id, invocation, model, ExecutionContext()
+        )

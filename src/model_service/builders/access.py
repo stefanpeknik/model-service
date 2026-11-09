@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from model_service.builders.contracts import (
+        ExecutionContext,
         Invocation,
         ModelBinding,
     )
@@ -70,12 +71,14 @@ class AccessAdapter(ABC):
     def create(
         self,
         invocation: Invocation,
+        execution_context: ExecutionContext,
         model: ModelBinding,
     ) -> InputAccess | Awaitable[InputAccess]:
-        """Create the input access for one invocation run.
+        """Create the input access for one invocation attempt.
 
         Args:
             invocation: Invocation whose inputs and outputs the access resolves.
+            execution_context: Attempt identity and protected provider state.
             model: Model binding; tells an adapter that fetches slides which
                 resolution the builder reads.
 

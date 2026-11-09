@@ -143,11 +143,14 @@ class BuilderSpec:
         names = [name for name, output in self.outputs.items() if output.default_path]
         return names[0] if len(names) == 1 else None
 
-    def check_invocation(self, invocation: Invocation) -> None:
+    def check_invocation(
+        self, invocation: Invocation, *, now: datetime | None = None
+    ) -> None:
         """Check an invocation against this declaration before running it.
 
         Args:
             invocation: Invocation to check.
+            now: Time to compare the deadline against; the current UTC time if None.
 
         Raises:
             InvalidInvocation: The deadline lacks a timezone or has passed, inputs
@@ -158,7 +161,7 @@ class BuilderSpec:
         deadline = invocation.deadline_at
         if deadline.tzinfo is None or deadline.utcoffset() is None:
             raise InvalidInvocation("deadline_at must include a timezone")
-        if deadline <= datetime.now(UTC):
+        if deadline <= (now or datetime.now(UTC)):
             raise InvalidInvocation("deadline_at must be in the future")
         if unknown := invocation.inputs.keys() - self.inputs.keys():
             raise InvalidInvocation(f"unknown inputs: {', '.join(sorted(unknown))}")
@@ -177,7 +180,7 @@ class BuilderSpec:
         """Check that a model's inference contract is the one this builder accepts.
 
         Args:
-            model: Model binding resolved for the run.
+            model: Model binding resolved for the attempt.
 
         Raises:
             IncompatibleModelError: The model's contract differs from `accepts`.

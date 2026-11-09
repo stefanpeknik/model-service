@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from model_service.builders.contracts import (
     BuilderFailure,
     ContractViolation,
+    ExecutionContext,
     InputAccessContext,
     InvalidInvocation,
     Invocation,
@@ -32,6 +33,7 @@ class FailingApplication:
         self,
         _invocation: Invocation,
         _model: ModelBinding,
+        _execution_context: ExecutionContext | None = None,
     ) -> Never:
         raise self._error
 

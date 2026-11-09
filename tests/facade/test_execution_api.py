@@ -44,9 +44,15 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
     from starlette.types import Message, Scope
 
-    from model_service.builders.contracts import Invocation, ModelBinding
+    from model_service.builders.contracts import (
+        ExecutionContext,
+        Invocation,
+        ModelBinding,
+    )
 
-    type Handler = Callable[[str, Invocation, ModelBinding], Awaitable[BuilderResult]]
+    type Handler = Callable[
+        [str, Invocation, ModelBinding, ExecutionContext], Awaitable[BuilderResult]
+    ]
 
 
 PROSTATE = SpatialScoresModel(
@@ -65,7 +71,7 @@ class FakeDispatch:
     """Record dispatched calls and delegate to a test handler."""
 
     def __init__(self, handler: Handler | None = None) -> None:
-        self.calls: list[tuple[str, Invocation, ModelBinding]] = []
+        self.calls: list[tuple[str, Invocation, ModelBinding, ExecutionContext]] = []
         self._handler = handler
 
     async def run(
@@ -73,11 +79,12 @@ class FakeDispatch:
         builder_id: str,
         invocation: Invocation,
         model: ModelBinding,
+        execution_context: ExecutionContext,
     ) -> BuilderResult:
-        self.calls.append((builder_id, invocation, model))
+        self.calls.append((builder_id, invocation, model, execution_context))
         if self._handler is None:
             return BuilderResult(outputs={"score": InlineOutput(value=0.9)})
-        return await self._handler(builder_id, invocation, model)
+        return await self._handler(builder_id, invocation, model, execution_context)
 
 
 class ApiTestCase(unittest.IsolatedAsyncioTestCase):
@@ -201,11 +208,12 @@ class RunRouteTests(ApiTestCase):
         self.assertEqual(
             response.json(), {"outputs": {"score": {"kind": "inline", "value": 0.9}}}
         )
-        [(builder_id, invocation, model)] = self.dispatch.calls
+        [(builder_id, invocation, model, context)] = self.dispatch.calls
         self.assertEqual(builder_id, "heatmap")
         self.assertEqual(model, PROSTATE)
         self.assertIsNone(invocation.resolved_configuration)
         self.assertEqual(invocation.output_path, "outputs/heatmap.tiff")
+        self.assertIsNone(context.processing_attempt_id)
 
     async def test_lookup_and_validation_errors_happen_before_dispatch(self) -> None:
         request = self.run_request()

@@ -1,4 +1,8 @@
-"""Download model artifacts for model deployment construction."""
+"""Download model artifacts for model deployment construction.
+
+This model loader is separate from model_service.scheduler.providers, whose adapters connect
+workflows to caller data and external job lifecycles.
+"""
 
 
 def mlflow(artifact_uri: str) -> str:

@@ -108,7 +108,7 @@ class BuilderDeployment:
         """Run one builder invocation over HTTP.
 
         Args:
-            body: Invocation and model of the run.
+            body: Invocation, model and execution context of the attempt.
 
         Returns:
             The builder's result.

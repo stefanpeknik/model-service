@@ -1,5 +1,6 @@
-"""Durable execution state rules, without storage or a worker.
+"""Durable execution state rules and the seams around them, without a worker.
 
-transitions.ExecutionTransitions owns every state change; domain.py and
-contracts.py hold the records and safe failure types it works on.
+transitions.ExecutionTransitions owns every state change; store.repository is the
+persistence interface and providers is the provider interface. Persistence
+implementations remain separate.
 """

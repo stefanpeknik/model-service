@@ -1,4 +1,4 @@
-"""Check deadline-aware acquisition, bounded cleanup and cancellation."""
+"""Check deadline-aware acquisition, bounded cleanup, cancellation and attempt isolation."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from model_service.builders.application import BuilderApplication
 from model_service.builders.contracts import (
     BuilderFailure,
     BuilderResult,
+    ExecutionContext,
     InvalidInvocation,
 )
 from tests.support.builder_fixtures import (
@@ -40,7 +41,7 @@ class Adapter:
     def __init__(self, access: Any) -> None:
         self._access = access
 
-    def create(self, _invocation: object, _model: object) -> Any:
+    def create(self, _invocation: object, _context: object, _model: object) -> Any:
         return self._access
 
 
@@ -49,7 +50,9 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
         cancelled = asyncio.Event()
 
         class BlockingAdapter:
-            async def create(self, _invocation: object, _model: object) -> Any:
+            async def create(
+                self, _invocation: object, _context: object, _model: object
+            ) -> Any:
                 try:
                     await asyncio.Event().wait()
                 finally:
@@ -164,6 +167,21 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
             await application(FunctionBuilder(build), Adapter(Access())).run(
                 invocation("test"), SPATIAL_MODEL
             )
+
+
+class InputAccessContextTests(unittest.TestCase):
+    def test_execution_context_rejects_invalid_attempts_and_non_json_secrets(
+        self,
+    ) -> None:
+        from pydantic import TypeAdapter, ValidationError
+
+        for attempt in ("", True, 1):
+            with self.subTest(attempt=attempt), self.assertRaises(ValidationError):
+                ExecutionContext(processing_attempt_id=attempt)  # type: ignore[arg-type]
+        with self.assertRaises(ValidationError):
+            ExecutionContext(protected_context={"invalid": float("nan")})
+        with self.assertRaises(ValidationError):
+            TypeAdapter(ExecutionContext).validate_python({"unexpected": True})
 
 
 if __name__ == "__main__":

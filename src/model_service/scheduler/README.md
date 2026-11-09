@@ -1,12 +1,15 @@
 # Execution scheduler
 
-The state rules of durable builder executions. They compute each change of
-an execution record and do no storage or network I/O.
+Durable executions of builder invocations: the state rules, the persistence
+interface and the provider interface. A repository admits, claims, renews and
+settles executions under these rules.
 
 | Module | Owns |
 | --- | --- |
 | `transitions.py` | Every state change: admit, claim, renew, settle, cancel, lease recovery, deadlines |
-| `domain.py`, `contracts.py` | Execution records, leases, retry policies, attempt outcomes and safe errors |
+| `domain.py`, `contracts.py` | Internal records, schedule requests and safe errors |
+| `store/repository.py` | The persistence interface |
+| `providers.py` | Provider interface: identify, prepare, finish |
 
 ## Lifecycle
 
@@ -23,8 +26,9 @@ cancel ────────────────────────�
 - A publication that fails or whose outcome is unknown is not retried; the
   execution fails and the provider gets a failure report.
 - A lease that expires is recovered by retrying or failing its attempt. Every
-  settlement checks the fencing token, so a stale attempt cannot overwrite a
-  newer one.
+  write checks the fencing token, so a stale attempt cannot overwrite a newer
+  one.
 
-Tests: `tests/scheduler/test_transitions.py` and
-`tests/scheduler/test_retry_policy.py`.
+Tests: `tests/scheduler/test_transitions.py`, `tests/scheduler/test_retry_policy.py`
+and `tests/support/repository_contract.py` (the repository contract, run against
+the in-memory repository).

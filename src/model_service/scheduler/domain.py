@@ -110,6 +110,17 @@ class Priority(IntEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class PreparedInvocation:
+    """Carry a validated invocation, private provider state, and any provider-imposed deadline limits."""
+
+    invocation: Invocation
+    protected_context: dict[str, JsonValue]
+    deadline_cap: datetime | None = None
+    terminal_report_deadline_at: datetime | None = None
+    priority: int = Priority.NORMAL
+
+
+@dataclass(frozen=True, slots=True)
 class Admission:
     """Carry the complete prepared submission that persistence must admit atomically."""
 
@@ -157,6 +168,14 @@ class ExecutionRecord:
         if self.work_kind is WorkKind.PROCESSING:
             return self.processing_attempts
         return self.finish_attempts
+
+
+@dataclass(frozen=True, slots=True)
+class AdmissionResult:
+    """Pair the admitted record with a flag distinguishing insertion from an idempotent replay."""
+
+    execution: ExecutionRecord
+    created: bool
 
 
 @dataclass(frozen=True, slots=True)

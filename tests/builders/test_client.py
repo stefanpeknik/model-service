@@ -17,6 +17,7 @@ from model_service.builders.client import (
 )
 from model_service.builders.contracts import (
     BuilderResult,
+    ExecutionContext,
     InlineOutput,
     InputAccessContext,
     Invocation,
@@ -46,6 +47,7 @@ class HttpBuilderDispatchTests(unittest.IsolatedAsyncioTestCase):
     async def dispatch(
         self,
         handler: Callable[[httpx.Request], httpx.Response],
+        context: ExecutionContext | None = None,
     ) -> BuilderResult:
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             return await HTTPBuilderDispatch(client, origin="http://ray:8000/").run(
@@ -59,9 +61,10 @@ class HttpBuilderDispatchTests(unittest.IsolatedAsyncioTestCase):
                     deadline_at=datetime.now(UTC) + timedelta(minutes=1),
                 ),
                 MODEL,
+                context or ExecutionContext(),
             )
 
-    async def test_success_sends_invocation_and_model(self) -> None:
+    async def test_success_sends_invocation_model_and_context(self) -> None:
         requests: list[httpx.Request] = []
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -70,7 +73,13 @@ class HttpBuilderDispatchTests(unittest.IsolatedAsyncioTestCase):
                 200, json={"outputs": {"score": {"kind": "inline", "value": 0.9}}}
             )
 
-        result = await self.dispatch(handler)
+        result = await self.dispatch(
+            handler,
+            ExecutionContext(
+                processing_attempt_id="attempt-1",
+                protected_context={"credential": "secret"},
+            ),
+        )
 
         self.assertEqual(result, BuilderResult(outputs={"score": InlineOutput(0.9)}))
         [request] = requests
@@ -80,6 +89,13 @@ class HttpBuilderDispatchTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(body["invocation"]["resolved_configuration"])
         self.assertEqual(body["model"]["id"], "prostate-classifier-1")
         self.assertEqual(body["model"]["contract"], "spatial-scores")
+        self.assertEqual(
+            body["execution_context"],
+            {
+                "processing_attempt_id": "attempt-1",
+                "protected_context": {"credential": "secret"},
+            },
+        )
         self.assertLessEqual(request.extensions["timeout"]["read"], 60)
 
     async def test_ray_serves_own_503_is_a_confirmed_rejection(self) -> None:

@@ -1,10 +1,13 @@
 """Resolve builder files below a shared-storage root with traversal and symlink checks.
 
 The caller names the root, but it must lie within a root the server allows.
+Scheduled attempts write outputs below `.attempts/<hash of attempt token>/`;
+synchronous runs write to the requested relative path directly.
 """
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Annotated
 
@@ -19,6 +22,7 @@ if TYPE_CHECKING:
 
     from model_service.builders.contracts import (
         BuilderInput,
+        ExecutionContext,
         Invocation,
         ModelBinding,
     )
@@ -31,15 +35,29 @@ class SharedStorageState(BaseModel):
 
 
 class SharedStorageAccess(InputAccess):
-    def __init__(self, root: Path, inputs: dict[str, BuilderInput]) -> None:
-        """Hold the resolved root and the inputs.
+    def __init__(
+        self,
+        root: Path,
+        inputs: dict[str, BuilderInput],
+        *,
+        processing_attempt_id: str | None = None,
+    ) -> None:
+        """Hold the resolved root, the inputs and the attempt's output prefix.
 
         Args:
             root: The resolved shared-storage root, already checked against the allowed roots.
             inputs: The invocation's builder inputs by name.
+            processing_attempt_id: The scheduled attempt's ID; outputs go below
+                `.attempts/<sha256 of it>/`. None for synchronous runs, which write to
+                the requested path directly.
         """
         self._root = root
         self._inputs = inputs
+        self._output_prefix = (
+            ".attempts/" + hashlib.sha256(processing_attempt_id.encode()).hexdigest()
+            if processing_attempt_id is not None
+            else ""
+        )
 
     def input_path(self, name: str) -> Path:
         """Resolve a shared-path input to an existing regular file below the root.
@@ -64,7 +82,7 @@ class SharedStorageAccess(InputAccess):
         return path
 
     def output_path(self, relative_path: str) -> Path:
-        """Resolve an output path below the root.
+        """Resolve an output path below the root and the attempt's prefix.
 
         The file need not exist yet.
 
@@ -78,7 +96,9 @@ class SharedStorageAccess(InputAccess):
             InvalidInvocation: If the path is not relative and traversal-free, or
                 resolves outside the root.
         """
-        return self._resolve(relative_path, must_exist=False)
+        return self._resolve(
+            relative_path, must_exist=False, prefix=self._output_prefix
+        )
 
     async def aclose(self) -> None:
         """Release nothing; shared-storage access holds no resources."""
@@ -100,12 +120,15 @@ class SharedStorageAccess(InputAccess):
             return False
         return resolved.is_file()
 
-    def _resolve(self, relative_path: str, *, must_exist: bool) -> Path:
+    def _resolve(
+        self, relative_path: str, *, must_exist: bool, prefix: str = ""
+    ) -> Path:
         """Resolve a relative POSIX path below the root, rejecting traversal and symlink escapes.
 
         Args:
             relative_path: The caller's relative path.
             must_exist: Whether the path must already exist.
+            prefix: A relative directory placed between the root and the path.
 
         Returns:
             The resolved path.
@@ -125,7 +148,7 @@ class SharedStorageAccess(InputAccess):
             raise InvalidInvocation(
                 "shared-storage paths must be relative and traversal-free"
             )
-        candidate = self._root.joinpath(*path.parts)
+        candidate = self._root.joinpath(*PurePosixPath(prefix).parts, *path.parts)
         try:
             resolved = candidate.resolve(strict=must_exist)
             resolved.relative_to(self._root)
@@ -181,12 +204,14 @@ class SharedStorageAccessAdapter(AccessAdapter):
     def create(
         self,
         invocation: Invocation,
+        execution_context: ExecutionContext,
         model: ModelBinding | None = None,
     ) -> SharedStorageAccess:
         """Create shared-storage access for one invocation.
 
         Args:
             invocation: The invocation; its input access state names the root.
+            execution_context: Supplies the processing attempt ID that scopes outputs.
             model: Unused.
 
         Returns:
@@ -197,5 +222,7 @@ class SharedStorageAccessAdapter(AccessAdapter):
         """
         del model
         return SharedStorageAccess(
-            self.root(invocation.input_access.state), invocation.inputs
+            self.root(invocation.input_access.state),
+            invocation.inputs,
+            processing_attempt_id=execution_context.processing_attempt_id,
         )

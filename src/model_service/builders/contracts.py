@@ -1,12 +1,12 @@
 """Builder invocations, model bindings, results and safe errors.
 
-Everything here crosses a process boundary (facade → Ray builder replica), so
-the types are strict and JSON-serializable.
+Everything here crosses a process boundary (facade → scheduler database → Ray
+builder replica), so the types are strict and JSON-serializable.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
@@ -21,6 +21,7 @@ from pydantic import (
     ValidationError,
 )
 from pydantic import JsonValue as PydanticJsonValue
+from pydantic.dataclasses import dataclass as validated_dataclass
 
 
 if TYPE_CHECKING:
@@ -171,6 +172,14 @@ class InputAccessContext:
     state: _JsonObject
 
 
+@validated_dataclass(frozen=True, slots=True, config=ConfigDict(extra="forbid"))
+class ExecutionContext:
+    """Attempt identity and secret provider state, kept out of the stored invocation."""
+
+    processing_attempt_id: _NonEmptyString | None = None
+    protected_context: _JsonObject = field(default_factory=dict, repr=False)
+
+
 def _iso_datetime(value: object) -> datetime:
     """Parse a deadline from an ISO 8601 string, passing datetimes through.
 
@@ -199,10 +208,11 @@ type Deadline = Annotated[
 
 @dataclass(frozen=True, slots=True)
 class Invocation:
-    """One request to run a builder.
+    """One request to run a builder; stored durably for scheduled executions.
 
     `resolved_configuration` is None when the run uses the builder's current
-    defaults; a provider may resolve it from its own job's configuration instead.
+    defaults, chosen when each attempt starts; a provider may resolve it from its
+    own job's configuration instead.
     """
 
     inputs: Annotated[dict[str, BuilderInput], Field(strict=True)]

@@ -26,6 +26,7 @@ from model_service.builders.contracts import (
     BuilderOutputs,
     BuilderResult,
     ContractViolation,
+    ExecutionContext,
     FailureCode,
     InlineOutput,
     InvalidInvocation,
@@ -78,7 +79,12 @@ class BuilderApplication:
         self._cleanup_timeout_seconds = cleanup_timeout_seconds
         self._model_handles = model_handles
 
-    async def run(self, invocation: Invocation, model: ModelBinding) -> BuilderResult:
+    async def run(
+        self,
+        invocation: Invocation,
+        model: ModelBinding,
+        execution_context: ExecutionContext | None = None,
+    ) -> BuilderResult:
         """Validate, run the builder before the deadline, check its result, and clean up.
 
         The input access is always closed. A cleanup failure is raised only when the
@@ -86,7 +92,9 @@ class BuilderApplication:
 
         Args:
             invocation: Invocation to run.
-            model: Model binding resolved for this run.
+            model: Model binding resolved for this attempt.
+            execution_context: Attempt identity and protected provider state; an
+                empty context when omitted.
 
         Returns:
             The builder's validated result.
@@ -114,7 +122,9 @@ class BuilderApplication:
                     # fetching inputs.
                     client = client_for(model, self._model_handles)
                     await client.verify()
-                    access = await self._create_access(invocation, model)
+                    access = await self._create_access(
+                        invocation, execution_context or ExecutionContext(), model
+                    )
                     outputs = await self._builder.run(
                         BuilderContext(
                             access=access,
@@ -202,12 +212,16 @@ class BuilderApplication:
         return paths
 
     async def _create_access(
-        self, invocation: Invocation, model: ModelBinding
+        self,
+        invocation: Invocation,
+        execution_context: ExecutionContext,
+        model: ModelBinding,
     ) -> InputAccess:
         """Create the input access through the adapter the invocation names.
 
         Args:
             invocation: Invocation whose `input_access.kind` selects the adapter.
+            execution_context: Attempt identity and protected provider state.
             model: Model binding passed on to the adapter.
 
         Returns:
@@ -219,7 +233,7 @@ class BuilderApplication:
         adapter = self._access_adapters.get(invocation.input_access.kind)
         if adapter is None:
             raise InvalidInvocation("unsupported input access kind")
-        access = adapter.create(invocation, model)
+        access = adapter.create(invocation, execution_context, model)
         if inspect.isawaitable(access):
             return await access
         return access

@@ -1,8 +1,8 @@
-"""Internal HTTP contract between the facade and Ray builder replicas."""
+"""Internal HTTP contract between the facade/scheduler and Ray builder replicas."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated
 
@@ -13,6 +13,7 @@ from model_service.builders.contracts import (
     BuilderFailure,
     BuilderResult,
     ContractViolation,
+    ExecutionContext,
     InvalidInvocation,
     Invocation,
     ModelBinding,
@@ -25,10 +26,11 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class RunRequest:
-    """The invocation plus the model resolved for it."""
+    """The stored invocation plus the model resolved for this attempt."""
 
     invocation: Invocation
     model: ModelBinding
+    execution_context: ExecutionContext = field(default_factory=ExecutionContext)
 
 
 RUN_REQUEST: TypeAdapter[RunRequest] = TypeAdapter(RunRequest)
@@ -79,7 +81,7 @@ async def run_http(
 
     Args:
         application: Builder application to run.
-        request: Invocation and model of the run.
+        request: Invocation, model and execution context of the attempt.
 
     Returns:
         The builder's result.
@@ -89,7 +91,9 @@ async def run_http(
             500 for a contract violation, 503 for a retryable failure.
     """
     try:
-        return await application.run(request.invocation, request.model)
+        return await application.run(
+            request.invocation, request.model, request.execution_context
+        )
     except InvalidInvocation as exc:
         raise error(
             status.HTTP_422_UNPROCESSABLE_CONTENT,

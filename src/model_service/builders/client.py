@@ -21,6 +21,7 @@ from model_service.builders.http import RUN_REQUEST, ErrorResponse, RunRequest
 if TYPE_CHECKING:
     from model_service.builders.contracts import (
         BuilderResult,
+        ExecutionContext,
         Invocation,
         ModelBinding,
     )
@@ -36,13 +37,15 @@ class BuilderDispatch(ABC):
         builder_id: str,
         invocation: Invocation,
         model: ModelBinding,
+        execution_context: ExecutionContext,
     ) -> BuilderResult:
-        """Run a builder for one invocation.
+        """Run a builder for one invocation attempt.
 
         Args:
             builder_id: Registered builder id.
             invocation: Invocation to run.
-            model: Model binding resolved for this run.
+            model: Model binding resolved for this attempt.
+            execution_context: Attempt identity and protected provider state.
 
         Returns:
             The builder's result.
@@ -96,6 +99,7 @@ class HTTPBuilderDispatch(BuilderDispatch):
         builder_id: str,
         invocation: Invocation,
         model: ModelBinding,
+        execution_context: ExecutionContext,
     ) -> BuilderResult:
         """Post one run request to a builder replica and classify the outcome.
 
@@ -104,7 +108,8 @@ class HTTPBuilderDispatch(BuilderDispatch):
         Args:
             builder_id: Registered builder id, used in the route.
             invocation: Invocation to run.
-            model: Model binding resolved for this run.
+            model: Model binding resolved for this attempt.
+            execution_context: Attempt identity and protected provider state.
 
         Returns:
             The builder's result from a 200 response.
@@ -119,7 +124,7 @@ class HTTPBuilderDispatch(BuilderDispatch):
         timeout = max(
             (invocation.deadline_at - datetime.now(UTC)).total_seconds(), 0.001
         )
-        request = RunRequest(invocation, model)
+        request = RunRequest(invocation, model, execution_context)
         try:
             response = await self._client.post(
                 f"{self._origin}/builders/{quote(builder_id, safe='')}/",

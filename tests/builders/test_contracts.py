@@ -106,7 +106,7 @@ class BuilderContractTests(unittest.TestCase):
             with self.subTest(invalid=invalid), self.assertRaises(ValidationError):
                 MODEL_BINDING.validate_python(invalid)
 
-    def test_run_request_nests_invocation_and_model(self) -> None:
+    def test_run_request_nests_invocation_model_and_context(self) -> None:
         body = {
             "invocation": INVOCATION_BODY,
             "model": {
@@ -115,10 +115,15 @@ class BuilderContractTests(unittest.TestCase):
                 "tile_size": 224,
                 "mpp": 0.5,
             },
+            "execution_context": {
+                "processing_attempt_id": "attempt-1",
+                "protected_context": {"credential": "secret"},
+            },
         }
         request = RUN_REQUEST.validate_python(body)
 
         self.assertIsInstance(request.model, TileEmbeddingModel)
+        self.assertNotIn("secret", repr(request.execution_context))
         self.assertEqual(RUN_REQUEST.dump_python(request, mode="json"), body)
         with self.assertRaises(ValidationError):
             RUN_REQUEST.validate_python({"invocation": INVOCATION_BODY})

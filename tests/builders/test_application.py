@@ -68,7 +68,9 @@ class FixedAccessAdapter:
         self._root = root
         self._access = access
 
-    def create(self, _invocation: object, _model: object) -> FixedAccess:
+    def create(
+        self, _invocation: object, _context: object, _model: object
+    ) -> FixedAccess:
         return self._access(self._root)
 
 
@@ -86,7 +88,9 @@ class RaisingAdapter:
     def __init__(self, error: Exception) -> None:
         self._error = error
 
-    def create(self, _invocation: object, _model: object) -> FixedAccess:
+    def create(
+        self, _invocation: object, _context: object, _model: object
+    ) -> FixedAccess:
         raise self._error
 
 
