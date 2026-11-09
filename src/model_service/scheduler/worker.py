@@ -16,11 +16,13 @@ from model_service.builders.client import (
     RemoteFailureError,
     UnknownOutcomeError,
 )
-from model_service.builders.contracts import ExecutionContext
+from model_service.builders.contracts import BuilderResult, ExecutionContext
 from model_service.scheduler.contracts import (
     ExecutionError,
     ExecutionErrorCode,
     IncompatibleModelError,
+    InferenceInvocation,
+    Operation,
     UnknownBuilderError,
     UnknownModelError,
 )
@@ -155,7 +157,7 @@ class ExecutionWorker:
                 if len(running) < self._max_concurrent:
                     try:
                         claim = await self._repository.claim_due(
-                            self._owner, self._lease_duration
+                            self._owner, self._lease_duration, [Operation.BUILDER]
                         )
                     except Exception as error:
                         logger.error("execution claim failed: %s", type(error).__name__)
@@ -185,7 +187,9 @@ class ExecutionWorker:
         Raises:
             ExecutionRepositoryUnavailableError: The repository is unavailable for the claim, or for the settlement during a whole lease.
         """
-        claim = await self._repository.claim_due(self._owner, self._lease_duration)
+        claim = await self._repository.claim_due(
+            self._owner, self._lease_duration, [Operation.BUILDER]
+        )
         if claim is None:
             return False
         await self._process(claim)
@@ -382,7 +386,14 @@ class ExecutionWorker:
             Success with the builder result; a rejection for confirmed backpressure; or
             a failure, permanent for an unknown or incompatible model and retryable for
             an unknown dispatch outcome.
+
+        Raises:
+            RuntimeError: The claim has no builder invocation.
         """
+        if claim.builder_id is None or isinstance(
+            claim.invocation, InferenceInvocation
+        ):
+            raise RuntimeError("builder claim has no builder invocation")
         try:
             # Each attempt uses the model's current catalog declaration.
             model = self._resolve_model(claim.builder_id, claim.model_id)
@@ -444,8 +455,8 @@ def _finish_outcome(claim: WorkClaim) -> ProviderFinishOutcome:
         RuntimeError: The claim lacks the stored result or error its kind requires, or its kind is not provider work.
     """
     if claim.kind is WorkKind.PROVIDER_FINISH:
-        if claim.result is None:
-            raise RuntimeError("provider finish requires a durable result")
+        if not isinstance(claim.result, BuilderResult) or claim.builder_id is None:
+            raise RuntimeError("provider finish requires a durable builder result")
         return ProviderSuccess(claim.result, claim.builder_id)
     if claim.kind is WorkKind.PROVIDER_FAILURE_REPORT:
         if claim.error is None:

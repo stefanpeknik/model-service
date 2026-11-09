@@ -6,10 +6,12 @@ not themselves write to storage or start work.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from enum import IntEnum, StrEnum
 from typing import TYPE_CHECKING
+
+from model_service.scheduler.contracts import Operation, ProviderName
 
 
 if TYPE_CHECKING:
@@ -23,7 +25,9 @@ if TYPE_CHECKING:
     from model_service.scheduler.contracts import (
         ExecutionError,
         ExecutionStatus,
-        ProviderName,
+        InferenceResult,
+        StoredInvocation,
+        StoredResult,
     )
 
 
@@ -125,12 +129,14 @@ class Admission:
     """Carry the complete prepared submission that persistence must admit atomically."""
 
     identity: SubmissionIdentity
-    builder_id: str
+    builder_id: str | None
     model_id: str
-    invocation: Invocation
+    invocation: StoredInvocation
     protected_context: dict[str, JsonValue]
     deadline_at: datetime
     terminal_report_deadline_at: datetime | None = None
+    operation: Operation = Operation.BUILDER
+    payload: bytes | None = None
     priority: int = Priority.NORMAL
 
 
@@ -140,10 +146,10 @@ class ExecutionRecord:
 
     id: str
     identity: SubmissionIdentity
-    builder_id: str
+    builder_id: str | None
     model_id: str
     status: ExecutionStatus
-    invocation: Invocation
+    invocation: StoredInvocation
     protected_context: dict[str, JsonValue]
     deadline_at: datetime
     terminal_report_deadline_at: datetime | None
@@ -156,10 +162,11 @@ class ExecutionRecord:
     lease_owner: str | None
     fencing_token: str | None
     lease_expires_at: datetime | None
-    result: BuilderResult | None
+    result: StoredResult | None
     error: ExecutionError | None
     created_at: datetime
     updated_at: datetime
+    operation: Operation = Operation.BUILDER
     priority: int = Priority.NORMAL
 
     @property
@@ -183,16 +190,18 @@ class WorkClaim:
     """Give a worker the inputs and token for one leased processing or provider attempt."""
 
     execution_id: str
-    builder_id: str
+    builder_id: str | None
     model_id: str
     provider: ProviderName
     kind: WorkKind
-    invocation: Invocation
+    invocation: StoredInvocation
     protected_context: dict[str, JsonValue]
     attempt: int
     fencing_token: str
-    result: BuilderResult | None
+    result: StoredResult | None
     error: ExecutionError | None
+    operation: Operation = Operation.BUILDER
+    payload: bytes | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,6 +209,14 @@ class ProcessingSucceeded:
     """Report a computation result to store before scheduling provider finish."""
 
     result: BuilderResult
+
+
+@dataclass(frozen=True, slots=True)
+class InferenceSucceeded:
+    """A raw model response; the repository stores `content` next to the execution."""
+
+    result: InferenceResult
+    content: bytes = field(repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -233,6 +250,7 @@ class ProviderFinishFailed:
 
 type Settlement = (
     ProcessingSucceeded
+    | InferenceSucceeded
     | ProcessingRejected
     | ProcessingFailed
     | ProviderFinishSucceeded

@@ -142,6 +142,12 @@ class SchedulerSettings(BaseSettings):
     inference_max_result_bytes: int = Field(
         default=4 * 1024 * 1024, gt=0, validation_alias="INFERENCE_MAX_RESULT_BYTES"
     )
+    # Request and response files of inference executions; every facade
+    # replica must see the same directory.
+    inference_storage_path: Path = Field(
+        default=Path("/mnt/model-service-inference"),
+        validation_alias="INFERENCE_STORAGE_PATH",
+    )
 
     @classmethod
     def settings_customise_sources(

@@ -9,10 +9,15 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Annotated
+
+from pydantic import Field, TypeAdapter
 
 from model_service.builders.contracts import (
     BuilderResult,
+    Deadline,
     IncompatibleModelError,
+    Invocation,
     JsonValue,
     ModelBinding,
     UnknownBuilderError,
@@ -29,6 +34,22 @@ class ExecutionStatus(StrEnum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+    @property
+    def terminal(self) -> bool:
+        """Whether an execution in this status is finished for good."""
+        return self in {
+            ExecutionStatus.SUCCEEDED,
+            ExecutionStatus.FAILED,
+            ExecutionStatus.CANCELLED,
+        }
+
+
+class Operation(StrEnum):
+    """What an execution runs: a builder over a slide, or one raw model request."""
+
+    BUILDER = "builder"
+    INFERENCE = "inference"
 
 
 class ExecutionErrorCode(StrEnum):
@@ -58,6 +79,29 @@ class ScheduleRequest:
     idempotency_key: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class InferenceInvocation:
+    """The stored part of a raw request; the payload bytes are kept separately."""
+
+    headers: Annotated[dict[str, str], Field(strict=True)]
+    deadline_at: Deadline
+
+
+@dataclass(frozen=True, slots=True)
+class InferenceResult:
+    """Describes a stored model response; its bytes are kept in the payload store."""
+
+    media_type: str | None
+    headers: Annotated[dict[str, str], Field(strict=True)]
+    size: Annotated[int, Field(strict=True, ge=0)]
+
+
+type StoredInvocation = Invocation | InferenceInvocation
+type StoredResult = BuilderResult | InferenceResult
+STORED_INVOCATION: TypeAdapter[StoredInvocation] = TypeAdapter(StoredInvocation)
+STORED_RESULT: TypeAdapter[StoredResult] = TypeAdapter(StoredResult)
+
+
 type ModelResolver = Callable[[str, str], ModelBinding]
 """Return the current model binding for (builder_id, model_id), raising
 UnknownBuilderError, UnknownModelError or IncompatibleModelError."""
@@ -72,10 +116,11 @@ class ExecutionError:
 @dataclass(frozen=True, slots=True)
 class ExecutionView:
     id: str
-    builder_id: str
+    operation: Operation
+    builder_id: str | None
     model_id: str
     status: ExecutionStatus
-    result: BuilderResult | None = None
+    result: StoredResult | None = None
     error: ExecutionError | None = None
     # A failure or cancellation not yet reported to the provider.
     provider_pending: bool = False
@@ -103,3 +148,7 @@ class SchedulingUnavailableError(RuntimeError):
 
 class UnknownExecutionError(KeyError):
     pass
+
+
+class ResultUnavailableError(RuntimeError):
+    """The execution has no stored inference response to download."""

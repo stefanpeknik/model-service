@@ -10,6 +10,7 @@ from datetime import datetime  # noqa: TC003 - SQLAlchemy resolves mapped annota
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     DateTime,
     Enum,
@@ -28,13 +29,14 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
 
-from model_service.builders.contracts import (
-    INVOCATION,
-    RESULT,
-    BuilderResult,
-    Invocation,
+from model_service.scheduler.contracts import (
+    STORED_INVOCATION,
+    STORED_RESULT,
+    ExecutionStatus,
+    Operation,
+    StoredInvocation,
+    StoredResult,
 )
-from model_service.scheduler.contracts import ExecutionStatus
 from model_service.scheduler.domain import WorkKind
 
 
@@ -45,12 +47,14 @@ if TYPE_CHECKING:
 DEFAULT_SCHEMA = "model_service"
 
 
-class InvocationType(TypeDecorator[Invocation]):
+class InvocationType(TypeDecorator[StoredInvocation]):
     impl = JSONB(none_as_null=True)
     cache_ok = True
 
-    def process_bind_param(self, value: Invocation | None, dialect: Dialect) -> object:
-        """Serialize an invocation to JSON for the JSONB column.
+    def process_bind_param(
+        self, value: StoredInvocation | None, dialect: Dialect
+    ) -> object:
+        """Serialize a stored invocation to JSON for the JSONB column.
 
         Args:
             value: The invocation, or None.
@@ -61,34 +65,34 @@ class InvocationType(TypeDecorator[Invocation]):
         """
         if value is None:
             return None
-        return INVOCATION.dump_python(value, mode="json")
+        return STORED_INVOCATION.dump_python(value, mode="json")
 
     def process_result_value(
         self, value: object, dialect: Dialect
-    ) -> Invocation | None:
-        """Validate the column's JSON back into an invocation.
+    ) -> StoredInvocation | None:
+        """Validate the column's JSON back into a stored invocation.
 
         Args:
             value: JSON from the JSONB column, or None.
             dialect: Database dialect in use.
 
         Returns:
-            The invocation, or None.
+            The stored invocation, or None.
 
         Raises:
-            pydantic.ValidationError: The JSON does not match the invocation schema.
+            pydantic.ValidationError: The JSON does not match the stored invocation schema.
         """
-        return INVOCATION.validate_python(value) if value is not None else None
+        return STORED_INVOCATION.validate_python(value) if value is not None else None
 
 
-class ResultType(TypeDecorator[BuilderResult]):
+class ResultType(TypeDecorator[StoredResult]):
     impl = JSONB(none_as_null=True)
     cache_ok = True
 
     def process_bind_param(
-        self, value: BuilderResult | None, dialect: Dialect
+        self, value: StoredResult | None, dialect: Dialect
     ) -> object:
-        """Serialize a builder result to JSON for the JSONB column.
+        """Serialize a stored result to JSON for the JSONB column.
 
         Args:
             value: The result, or None.
@@ -97,24 +101,26 @@ class ResultType(TypeDecorator[BuilderResult]):
         Returns:
             The JSON-compatible value, or None.
         """
-        return RESULT.dump_python(value, mode="json") if value is not None else None
+        return (
+            STORED_RESULT.dump_python(value, mode="json") if value is not None else None
+        )
 
     def process_result_value(
         self, value: object, dialect: Dialect
-    ) -> BuilderResult | None:
-        """Validate the column's JSON back into a builder result.
+    ) -> StoredResult | None:
+        """Validate the column's JSON back into a stored result.
 
         Args:
             value: JSON from the JSONB column, or None.
             dialect: Database dialect in use.
 
         Returns:
-            The builder result, or None.
+            The stored result, or None.
 
         Raises:
-            pydantic.ValidationError: The JSON does not match the builder result schema.
+            pydantic.ValidationError: The JSON does not match the stored result schema.
         """
-        return RESULT.validate_python(value) if value is not None else None
+        return STORED_RESULT.validate_python(value) if value is not None else None
 
 
 class Base(DeclarativeBase):
@@ -134,7 +140,16 @@ class ExecutionRow(Base):
     provider: Mapped[str] = mapped_column(Text)
     submission_key: Mapped[str] = mapped_column(Text)
     request_fingerprint: Mapped[str] = mapped_column(Text)
-    builder_id: Mapped[str] = mapped_column(Text)
+    operation: Mapped[Operation] = mapped_column(
+        Enum(
+            Operation,
+            native_enum=False,
+            create_constraint=True,
+            length=None,
+            values_callable=lambda enum: [operation.value for operation in enum],
+        )
+    )
+    builder_id: Mapped[str | None] = mapped_column(Text)
     model_id: Mapped[str] = mapped_column(Text)
     status: Mapped[ExecutionStatus] = mapped_column(
         Enum(
@@ -145,7 +160,7 @@ class ExecutionRow(Base):
             values_callable=lambda enum: [status.value for status in enum],
         )
     )
-    invocation: Mapped[Invocation] = mapped_column(InvocationType())
+    invocation: Mapped[StoredInvocation] = mapped_column(InvocationType())
     protected_context: Mapped[bytes] = mapped_column(LargeBinary)
     deadline_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     terminal_report_deadline_at: Mapped[datetime | None] = mapped_column(
@@ -168,10 +183,16 @@ class ExecutionRow(Base):
     lease_owner: Mapped[str | None] = mapped_column(Text)
     fencing_token: Mapped[str | None] = mapped_column(UUID(as_uuid=False))
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    result: Mapped[BuilderResult | None] = mapped_column(ResultType())
+    result: Mapped[StoredResult | None] = mapped_column(ResultType())
     error_code: Mapped[str | None] = mapped_column(Text)
     error_message: Mapped[str | None] = mapped_column(Text)
+    # Raw-inference bytes live in files (see store/payloads.py); the request until
+    # the execution finishes, the response of a succeeded one until retention.
     priority: Mapped[int] = mapped_column(Integer)
+    request_path: Mapped[str | None] = mapped_column(Text)
+    request_size: Mapped[int | None] = mapped_column(BigInteger)
+    response_path: Mapped[str | None] = mapped_column(Text)
+    response_size: Mapped[int | None] = mapped_column(BigInteger)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.clock_timestamp()
     )
@@ -226,6 +247,7 @@ Index(
 Index(
     "executions_active_processing_idx",
     ExecutionRow.model_id,
+    ExecutionRow.operation,
     ExecutionRow.lease_expires_at,
     postgresql_where=and_(
         ExecutionRow.work_kind == WorkKind.PROCESSING,

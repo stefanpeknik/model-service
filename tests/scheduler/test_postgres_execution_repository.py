@@ -43,11 +43,16 @@ from model_service.scheduler.domain import (
     WorkKind,
 )
 from model_service.scheduler.store.models import ExecutionRow
+from model_service.scheduler.store.payloads import PayloadStore
 from model_service.scheduler.store.postgres import PostgresExecutionRepository
 from model_service.scheduler.store.protected_context import ProtectedContextCipher
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
 from model_service.scheduler.store.schema import MIGRATIONS_DIRECTORY
-from tests.support.repository_contract import ExecutionRepositoryContract
+from tests.support.repository_contract import (
+    INFERENCE_LIMIT,
+    INFERENCE_RETENTION,
+    ExecutionRepositoryContract,
+)
 
 
 ALL_MIGRATIONS = {path.stem for path in MIGRATIONS_DIRECTORY.glob("*.sql")}
@@ -68,6 +73,9 @@ class PostgresExecutionRepositoryTests(
             self.skipTest("TEST_POSTGRES_DSN is not configured")
         self.dsn = dsn
         self.schema = f"test_execution_{uuid4().hex}"
+        payload_directory = TemporaryDirectory()
+        self.addCleanup(payload_directory.cleanup)
+        self.payload_root = Path(payload_directory.name)
         self._repositories: list[PostgresExecutionRepository] = []
         key = base64.urlsafe_b64encode(bytes(range(32))).decode()
         self.cipher = ProtectedContextCipher.from_base64(key)
@@ -241,6 +249,7 @@ class PostgresExecutionRepositoryTests(
         repository = PostgresExecutionRepository(
             make_conninfo(**conninfo_to_dict(self.dsn)),
             cipher=self.cipher,
+            payloads=PayloadStore(self.payload_root),
             schema=self.schema,
         )
         self._repositories.append(repository)
@@ -369,6 +378,29 @@ class PostgresExecutionRepositoryTests(
             await connection.execute(
                 sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema))
             )
+
+    async def test_orphaned_payload_files_are_swept(self) -> None:
+        kept_id = await self._admit_inference("kept")
+        kept = self.payload_root / kept_id[:2] / f"{kept_id}.request"
+        orphan_id, fresh_id = str(uuid4()), str(uuid4())
+        orphan = self.payload_root / orphan_id[:2] / f"{orphan_id}.request"
+        fresh = self.payload_root / fresh_id[:2] / f"{fresh_id}.response-x"
+        other = self.payload_root / "lost+found" / "file"
+        for path in (orphan, fresh, other):
+            path.parent.mkdir(exist_ok=True)
+            path.write_bytes(b"lost")
+        old = (datetime.now(UTC) - timedelta(hours=2)).timestamp()
+        for path in (orphan, kept, other):
+            os.utime(path, (old, old))
+
+        await self.repository.maintain()
+
+        self.assertEqual(
+            sorted(
+                p.relative_to(self.payload_root) for p in self.payload_root.glob("*/*")
+            ),
+            sorted(p.relative_to(self.payload_root) for p in (kept, fresh, other)),
+        )
 
     async def test_malformed_execution_id_is_unknown(self) -> None:
         with self.assertRaises(UnknownExecutionError):
@@ -782,8 +814,11 @@ class PostgresExecutionRepositoryTests(
         repository = PostgresExecutionRepository(
             self.dsn,
             cipher=self.cipher,
+            payloads=PayloadStore(self.payload_root),
             schema=schema or self.schema,
             per_model_limit=per_model_limit,
+            per_model_inference_limit=INFERENCE_LIMIT,
+            inference_retention=INFERENCE_RETENTION,
             processing_policy=self.processing_policy,
             finish_policy=self.processing_policy,
         )

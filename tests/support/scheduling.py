@@ -13,6 +13,7 @@ from model_service.builders.contracts import (
 from model_service.scheduler.contracts import (
     ExecutionStatus,
     ExecutionView,
+    Operation,
     ScheduleRequest,
     ScheduleResult,
     UnknownExecutionError,
@@ -39,6 +40,7 @@ PROSTATE = SpatialScoresModel(
 def view(status: ExecutionStatus, **fields: object) -> ExecutionView:
     return ExecutionView(
         id="execution-1",
+        operation=Operation.BUILDER,
         builder_id="heatmap",
         model_id=PROSTATE.id,
         status=status,

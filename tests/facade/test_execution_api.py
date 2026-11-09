@@ -43,6 +43,7 @@ from model_service.providers.standalone import StandaloneProviderAdapter
 from model_service.scheduler.contracts import (
     ExecutionStatus,
     ExecutionView,
+    Operation,
     ScheduleRequest,
     ScheduleResult,
     SchedulingUnavailableError,
@@ -117,6 +118,7 @@ class RecordingScheduler:
         return ScheduleResult(
             execution=ExecutionView(
                 id="execution-1",
+                operation=Operation.BUILDER,
                 builder_id=request.builder_id,
                 model_id=request.model_id,
                 status=ExecutionStatus.QUEUED,
@@ -298,6 +300,7 @@ class ScheduleRouteTests(ApiTestCase):
             polled.json(),
             {
                 "id": execution_id,
+                "operation": "builder",
                 "builder_id": "heatmap",
                 "model_id": "prostate-classifier-1",
                 "status": "queued",

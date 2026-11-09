@@ -319,6 +319,7 @@ class ExecutionScheduler:
         """
         return ExecutionView(
             id=execution.id,
+            operation=execution.operation,
             builder_id=execution.builder_id,
             model_id=execution.model_id,
             status=execution.status,

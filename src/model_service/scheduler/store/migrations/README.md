@@ -29,11 +29,11 @@ An initialization failure prevents scheduler startup.
 
 1. Update the ORM mapping in `../models.py`.
 2. Add the next numbered migration here, for example
-   `0002-add-example-column.sql`. Declare its predecessor and write the upgrade:
+   `0003-add-example-column.sql`. Declare its predecessor and write the upgrade:
 
    ```sql
    -- Add an optional example column.
-   -- depends: 0001-create-executions
+   -- depends: 0002-raw-inference
 
    ALTER TABLE executions ADD COLUMN example TEXT;
    ```

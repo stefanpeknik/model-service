@@ -69,6 +69,13 @@ executionScheduler:
   maximumDeadlineSeconds: 86400
   perModelLimit: 1
   maxConcurrentExecutions: 4
+  # Request and response files of inference executions. A ReadWriteMany
+  # claim mounted by every facade replica and nothing else. Size it for the
+  # tiles kept: up to 4 MiB per response for 24 hours, plus requests still
+  # queued.
+  inferenceStorage:
+    existingClaim: ""
+    mountPath: /mnt/model-service-inference
   resources:
     requests:
       cpu: 100m

@@ -15,10 +15,12 @@ from model_service.scheduler.contracts import (
     ExecutionError,
     ExecutionErrorCode,
     ExecutionStatus,
+    Operation,
 )
 from model_service.scheduler.domain import (
     Admission,
     ExecutionRecord,
+    InferenceSucceeded,
     ProcessingFailed,
     ProcessingRejected,
     ProcessingSucceeded,
@@ -106,7 +108,7 @@ class ExecutionTransitions:
         """Retain the policies used to bound attempts and calculate retry delays.
 
         Args:
-            processing_policy: Retry policy for builder processing.
+            processing_policy: Retry policy for builder and inference processing.
             finish_policy: Retry policy for provider publication and terminal reports.
         """
         self._processing_policy = processing_policy
@@ -151,6 +153,7 @@ class ExecutionTransitions:
             error=None,
             created_at=now,
             updated_at=now,
+            operation=admission.operation,
             priority=admission.priority,
         )
 
@@ -158,8 +161,8 @@ class ExecutionTransitions:
     def cancel(execution: ExecutionRecord, now: datetime) -> ExecutionRecord:
         """Make a nonterminal execution cancelled, fence its attempt, and queue provider cancellation reporting.
 
-        Publication marks and finish attempts are reset because they belong to the
-        publication, not the report.
+        Raw inference has no provider, so it gets no report. Publication marks and
+        finish attempts are reset because they belong to the publication, not the report.
 
         Args:
             execution: Current execution record.
@@ -174,11 +177,12 @@ class ExecutionTransitions:
             ExecutionStatus.CANCELLED,
         }:
             return execution
+        report = _has_provider_phase(execution)
         return replace(
             execution,
             status=ExecutionStatus.CANCELLED,
-            work_kind=WorkKind.PROVIDER_CANCELLATION_REPORT,
-            next_attempt_at=now,
+            work_kind=WorkKind.PROVIDER_CANCELLATION_REPORT if report else None,
+            next_attempt_at=now if report else None,
             lease_owner=None,
             fencing_token=None,
             lease_expires_at=None,
@@ -253,6 +257,7 @@ class ExecutionTransitions:
                 fencing_token=fencing_token,
                 result=claimed.result,
                 error=claimed.error,
+                operation=claimed.operation,
             ),
         )
 
@@ -326,7 +331,7 @@ class ExecutionTransitions:
             The state update and the rejection reason, if any.
 
         Raises:
-            StaleWorkClaimError: The outcome does not fit the claimed work kind.
+            StaleWorkClaimError: The outcome does not fit the claimed work kind or operation.
             TypeError: The settlement type is unknown.
         """
         if execution.fencing_token != fencing_token:
@@ -391,11 +396,31 @@ class ExecutionTransitions:
             The record after the outcome.
 
         Raises:
-            StaleWorkClaimError: The outcome does not fit the work kind.
+            StaleWorkClaimError: The outcome does not fit the work kind, or a builder and
+                raw inference settle each other's result type.
             TypeError: The settlement type is unknown.
         """
+        if isinstance(settlement, InferenceSucceeded):
+            self._require_kind(execution, WorkKind.PROCESSING)
+            if _has_provider_phase(execution):
+                raise StaleWorkClaimError("a builder cannot settle a model response")
+            return replace(
+                execution,
+                status=ExecutionStatus.SUCCEEDED,
+                result=settlement.result,
+                work_kind=None,
+                next_attempt_at=None,
+                lease_owner=None,
+                fencing_token=None,
+                lease_expires_at=None,
+                updated_at=now,
+            )
         if isinstance(settlement, ProcessingSucceeded):
             self._require_kind(execution, WorkKind.PROCESSING)
+            if not _has_provider_phase(execution):
+                raise StaleWorkClaimError(
+                    "raw inference cannot settle a builder result"
+                )
             return replace(
                 execution,
                 status=ExecutionStatus.RUNNING,
@@ -731,7 +756,8 @@ class ExecutionTransitions:
     ) -> ExecutionRecord:
         """Record a safe failure, release the lease, and optionally queue a failure report.
 
-        The report is new provider work, so it gets its own finish attempts.
+        The report is new provider work, so it gets its own finish attempts. Raw
+        inference never gets one.
 
         Args:
             execution: Current execution record.
@@ -742,6 +768,7 @@ class ExecutionTransitions:
         Returns:
             The failed record.
         """
+        report = report and _has_provider_phase(execution)
         return replace(
             execution,
             status=ExecutionStatus.FAILED,
@@ -776,3 +803,17 @@ class ExecutionTransitions:
             lease_expires_at=None,
             updated_at=now,
         )
+
+
+def _has_provider_phase(execution: ExecutionRecord) -> bool:
+    """Return whether the execution has a provider to publish to or report back to.
+
+    Raw inference has none.
+
+    Args:
+        execution: Current execution record.
+
+    Returns:
+        True for builder executions.
+    """
+    return execution.operation is Operation.BUILDER

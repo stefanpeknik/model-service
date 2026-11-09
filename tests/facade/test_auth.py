@@ -20,6 +20,7 @@ from model_service.facade.catalog import ModelCatalog
 from model_service.scheduler.contracts import (
     ExecutionStatus,
     ExecutionView,
+    Operation,
 )
 
 
@@ -42,6 +43,7 @@ class Scheduler:
     async def get(self, execution_id: str) -> ExecutionView:
         return ExecutionView(
             id=execution_id,
+            operation=Operation.BUILDER,
             builder_id="heatmap",
             model_id="classifier",
             status=ExecutionStatus.QUEUED,
