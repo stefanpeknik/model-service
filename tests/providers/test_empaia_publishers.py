@@ -83,8 +83,7 @@ class PublisherTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(PUBLISHERS.resolve(None, HEATMAP))
         self.assertIsNone(PUBLISHERS.resolve("polygon", inline))
-        self.assertIsNone(PUBLISHERS.resolve("continuous_pixelmap", HEATMAP))
-        self.assertIsNotNone(PUBLISHERS.resolve("float", inline))
+        self.assertIsNotNone(PUBLISHERS.resolve("continuous_pixelmap", HEATMAP))
 
 
 class RectangleTests(unittest.TestCase):

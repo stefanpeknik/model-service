@@ -15,6 +15,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 if TYPE_CHECKING:
+    from rationai.empaia.typing import SlideInfo
+    from rationai.empaia.utils.scalar_output import PixelmapTileSet
+
     from model_service.builders.contracts import JsonValue
 
 
@@ -227,6 +230,35 @@ class EmpaiaGateway(ABC):
         Raises:
             EmpaiaGatewayError: If the value is not a valid primitive or the write
                 fails; a failed write may leave an unknown outcome.
+        """
+        ...
+
+    @abstractmethod
+    async def slide_info(self) -> SlideInfo:
+        """Fetch the job's slide with every level's downsample factor.
+
+        Returns:
+            The slide.
+
+        Raises:
+            EmpaiaGatewayError: If the request fails.
+        """
+        ...
+
+    @abstractmethod
+    async def publish_pixelmap(
+        self, name: str, slide_id: str, tile_sets: tuple[PixelmapTileSet, ...]
+    ) -> None:
+        """Create one output pixelmap on the slide and upload its levels.
+
+        Args:
+            name: The EMPAIA output key, also the pixelmap's name.
+            slide_id: The slide the pixelmap belongs to.
+            tile_sets: The pyramid levels to upload.
+
+        Raises:
+            EmpaiaGatewayError: If creating or uploading fails; a failed write may
+                leave an unknown outcome.
         """
         ...
 
