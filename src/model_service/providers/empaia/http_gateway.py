@@ -1,11 +1,14 @@
 """Implement AppService HTTP access and classify safe integration failures.
 
-Output publication invokes a durable guard before writes and tracks uncertain
-mutation outcomes.
+Slides are linked from the slide volume through the RationAI direct-access
+route; rectangles become masks. Output publication invokes a durable guard before writes and tracks
+uncertain mutation outcomes.
 """
 
 from __future__ import annotations
 
+import math
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from aiohttp import ClientError, ClientResponseError, ContentTypeError
@@ -19,7 +22,21 @@ from model_service.providers.empaia.gateway import (
     EmpaiaJobMode,
     PrimitiveType,
 )
-from model_service.providers.empaia.responses import ConfigurationResponse
+from model_service.providers.empaia.materialization import (
+    link_direct_input,
+    write_rectangle_input,
+)
+from model_service.providers.empaia.responses import (
+    ConfigurationResponse,
+    RectangleResponse,
+    SlideResponse,
+)
+from model_service.providers.empaia.slides import (
+    DirectAccess,
+    Rectangle,
+    SlideLevel,
+    SlideMetadata,
+)
 
 
 if TYPE_CHECKING:
@@ -31,10 +48,11 @@ if TYPE_CHECKING:
         MutationGuard,
     )
     from model_service.providers.empaia.settings import EmpaiaSettings
+    from model_service.providers.empaia.slides import RectangleMaskWriter
 
 
 class HttpEmpaiaGateway(EmpaiaGateway):
-    """Access one EMPAIA job through authenticated HTTP."""
+    """Access one EMPAIA job through authenticated HTTP and pluggable image adapters."""
 
     def __init__(
         self,
@@ -43,8 +61,9 @@ class HttpEmpaiaGateway(EmpaiaGateway):
         credential: str,
         *,
         client: Client | None = None,
+        rectangle_writer: RectangleMaskWriter | None = None,
     ) -> None:
-        """Require complete connection settings and select the SDK client.
+        """Require complete connection settings and select the SDK client and rectangle writer.
 
         close() closes even an injected client.
 
@@ -53,6 +72,7 @@ class HttpEmpaiaGateway(EmpaiaGateway):
             job_id: The EMPAIA job ID.
             credential: The job's token.
             client: The SDK client; one is built from the connection settings if omitted.
+            rectangle_writer: Rasterizes rectangle inputs; libvips by default.
 
         Raises:
             EmpaiaGatewayError: If `api_url`, `job_id` or `credential` is empty; not
@@ -65,6 +85,10 @@ class HttpEmpaiaGateway(EmpaiaGateway):
             )
         self._job_id = job_id
         self._client = client or Client(api_url, job_id, credential)
+        if rectangle_writer is None:
+            from model_service.providers.empaia.image_io import VipsRectangleMaskWriter
+
+        self._rectangle_writer = rectangle_writer or VipsRectangleMaskWriter()
 
     def set_before_mutation(self, callback: MutationGuard) -> None:
         """Install the async durable-claim guard used immediately before each external mutation.
@@ -126,6 +150,39 @@ class HttpEmpaiaGateway(EmpaiaGateway):
             raise
         return True
 
+    async def materialize_input(
+        self,
+        name: str,
+        directory: str,
+    ) -> str:
+        """Link a slide input, or fetch rectangle metadata and write a local mask.
+
+        Args:
+            name: The EMPAIA input key.
+            directory: The directory to put the file in.
+
+        Returns:
+            The path of the slide link or of `mask.tiff`.
+
+        Raises:
+            EmpaiaGatewayError: Not retryable if the slide is not on the slide volume
+                or does not support direct access, or the rectangle or slide data is
+                invalid; retryable if linking or writing the mask fails; otherwise
+                as `_call` classifies a failed request.
+        """
+        direct = await self._direct_access(name)
+        if direct is not None:
+            return str(link_direct_input(direct, Path(directory)))
+        value = await self._call(self._client.get_input_data(name))
+        if _is_slide(value):
+            raise EmpaiaGatewayError.invalid(
+                "EMPAIA slide is not on the slide volume model-service reads"
+            )
+        target = Path(directory) / "mask.tiff"
+        slide = await self._slide_metadata()
+        write_rectangle_input(self._rectangle_writer, target, slide, _rectangle(value))
+        return str(target)
+
     async def post_primitive(
         self, name: str, output_type: str, value: JsonValue
     ) -> None:
@@ -169,6 +226,45 @@ class HttpEmpaiaGateway(EmpaiaGateway):
     async def close(self) -> None:
         """Close the gateway's HTTP client and release its network resources."""
         await self._client.close()
+
+    async def _direct_access(self, name: str) -> DirectAccess | None:
+        """Query the extension endpoint for the input's path on the slide volume.
+
+        Only a 404 permits rectangle fallback, while other failures remain errors.
+
+        Args:
+            name: The EMPAIA input key.
+
+        Returns:
+            The path and whether direct access is supported, or None if the input has
+            no direct-access path.
+
+        Raises:
+            EmpaiaGatewayError: As `_call` classifies a failed request.
+        """
+        info = await self._call(self._client.get_direct_access_info(name))
+        # CDS answers the path under its own data directory (physical_path)
+        # and relative to it (storage_path); model-service mounts the slide
+        # volume where CDS does, so the absolute path resolves here too.
+        if info is None or not info.path:
+            return None
+        return DirectAccess(
+            storage_path=Path(info.path),
+            supported=info.direct_access_supported,
+        )
+
+    async def _slide_metadata(self) -> SlideMetadata:
+        """Fetch and decode the job's slide input metadata.
+
+        Returns:
+            The slide's identity, size, pixel size and levels.
+
+        Raises:
+            EmpaiaGatewayError: Not retryable if the slide data is invalid; otherwise
+                as `_call` classifies a failed request.
+        """
+        value = await self._call(self._client.get_input_data("slide"))
+        return _slide_metadata(value)
 
     async def _call[T](self, operation: Awaitable[T], *, mutation: bool = False) -> T:
         """Await an SDK call, translating failures without exposing upstream details.
@@ -253,6 +349,18 @@ def http_gateway_factory(settings: EmpaiaSettings) -> EmpaiaGatewayFactory:
     return create
 
 
+def _is_slide(value: object) -> bool:
+    """Check whether input data is a slide; slide inputs carry pyramid levels, rectangles do not.
+
+    Args:
+        value: The decoded input data.
+
+    Returns:
+        True for a slide.
+    """
+    return isinstance(value, dict) and "levels" in value
+
+
 type _PostPrimitive = (
     primitives.PostBoolPrimitive
     | primitives.PostIntegerPrimitive
@@ -308,3 +416,50 @@ def _primitive_output(
         raise EmpaiaGatewayError.invalid(
             "EMPAIA inline output is not a valid primitive"
         ) from error
+
+
+def _slide_metadata(value: object) -> SlideMetadata:
+    """Convert validated provider slide data into local geometry values.
+
+    Args:
+        value: The decoded slide input data.
+
+    Returns:
+        The slide's identity, size, pixel size and levels.
+
+    Raises:
+        EmpaiaGatewayError: Not retryable if the data is not a valid slide.
+    """
+    slide = SlideResponse.parse(value)
+    return SlideMetadata(
+        identifier=slide.id,
+        width=slide.extent.x,
+        height=slide.extent.y,
+        pixel_size_nm_x=slide.pixel_size_nm.x,
+        pixel_size_nm_y=slide.pixel_size_nm.y,
+        levels=tuple(
+            SlideLevel(index=index, width=level.extent.x, height=level.extent.y)
+            for index, level in enumerate(slide.levels)
+        ),
+    )
+
+
+def _rectangle(value: object) -> Rectangle:
+    """Floor rectangle origins and ceil dimensions when converting provider geometry to integer pixels.
+
+    Args:
+        value: The decoded rectangle input data.
+
+    Returns:
+        The rectangle in integer pixels.
+
+    Raises:
+        EmpaiaGatewayError: Not retryable if the data is not a valid rectangle.
+    """
+    rectangle = RectangleResponse.parse(value)
+    return Rectangle(
+        x=math.floor(rectangle.upper_left[0]),
+        y=math.floor(rectangle.upper_left[1]),
+        width=math.ceil(rectangle.width),
+        height=math.ceil(rectangle.height),
+    )

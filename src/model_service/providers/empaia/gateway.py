@@ -1,4 +1,7 @@
-"""Specify the EMPAIA job boundary, protected credentials, and configurable gateway factory."""
+"""Specify the EMPAIA job boundary, protected credentials, and configurable gateway factory.
+
+Input access uses this boundary in the builder process.
+"""
 
 from __future__ import annotations
 
@@ -105,18 +108,35 @@ class EmpaiaJobMode(StrEnum):
     REPORT = "REPORT"
 
 
-class EmpaiaJobContext(BaseModel):
-    """Identify one job by API origin and job ID, with its private credential hidden from repr."""
+class EmpaiaInputState(BaseModel):
+    """Carry the non-secret API origin and job ID used to select provider input access."""
 
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 
     api_url: Annotated[str, Field(min_length=1)]
     job_id: Annotated[str, Field(min_length=1)]
+
+
+class EmpaiaJobContext(EmpaiaInputState):
+    """Add a private job credential to the public job identity; the credential is hidden from repr."""
+
     credential: Annotated[str, Field(min_length=1, repr=False)]
+
+    def protected_values(self) -> dict[str, JsonValue]:
+        """Extract API origin, job ID, and credential for encrypted durable context and internal dispatch.
+
+        Returns:
+            The values by field name, credential included.
+        """
+        return {
+            "api_url": self.api_url,
+            "job_id": self.job_id,
+            "credential": self.credential,
+        }
 
 
 class EmpaiaGateway(ABC):
-    """Abstract AppService configuration, input presence, result publication, and terminal reporting."""
+    """Abstract AppService configuration, input acquisition, result publication, and terminal reporting."""
 
     @abstractmethod
     def set_before_mutation(self, callback: MutationGuard) -> None:
@@ -163,6 +183,26 @@ class EmpaiaGateway(ABC):
 
         Raises:
             EmpaiaGatewayError: If the request fails other than by a missing input.
+        """
+        ...
+
+    @abstractmethod
+    async def materialize_input(
+        self,
+        name: str,
+        directory: str,
+    ) -> str:
+        """Make a named job input available inside `directory`.
+
+        Args:
+            name: The EMPAIA input key.
+            directory: The directory to put the file in.
+
+        Returns:
+            The path of the file.
+
+        Raises:
+            EmpaiaGatewayError: If the input cannot be fetched or materialized.
         """
         ...
 

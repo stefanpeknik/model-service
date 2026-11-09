@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import httpx
 from aiohttp import web
@@ -12,9 +14,28 @@ from rationai.empaia import Client
 
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.http_gateway import HttpEmpaiaGateway
+from model_service.providers.empaia.slides import Rectangle, SlideMetadata
 
 
 OUTPUT_ID = "11111111-1111-4111-8111-111111111111"
+
+
+class RecordingRectangleWriter:
+    """Record rectangle-mask requests and create placeholder destination files."""
+
+    def __init__(self) -> None:
+        """Start an empty list of mask destinations and geometry requests."""
+        self.calls: list[tuple[Path, SlideMetadata, Rectangle]] = []
+
+    def write(
+        self,
+        destination: Path,
+        slide: SlideMetadata,
+        rectangle: Rectangle,
+    ) -> None:
+        """Record requested slide/rectangle geometry and create a placeholder mask file."""
+        self.calls.append((destination, slide, rectangle))
+        destination.touch()
 
 
 class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
@@ -55,6 +76,54 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
         client = Client(str(server.make_url("/")), "job-1", "credential")
         self.addAsyncCleanup(client.close)
         return client
+
+    async def test_invalid_rectangle_geometry_is_a_safe_integration_error(self) -> None:
+        """Verify invalid rectangle geometry is a safe integration error."""
+        for coordinate in [float("nan"), float("inf"), True, "10"]:
+            with self.subTest(coordinate=coordinate), TemporaryDirectory() as directory:
+                writer = RecordingRectangleWriter()
+
+                def handle(
+                    request: httpx.Request, coordinate=coordinate
+                ) -> httpx.Response:
+                    """Return scenario-specific mock HTTP responses and record or assert requests for this gateway test."""
+                    if request.url.path.endswith("/direct-access"):
+                        return httpx.Response(404)
+                    if request.url.path.endswith("/inputs/slide"):
+                        return httpx.Response(
+                            200,
+                            json={
+                                "id": "slide-1",
+                                "extent": {"x": 1200, "y": 600, "z": 1},
+                                "pixel_size_nm": {"x": 250, "y": 250},
+                                "levels": [{"extent": {"x": 1200, "y": 600}}],
+                            },
+                        )
+                    return httpx.Response(
+                        200,
+                        content=json.dumps(
+                            {
+                                "upper_left": [coordinate, 20],
+                                "width": 100,
+                                "height": 50,
+                            }
+                        ),
+                    )
+
+                gateway = HttpEmpaiaGateway(
+                    "https://empaia.example",
+                    "job-1",
+                    "credential",
+                    client=await self.appservice(httpx.MockTransport(handle)),
+                    rectangle_writer=writer,
+                )
+                try:
+                    with self.assertRaises(EmpaiaGatewayError) as raised:
+                        await gateway.materialize_input("roi", directory)
+                    self.assertFalse(raised.exception.retryable)
+                    self.assertEqual(writer.calls, [])
+                finally:
+                    await gateway.close()
 
     async def test_configuration_rejects_nested_nonfinite_values(self) -> None:
         """Verify configuration rejects nested nonfinite values."""
@@ -107,30 +176,50 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await gateway.close()
 
-    async def test_configuration_is_flattened(self) -> None:
-        """Verify configuration is flattened."""
+    async def test_configuration_is_flattened_and_direct_input_is_linked(self) -> None:
+        """Verify configuration is flattened and direct input is linked."""
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "slide.tiff"
+            source.write_bytes(b"slide")
 
-        def handle(request: httpx.Request) -> httpx.Response:
-            """Return scenario-specific mock HTTP responses and record or assert requests for this gateway test."""
-            if request.url.path.endswith("/configuration"):
-                return httpx.Response(
-                    200,
-                    json={"global": {"stride": 0.5}, "customer": {"tiles": 8}},
-                )
-            raise AssertionError(request.url.path)
+            def handle(request: httpx.Request) -> httpx.Response:
+                """Return scenario-specific mock HTTP responses and record or assert requests for this gateway test."""
+                if request.url.path.endswith("/configuration"):
+                    return httpx.Response(
+                        200,
+                        json={"global": {"stride": 0.5}, "customer": {"tiles": 8}},
+                    )
+                if request.url.path.endswith("/direct-access"):
+                    return httpx.Response(
+                        200,
+                        # As CDS answers: absolute under its data directory,
+                        # and relative to it.
+                        json={
+                            "slide_id": "slide-1",
+                            "physical_path": str(source),
+                            "storage_path": "slide.tiff",
+                            "direct_access_supported": True,
+                        },
+                    )
+                raise AssertionError(request.url.path)
 
-        client = await self.appservice(httpx.MockTransport(handle))
-        gateway = HttpEmpaiaGateway(
-            "https://empaia.example",
-            "job-1",
-            "credential",
-            client=client,
-        )
+            client = await self.appservice(httpx.MockTransport(handle))
+            gateway = HttpEmpaiaGateway(
+                "https://empaia.example",
+                "job-1",
+                "credential",
+                client=client,
+            )
+            workspace = Path(directory) / "workspace"
 
-        configuration = await gateway.get_configuration()
+            configuration = await gateway.get_configuration()
+            destination = Path(await gateway.materialize_input("slide", str(workspace)))
 
-        self.assertEqual(configuration, {"stride": 0.5, "tiles": 8})
-        await gateway.close()
+            self.assertEqual(configuration, {"stride": 0.5, "tiles": 8})
+            self.assertEqual(destination, workspace / source.name)
+            self.assertTrue(destination.is_symlink())
+            self.assertEqual(destination.read_bytes(), b"slide")
+            await gateway.close()
 
     async def test_inline_outputs_and_lifecycle_use_appservice_contract(self) -> None:
         """Verify inline outputs and lifecycle use AppService contract."""
@@ -203,6 +292,59 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
                 await gateway.has_input("other")
             self.assertTrue(raised.exception.retryable)
         finally:
+            await gateway.close()
+
+    async def test_rectangle_input_is_materialized_when_direct_access_is_absent(
+        self,
+    ) -> None:
+        """Verify rectangle input is materialized when direct access is absent."""
+        writer = RecordingRectangleWriter()
+
+        def handle(request: httpx.Request) -> httpx.Response:
+            """Return scenario-specific mock HTTP responses and record or assert requests for this gateway test."""
+            if request.url.path.endswith("/direct-access"):
+                return httpx.Response(404)
+            if request.url.path.endswith("/inputs/slide"):
+                return httpx.Response(
+                    200,
+                    json={
+                        "id": "slide-1",
+                        "extent": {"x": 1200, "y": 600, "z": 1},
+                        "pixel_size_nm": {"x": 250.0, "y": 250.0},
+                        "levels": [{"extent": {"x": 1200, "y": 600, "z": 1}}],
+                    },
+                )
+            if request.url.path.endswith("/inputs/region_of_interest"):
+                return httpx.Response(
+                    200,
+                    json={"upper_left": [10.2, 20.8], "width": 100, "height": 50},
+                )
+            raise AssertionError(request.url.path)
+
+        with TemporaryDirectory() as directory:
+            gateway = HttpEmpaiaGateway(
+                "https://empaia.example",
+                "job-1",
+                "credential",
+                client=await self.appservice(httpx.MockTransport(handle)),
+                rectangle_writer=writer,
+            )
+
+            destination = Path(
+                await gateway.materialize_input("region_of_interest", directory)
+            )
+
+            self.assertEqual(destination, Path(directory) / "mask.tiff")
+            self.assertTrue(destination.is_file())
+            self.assertEqual(len(writer.calls), 1)
+            _, slide, rectangle = writer.calls[0]
+            self.assertEqual(slide.identifier, "slide-1")
+            self.assertEqual(rectangle, Rectangle(10, 20, 100, 50))
+
+            # A slide must be on the slide volume; there is no download.
+            with self.assertRaises(EmpaiaGatewayError) as raised:
+                await gateway.materialize_input("slide", directory)
+            self.assertFalse(raised.exception.retryable)
             await gateway.close()
 
     async def test_configuration_rejects_ambiguous_sections(self) -> None:

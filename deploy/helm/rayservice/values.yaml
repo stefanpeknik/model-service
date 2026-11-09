@@ -94,6 +94,13 @@ executionScheduler:
       memory: 512Mi
 
 empaia:
+  # Slide inputs are linked from the file named by the RationAI direct-access
+  # route. The claim holding the installation's slides, mounted
+  # read-only where its CDS mounts it, since model-service links the absolute
+  # path CDS answers. The facade mounts it; worker files include it too.
+  slideVolume:
+    existingClaim: ""
+    mountPath: ""
   # Extra DNS search domains for pods that call AppService, when the
   # installation hands out short host names from another namespace.
   dnsSearches: []
