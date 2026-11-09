@@ -60,7 +60,7 @@ RUN sudo sh -c 'echo "/usr/local/lib" > /etc/ld.so.conf.d/custom-libs.conf' && \
 RUN uv pip install --python /home/ray/anaconda3/bin/python --no-cache \
     onnxruntime-gpu tensorrt lz4 ratiopath "mlflow<3.0" torch torchvision \
     "timm>=1.0.0" \
-    "huggingface-hub>=0.23.0"
+    "huggingface-hub>=0.23.0" "pydantic>=2.10.0"
 
 WORKDIR /app
 ENV PYTHONPATH=/app

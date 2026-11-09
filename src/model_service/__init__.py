@@ -1,1 +1,1 @@
-"""RationAI model service: Ray Serve models and builders."""
+"""RationAI model service: builders and model_service.models."""

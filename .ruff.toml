@@ -51,3 +51,10 @@ lines-after-imports = 2
 
 [lint.pydocstyle]
 convention = "google"
+
+[lint.flake8-type-checking]
+# Pydantic resolves field annotations at runtime.
+runtime-evaluated-base-classes = [
+    "pydantic.BaseModel",
+    "model_service.providers.standalone.BuilderRequest",
+]

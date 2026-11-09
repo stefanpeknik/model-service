@@ -56,7 +56,7 @@ RUN sudo apt-get update && sudo apt-get -y upgrade && \
 RUN sudo apt-get remove -y --purge systemd systemd-sysv && sudo apt-get autoremove --purge -y && sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/* 
 
 RUN uv pip install --python /home/ray/anaconda3/bin/python --no-cache \
-    onnxruntime lz4 ratiopath pyvips "mlflow<3.0"
+    onnxruntime lz4 ratiopath pyvips "mlflow<3.0" "pydantic>=2.10.0"
 
 WORKDIR /app
 ENV PYTHONPATH=/app
