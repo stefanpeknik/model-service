@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from model_service.scheduler.api import (
+    from model_service.scheduler.executions import (
         ExecutionError,
         ProviderName,
         ScheduleRequest,

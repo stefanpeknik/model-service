@@ -5,7 +5,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class WorkerSettings(BaseModel):
+class ReplicaSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     num_threads: int = Field(default=2, gt=0)
@@ -13,5 +13,5 @@ class WorkerSettings(BaseModel):
     shared_storage_roots: tuple[Path, ...] = ()
 
 
-class DeploymentSettings(WorkerSettings):
+class DeploymentSettings(ReplicaSettings):
     builder_id: str = Field(min_length=1)

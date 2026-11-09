@@ -28,7 +28,7 @@ from model_service.providers.empaia.gateway import (
     EmpaiaJobMode,
     PrimitiveType,
 )
-from model_service.providers.empaia.materialization import (
+from model_service.providers.empaia.input_access import (
     link_direct_input,
     write_rectangle_input,
 )

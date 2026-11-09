@@ -7,7 +7,7 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
-from model_service.scheduler.api import ExecutionStatus, ScheduleRequest
+from model_service.scheduler.executions import ExecutionStatus, ScheduleRequest
 from model_service.scheduler.records import RetryPolicy
 from model_service.scheduler.scheduler import ExecutionScheduler
 from model_service.wire.result import BuilderResult

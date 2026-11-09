@@ -24,12 +24,12 @@ from model_service.replica.protocol import (
     error,
     run_http,
 )
-from model_service.replica.settings import DeploymentSettings, WorkerSettings
+from model_service.replica.settings import DeploymentSettings, ReplicaSettings
 from model_service.wire.result import BuilderResult
 
 
 if TYPE_CHECKING:
-    from model_service.replica.access import AccessAdapter
+    from model_service.providers.access import AccessAdapter
 
 
 fastapi = FastAPI()
@@ -76,7 +76,7 @@ def build_application(config: DeploymentSettings) -> BuilderApplication:
     spec = get_builder(config.builder_id)
     module_name, _, class_name = spec.implementation.partition(":")
     implementation = getattr(importlib.import_module(module_name), class_name)
-    settings = WorkerSettings.model_validate(config.model_dump(exclude={"builder_id"}))
+    settings = ReplicaSettings.model_validate(config.model_dump(exclude={"builder_id"}))
     adapters: dict[str, AccessAdapter] = {}
     for provider in PROVIDERS:
         adapters.update(provider.input_access(settings))

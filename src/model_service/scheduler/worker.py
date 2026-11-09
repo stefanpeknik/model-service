@@ -16,8 +16,8 @@ from model_service.replica.client import (
     RemoteFailureError,
     UnknownOutcomeError,
 )
-from model_service.scheduler import inference
-from model_service.scheduler.api import (
+from model_service.scheduler import raw_inference
+from model_service.scheduler.executions import (
     ExecutionError,
     ExecutionErrorCode,
     IncompatibleModelError,
@@ -58,9 +58,9 @@ if TYPE_CHECKING:
 
     from model_service.replica.client import BuilderDispatch
     from model_service.scheduler.active_work import ActiveWorkRegistry
-    from model_service.scheduler.api import ModelResolver, ProviderName
-    from model_service.scheduler.inference import InferenceTarget
+    from model_service.scheduler.executions import ModelResolver, ProviderName
     from model_service.scheduler.providers import ProviderAdapter
+    from model_service.scheduler.raw_inference import InferenceTarget
     from model_service.scheduler.records import Settlement
     from model_service.scheduler.store.repository import ExecutionRepository
 
@@ -466,7 +466,7 @@ class ExecutionWorker:
                 ),
                 retryable=False,
             )
-        except inference.IncompatibleInputError as error:
+        except raw_inference.IncompatibleInputError as error:
             return ProcessingFailed(
                 error=ExecutionError(ExecutionErrorCode.INCOMPATIBLE_INPUT, str(error)),
                 retryable=False,
@@ -475,7 +475,7 @@ class ExecutionWorker:
             response = await self._inference.call(
                 claim.model_id, claim.payload, claim.invocation.headers
             )
-        except inference.ModelUnavailableError:
+        except raw_inference.ModelUnavailableError:
             return ProcessingFailed(
                 error=ExecutionError(
                     ExecutionErrorCode.MODEL_UNAVAILABLE,
@@ -483,7 +483,7 @@ class ExecutionWorker:
                 ),
                 retryable=True,
             )
-        except inference.ResultTooLargeError:
+        except raw_inference.ResultTooLargeError:
             return ProcessingFailed(
                 error=ExecutionError(
                     ExecutionErrorCode.RESULT_TOO_LARGE,
@@ -491,7 +491,7 @@ class ExecutionWorker:
                 ),
                 retryable=False,
             )
-        return inference.settlement(response)
+        return raw_inference.settlement(response)
 
     async def _run_builder(self, claim: WorkClaim) -> Settlement:
         """Resolve the model's current binding and dispatch the builder.

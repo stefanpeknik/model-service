@@ -20,7 +20,7 @@ from model_service.providers.empaia.publishers import (
     PublisherRegistry,
     default_publishers,
 )
-from model_service.providers.empaia.scheduling import EmpaiaProviderAdapter
+from model_service.providers.empaia.scheduler_adapter import EmpaiaProviderAdapter
 from model_service.scheduler.providers import (
     ProviderFinishFailureError,
     ProviderSuccess,
@@ -241,7 +241,7 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "model_service.providers.empaia.scheduling.get_builder",
+                "model_service.providers.empaia.scheduler_adapter.get_builder",
                 return_value=with_score,
             ),
             patch(

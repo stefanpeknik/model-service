@@ -11,7 +11,7 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING, Never
 
-from model_service.scheduler.api import (
+from model_service.scheduler.executions import (
     ExecutionError,
     ExecutionErrorCode,
     ExecutionStatus,

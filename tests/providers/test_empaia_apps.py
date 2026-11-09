@@ -27,7 +27,7 @@ from model_service.providers.empaia.ead import (
     parse_listings,
 )
 from model_service.providers.empaia.ead_io import BUILDER_IO
-from model_service.providers.empaia.plugin import CATALOG_BLOCK
+from model_service.providers.empaia.provider import CATALOG_BLOCK
 from model_service.providers.empaia.publishers import default_publishers
 from model_service.providers.empaia.registration import (
     Marketplace,
@@ -274,7 +274,7 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
         settings = EmpaiaSettings(
             marketplace_url="https://marketplace.example", organization_id="org-1"
         )
-        from model_service.providers.empaia.plugin import _marketplace
+        from model_service.providers.empaia.provider import _marketplace
 
         marketplace = _marketplace(settings)
         assert marketplace is not None

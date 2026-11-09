@@ -16,7 +16,7 @@ from model_service.inference.clients import TileEmbeddingClient
 
 if TYPE_CHECKING:
     from model_service.builders.base import BuilderContext
-    from model_service.replica.settings import WorkerSettings
+    from model_service.replica.settings import ReplicaSettings
 
 
 class EmbeddingBuilder(
@@ -24,7 +24,7 @@ class EmbeddingBuilder(
         TileEmbeddingClient, EmbeddingInputs, EmbeddingConfiguration, EmbeddingOutputs
     ]
 ):
-    def __init__(self, settings: WorkerSettings) -> None:
+    def __init__(self, settings: ReplicaSettings) -> None:
         """Configure the builder for a replica.
 
         Args:

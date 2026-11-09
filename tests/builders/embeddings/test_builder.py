@@ -25,7 +25,7 @@ from model_service.providers.standalone import StandaloneProviderAdapter
 from model_service.replica.application import BuilderApplication
 from model_service.replica.client import HTTPBuilderDispatch
 from model_service.replica.protocol import RunRequest, run_http
-from model_service.replica.settings import WorkerSettings
+from model_service.replica.settings import ReplicaSettings
 from model_service.scheduler.scheduler import ExecutionScheduler
 from tests.support.builder_contract import BuilderContractTests
 from tests.support.builder_fixtures import write_slide
@@ -114,7 +114,7 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
             ]
         )
         storage = SharedStorageAccessAdapter([self.root])
-        settings = WorkerSettings(num_threads=1, max_concurrent_tasks=3)
+        settings = ReplicaSettings(num_threads=1, max_concurrent_tasks=3)
         application = BuilderApplication(
             get_builder("tile-embeddings"),
             EmbeddingBuilder(settings),

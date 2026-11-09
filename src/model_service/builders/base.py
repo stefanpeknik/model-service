@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
     from pydantic import BaseModel
 
-    from model_service.replica.access import InputAccess
+    from model_service.providers.access import InputAccess
 
 
 @dataclass(frozen=True, slots=True)

@@ -16,14 +16,14 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from model_service.builders.registry import get_builder
 from model_service.providers.plugin import Provider
-from model_service.scheduler.api import (
+from model_service.scheduler.executions import (
     InvalidScheduleRequestError,
     ProviderName,
     ScheduleRequest,
 )
 from model_service.scheduler.providers import ProviderAdapter
 from model_service.scheduler.records import PreparedInvocation, SubmissionIdentity
-from model_service.wire.errors import InvalidInvocation
+from model_service.wire.failures import InvalidInvocation
 from model_service.wire.invocation import (
     SHARED_STORAGE,
     BuilderInput,
@@ -40,10 +40,10 @@ if TYPE_CHECKING:
 
     from model_service.catalog import ModelCatalog
     from model_service.facade.settings import SchedulerSettings
+    from model_service.providers.access import AccessAdapter
     from model_service.providers.plugin import FacadeContribution
     from model_service.providers.shared_storage import SharedStorageAccessAdapter
-    from model_service.replica.access import AccessAdapter
-    from model_service.replica.settings import WorkerSettings
+    from model_service.replica.settings import ReplicaSettings
     from model_service.scheduler.providers import BeforeMutation, ProviderFinishOutcome
     from model_service.wire.json import JsonValue
 
@@ -221,7 +221,7 @@ class StandaloneProvider(Provider):
             )
         )
 
-    def input_access(self, settings: WorkerSettings) -> Mapping[str, AccessAdapter]:
+    def input_access(self, settings: ReplicaSettings) -> Mapping[str, AccessAdapter]:
         """Give builder replicas shared-storage access below the allowed roots.
 
         Args:

@@ -29,7 +29,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
 
-from model_service.scheduler.api import (
+from model_service.scheduler.executions import (
     STORED_INVOCATION,
     STORED_RESULT,
     ExecutionStatus,

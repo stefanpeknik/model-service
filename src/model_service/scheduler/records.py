@@ -11,13 +11,13 @@ from datetime import timedelta
 from enum import IntEnum, StrEnum
 from typing import TYPE_CHECKING
 
-from model_service.scheduler.api import Operation, ProviderName
+from model_service.scheduler.executions import Operation, ProviderName
 
 
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from model_service.scheduler.api import (
+    from model_service.scheduler.executions import (
         ExecutionError,
         ExecutionStatus,
         InferenceResult,

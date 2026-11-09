@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from collections.abc import Collection
     from datetime import timedelta
 
-    from model_service.scheduler.api import Operation
+    from model_service.scheduler.executions import Operation
     from model_service.scheduler.records import (
         Admission,
         AdmissionResult,

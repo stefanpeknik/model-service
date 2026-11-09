@@ -6,7 +6,7 @@ import unittest
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
-from model_service.scheduler.api import ExecutionErrorCode, ExecutionStatus
+from model_service.scheduler.executions import ExecutionErrorCode, ExecutionStatus
 from model_service.scheduler.records import (
     Admission,
     RetryPolicy,

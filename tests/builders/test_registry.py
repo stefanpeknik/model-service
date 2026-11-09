@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from model_service.builders.heatmap.declaration import HeatmapConfiguration
 from model_service.builders.registry import BUILDERS, get_builder
 from model_service.inference.contracts import SpatialScoresModel, TileEmbeddingModel
-from model_service.wire.errors import (
+from model_service.wire.failures import (
     IncompatibleModelError,
     InvalidInvocation,
     UnknownBuilderError,

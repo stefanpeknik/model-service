@@ -18,8 +18,8 @@ from model_service.builders.registry import get_builder
 from model_service.inference.contracts import InferenceContract
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
 from model_service.replica.application import BuilderApplication
-from model_service.replica.settings import WorkerSettings
-from model_service.wire.errors import BuilderFailure, FailureCode, InvalidInvocation
+from model_service.replica.settings import ReplicaSettings
+from model_service.wire.failures import BuilderFailure, FailureCode, InvalidInvocation
 from model_service.wire.invocation import SharedPathInput
 from model_service.wire.result import SharedArtifact
 from tests.support.builder_fixtures import (
@@ -87,7 +87,7 @@ class BuilderContractTests(_Base):
         running = deployment or healthy_deployment(self.model)
         application = BuilderApplication(
             self.spec,
-            implementation(WorkerSettings(num_threads=1, max_concurrent_tasks=2)),
+            implementation(ReplicaSettings(num_threads=1, max_concurrent_tasks=2)),
             {"shared_storage": SharedStorageAccessAdapter([self.root])},
             model_handles=lambda _model_id: running,  # type: ignore[arg-type, return-value]
         )

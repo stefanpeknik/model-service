@@ -6,7 +6,7 @@ import unittest
 
 import httpx
 
-from model_service.facade.inference import HttpInferenceProxy, InferenceRequest
+from model_service.facade.raw_inference import HttpInferenceProxy, InferenceRequest
 
 
 class HttpInferenceProxyTests(unittest.IsolatedAsyncioTestCase):

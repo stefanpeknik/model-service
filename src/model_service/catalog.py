@@ -25,7 +25,7 @@ from model_service.inference.contracts import (
     MODEL_CLASSES,
     InferenceContract,
 )
-from model_service.wire.errors import UnknownModelError
+from model_service.wire.failures import UnknownModelError
 
 
 if TYPE_CHECKING:

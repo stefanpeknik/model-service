@@ -23,7 +23,7 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from psycopg.errors import CheckViolation
 from psycopg.types.json import Jsonb
 
-from model_service.scheduler.api import (
+from model_service.scheduler.executions import (
     InferenceResult,
     ScheduleConflictError,
     UnknownExecutionError,

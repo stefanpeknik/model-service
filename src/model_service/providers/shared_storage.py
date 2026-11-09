@@ -13,8 +13,8 @@ from typing import TYPE_CHECKING, Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from model_service.replica.access import AccessAdapter, InputAccess
-from model_service.wire.errors import InvalidInvocation
+from model_service.providers.access import AccessAdapter, InputAccess
+from model_service.wire.failures import InvalidInvocation
 from model_service.wire.invocation import SharedPathInput
 
 

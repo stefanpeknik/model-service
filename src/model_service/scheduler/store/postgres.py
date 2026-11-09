@@ -23,7 +23,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from model_service.scheduler.api import (
+from model_service.scheduler.executions import (
     ExecutionError,
     ExecutionStatus,
     Operation,

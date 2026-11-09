@@ -18,7 +18,7 @@ from model_service.inference.contracts import (
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from model_service.wire.errors import BuilderFailure, FailureCode
+from model_service.wire.failures import BuilderFailure, FailureCode
 from tests.support.builder_fixtures import FakeDeployment, running_config
 
 

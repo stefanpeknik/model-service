@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from model_service.inference.contracts import (
     InferenceContract,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
-from model_service.wire.errors import IncompatibleModelError, InvalidInvocation
+from model_service.wire.failures import IncompatibleModelError, InvalidInvocation
 from model_service.wire.result import (
     BuilderResult,
     InlineOutput,

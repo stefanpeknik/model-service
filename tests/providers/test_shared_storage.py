@@ -8,7 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
-from model_service.wire.errors import InvalidInvocation
+from model_service.wire.failures import InvalidInvocation
 from model_service.wire.invocation import ExecutionContext, SharedPathInput
 from tests.support.builder_fixtures import invocation
 

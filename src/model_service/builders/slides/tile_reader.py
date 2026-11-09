@@ -17,7 +17,7 @@ from openslide import PROPERTY_NAME_MPP_X, PROPERTY_NAME_MPP_Y, OpenSlideError
 from ratiopath.openslide import OpenSlide
 
 from model_service.builders.slides.tissue import find_tissue
-from model_service.wire.errors import InvalidInvocation
+from model_service.wire.failures import InvalidInvocation
 
 
 if TYPE_CHECKING:

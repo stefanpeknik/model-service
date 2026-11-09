@@ -20,10 +20,10 @@ from model_service.providers.standalone import StandaloneProviderAdapter
 from model_service.replica.application import BuilderApplication
 from model_service.replica.cleanup import close_resource
 from model_service.scheduler.active_work import ActiveWorkRegistry
-from model_service.scheduler.api import ExecutionStatus, ScheduleRequest
+from model_service.scheduler.executions import ExecutionStatus, ScheduleRequest
 from model_service.scheduler.scheduler import ExecutionScheduler
 from model_service.scheduler.worker import ExecutionWorker
-from model_service.wire.errors import BuilderFailure, FailureCode, InvalidInvocation
+from model_service.wire.failures import BuilderFailure, FailureCode, InvalidInvocation
 from model_service.wire.invocation import (
     ExecutionContext,
     InputAccessContext,

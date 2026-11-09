@@ -10,7 +10,7 @@ from fastapi import HTTPException
 
 from model_service.inference.contracts import SpatialScoresModel
 from model_service.replica.protocol import ErrorCode, RunRequest, run_http
-from model_service.wire.errors import (
+from model_service.wire.failures import (
     BuilderFailure,
     ContractViolation,
     InvalidInvocation,

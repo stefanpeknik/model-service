@@ -25,7 +25,7 @@ from model_service.builders.registry import get_builder
 from model_service.inference.contracts import SpatialScoresModel
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
 from model_service.replica.application import BuilderApplication
-from model_service.replica.settings import WorkerSettings
+from model_service.replica.settings import ReplicaSettings
 from model_service.wire.invocation import SharedPathInput
 from model_service.wire.result import SharedArtifact
 from tests.support.builder_contract import BuilderContractTests
@@ -275,7 +275,7 @@ class HeatmapBuilderTests(unittest.IsolatedAsyncioTestCase):
             inputs["region_of_interest"] = SharedPathInput("mask.tiff")
         application = BuilderApplication(
             get_builder("heatmap"),
-            HeatmapBuilder(WorkerSettings(num_threads=1, max_concurrent_tasks=2)),
+            HeatmapBuilder(ReplicaSettings(num_threads=1, max_concurrent_tasks=2)),
             {"shared_storage": SharedStorageAccessAdapter([self.root])},
             model_handles=lambda _model_id: handle,  # type: ignore[arg-type, return-value]
         )
@@ -364,7 +364,7 @@ class HeatmapBuilderTests(unittest.IsolatedAsyncioTestCase):
 class UnreadableInputTests(unittest.TestCase):
     def test_a_file_that_is_not_a_slide_is_an_invalid_input(self) -> None:
         from model_service.builders.slides.tile_reader import open_slide
-        from model_service.wire.errors import InvalidInvocation
+        from model_service.wire.failures import InvalidInvocation
 
         with TemporaryDirectory() as directory:
             path = Path(directory) / "notes.txt"

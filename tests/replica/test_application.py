@@ -20,7 +20,7 @@ from model_service.providers.shared_storage import SharedStorageAccessAdapter
 from model_service.replica.application import BuilderApplication
 from model_service.replica.client import HTTPBuilderDispatch, RemoteFailureError
 from model_service.replica.protocol import RunRequest, run_http
-from model_service.wire.errors import (
+from model_service.wire.failures import (
     BuilderFailure,
     ContractViolation,
     FailureCode,

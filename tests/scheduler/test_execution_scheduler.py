@@ -17,7 +17,7 @@ from model_service.replica.client import (
     UnknownOutcomeError,
 )
 from model_service.scheduler.active_work import ActiveWorkRegistry
-from model_service.scheduler.api import (
+from model_service.scheduler.executions import (
     ExecutionStatus,
     IncompatibleModelError,
     InvalidScheduleRequestError,
@@ -66,7 +66,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from model_service.inference.contracts import ModelBinding
-    from model_service.scheduler.api import ModelResolver
+    from model_service.scheduler.executions import ModelResolver
     from model_service.scheduler.providers import BeforeMutation, ProviderFinishOutcome
     from model_service.wire.json import JsonValue
 

@@ -13,9 +13,9 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from model_service.scheduler import inference
+from model_service.scheduler import raw_inference
 from model_service.scheduler.active_work import ActiveWorkRegistry
-from model_service.scheduler.api import (
+from model_service.scheduler.executions import (
     ExecutionStatus,
     ExecutionView,
     InferenceInvocation,
@@ -42,9 +42,9 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Mapping
 
     from model_service.replica.client import BuilderDispatch
-    from model_service.scheduler.api import ModelResolver, ProviderName
-    from model_service.scheduler.inference import InferenceTarget
+    from model_service.scheduler.executions import ModelResolver, ProviderName
     from model_service.scheduler.providers import ProviderAdapter
+    from model_service.scheduler.raw_inference import InferenceTarget
     from model_service.scheduler.store.repository import ExecutionRepository
 
 
@@ -238,7 +238,7 @@ class ExecutionScheduler:
         if self._inference is None:
             raise SchedulingUnavailableError("scheduled inference is not configured")
         self._inference.check(request.model_id, request.payload)
-        identity = inference.identify(request)
+        identity = raw_inference.identify(request)
         if (existing := await self._find(identity)) is not None:
             return ScheduleResult(self._view(existing), created=False)
         deadline_at = self._clock() + self._requested_timeout(

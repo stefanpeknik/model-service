@@ -13,14 +13,14 @@ from model_service.facade.errors import (
     lookup_error,
     unavailable,
 )
-from model_service.scheduler.api import (
+from model_service.scheduler.executions import (
     InferenceScheduleRequest,
     InvalidScheduleRequestError,
     ScheduleConflictError,
     SchedulingUnavailableError,
 )
-from model_service.scheduler.inference import IncompatibleInputError
-from model_service.wire.errors import (
+from model_service.scheduler.raw_inference import IncompatibleInputError
+from model_service.wire.failures import (
     IncompatibleModelError,
     UnknownBuilderError,
     UnknownModelError,
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from fastapi import Response
 
     from model_service.facade.ports import Scheduler
-    from model_service.scheduler.api import ScheduleRequest, ScheduleResult
+    from model_service.scheduler.executions import ScheduleRequest, ScheduleResult
 
 
 logger = logging.getLogger(__name__)

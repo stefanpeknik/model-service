@@ -14,19 +14,19 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from model_service.facade.auth import Access, Action
 from model_service.facade.errors import ERRORS, ApiErrorCode, http_error, lookup_error
-from model_service.facade.inference import inference_headers
+from model_service.facade.raw_inference import inference_headers
 from model_service.facade.routes.common import require_idempotency_key, submit
 from model_service.inference.contracts import (  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
     InferenceContract,
     ModelBinding,
 )
-from model_service.scheduler.api import InferenceScheduleRequest, ScheduleResult
-from model_service.scheduler.inference import (
+from model_service.scheduler.executions import InferenceScheduleRequest, ScheduleResult
+from model_service.scheduler.raw_inference import (
     IncompatibleInputError,
     ModelUnavailableError,
     ResultTooLargeError,
 )
-from model_service.wire.errors import UnknownModelError
+from model_service.wire.failures import UnknownModelError
 from model_service.wire.json import (
     JsonValue,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
@@ -35,7 +35,7 @@ from model_service.wire.json import (
 if TYPE_CHECKING:
     from model_service.catalog import ModelCatalog
     from model_service.facade.ports import Scheduler
-    from model_service.scheduler.inference import InferenceTarget
+    from model_service.scheduler.raw_inference import InferenceTarget
 
 
 @dataclass(frozen=True, slots=True)

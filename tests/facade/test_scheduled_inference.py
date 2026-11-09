@@ -13,7 +13,7 @@ from httpx import ASGITransport, AsyncClient
 
 from model_service.catalog import ModelCatalog
 from model_service.facade.http_app import create_app
-from model_service.facade.inference import (
+from model_service.facade.raw_inference import (
     HttpInferenceProxy,
     ModelInference,
     check_tile,
@@ -22,7 +22,7 @@ from model_service.facade.wiring import model_resolver
 from model_service.inference.contracts import SpatialScoresModel, TileEmbeddingModel
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
 from model_service.providers.standalone import StandaloneProviderAdapter
-from model_service.scheduler.inference import IncompatibleInputError
+from model_service.scheduler.raw_inference import IncompatibleInputError
 from model_service.scheduler.records import Admission, RetryPolicy, SubmissionIdentity
 from model_service.scheduler.scheduler import ExecutionScheduler
 from model_service.wire.invocation import InputAccessContext, Invocation

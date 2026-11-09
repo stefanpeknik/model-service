@@ -24,7 +24,7 @@ from model_service.inference.contracts import (
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from model_service.scheduler.api import (
+from model_service.scheduler.executions import (
     ExecutionStatus,
     Operation,
     ResultUnavailableError,

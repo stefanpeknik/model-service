@@ -37,7 +37,7 @@ from model_service.providers.empaia.gateway import (
 )
 from model_service.providers.empaia.input_access import job_workspace
 from model_service.providers.empaia.publishers import default_publishers
-from model_service.scheduler.api import (
+from model_service.scheduler.executions import (
     InvalidScheduleRequestError,
     ScheduleRequest,
     SchedulingUnavailableError,
@@ -55,7 +55,7 @@ from model_service.scheduler.records import (
     Priority,
     SubmissionIdentity,
 )
-from model_service.wire.errors import InvalidInvocation
+from model_service.wire.failures import InvalidInvocation
 from model_service.wire.invocation import InputAccessContext, Invocation, ProviderInput
 from model_service.wire.json import is_json_value
 

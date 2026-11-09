@@ -1,5 +1,10 @@
-"""Contain the public HTTP application and production dependency wiring.
+"""The API process: public HTTP routes and the process wiring.
 
-routes/ holds one module per URL prefix and api.py assembles them. app.py wires
-PostgreSQL, provider adapters, the worker and HTTP dispatch to Ray Serve.
+- wiring.py: create_facade, builds the process (catalog, scheduler, providers).
+- http_app.py: create_app, assembles the FastAPI app from routes/.
+- routes/: one module per URL prefix; requests.py holds their bodies.
+- errors.py: the public error envelope; ports.py: what routes need.
+- raw_inference.py: forwards raw tiles to models.
+- synchronous.py: runs a builder while the caller waits.
+- capacity.py, health.py: Ray Serve state for executions and readiness.
 """

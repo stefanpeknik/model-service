@@ -23,7 +23,7 @@ from httpx import (
 from model_service.catalog import ModelCatalog
 from model_service.facade.health import DeploymentHealth
 from model_service.facade.http_app import create_app
-from model_service.facade.inference import HttpInferenceProxy, ModelInference
+from model_service.facade.raw_inference import HttpInferenceProxy, ModelInference
 from model_service.facade.synchronous import SynchronousBuilderService
 from model_service.facade.wiring import model_resolver
 from model_service.inference.contracts import SpatialScoresModel, TileEmbeddingModel
@@ -34,7 +34,7 @@ from model_service.replica.client import (
     RemoteFailureError,
     UnknownOutcomeError,
 )
-from model_service.scheduler.api import (
+from model_service.scheduler.executions import (
     ExecutionStatus,
     ExecutionView,
     Operation,

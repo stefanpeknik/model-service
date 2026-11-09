@@ -20,9 +20,9 @@ if TYPE_CHECKING:
 
     from model_service.catalog import ModelCatalog
     from model_service.facade.settings import SchedulerSettings
+    from model_service.providers.access import AccessAdapter
     from model_service.providers.empaia.registration import Marketplace
-    from model_service.replica.access import AccessAdapter
-    from model_service.replica.settings import WorkerSettings
+    from model_service.replica.settings import ReplicaSettings
 
 
 # The model files' block it reads: how a model is offered in EMPAIA.
@@ -58,7 +58,9 @@ class EmpaiaProvider(Provider):
         from model_service.providers.empaia.publishers import default_publishers
         from model_service.providers.empaia.registration import register_until_done
         from model_service.providers.empaia.routes import create_router
-        from model_service.providers.empaia.scheduling import EmpaiaProviderAdapter
+        from model_service.providers.empaia.scheduler_adapter import (
+            EmpaiaProviderAdapter,
+        )
 
         del settings
         empaia = EmpaiaSettings()
@@ -84,7 +86,7 @@ class EmpaiaProvider(Provider):
             background=register,
         )
 
-    def input_access(self, settings: WorkerSettings) -> Mapping[str, AccessAdapter]:
+    def input_access(self, settings: ReplicaSettings) -> Mapping[str, AccessAdapter]:
         """Give builder replicas access to EMPAIA job inputs through the App Service.
 
         Args:

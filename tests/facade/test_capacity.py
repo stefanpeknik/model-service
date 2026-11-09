@@ -17,7 +17,7 @@ from model_service.catalog import ModelCatalog
 from model_service.facade.capacity import ServeCapacity
 from model_service.facade.http_app import create_app
 from model_service.providers.empaia.routes import create_router
-from model_service.scheduler.api import ExecutionStatus
+from model_service.scheduler.executions import ExecutionStatus
 from tests.providers.test_empaia_routes import PROSTATE, ScriptedScheduler, view
 
 

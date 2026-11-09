@@ -13,7 +13,7 @@ from model_service.catalog import ModelCatalog
 from model_service.facade.capacity import ServeCapacity
 from model_service.facade.health import DeploymentHealth
 from model_service.facade.http_app import create_app as create_api
-from model_service.facade.inference import HttpInferenceProxy, ModelInference
+from model_service.facade.raw_inference import HttpInferenceProxy, ModelInference
 from model_service.facade.settings import SchedulerSettings
 from model_service.facade.synchronous import SynchronousBuilderService
 from model_service.providers.installed import PROVIDERS
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
 
     from model_service.inference.contracts import ModelBinding
-    from model_service.scheduler.api import ModelResolver
+    from model_service.scheduler.executions import ModelResolver
 
 
 def model_resolver(catalog: ModelCatalog) -> ModelResolver:
@@ -54,7 +54,7 @@ def model_resolver(catalog: ModelCatalog) -> ModelResolver:
     return resolve
 
 
-def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
+def create_facade(settings: SchedulerSettings | None = None) -> FastAPI:
     """Wire the production facade: catalog, repository, providers, scheduler and API.
 
     The repository is initialized, provider background tasks start and the

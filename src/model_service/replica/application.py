@@ -22,7 +22,7 @@ from model_service.builders.base import BuilderContext
 from model_service.builders.spec import BuilderInputs, BuilderOutputs
 from model_service.inference.clients import client_for, ray_handle
 from model_service.replica.cleanup import close_resource
-from model_service.wire.errors import (
+from model_service.wire.failures import (
     BuilderFailure,
     ContractViolation,
     FailureCode,
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from model_service.builders.spec import BuilderSpec
     from model_service.inference.clients import HandleLookup
     from model_service.inference.contracts import ModelBinding
-    from model_service.replica.access import AccessAdapter, InputAccess
+    from model_service.providers.access import AccessAdapter, InputAccess
     from model_service.wire.invocation import InputAccessKind, Invocation
 
 

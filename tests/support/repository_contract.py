@@ -6,7 +6,7 @@ from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from model_service.scheduler.api import (
+from model_service.scheduler.executions import (
     ExecutionError,
     ExecutionStatus,
     InferenceInvocation,

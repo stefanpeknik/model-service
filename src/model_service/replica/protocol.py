@@ -12,7 +12,7 @@ from pydantic import Field, StrictBool, TypeAdapter
 from model_service.inference.contracts import (
     ModelBinding,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
-from model_service.wire.errors import (
+from model_service.wire.failures import (
     BuilderFailure,
     ContractViolation,
     InvalidInvocation,

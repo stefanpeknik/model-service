@@ -19,13 +19,13 @@ from model_service.inference.clients import SpatialScoresClient
 
 if TYPE_CHECKING:
     from model_service.builders.base import BuilderContext
-    from model_service.replica.settings import WorkerSettings
+    from model_service.replica.settings import ReplicaSettings
 
 
 class HeatmapBuilder(
     Builder[SpatialScoresClient, HeatmapInputs, HeatmapConfiguration, HeatmapOutputs]
 ):
-    def __init__(self, settings: WorkerSettings) -> None:
+    def __init__(self, settings: ReplicaSettings) -> None:
         """Configure the builder for a replica.
 
         Args:

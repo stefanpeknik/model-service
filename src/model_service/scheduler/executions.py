@@ -14,7 +14,7 @@ from typing import Annotated
 from pydantic import Field, TypeAdapter
 
 from model_service.inference.contracts import ModelBinding
-from model_service.wire.errors import (
+from model_service.wire.failures import (
     IncompatibleModelError,
     UnknownBuilderError,
     UnknownModelError,

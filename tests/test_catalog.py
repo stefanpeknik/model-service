@@ -14,7 +14,7 @@ from model_service.inference.contracts import (
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from model_service.wire.errors import UnknownModelError
+from model_service.wire.failures import UnknownModelError
 
 
 def spatial_document(model_id: str = "prostate-classifier-1") -> dict[str, object]:

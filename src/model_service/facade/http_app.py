@@ -20,7 +20,7 @@ from model_service.facade.health import (
 )
 from model_service.facade.ports import NoCapacityInfo
 from model_service.facade.routes import builders, executions, models
-from model_service.scheduler.api import SchedulingUnavailableError
+from model_service.scheduler.executions import SchedulingUnavailableError
 
 
 if TYPE_CHECKING:
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from model_service.catalog import ModelCatalog
     from model_service.facade.ports import BuilderRunner, Capacity, Scheduler
     from model_service.providers.plugin import RouteFactory
-    from model_service.scheduler.inference import InferenceTarget
+    from model_service.scheduler.raw_inference import InferenceTarget
 
 
 def create_app(

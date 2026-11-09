@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
-from model_service.scheduler.api import (
+from model_service.scheduler.executions import (
     INFERENCE_PROVIDER,
     ExecutionError,
     ExecutionErrorCode,
@@ -31,7 +31,7 @@ from model_service.scheduler.records import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from model_service.scheduler.api import InferenceScheduleRequest
+    from model_service.scheduler.executions import InferenceScheduleRequest
     from model_service.scheduler.records import Settlement
 
 

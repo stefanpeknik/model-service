@@ -1,11 +1,16 @@
-"""Expose caller-facing durable scheduling contracts.
+"""Durable executions: admission, leases, retries, deadlines and provider finish.
 
-Start with scheduler.ExecutionScheduler for admission and worker lifetime;
-transitions.ExecutionTransitions owns the shared state rules. Persistence
-implementations remain separate.
+- executions.py: what callers see: statuses, views, schedule requests, errors.
+- scheduler.py: ExecutionScheduler, admission and the worker's lifetime.
+- worker.py: claims work, runs attempts, renews leases, settles outcomes.
+- transitions.py: the state rules every repository applies.
+- records.py: internal records, leases, retry policy and outcomes.
+- raw_inference.py: scheduled single-tile inference.
+- providers.py: the interface a provider implements to admit and finish jobs.
+- store/: the PostgreSQL repository, its rows and migrations.
 """
 
-from model_service.scheduler.api import (
+from model_service.scheduler.executions import (
     ExecutionView,
     ScheduleRequest,
     ScheduleResult,

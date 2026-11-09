@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from model_service.facade.requests import ImmediateBuilderRequest
-    from model_service.scheduler.api import (
+    from model_service.scheduler.executions import (
         ExecutionView,
         InferenceResult,
         InferenceScheduleRequest,

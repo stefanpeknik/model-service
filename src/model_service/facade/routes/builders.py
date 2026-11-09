@@ -31,11 +31,11 @@ from model_service.replica.client import (
     RemoteFailureError,
     UnknownOutcomeError,
 )
-from model_service.scheduler.api import (
+from model_service.scheduler.executions import (
     ScheduleRequest,
     ScheduleResult,
 )
-from model_service.wire.errors import (
+from model_service.wire.failures import (
     IncompatibleModelError,
     InvalidInvocation,
     UnknownBuilderError,

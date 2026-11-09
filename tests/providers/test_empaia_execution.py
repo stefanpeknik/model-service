@@ -21,10 +21,10 @@ from model_service.providers.empaia.gateway import (
 )
 from model_service.providers.empaia.input_access import EmpaiaInputAccessAdapter
 from model_service.providers.empaia.publishers import Commit, PublisherRegistry
-from model_service.providers.empaia.scheduling import EmpaiaProviderAdapter
+from model_service.providers.empaia.scheduler_adapter import EmpaiaProviderAdapter
 from model_service.replica.application import BuilderApplication
 from model_service.scheduler.active_work import ActiveWorkRegistry
-from model_service.scheduler.api import (
+from model_service.scheduler.executions import (
     InvalidScheduleRequestError,
     ScheduleRequest,
     SchedulingUnavailableError,
