@@ -30,9 +30,10 @@ if TYPE_CHECKING:
 class BuilderContext[I: BuilderInputs, C: BaseModel]:
     """What one builder run gets: its model, inputs and configuration, typed.
 
-    The model is checked against the builder's contract, and the inputs and the
-    configuration are resolved with the builder's own classes before the context
-    is built, so a builder can rely on these types without checking them again.
+    The application checks the model against the builder's contract, resolves
+    the inputs to local files and the configuration with the builder's own
+    classes before building it, so a builder can rely on these types without
+    checking them again.
     """
 
     access: InputAccess

@@ -1,7 +1,8 @@
-"""Shared fixtures for builder declaration tests: test specs."""
+"""Shared fixtures for builder runtime tests: test specs and models."""
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
@@ -16,8 +17,12 @@ from model_service.builders.contracts import (
     InferenceContract,
     InlineOutput,
     Input,
+    InputAccessContext,
+    Invocation,
     OutputKind,
     SharedArtifact,
+    SpatialScoresModel,
+    TileEmbeddingModel,
 )
 from model_service.builders.spec import BuilderSpec, InputSpec, OutputSpec
 
@@ -26,6 +31,12 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
 
     from model_service.builders.base import BuilderContext
+
+
+SPATIAL_MODEL = SpatialScoresModel(
+    id="classifier", tile_size=32, output_tile_size=1, n_channels=1, mpp=0.5
+)
+EMBEDDING_MODEL = TileEmbeddingModel(id="encoder", tile_size=224, mpp=0.5)
 
 
 class EmptyConfiguration(BaseModel):
@@ -79,6 +90,20 @@ def outputs_model(outputs: Mapping[str, OutputSpec]) -> type[BuilderOutputs]:
     return create_model("TestOutputs", __base__=BuilderOutputs, **fields)
 
 
+def inline_output() -> OutputSpec:
+    return OutputSpec(kind=OutputKind.INLINE)
+
+
+def artifact_output(
+    default_path: str = "result.bin", media_type: str | None = None
+) -> OutputSpec:
+    return OutputSpec(
+        kind=OutputKind.SHARED_ARTIFACT,
+        media_type=media_type,
+        default_path=default_path,
+    )
+
+
 class FunctionBuilder:
     def __init__(
         self, function: Callable[[BuilderContext], Awaitable[BuilderResult]]
@@ -88,7 +113,7 @@ class FunctionBuilder:
     async def run(self, context: BuilderContext[Any, Any]) -> BuilderOutputs:
         """Return the function's result as outputs, without validating it.
 
-        Unvalidated, so tests can return wrong names and kinds.
+        Unvalidated, so tests can hand the application wrong names and kinds.
         """
         result = await self._function(context)
         if not isinstance(result, BuilderResult):
@@ -99,3 +124,18 @@ class FunctionBuilder:
             **dict.fromkeys(result.outputs, (BuilderOutput, ...)),  # type: ignore[call-overload]
         )
         return model.model_construct(**result.outputs)
+
+
+def invocation(
+    kind: str = "shared_storage",
+    state: dict[str, object] | None = None,
+    **overrides: object,
+) -> Invocation:
+    values: dict[str, object] = {
+        "inputs": {},
+        "resolved_configuration": None,
+        "input_access": InputAccessContext(kind, state or {}),
+        "deadline_at": datetime.now(UTC) + timedelta(minutes=1),
+    }
+    values.update(overrides)
+    return Invocation(**values)  # type: ignore[arg-type]

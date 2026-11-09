@@ -1,1 +1,1 @@
-"""RationAI model service: builders and model_service.models."""
+"""RationAI model service: providers, builders and model_service.models."""

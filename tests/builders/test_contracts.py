@@ -1,4 +1,4 @@
-"""Check the wire format of invocations, results and model bindings."""
+"""Check the wire format of invocations, results, run requests and model bindings."""
 
 import unittest
 from datetime import UTC, datetime
@@ -14,6 +14,7 @@ from model_service.builders.contracts import (
     SpatialScoresModel,
     TileEmbeddingModel,
 )
+from model_service.builders.http import RUN_REQUEST
 
 
 INVOCATION_BODY = {
@@ -104,6 +105,23 @@ class BuilderContractTests(unittest.TestCase):
         ):
             with self.subTest(invalid=invalid), self.assertRaises(ValidationError):
                 MODEL_BINDING.validate_python(invalid)
+
+    def test_run_request_nests_invocation_and_model(self) -> None:
+        body = {
+            "invocation": INVOCATION_BODY,
+            "model": {
+                "id": "virchow2",
+                "contract": "tile-embedding",
+                "tile_size": 224,
+                "mpp": 0.5,
+            },
+        }
+        request = RUN_REQUEST.validate_python(body)
+
+        self.assertIsInstance(request.model, TileEmbeddingModel)
+        self.assertEqual(RUN_REQUEST.dump_python(request, mode="json"), body)
+        with self.assertRaises(ValidationError):
+            RUN_REQUEST.validate_python({"invocation": INVOCATION_BODY})
 
 
 if __name__ == "__main__":

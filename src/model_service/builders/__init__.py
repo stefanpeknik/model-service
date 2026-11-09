@@ -1,1 +1,1 @@
-"""Reusable whole-slide builders: their contracts, declarations and registry."""
+"""Reusable whole-slide builders, their runtime and the Ray Serve ingress."""

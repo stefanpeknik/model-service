@@ -1,4 +1,4 @@
-"""Builder invocations, model bindings, results and errors.
+"""Builder invocations, model bindings, results and safe errors.
 
 Everything here crosses a process boundary (caller → Ray builder replica), so
 the types are strict and JSON-serializable.
@@ -18,6 +18,7 @@ from pydantic import (
     Field,
     PlainSerializer,
     TypeAdapter,
+    ValidationError,
 )
 from pydantic import JsonValue as PydanticJsonValue
 
@@ -49,6 +50,22 @@ def _validate_json_value(value: object) -> PydanticJsonValue:
 type JsonValue = Annotated[PydanticJsonValue, BeforeValidator(_validate_json_value)]
 type _NonEmptyString = Annotated[str, Field(strict=True, min_length=1)]
 type _JsonObject = Annotated[dict[str, JsonValue], Field(strict=True)]
+
+
+def is_json_value(value: object) -> bool:
+    """Check whether a value is strict JSON, without NaN or infinities.
+
+    Args:
+        value: Value to check.
+
+    Returns:
+        True when the value is strict JSON.
+    """
+    try:
+        _JSON_VALUE.validate_python(value, strict=True)
+    except ValidationError:
+        return False
+    return True
 
 
 class InferenceContract(StrEnum):
@@ -133,6 +150,7 @@ type BuilderInput = Annotated[
 # Which access adapter resolves an invocation's inputs and outputs; each
 # provider names its own, the builder replica holds one adapter per kind.
 type InputAccessKind = str
+SHARED_STORAGE: InputAccessKind = "shared_storage"
 
 
 @dataclass(frozen=True, slots=True)
@@ -230,8 +248,8 @@ class BuilderOutputs(BaseModel):
 
     A field is a `SharedArtifact`, annotated with `Artifact`, or an
     `InlineOutput`. A builder returns its own subclass; the registry derives the
-    builder's output declaration from the fields, and `result()` turns it into
-    the generic `BuilderResult` that is sent and stored.
+    builder's output declaration from the fields, and the application turns it
+    into the generic `BuilderResult` that is sent and stored.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -261,8 +279,8 @@ class BuilderInputs(BaseModel):
 
     A field is a `Path` (required) or `Path | None` defaulting to None
     (optional), annotated with `Input`. The registry derives the builder's input
-    declaration from the fields; a builder receives an instance with each
-    supplied input resolved to a local file through the input access.
+    declaration from the fields; the application resolves each supplied input to
+    a local file through the input access and hands the builder an instance.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -276,6 +294,13 @@ class BuilderInputs(BaseModel):
         return tuple(path for path in dict(self).values() if path is not None)
 
 
+class FailureCode(StrEnum):
+    DEADLINE_EXCEEDED = "builder_deadline_exceeded"
+    INTERNAL_ERROR = "builder_internal_error"
+    INPUT_UNAVAILABLE = "input_unavailable"
+    MODEL_UNAVAILABLE = "model_unavailable"
+
+
 class InvalidInvocation(ValueError):  # noqa: N818
     """Inputs, access, configuration or deadline violate the builder's contract."""
 
@@ -284,5 +309,30 @@ class UnknownBuilderError(KeyError):
     pass
 
 
+class UnknownModelError(KeyError):
+    pass
+
+
 class IncompatibleModelError(InvalidInvocation):
     """The model's inference contract is not the one the builder accepts."""
+
+
+class ContractViolation(RuntimeError):  # noqa: N818
+    """A builder returned outputs that differ from its declaration."""
+
+
+class BuilderFailure(RuntimeError):  # noqa: N818
+    """A caller-safe failure with a stable code and a retry decision."""
+
+    def __init__(self, *, code: str, safe_message: str, retryable: bool) -> None:
+        """Record a caller-safe failure.
+
+        Args:
+            code: Stable failure code, usually a `FailureCode`.
+            safe_message: Message safe to show callers.
+            retryable: Whether a retry may succeed.
+        """
+        super().__init__(safe_message)
+        self.code = code
+        self.safe_message = safe_message
+        self.retryable = retryable

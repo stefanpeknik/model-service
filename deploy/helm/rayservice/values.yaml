@@ -5,6 +5,12 @@ applications:
   - prov-gigapath
   - virchow2
 
+# Builders run `builders.serve:app`; the key is the builder ID.
+builders: {}
+
+# Roots callers may name in shared-storage requests (builders).
+sharedStorageRoots: [/mnt/data, /mnt/projects]
+
 workers:
   - cpu-workers
   - mig20-workers
