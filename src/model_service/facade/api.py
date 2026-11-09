@@ -1,0 +1,127 @@
+"""Assemble the public HTTP API from the route modules.
+
+Readiness checks durable storage; `/healthz/deployments` checks Ray.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from fastapi import FastAPI, Request, Response, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+
+from model_service.facade.auth import Access
+from model_service.facade.errors import ApiErrorCode, http_error
+from model_service.facade.health import (
+    DeploymentHealthCheck,
+    DeploymentState,
+    DeploymentStatus,
+)
+from model_service.facade.ports import NoCapacityInfo
+from model_service.facade.routes import builders, executions, models
+from model_service.scheduler.contracts import SchedulingUnavailableError
+
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from starlette.types import Lifespan
+
+    from model_service.facade.catalog import ModelCatalog
+    from model_service.facade.ports import BuilderRunner, Capacity, Scheduler
+    from model_service.providers.composition import RouteFactory
+    from model_service.scheduler.inference import InferenceTarget
+
+
+def create_app(
+    scheduler: Scheduler,
+    *,
+    catalog: ModelCatalog,
+    builder_runner: BuilderRunner | None = None,
+    inference_target: InferenceTarget | None = None,
+    lifespan: Lifespan[FastAPI] | None = None,
+    deployment_health: DeploymentHealthCheck | None = None,
+    inference_max_request_bytes: int = 2 * 1024 * 1024,
+    capacity: Capacity | None = None,
+    access: Access | None = None,
+    provider_routes: Sequence[RouteFactory] = (),
+) -> FastAPI:
+    """Build the FastAPI app with health checks, public routes and provider routes.
+
+    Args:
+        scheduler: Admits, reads and cancels durable executions.
+        catalog: Deployed models served under `/v1/models`.
+        builder_runner: Runs builders synchronously; None makes `/run` answer 503.
+        inference_target: Runs raw model requests; None makes direct inference answer 503.
+        lifespan: Startup and shutdown context for the app.
+        deployment_health: Checks Ray Serve routes; None reports `not_configured`.
+        inference_max_request_bytes: Largest raw inference body accepted, in bytes.
+        capacity: Explains running executions stuck waiting for Ray capacity;
+            None adds no explanation.
+        access: Guards the public API; the default lets everyone in. Providers
+            guard their own routes.
+        provider_routes: Router factories contributed by providers.
+
+    Returns:
+        The assembled application.
+    """
+    capacity = capacity or NoCapacityInfo()
+    access = access or Access()
+    app = FastAPI(title="model-service", lifespan=lifespan)
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid_request(
+        _request: Request, _error: RequestValidationError
+    ) -> JSONResponse:
+        # Do not echo the body: it may contain provider credentials.
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            content={
+                "detail": {
+                    "code": ApiErrorCode.INVALID_REQUEST,
+                    "message": "request body is invalid",
+                    "retryable": False,
+                }
+            },
+        )
+
+    @app.get("/healthz")
+    async def health() -> JSONResponse:
+        # Liveness: a facade whose worker stopped would hold jobs forever.
+        if not scheduler.alive:
+            return JSONResponse({"status": "worker stopped"}, status_code=503)
+        return JSONResponse({"status": "ok"})
+
+    @app.get("/readyz")
+    async def readiness() -> dict[str, str]:
+        try:
+            await scheduler.check_ready()
+        except SchedulingUnavailableError as error:
+            raise http_error(
+                503,
+                ApiErrorCode.SCHEDULING_UNAVAILABLE,
+                "execution repository is temporarily unavailable",
+                retryable=True,
+            ) from error
+        return {"status": "ok"}
+
+    @app.get("/healthz/deployments")
+    async def deployment_status(response: Response) -> DeploymentStatus:
+        if deployment_health is None:
+            return DeploymentStatus(DeploymentState.NOT_CONFIGURED)
+        result = await deployment_health.check()
+        if result.status is not DeploymentState.READY:
+            response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return result
+
+    app.include_router(
+        models.create_router(
+            scheduler, catalog, inference_target, inference_max_request_bytes, access
+        )
+    )
+    app.include_router(builders.create_router(scheduler, builder_runner, access))
+    for routes in provider_routes:
+        app.include_router(routes(scheduler, capacity))
+    app.include_router(executions.create_router(scheduler, capacity, access))
+    return app

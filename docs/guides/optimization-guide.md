@@ -83,7 +83,7 @@ Store the cache path in a shared location that persists across pod restarts.
 
 **Option 1: Use an emptyDir volume (data lost on pod restart)**
 
-In your application YAML in `helm/rayservice/applications/`, set the environment variable:
+In your model file in `deploy/helm/rayservice/models/`, set the environment variable:
 
 ```yaml
 deployments:
@@ -94,7 +94,7 @@ deployments:
           TRT_CACHE_PATH: /data/trt-cache
 ```
 
-Then add volume mounting to your worker group in `helm/rayservice/values.yaml`:
+Then add volume mounting to your worker group in `deploy/helm/rayservice/values.yaml`:
 
 ```yaml
 rayClusterConfig:
@@ -319,7 +319,7 @@ sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL  # Sequential = l
 
 self.session = ort.InferenceSession(
   provider_path,
-  session_options=sess_options,
+  sess_options=sess_options,
   providers=[...],
 )
 ```

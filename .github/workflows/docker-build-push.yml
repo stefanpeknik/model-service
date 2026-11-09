@@ -57,7 +57,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ./docker/Dockerfile.${{ inputs.image }}
+          file: ./deploy/images/Dockerfile.${{ inputs.image }}
           push: true
           tags: cerit.io/rationai/model-service:${{ steps.set_tag.outputs.image_tag }}
           platforms: linux/amd64

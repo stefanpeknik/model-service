@@ -1,0 +1,34 @@
+inference:
+  contract: tile-embedding
+  mpp: 0.5  # 20x; the resolution the published encoder was trained at
+  summaries:
+  - global
+  - local_mean
+serve:
+  name: virchow2
+  import_path: model_service.models.virchow2:app
+  route_prefix: /virchow2
+  runtime_env:
+    config:
+      setup_timeout_seconds: 1800
+  deployments:
+    - name: Virchow2
+      max_ongoing_requests: 1024
+      max_queued_requests: 8192
+      autoscaling_config:
+        min_replicas: 0
+        max_replicas: 4
+        target_ongoing_requests: 256
+      ray_actor_options:
+        num_cpus: 4
+        num_gpus: 1
+        memory: 8589934592
+        runtime_env:
+          env_vars:
+            HF_HOME: /mnt/huggingface_cache
+      user_config:
+        tile_size: 224
+        max_batch_size: 512
+        batch_wait_timeout_s: 0.1
+        model:
+          repo_id: paige-ai/Virchow2

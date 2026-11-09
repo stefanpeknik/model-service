@@ -1,0 +1,38 @@
+# Volumes the model-service release in rationai-infra-test-ns uses besides
+# the chart's outputs and scratch claims: the facade's raw-inference files and
+# the GPU workers' TensorRT and Hugging Face caches.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-service-inference
+  namespace: rationai-infra-test-ns
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: nfs-csi
+  resources:
+    requests:
+      storage: 8Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-service-trt-cache
+  namespace: rationai-infra-test-ns
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: nfs-csi
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-service-hf-cache
+  namespace: rationai-infra-test-ns
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: nfs-csi
+  resources:
+    requests:
+      storage: 15Gi
