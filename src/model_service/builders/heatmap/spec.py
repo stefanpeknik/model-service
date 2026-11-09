@@ -6,7 +6,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict
 
-from model_service.builders.spec import (
+from model_service.builders.declarations import (
     Artifact,
     BuilderInputs,
     BuilderOutputs,

@@ -27,7 +27,7 @@ from model_service.scheduler.executions import (
     UnknownBuilderError,
     UnknownModelError,
 )
-from model_service.scheduler.providers import (
+from model_service.scheduler.provider_adapter import (
     ProviderCancellation,
     ProviderFailure,
     ProviderFinishFailureError,
@@ -67,7 +67,10 @@ if TYPE_CHECKING:
 
     from model_service.inference.contracts import ModelBinding
     from model_service.scheduler.executions import ModelResolver
-    from model_service.scheduler.providers import BeforeMutation, ProviderFinishOutcome
+    from model_service.scheduler.provider_adapter import (
+        BeforeMutation,
+        ProviderFinishOutcome,
+    )
     from model_service.wire.json import JsonValue
 
 

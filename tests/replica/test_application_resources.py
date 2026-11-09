@@ -14,11 +14,11 @@ from unittest.mock import patch
 
 from model_service.builders.registry import BUILDERS, get_builder
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
-from model_service.providers.empaia.input_access import EmpaiaInputAccessAdapter
+from model_service.providers.empaia.job_inputs import EmpaiaInputAccessAdapter
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
 from model_service.providers.standalone import StandaloneProviderAdapter
-from model_service.replica.application import BuilderApplication
 from model_service.replica.cleanup import close_resource
+from model_service.replica.runner import BuilderApplication
 from model_service.scheduler.active_work import ActiveWorkRegistry
 from model_service.scheduler.executions import ExecutionStatus, ScheduleRequest
 from model_service.scheduler.scheduler import ExecutionScheduler

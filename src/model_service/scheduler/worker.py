@@ -26,7 +26,7 @@ from model_service.scheduler.executions import (
     UnknownBuilderError,
     UnknownModelError,
 )
-from model_service.scheduler.providers import (
+from model_service.scheduler.provider_adapter import (
     ProviderCancellation,
     ProviderFailure,
     ProviderFinishFailureError,
@@ -59,7 +59,7 @@ if TYPE_CHECKING:
     from model_service.replica.client import BuilderDispatch
     from model_service.scheduler.active_work import ActiveWorkRegistry
     from model_service.scheduler.executions import ModelResolver, ProviderName
-    from model_service.scheduler.providers import ProviderAdapter
+    from model_service.scheduler.provider_adapter import ProviderAdapter
     from model_service.scheduler.records import Settlement
     from model_service.scheduler.store.repository import ExecutionRepository
     from model_service.scheduler.tile_executions import InferenceTarget

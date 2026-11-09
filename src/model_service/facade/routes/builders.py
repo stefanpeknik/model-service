@@ -14,7 +14,12 @@ from fastapi import APIRouter, Depends, Request, Response, status
 
 from model_service.builders.registry import BUILDERS
 from model_service.facade.auth import Access, Action
-from model_service.facade.errors import ERRORS, ApiErrorCode, http_error, lookup_error
+from model_service.facade.http_errors import (
+    ERRORS,
+    ApiErrorCode,
+    http_error,
+    lookup_error,
+)
 
 # FastAPI reads these annotations at runtime.
 from model_service.facade.requests import (

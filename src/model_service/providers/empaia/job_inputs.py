@@ -20,7 +20,7 @@ from model_service.providers.empaia.app_service.gateway import (
     EmpaiaInputState,
     EmpaiaJobContext,
 )
-from model_service.providers.input_files import AccessAdapter, InputAccess
+from model_service.providers.input_files import InputAccess, InputAccessFactory
 from model_service.replica.cleanup import close_resource
 from model_service.wire.failures import BuilderFailure, FailureCode, InvalidInvocation
 from model_service.wire.invocation import ExecutionContext, ProviderInput
@@ -145,7 +145,7 @@ def job_workspace(root: Path, api_url: str, job_id: str) -> Path:
     return root / hashlib.sha256(f"{api_url}\0{job_id}".encode()).hexdigest()
 
 
-class EmpaiaInputAccessAdapter(AccessAdapter):
+class EmpaiaInputAccessAdapter(InputAccessFactory):
     """Create per-attempt local access by resolving inputs through an EMPAIA gateway."""
 
     def __init__(

@@ -15,13 +15,13 @@ from typing import TYPE_CHECKING, Annotated
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from model_service.builders.registry import get_builder
-from model_service.providers.plugin import Provider
+from model_service.providers.provider import Provider
 from model_service.scheduler.executions import (
     InvalidScheduleRequestError,
     ProviderName,
     ScheduleRequest,
 )
-from model_service.scheduler.providers import ProviderAdapter
+from model_service.scheduler.provider_adapter import ProviderAdapter
 from model_service.scheduler.records import PreparedInvocation, SubmissionIdentity
 from model_service.wire.failures import InvalidInvocation
 from model_service.wire.invocation import (
@@ -40,11 +40,14 @@ if TYPE_CHECKING:
 
     from model_service.catalog import ModelCatalog
     from model_service.facade.settings import SchedulerSettings
-    from model_service.providers.input_files import AccessAdapter
-    from model_service.providers.plugin import FacadeContribution
+    from model_service.providers.input_files import InputAccessFactory
+    from model_service.providers.provider import FacadeContribution
     from model_service.providers.shared_storage import SharedStorageAccessAdapter
     from model_service.replica.settings import ReplicaSettings
-    from model_service.scheduler.providers import BeforeMutation, ProviderFinishOutcome
+    from model_service.scheduler.provider_adapter import (
+        BeforeMutation,
+        ProviderFinishOutcome,
+    )
     from model_service.wire.json import JsonValue
 
 
@@ -211,7 +214,7 @@ class StandaloneProvider(Provider):
         Returns:
             The facade contribution.
         """
-        from model_service.providers.plugin import FacadeContribution
+        from model_service.providers.provider import FacadeContribution
         from model_service.providers.shared_storage import SharedStorageAccessAdapter
 
         del catalog
@@ -221,7 +224,9 @@ class StandaloneProvider(Provider):
             )
         )
 
-    def input_access(self, settings: ReplicaSettings) -> Mapping[str, AccessAdapter]:
+    def input_access(
+        self, settings: ReplicaSettings
+    ) -> Mapping[str, InputAccessFactory]:
         """Give builder replicas shared-storage access below the allowed roots.
 
         Args:

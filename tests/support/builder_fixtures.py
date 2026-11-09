@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, create_model
 
-from model_service.builders.spec import (
+from model_service.builders.declarations import (
     Artifact,
     BuilderInputs,
     BuilderOutputs,

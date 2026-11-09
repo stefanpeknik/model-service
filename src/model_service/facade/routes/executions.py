@@ -9,7 +9,12 @@ from fastapi import APIRouter, HTTPException, Response
 from pydantic import Field
 
 from model_service.facade.auth import Access, Action
-from model_service.facade.errors import ERRORS, ApiErrorCode, http_error, unavailable
+from model_service.facade.http_errors import (
+    ERRORS,
+    ApiErrorCode,
+    http_error,
+    unavailable,
+)
 from model_service.scheduler.executions import (
     ExecutionView,
     ResultUnavailableError,

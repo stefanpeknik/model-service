@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from model_service.providers.input_files import AccessAdapter, InputAccess
+from model_service.providers.input_files import InputAccess, InputAccessFactory
 from model_service.wire.failures import InvalidInvocation
 from model_service.wire.invocation import SharedPathInput
 
@@ -156,7 +156,7 @@ class SharedStorageAccess(InputAccess):
         return resolved
 
 
-class SharedStorageAccessAdapter(AccessAdapter):
+class SharedStorageAccessAdapter(InputAccessFactory):
     def __init__(self, allowed_roots: Iterable[Path]) -> None:
         """Keep the roots callers may name.
 

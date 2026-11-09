@@ -22,9 +22,9 @@ from model_service.facade.wiring import model_resolver
 from model_service.inference.contracts import TileEmbeddingModel
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
 from model_service.providers.standalone import StandaloneProviderAdapter
-from model_service.replica.application import BuilderApplication
 from model_service.replica.client import HTTPBuilderDispatch
 from model_service.replica.protocol import RunRequest, run_http
+from model_service.replica.runner import BuilderApplication
 from model_service.replica.settings import ReplicaSettings
 from model_service.scheduler.scheduler import ExecutionScheduler
 from tests.support.builder_contract import BuilderContractTests

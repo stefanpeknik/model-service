@@ -10,8 +10,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from model_service.builders.declarations import BuilderInputs, BuilderOutputs
 from model_service.builders.output_files import atomic_artifact
-from model_service.builders.spec import BuilderInputs, BuilderOutputs
 from model_service.inference.clients import ModelClient
 from model_service.wire.result import SharedArtifact
 

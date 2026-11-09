@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import ValidationError
 
 from model_service.builders.base import BuilderContext
-from model_service.builders.spec import BuilderInputs, BuilderOutputs
+from model_service.builders.declarations import BuilderInputs, BuilderOutputs
 from model_service.inference.clients import client_for, ray_handle
 from model_service.replica.cleanup import close_resource
 from model_service.wire.failures import (
@@ -37,10 +37,10 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from model_service.builders.base import Builder
-    from model_service.builders.spec import BuilderSpec
+    from model_service.builders.declarations import BuilderSpec
     from model_service.inference.clients import HandleLookup
     from model_service.inference.contracts import ModelBinding
-    from model_service.providers.input_files import AccessAdapter, InputAccess
+    from model_service.providers.input_files import InputAccess, InputAccessFactory
     from model_service.wire.invocation import InputAccessKind, Invocation
 
 
@@ -52,7 +52,7 @@ class BuilderApplication:
         self,
         spec: BuilderSpec,
         builder: Builder[Any, Any, Any, Any],
-        access_adapters: Mapping[InputAccessKind, AccessAdapter],
+        access_adapters: Mapping[InputAccessKind, InputAccessFactory],
         *,
         cleanup_timeout_seconds: float = 10,
         model_handles: HandleLookup = ray_handle,

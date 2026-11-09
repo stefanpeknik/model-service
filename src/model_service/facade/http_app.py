@@ -12,12 +12,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from model_service.facade.auth import Access
-from model_service.facade.errors import ApiErrorCode, http_error
 from model_service.facade.health import (
     DeploymentHealthCheck,
     DeploymentState,
     DeploymentStatus,
 )
+from model_service.facade.http_errors import ApiErrorCode, http_error
 from model_service.facade.ports import NoCapacityInfo
 from model_service.facade.routes import builders, executions, models
 from model_service.scheduler.executions import SchedulingUnavailableError
@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
     from model_service.catalog import ModelCatalog
     from model_service.facade.ports import BuilderRunner, Capacity, Scheduler
-    from model_service.providers.plugin import RouteFactory
+    from model_service.providers.provider import RouteFactory
     from model_service.scheduler.tile_executions import InferenceTarget
 
 

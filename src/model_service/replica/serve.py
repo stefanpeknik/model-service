@@ -16,7 +16,6 @@ from ray import serve
 
 from model_service.builders.registry import get_builder
 from model_service.providers.enabled import PROVIDERS
-from model_service.replica.application import BuilderApplication
 from model_service.replica.protocol import (
     ErrorCode,
     ErrorResponse,
@@ -24,12 +23,13 @@ from model_service.replica.protocol import (
     error,
     run_http,
 )
+from model_service.replica.runner import BuilderApplication
 from model_service.replica.settings import DeploymentSettings, ReplicaSettings
 from model_service.wire.result import BuilderResult
 
 
 if TYPE_CHECKING:
-    from model_service.providers.input_files import AccessAdapter
+    from model_service.providers.input_files import InputAccessFactory
 
 
 fastapi = FastAPI()
@@ -77,7 +77,7 @@ def build_application(config: DeploymentSettings) -> BuilderApplication:
     module_name, _, class_name = spec.implementation.partition(":")
     implementation = getattr(importlib.import_module(module_name), class_name)
     settings = ReplicaSettings.model_validate(config.model_dump(exclude={"builder_id"}))
-    adapters: dict[str, AccessAdapter] = {}
+    adapters: dict[str, InputAccessFactory] = {}
     for provider in PROVIDERS:
         adapters.update(provider.input_access(settings))
     return BuilderApplication(spec, implementation(settings), adapters)

@@ -26,7 +26,7 @@ from model_service.wire.result import InlineOutput, SharedArtifact
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from model_service.builders.spec import OutputSpec
+    from model_service.builders.declarations import OutputSpec
     from model_service.inference.contracts import ModelBinding
     from model_service.providers.empaia.app_service.gateway import EmpaiaGateway
     from model_service.wire.result import BuilderOutput

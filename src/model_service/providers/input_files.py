@@ -62,7 +62,7 @@ class InputAccess(ABC):
         ...
 
 
-class AccessAdapter(ABC):
+class InputAccessFactory(ABC):
     # The model tells an adapter that fetches slides which resolution the builder reads.
     @abstractmethod
     def create(

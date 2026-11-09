@@ -17,7 +17,7 @@ import numpy as np
 from model_service.builders.registry import get_builder
 from model_service.inference.contracts import InferenceContract
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
-from model_service.replica.application import BuilderApplication
+from model_service.replica.runner import BuilderApplication
 from model_service.replica.settings import ReplicaSettings
 from model_service.wire.failures import BuilderFailure, FailureCode, InvalidInvocation
 from model_service.wire.invocation import SharedPathInput

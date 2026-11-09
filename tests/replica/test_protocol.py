@@ -24,7 +24,7 @@ from model_service.wire.invocation import (
 
 if TYPE_CHECKING:
     from model_service.inference.contracts import ModelBinding
-    from model_service.replica.application import BuilderApplication
+    from model_service.replica.runner import BuilderApplication
 
 
 class FailingApplication:

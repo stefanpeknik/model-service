@@ -1,6 +1,6 @@
 """The HTTP contract between the facade or scheduler and a builder replica.
 
-Its error format is internal; the public API's is facade/errors.py.
+Its error format is internal; the public API's is facade/http_errors.py.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from model_service.wire.result import (
 
 
 if TYPE_CHECKING:
-    from model_service.replica.application import BuilderApplication
+    from model_service.replica.runner import BuilderApplication
 
 
 @dataclass(frozen=True, slots=True)

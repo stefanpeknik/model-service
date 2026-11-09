@@ -33,7 +33,7 @@ from model_service.providers.empaia.app_service.types import (
     SlideLevel,
     SlideMetadata,
 )
-from model_service.providers.empaia.input_access import (
+from model_service.providers.empaia.job_inputs import (
     link_direct_input,
     write_rectangle_input,
 )

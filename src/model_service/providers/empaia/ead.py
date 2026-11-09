@@ -38,7 +38,7 @@ from model_service.providers.empaia.ead_builder_io import BUILDER_IO
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
-    from model_service.builders.spec import BuilderSpec
+    from model_service.builders.declarations import BuilderSpec
     from model_service.inference.contracts import ModelBinding
     from model_service.providers.empaia.ead_builder_io import BuilderIo
     from model_service.providers.empaia.publishers import PublisherRegistry

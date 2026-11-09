@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from model_service.providers.empaia.app_service.gateway import INPUT_ACCESS_KIND
 from model_service.providers.empaia.app_service.http import http_gateway_factory
 from model_service.providers.empaia.settings import EmpaiaSettings
-from model_service.providers.plugin import FacadeContribution, Provider
+from model_service.providers.provider import FacadeContribution, Provider
 
 
 if TYPE_CHECKING:
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from model_service.catalog import ModelCatalog
     from model_service.facade.settings import SchedulerSettings
     from model_service.providers.empaia.registration import Marketplace
-    from model_service.providers.input_files import AccessAdapter
+    from model_service.providers.input_files import InputAccessFactory
     from model_service.replica.settings import ReplicaSettings
 
 
@@ -55,7 +55,7 @@ class EmpaiaProvider(Provider):
             jsonschema.ValidationError: If a generated EAD fails the EAD v3 schema.
         """
         from model_service.providers.empaia.ead import app_definitions, parse_listings
-        from model_service.providers.empaia.jobs import (
+        from model_service.providers.empaia.job_adapter import (
             EmpaiaProviderAdapter,
         )
         from model_service.providers.empaia.publishers import default_publishers
@@ -86,7 +86,9 @@ class EmpaiaProvider(Provider):
             background=register,
         )
 
-    def input_access(self, settings: ReplicaSettings) -> Mapping[str, AccessAdapter]:
+    def input_access(
+        self, settings: ReplicaSettings
+    ) -> Mapping[str, InputAccessFactory]:
         """Give builder replicas access to EMPAIA job inputs through the App Service.
 
         Args:
@@ -98,7 +100,7 @@ class EmpaiaProvider(Provider):
         Raises:
             pydantic.ValidationError: If the `EMPAIA_*` settings are invalid.
         """
-        from model_service.providers.empaia.input_access import (
+        from model_service.providers.empaia.job_inputs import (
             EmpaiaInputAccessAdapter,
         )
 

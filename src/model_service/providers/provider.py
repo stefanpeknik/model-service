@@ -23,9 +23,9 @@ if TYPE_CHECKING:
     from model_service.catalog import ModelCatalog
     from model_service.facade.ports import Capacity, Scheduler
     from model_service.facade.settings import SchedulerSettings
-    from model_service.providers.input_files import AccessAdapter
+    from model_service.providers.input_files import InputAccessFactory
     from model_service.replica.settings import ReplicaSettings
-    from model_service.scheduler.providers import ProviderAdapter
+    from model_service.scheduler.provider_adapter import ProviderAdapter
     from model_service.wire.invocation import InputAccessKind
 
 
@@ -62,7 +62,7 @@ class Provider(ABC):
     @abstractmethod
     def input_access(
         self, settings: ReplicaSettings
-    ) -> Mapping[InputAccessKind, AccessAdapter]:
+    ) -> Mapping[InputAccessKind, InputAccessFactory]:
         """Build the adapters builder replicas use for the inputs this provider hands out.
 
         Args:

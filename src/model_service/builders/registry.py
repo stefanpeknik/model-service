@@ -15,7 +15,7 @@ from model_service.wire.failures import UnknownBuilderError
 
 
 if TYPE_CHECKING:
-    from model_service.builders.spec import BuilderOutputs, BuilderSpec
+    from model_service.builders.declarations import BuilderOutputs, BuilderSpec
     from model_service.wire.result import BuilderResult
 
 

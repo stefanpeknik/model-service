@@ -13,13 +13,13 @@ from typing import TYPE_CHECKING, Any, cast
 import httpx
 from fastapi import FastAPI
 
+from model_service.builders.declarations import InputSpec
 from model_service.builders.output_files import atomic_artifact
-from model_service.builders.spec import InputSpec
-from model_service.providers.empaia.input_access import EmpaiaInputAccessAdapter
+from model_service.providers.empaia.job_inputs import EmpaiaInputAccessAdapter
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
-from model_service.replica.application import BuilderApplication
 from model_service.replica.client import HTTPBuilderDispatch, RemoteFailureError
 from model_service.replica.protocol import RunRequest, run_http
+from model_service.replica.runner import BuilderApplication
 from model_service.wire.failures import (
     BuilderFailure,
     ContractViolation,

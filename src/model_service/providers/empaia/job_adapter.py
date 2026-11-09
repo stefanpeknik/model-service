@@ -35,14 +35,14 @@ from model_service.providers.empaia.app_service.gateway import (
 )
 from model_service.providers.empaia.ead import VIEWER_CONFIG_KEY
 from model_service.providers.empaia.ead_builder_io import BUILDER_IO
-from model_service.providers.empaia.input_access import job_workspace
+from model_service.providers.empaia.job_inputs import job_workspace
 from model_service.providers.empaia.publishers import default_publishers
 from model_service.scheduler.executions import (
     InvalidScheduleRequestError,
     ScheduleRequest,
     SchedulingUnavailableError,
 )
-from model_service.scheduler.providers import (
+from model_service.scheduler.provider_adapter import (
     ProviderAdapter,
     ProviderCancellation,
     ProviderFailure,
@@ -64,10 +64,10 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Mapping
     from pathlib import Path
 
-    from model_service.builders.spec import BuilderSpec
+    from model_service.builders.declarations import BuilderSpec
     from model_service.providers.empaia.ead_builder_io import BuilderIo
     from model_service.providers.empaia.publishers import PublisherRegistry
-    from model_service.scheduler.providers import BeforeMutation
+    from model_service.scheduler.provider_adapter import BeforeMutation
     from model_service.wire.json import JsonValue
 
 
