@@ -69,6 +69,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from model_service.builders.contracts import JsonValue
+    from model_service.builders.spec import BuilderSpec
     from model_service.providers.empaia.io import BuilderIo
     from model_service.providers.empaia.publishers import PublisherRegistry
     from model_service.scheduler.providers import BeforeMutation
@@ -207,35 +208,8 @@ class EmpaiaProviderAdapter(ProviderAdapter):
             except EmpaiaGatewayError as error:
                 _raise_preparation_error(error)
             spec = get_builder(request.builder_id)
-            # Installation admins may configure an app with keys meant for
-            # something else; the builder takes only the ones it knows.
-            known = spec.configuration.model_fields
-            # The viewer's settings are expected and meant for the case browser.
-            if ignored := sorted(
-                configuration.keys() - known.keys() - {VIEWER_CONFIG_KEY}
-            ):
-                logger.warning(
-                    "EMPAIA job %s: ignoring configuration keys the %s builder "
-                    "does not take: %s",
-                    context.job_id,
-                    spec.id,
-                    ", ".join(ignored),
-                )
-            configuration = {k: v for k, v in configuration.items() if k in known}
-            try:
-                configuration = spec.resolve_configuration(configuration).model_dump(
-                    mode="json"
-                )
-            except InvalidInvocation as error:
-                raise InvalidScheduleRequestError(str(error)) from error
-            # A preprocessing app, for example, gets only a slide.
-            names = []
-            for name, input_spec in spec.inputs.items():
-                try:
-                    if input_spec.required or await gateway.has_input(name):
-                        names.append(name)
-                except EmpaiaGatewayError as error:
-                    _raise_preparation_error(error)
+            configuration = _builder_configuration(spec, configuration, context.job_id)
+            names = await _job_inputs(spec, gateway)
         effective_deadline = min(deadline_at, credential_expires_at)
         invocation = Invocation(
             inputs={name: ProviderInput(name=name) for name in names},
@@ -597,3 +571,66 @@ def _credential_expiry(credential: str) -> datetime:
         raise InvalidScheduleRequestError(
             "EMPAIA credential does not contain a valid expiry"
         ) from error
+
+
+def _builder_configuration(
+    spec: BuilderSpec, configuration: dict[str, JsonValue], job_id: str
+) -> dict[str, JsonValue]:
+    """Resolve a job's app configuration into the builder's configuration.
+
+    Installation admins may configure an app with keys meant for something
+    else; the builder takes only the ones it knows, and the rest are logged.
+    The viewer's settings are expected and meant for the case browser.
+
+    Args:
+        spec: The builder the job runs.
+        configuration: The app configuration EMPAIA gave the job.
+        job_id: The job, for the log.
+
+    Returns:
+        The builder's resolved configuration, as JSON.
+
+    Raises:
+        InvalidScheduleRequestError: If the builder rejects a value.
+    """
+    known = spec.configuration.model_fields
+    if ignored := sorted(configuration.keys() - known.keys() - {VIEWER_CONFIG_KEY}):
+        logger.warning(
+            "EMPAIA job %s: ignoring configuration keys the %s builder "
+            "does not take: %s",
+            job_id,
+            spec.id,
+            ", ".join(ignored),
+        )
+    taken = {k: v for k, v in configuration.items() if k in known}
+    try:
+        return spec.resolve_configuration(taken).model_dump(mode="json")
+    except InvalidInvocation as error:
+        raise InvalidScheduleRequestError(str(error)) from error
+
+
+async def _job_inputs(spec: BuilderSpec, gateway: EmpaiaGateway) -> list[str]:
+    """Name the builder inputs the job supplies.
+
+    Required inputs always; optional ones only if the job has them, so a
+    preprocessing app, for example, gets only a slide.
+
+    Args:
+        spec: The builder the job runs.
+        gateway: The job's gateway.
+
+    Returns:
+        The input names, in declaration order.
+
+    Raises:
+        InvalidScheduleRequestError: If the App Service rejects the lookup.
+        SchedulingUnavailableError: If it is temporarily unavailable.
+    """
+    names = []
+    for name, input_spec in spec.inputs.items():
+        try:
+            if input_spec.required or await gateway.has_input(name):
+                names.append(name)
+        except EmpaiaGatewayError as error:
+            _raise_preparation_error(error)
+    return names
