@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from model_service.builders.access import AccessAdapter
     from model_service.builders.contracts import JsonValue
     from model_service.builders.settings import WorkerSettings
+    from model_service.facade.catalog import ModelCatalog
     from model_service.facade.settings import SchedulerSettings
     from model_service.providers.composition import FacadeContribution
     from model_service.providers.shared_storage import SharedStorageAccessAdapter
@@ -194,12 +195,17 @@ class StandaloneProviderAdapter(ProviderAdapter):
 class StandaloneProvider(Provider):
     """Shared-storage jobs, through the public builder routes the facade serves."""
 
-    def facade(self, settings: SchedulerSettings) -> FacadeContribution:
-        """Contribute the standalone scheduler adapter, with no routes.
+    catalog_block = None
+
+    def facade(
+        self, catalog: ModelCatalog, settings: SchedulerSettings
+    ) -> FacadeContribution:
+        """Contribute the standalone scheduler adapter, with no routes or background work.
 
         The facade's public builder routes submit these jobs.
 
         Args:
+            catalog: Unused.
             settings: Supplies the allowed shared-storage roots.
 
         Returns:
@@ -208,6 +214,7 @@ class StandaloneProvider(Provider):
         from model_service.providers.composition import FacadeContribution
         from model_service.providers.shared_storage import SharedStorageAccessAdapter
 
+        del catalog
         return FacadeContribution(
             StandaloneProviderAdapter(
                 SharedStorageAccessAdapter(settings.shared_storage_roots)

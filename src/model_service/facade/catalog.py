@@ -6,7 +6,10 @@ that Helm also injects into the RayService, so the catalog and the running
 models come from the same files.
 
 Contract parameters the model already reads from its `user_config` are taken
-from there; `inference` declares only what the model does not read itself.
+from there; `inference` declares only what the model does not read itself. Any
+other top-level block belongs to a provider (e.g. how the model is offered
+there): the catalog keeps it for that provider, unread, and rejects a
+block no provider takes.
 """
 
 from __future__ import annotations
@@ -26,7 +29,7 @@ from model_service.builders.registry import BUILDERS
 
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Collection, Iterator, Mapping
     from pathlib import Path
 
     from model_service.builders.contracts import ModelBinding
@@ -54,7 +57,8 @@ class _ServeApplication(BaseModel):
 
 
 class ModelDocument(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # Other blocks are providers'.
+    model_config = ConfigDict(extra="allow")
 
     inference: InferenceDeclaration
     serve: _ServeApplication
@@ -119,11 +123,16 @@ def model_binding(document: ModelDocument) -> ModelBinding:
 
 
 class ModelCatalog:
-    def __init__(self, models: list[ModelBinding]) -> None:
-        """Index models by ID.
+    def __init__(
+        self,
+        models: list[ModelBinding],
+        blocks: Mapping[str, Mapping[str, object]] | None = None,
+    ) -> None:
+        """Index models by ID and keep the provider blocks.
 
         Args:
             models: Model bindings.
+            blocks: Provider blocks by block key, then by model ID.
 
         Raises:
             CatalogError: If two models share an ID.
@@ -131,20 +140,24 @@ class ModelCatalog:
         self._models = {model.id: model for model in models}
         if len(self._models) != len(models):
             raise CatalogError("model IDs must be unique")
+        self._blocks = {key: dict(value) for key, value in (blocks or {}).items()}
 
     @classmethod
-    def from_documents(cls, documents: object) -> ModelCatalog:
+    def from_documents(
+        cls, documents: object, provider_blocks: Collection[str] = ()
+    ) -> ModelCatalog:
         """Build the catalog from the JSON list Helm renders from the model YAML files.
 
         Args:
             documents: The decoded JSON, expected to be a list of model documents.
+            provider_blocks: The top-level keys providers read.
 
         Returns:
             The catalog.
 
         Raises:
             CatalogError: If `documents` is not a list, a document is invalid,
-                or a binding is invalid.
+                a document has a block no provider takes, or a binding is invalid.
         """
         if not isinstance(documents, list):
             raise CatalogError("model catalog must be a list")
@@ -152,14 +165,26 @@ class ModelCatalog:
             parsed = [ModelDocument.model_validate(item) for item in documents]
         except ValidationError as error:
             raise CatalogError(f"model catalog is invalid: {error}") from error
-        return cls([model_binding(document) for document in parsed])
+        blocks: dict[str, dict[str, object]] = {key: {} for key in provider_blocks}
+        for document in parsed:
+            for key, value in (document.model_extra or {}).items():
+                if key not in blocks:
+                    raise CatalogError(
+                        f"model {document.serve.name!r} has a {key!r} block "
+                        "no provider takes"
+                    )
+                blocks[key][document.serve.name] = value
+        return cls([model_binding(document) for document in parsed], blocks)
 
     @classmethod
-    def from_file(cls, path: Path) -> ModelCatalog:
+    def from_file(
+        cls, path: Path, provider_blocks: Collection[str] = ()
+    ) -> ModelCatalog:
         """Build the catalog from the rendered JSON file.
 
         Args:
             path: The catalog JSON file.
+            provider_blocks: The top-level keys providers read.
 
         Returns:
             The catalog.
@@ -171,7 +196,18 @@ class ModelCatalog:
             documents = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as error:
             raise CatalogError(f"cannot read model catalog {path}") from error
-        return cls.from_documents(documents)
+        return cls.from_documents(documents, provider_blocks)
+
+    def provider_block(self, key: str) -> dict[str, object]:
+        """Return each model's `key` block, by model ID.
+
+        Args:
+            key: The provider's top-level block key.
+
+        Returns:
+            A copy mapping model IDs to their block; models without one are absent.
+        """
+        return dict(self._blocks.get(key, {}))
 
     def get(self, model_id: str) -> ModelBinding:
         """Look up a deployed model.

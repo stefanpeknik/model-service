@@ -10,7 +10,7 @@ import asyncio
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from model_service.builders.contracts import SharedArtifact
+from model_service.builders.contracts import SharedArtifact, SpatialScoresModel
 from model_service.builders.heatmap.score_grid import read_score_grid
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.publishers import OutputPublisher
@@ -18,7 +18,7 @@ from model_service.providers.empaia.slides import RectangleMaskWriter, SlideLeve
 
 
 if TYPE_CHECKING:
-    from model_service.builders.contracts import BuilderOutput
+    from model_service.builders.contracts import BuilderOutput, ModelBinding
     from model_service.providers.empaia.gateway import EmpaiaGateway
     from model_service.providers.empaia.publishers import Commit
     from model_service.providers.empaia.slides import (
@@ -49,6 +49,18 @@ class ScoreGridPublisher(OutputPublisher):
         if not 256 <= tile_size <= 2048:
             raise ValueError("EMPAIA pixelmap tile size must be between 256 and 2048")
         self._tile_size = tile_size
+
+    def accepts(self, model: ModelBinding) -> bool:
+        # The SDK uploads single-channel pixelmaps only.
+        """Accept single-channel spatial-score models; the SDK uploads single-channel pixelmaps only.
+
+        Args:
+            model: The model whose outputs would be published.
+
+        Returns:
+            True for a spatial-score model with one channel.
+        """
+        return isinstance(model, SpatialScoresModel) and model.n_channels == 1
 
     async def prepare(
         self, gateway: EmpaiaGateway, name: str, output: BuilderOutput

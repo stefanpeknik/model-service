@@ -30,6 +30,7 @@ from model_service.builders.contracts import (
     is_json_value,
 )
 from model_service.builders.registry import get_builder, parse_result
+from model_service.providers.empaia.apps import VIEWER_CONFIG_KEY
 from model_service.providers.empaia.gateway import (
     INPUT_ACCESS_KIND,
     PROVIDER_NAME,
@@ -593,7 +594,7 @@ def _builder_configuration(
         InvalidScheduleRequestError: If the builder rejects a value.
     """
     known = spec.configuration.model_fields
-    if ignored := sorted(configuration.keys() - known.keys()):
+    if ignored := sorted(configuration.keys() - known.keys() - {VIEWER_CONFIG_KEY}):
         logger.warning(
             "EMPAIA job %s: ignoring configuration keys the %s builder "
             "does not take: %s",

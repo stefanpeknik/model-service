@@ -12,10 +12,12 @@ from model_service.builders.contracts import (
     InlineOutput,
     OutputKind,
     SharedArtifact,
+    SpatialScoresModel,
 )
 from model_service.builders.heatmap.score_grid import MEDIA_TYPE
 from model_service.builders.registry import get_builder
 from model_service.builders.spec import OutputSpec
+from model_service.providers.empaia.apps import AppMode, EmpaiaListing, app_definitions
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.image_io import _clip
 from model_service.providers.empaia.io import BUILDER_IO
@@ -34,6 +36,22 @@ from tests.support.builder_fixtures import outputs_model
 
 PUBLISHERS = default_publishers()
 HEATMAP = get_builder("heatmap").outputs["heatmap"]
+LISTING = EmpaiaListing(
+    name="Prostate cancer",
+    name_short="ProstHM",
+    description="Finds things.",
+    modes=(AppMode.PREPROCESSING,),
+)
+
+
+def model(n_channels: int) -> SpatialScoresModel:
+    return SpatialScoresModel(
+        id="prostate-classifier-1",
+        tile_size=512,
+        output_tile_size=1,
+        n_channels=n_channels,
+        mpp=0.468,
+    )
 
 
 class PublisherTests(unittest.IsolatedAsyncioTestCase):
@@ -93,6 +111,45 @@ class RectangleTests(unittest.TestCase):
         self.assertEqual(_clip(90, 20, 100), (90, 10))
         # Nothing on the slide: not positive, so the writer refuses it.
         self.assertLessEqual(_clip(-500, 100, 1000)[1], 0)
+
+
+class AppPublishabilityTests(unittest.TestCase):
+    def test_only_models_their_publishers_take_become_apps(self) -> None:
+        single = app_definitions(
+            [model(1)], {"prostate-classifier-1": LISTING}, PUBLISHERS
+        )
+        with self.assertLogs("model_service.providers.empaia.apps", "INFO") as logs:
+            multi = app_definitions(
+                [model(3)], {"prostate-classifier-1": LISTING}, PUBLISHERS
+            )
+
+        self.assertEqual(len(single), 1)
+        self.assertEqual(multi, [])
+        self.assertIn("nothing publishes heatmap", logs.output[0])
+
+    def test_an_output_nothing_publishes_withholds_the_app(self) -> None:
+        heatmap = BUILDER_IO["heatmap"]
+        with_polygons = replace(
+            heatmap, outputs={**heatmap.outputs, "glands": {"type": "polygon"}}
+        )
+        spec = get_builder("heatmap")
+        spec = replace(
+            spec,
+            output_model=outputs_model(
+                {**spec.outputs, "glands": OutputSpec(kind=OutputKind.INLINE)}
+            ),
+        )
+
+        with self.assertLogs("model_service.providers.empaia.apps", "INFO"):
+            apps = app_definitions(
+                [model(1)],
+                {"prostate-classifier-1": LISTING},
+                PUBLISHERS,
+                [spec],
+                {"heatmap": with_polygons},
+            )
+
+        self.assertEqual(apps, [])
 
 
 class FinishTests(unittest.IsolatedAsyncioTestCase):
