@@ -1,6 +1,6 @@
 """Compute execution state changes without database or network I/O.
 
-Repositories use these immutable decisions for admission, leases,
+Both persistence adapters use these immutable decisions for admission, leases,
 deadlines, retries, and provider finish. Repositories supply time and make each decision
 atomic.
 """

@@ -11,6 +11,8 @@ provider finish.
 | `transitions.py` | Every state change: admit, claim, renew, settle, cancel, lease recovery, deadlines |
 | `domain.py`, `contracts.py` | Internal records and public request/view types |
 | `store/repository.py` | The persistence interface |
+| `store/models.py`, `store/schema.py`, `store/migrations/` | PostgreSQL table mapping and Yoyo migrations ([guide](store/migrations/README.md)) |
+| `store/protected_context.py` | AES-GCM encryption of provider secrets at rest |
 | `providers.py` | Provider interface: identify, prepare, finish |
 
 ## Lifecycle
@@ -34,4 +36,5 @@ cancel ────────────────────────�
   cannot overwrite a newer attempt.
 
 Tests: `tests/scheduler/test_execution_scheduler.py` (behaviour, in-memory
-repository) and `tests/support/repository_contract.py` (the repository contract).
+repository), `tests/support/repository_contract.py` (the repository contract) and
+`tests/scheduler/test_execution_schema.py` (migrations; set `TEST_POSTGRES_DSN`).
