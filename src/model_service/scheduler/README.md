@@ -1,14 +1,14 @@
 # Execution scheduler
 
-Durable executions of builder invocations. `ExecutionScheduler` admits, reads
-and cancels; its worker claims due work and moves it through processing and
-provider finish. The store also keeps single raw model requests ("inference"
-operations) with their request and response files.
+Durable executions of builder invocations and of single raw model requests
+("inference" operations). `ExecutionScheduler` admits, reads and cancels; its
+worker claims due work and moves it through processing and provider finish.
 
 | Module | Owns |
 | --- | --- |
 | `scheduler.py` | Admission (validates builder, model and provider), views, cancellation, worker lifetime |
-| `worker.py` | Claim loop, lease renewal, dispatch, settlement |
+| `worker.py` | Claim loop with separate builder and tile slots, lease renewal, dispatch, settlement |
+| `inference.py` | Raw-request target interface, replay identity and HTTP status classification |
 | `transitions.py` | Every state change: admit, claim, renew, settle, cancel, lease recovery, deadlines |
 | `domain.py`, `contracts.py` | Internal records and public request/view types |
 | `store/repository.py` | The persistence interface |

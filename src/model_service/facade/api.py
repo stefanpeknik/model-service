@@ -29,9 +29,9 @@ if TYPE_CHECKING:
     from starlette.types import Lifespan
 
     from model_service.facade.catalog import ModelCatalog
-    from model_service.facade.inference import InferenceTarget
     from model_service.facade.ports import BuilderRunner, Capacity, Scheduler
     from model_service.providers.composition import RouteFactory
+    from model_service.scheduler.inference import InferenceTarget
 
 
 def create_app(
@@ -117,7 +117,7 @@ def create_app(
 
     app.include_router(
         models.create_router(
-            catalog, inference_target, inference_max_request_bytes, access
+            scheduler, catalog, inference_target, inference_max_request_bytes, access
         )
     )
     app.include_router(builders.create_router(scheduler, builder_runner, access))

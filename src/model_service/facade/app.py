@@ -83,6 +83,8 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
         payloads=PayloadStore(config.inference_storage_path),
         pool_size=config.database_pool_size,
         per_model_limit=config.per_model_limit,
+        per_model_inference_limit=config.per_model_inference_limit,
+        inference_retention=config.inference_retention,
         processing_policy=RetryPolicy(
             max_attempts=config.processing_attempts,
             initial_backoff=config.initial_backoff,
@@ -119,6 +121,8 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
         lease_duration=config.lease_duration,
         poll_interval=config.poll_interval,
         max_concurrent=config.max_concurrent_executions,
+        inference_target=inference_target,
+        max_concurrent_inference=config.max_concurrent_inference,
     )
 
     @asynccontextmanager

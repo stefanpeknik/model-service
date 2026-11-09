@@ -1,16 +1,16 @@
-"""`/v1/models`: the model catalog and raw inference.
+"""`/v1/models`: the model catalog and raw inference, run directly or scheduled.
 
 A raw request is one LZ4-compressed RGB tile of the model's `tile_size`, with
 optional `x-output-dtype` and `x-pool-tokens` headers. The model's response is
-returned as the model produced it.
+returned (or, when scheduled, stored) as the model produced it.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from model_service.builders.contracts import (
     InferenceContract,
@@ -20,17 +20,20 @@ from model_service.builders.contracts import (
 )
 from model_service.facade.auth import Access, Action
 from model_service.facade.errors import ERRORS, ApiErrorCode, http_error, lookup_error
-from model_service.facade.inference import (
+from model_service.facade.inference import inference_headers
+from model_service.facade.routes.common import require_idempotency_key, submit
+from model_service.scheduler.contracts import InferenceScheduleRequest, ScheduleResult
+from model_service.scheduler.inference import (
     IncompatibleInputError,
     ModelUnavailableError,
     ResultTooLargeError,
-    inference_headers,
 )
 
 
 if TYPE_CHECKING:
     from model_service.facade.catalog import ModelCatalog
-    from model_service.facade.inference import InferenceTarget
+    from model_service.facade.ports import Scheduler
+    from model_service.scheduler.inference import InferenceTarget
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,14 +76,16 @@ _BINARY_BODY = {
 
 
 def create_router(
+    scheduler: Scheduler,
     catalog: ModelCatalog,
     inference: InferenceTarget | None,
     max_request_bytes: int,
     access: Access,
 ) -> APIRouter:
-    """Build the `/v1/models` router: the catalog and raw inference.
+    """Build the `/v1/models` router: the catalog and direct or scheduled inference.
 
     Args:
+        scheduler: Admits durable inference executions.
         catalog: Deployed models.
         inference: Runs raw model requests; None makes `/run` answer 503.
         max_request_bytes: Largest raw request body accepted, in bytes.
@@ -152,6 +157,38 @@ def create_router(
                 for name, value in response.headers.items()
                 if name == "content-type" or name.startswith("x-")
             },
+        )
+
+    @router.post(
+        "/{model_id}/schedule",
+        status_code=status.HTTP_202_ACCEPTED,
+        responses={200: {"model": ScheduleResult}, **ERRORS},
+        openapi_extra=_BINARY_BODY,
+        dependencies=[access.require(Action.SCHEDULE)],
+    )
+    async def schedule_inference(
+        model_id: str,
+        request: Request,
+        response: Response,
+        idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+        timeout_seconds: int | None = None,
+    ) -> ScheduleResult:
+        """Durably queue one raw model request (the body `run` takes)."""
+        payload = await _read_body(request, max_request_bytes)
+        return await submit(
+            scheduler,
+            InferenceScheduleRequest(
+                model_id=model_id,
+                payload=payload,
+                headers={
+                    name: value
+                    for name, value in inference_headers(request.headers).items()
+                    if name.startswith("x-")
+                },
+                idempotency_key=idempotency_key,
+                requested_timeout_seconds=timeout_seconds,
+            ),
+            response,
         )
 
     return router

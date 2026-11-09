@@ -13,11 +13,17 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from model_service.scheduler import inference
 from model_service.scheduler.active_work import ActiveWorkRegistry
 from model_service.scheduler.contracts import (
     ExecutionStatus,
     ExecutionView,
+    InferenceInvocation,
+    InferenceResult,
+    InferenceScheduleRequest,
     InvalidScheduleRequestError,
+    Operation,
+    ResultUnavailableError,
     ScheduleRequest,
     ScheduleResult,
     SchedulingUnavailableError,
@@ -37,6 +43,7 @@ if TYPE_CHECKING:
 
     from model_service.builders.client import BuilderDispatch
     from model_service.scheduler.contracts import ModelResolver, ProviderName
+    from model_service.scheduler.inference import InferenceTarget
     from model_service.scheduler.providers import ProviderAdapter
     from model_service.scheduler.store.repository import ExecutionRepository
 
@@ -57,6 +64,8 @@ class ExecutionScheduler:
         lease_duration: timedelta = timedelta(seconds=60),
         poll_interval: float = 0.5,
         max_concurrent: int = 1,
+        inference_target: InferenceTarget | None = None,
+        max_concurrent_inference: int = 0,
     ) -> None:
         """Validate timing settings and wire a worker with a private local cancellation registry.
 
@@ -73,6 +82,8 @@ class ExecutionScheduler:
             lease_duration: How long a claim stays valid without renewal.
             poll_interval: Seconds between worker polls for due work.
             max_concurrent: Maximum builder executions this process runs at once.
+            inference_target: Model client for scheduled inference, or None to disable it.
+            max_concurrent_inference: Maximum inference executions this process runs at once.
 
         Raises:
             ValueError: lease_duration or poll_interval is not positive.
@@ -87,6 +98,7 @@ class ExecutionScheduler:
         self._default_timeout = default_timeout
         self._maximum_timeout = maximum_timeout
         self._clock = clock or (lambda: datetime.now(UTC))
+        self._inference = inference_target
         self._active_work = ActiveWorkRegistry()
         self._worker = ExecutionWorker(
             repository=repository,
@@ -97,6 +109,8 @@ class ExecutionScheduler:
             lease_duration=lease_duration,
             active_work=self._active_work,
             max_concurrent=max_concurrent,
+            inference_target=inference_target,
+            max_concurrent_inference=max_concurrent_inference,
         )
         self._poll_interval = poll_interval
         self._running = False
@@ -203,6 +217,48 @@ class ExecutionScheduler:
             )
         )
 
+    async def schedule_inference(
+        self, request: InferenceScheduleRequest
+    ) -> ScheduleResult:
+        """Check the payload against the model, then store it with the execution.
+
+        Args:
+            request: Raw inference request with payload and headers.
+
+        Returns:
+            The execution view and whether this call created it.
+
+        Raises:
+            SchedulingUnavailableError: Scheduled inference is not configured or the repository is unavailable.
+            UnknownModelError: The model is not in the catalog; raised before admission.
+            IncompatibleInputError: The payload does not fit the model's input; raised before admission.
+            InvalidScheduleRequestError: The requested timeout is not positive.
+            ScheduleConflictError: The idempotency key was used for a different request.
+        """
+        if self._inference is None:
+            raise SchedulingUnavailableError("scheduled inference is not configured")
+        self._inference.check(request.model_id, request.payload)
+        identity = inference.identify(request)
+        if (existing := await self._find(identity)) is not None:
+            return ScheduleResult(self._view(existing), created=False)
+        deadline_at = self._clock() + self._requested_timeout(
+            request.requested_timeout_seconds
+        )
+        return await self._admit(
+            Admission(
+                identity=identity,
+                builder_id=None,
+                model_id=request.model_id,
+                invocation=InferenceInvocation(
+                    headers=request.headers, deadline_at=deadline_at
+                ),
+                protected_context={},
+                deadline_at=deadline_at,
+                operation=Operation.INFERENCE,
+                payload=request.payload,
+            )
+        )
+
     async def _find(self, identity: SubmissionIdentity) -> ExecutionRecord | None:
         """Look up an earlier execution with the same submission identity.
 
@@ -264,6 +320,53 @@ class ExecutionScheduler:
                 "execution repository is temporarily unavailable"
             ) from error
         return self._view(execution)
+
+    async def get_many(self, execution_ids: list[str]) -> list[ExecutionView]:
+        """Read several executions, skipping IDs that do not exist.
+
+        Args:
+            execution_ids: IDs to read.
+
+        Returns:
+            Views of the executions that exist, in the requested order.
+
+        Raises:
+            SchedulingUnavailableError: The execution repository is unavailable.
+        """
+        try:
+            executions = await self._repository.get_many(execution_ids)
+        except ExecutionRepositoryUnavailableError as error:
+            raise SchedulingUnavailableError(
+                "execution repository is temporarily unavailable"
+            ) from error
+        return [self._view(execution) for execution in executions]
+
+    async def inference_result(
+        self, execution_id: str
+    ) -> tuple[InferenceResult, bytes]:
+        """Read the stored response of an inference execution.
+
+        Args:
+            execution_id: ID of the inference execution.
+
+        Returns:
+            The response metadata and its body.
+
+        Raises:
+            UnknownExecutionError: No execution has this ID.
+            ResultUnavailableError: The execution has no stored inference response.
+            SchedulingUnavailableError: The execution repository is unavailable.
+        """
+        try:
+            execution = await self._repository.get(execution_id)
+            if not isinstance(execution.result, InferenceResult):
+                raise ResultUnavailableError("execution has no inference response")
+            content = await self._repository.inference_content(execution_id)
+        except ExecutionRepositoryUnavailableError as error:
+            raise SchedulingUnavailableError(
+                "execution repository is temporarily unavailable"
+            ) from error
+        return execution.result, content
 
     async def cancel(self, execution_id: str) -> ExecutionView:
         """Record cancellation and fence the current claim, then cancel any local task.

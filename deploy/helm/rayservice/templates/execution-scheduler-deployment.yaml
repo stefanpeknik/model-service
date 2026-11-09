@@ -2,7 +2,7 @@
 {{- $imageTag := required "executionScheduler.image.tag is required" .Values.executionScheduler.image.tag }}
 {{- $databaseSecret := required "executionScheduler.database.existingSecret is required" .Values.executionScheduler.database.existingSecret }}
 {{- $encryptionSecret := required "executionScheduler.encryption.existingSecret is required" .Values.executionScheduler.encryption.existingSecret }}
-{{- $inferenceClaim := required "executionScheduler.inferenceStorage.existingClaim is required: inference executions keep their request and response files there" .Values.executionScheduler.inferenceStorage.existingClaim }}
+{{- $inferenceClaim := required "executionScheduler.inferenceStorage.existingClaim is required: scheduled raw inference keeps its request and response files there" .Values.executionScheduler.inferenceStorage.existingClaim }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -98,6 +98,18 @@ spec:
               value: {{ .Values.executionScheduler.perModelLimit | quote }}
             - name: MAX_CONCURRENT_EXECUTIONS
               value: {{ .Values.executionScheduler.maxConcurrentExecutions | quote }}
+            {{- with .Values.executionScheduler.scheduledInference }}
+            - name: PER_MODEL_INFERENCE_LIMIT
+              value: {{ .perModelLimit | quote }}
+            - name: MAX_CONCURRENT_INFERENCE
+              value: {{ .maxConcurrent | quote }}
+            - name: INFERENCE_MAX_REQUEST_BYTES
+              value: {{ .maxRequestBytes | int64 | quote }}
+            - name: INFERENCE_MAX_RESULT_BYTES
+              value: {{ .maxResultBytes | int64 | quote }}
+            - name: INFERENCE_RETENTION_SECONDS
+              value: {{ .retentionSeconds | int64 | quote }}
+            {{- end }}
             - name: INFERENCE_STORAGE_PATH
               value: {{ .Values.executionScheduler.inferenceStorage.mountPath | quote }}
           readinessProbe:

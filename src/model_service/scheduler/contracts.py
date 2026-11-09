@@ -60,11 +60,19 @@ class ExecutionErrorCode(StrEnum):
     DEADLINE_EXCEEDED = "execution_deadline_exceeded"
     UNKNOWN_MODEL = "unknown_model"
     INCOMPATIBLE_MODEL = "incompatible_model"
+    INCOMPATIBLE_INPUT = "incompatible_input"
+    MODEL_REJECTED_INPUT = "model_rejected_input"
+    MODEL_FAILED = "model_failed"
+    MODEL_UNAVAILABLE = "model_unavailable"
+    RESULT_TOO_LARGE = "inference_result_too_large"
+    REQUEST_UNAVAILABLE = "inference_request_unavailable"
     PROTECTED_CONTEXT_UNREADABLE = "protected_context_unreadable"
 
 
 # The integration a scheduled execution belongs to; each provider names itself.
 type ProviderName = str
+# Scheduled raw inference; it has no provider adapter.
+INFERENCE_PROVIDER: ProviderName = "inference"
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +88,17 @@ class ScheduleRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class InferenceScheduleRequest:
+    """One raw model request, exactly as `POST /{model_id}/` would receive it."""
+
+    model_id: str
+    payload: bytes
+    headers: dict[str, str]
+    idempotency_key: str
+    requested_timeout_seconds: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class InferenceInvocation:
     """The stored part of a raw request; the payload bytes are kept separately."""
 
@@ -89,7 +108,7 @@ class InferenceInvocation:
 
 @dataclass(frozen=True, slots=True)
 class InferenceResult:
-    """Describes a stored model response; its bytes are kept in the payload store."""
+    """Describes a stored model response; its bytes are served by `/result`."""
 
     media_type: str | None
     headers: Annotated[dict[str, str], Field(strict=True)]

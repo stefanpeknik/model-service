@@ -19,10 +19,12 @@ from model_service.facade.errors import (
     unavailable,
 )
 from model_service.scheduler.contracts import (
+    InferenceScheduleRequest,
     InvalidScheduleRequestError,
     ScheduleConflictError,
     SchedulingUnavailableError,
 )
+from model_service.scheduler.inference import IncompatibleInputError
 
 
 if TYPE_CHECKING:
@@ -58,16 +60,16 @@ def require_idempotency_key(
 
 async def submit(
     scheduler: Scheduler,
-    request: ScheduleRequest,
+    request: ScheduleRequest | InferenceScheduleRequest,
     response: Response,
 ) -> ScheduleResult:
-    """Admit a builder execution and map refusals to API errors.
+    """Admit a builder or inference execution and map refusals to API errors.
 
     Refusals are logged, since callers may not log the response body.
 
     Args:
         scheduler: Admits the execution.
-        request: The builder schedule request.
+        request: A builder or raw inference schedule request.
         response: The outgoing response; its status becomes 202 when the
             execution is created and 200 when an existing one is returned.
 
@@ -80,7 +82,10 @@ async def submit(
             request, 503 if scheduling is unavailable.
     """
     try:
-        result = await scheduler.schedule(request)
+        if isinstance(request, InferenceScheduleRequest):
+            result = await scheduler.schedule_inference(request)
+        else:
+            result = await scheduler.schedule(request)
     except (
         UnknownBuilderError,
         UnknownModelError,
@@ -91,7 +96,7 @@ async def submit(
     except ScheduleConflictError as error:
         _log_refusal(request, error)
         raise http_error(409, ApiErrorCode.SCHEDULE_CONFLICT, str(error)) from error
-    except InvalidScheduleRequestError as error:
+    except (InvalidScheduleRequestError, IncompatibleInputError) as error:
         _log_refusal(request, error)
         raise http_error(422, ApiErrorCode.INVALID_REQUEST, str(error)) from error
     except SchedulingUnavailableError as error:
@@ -101,7 +106,9 @@ async def submit(
     return result
 
 
-def _log_refusal(request: ScheduleRequest, error: Exception) -> None:
+def _log_refusal(
+    request: ScheduleRequest | InferenceScheduleRequest, error: Exception
+) -> None:
     """Log why a schedule request was refused.
 
     Args:
@@ -110,10 +117,8 @@ def _log_refusal(request: ScheduleRequest, error: Exception) -> None:
     """
     # The callers (JES among them) may not log the response body, so the
     # reason is kept here; error messages are the safe public ones.
-    logger.warning(
-        "Refused %s %s on %s: %s",
-        request.provider,
-        request.builder_id,
-        request.model_id,
-        error,
-    )
+    if isinstance(request, InferenceScheduleRequest):
+        subject = f"inference on {request.model_id}"
+    else:
+        subject = f"{request.provider} {request.builder_id} on {request.model_id}"
+    logger.warning("Refused %s: %s", subject, error)

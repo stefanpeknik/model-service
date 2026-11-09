@@ -1,18 +1,26 @@
-"""Raw model requests.
+"""Raw model requests, run directly or scheduled.
 
 Every model takes the same raw input, an LZ4 frame holding one HWC uint8 RGB
 tile of the model's `tile_size`. Requests are checked against that before they
-are forwarded.
+are sent: a direct run before forwarding, a scheduled one at admission and
+before each attempt.
 """
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import httpx
 import lz4.frame
+
+from model_service.scheduler.inference import (
+    IncompatibleInputError,
+    InferenceTarget,
+    ModelResponse,
+    ModelUnavailableError,
+    ResultTooLargeError,
+)
 
 
 if TYPE_CHECKING:
@@ -26,61 +34,6 @@ _REQUEST_HEADERS = frozenset({"x-output-dtype", "x-pool-tokens"})
 _RESPONSE_EXCLUDED_HEADERS = frozenset(
     {"connection", "content-length", "keep-alive", "transfer-encoding", "upgrade"}
 )
-
-
-@dataclass(frozen=True, slots=True)
-class ModelResponse:
-    status_code: int
-    content: bytes
-    headers: dict[str, str]
-
-
-class IncompatibleInputError(ValueError):
-    """The payload does not fit the model's current input."""
-
-
-class ModelUnavailableError(RuntimeError):
-    """The request did not get an HTTP response from the model."""
-
-
-class ResultTooLargeError(RuntimeError):
-    pass
-
-
-class InferenceTarget(ABC):
-    @abstractmethod
-    def check(self, model_id: str, payload: bytes) -> None:
-        """Check that a model exists and accepts the payload under its current input.
-
-        Args:
-            model_id: Catalog ID of the model.
-            payload: Raw request body.
-
-        Raises:
-            UnknownModelError: The model is not in the catalog.
-            IncompatibleInputError: The payload does not fit the model's current input.
-        """
-        ...
-
-    @abstractmethod
-    async def call(
-        self, model_id: str, payload: bytes, headers: Mapping[str, str]
-    ) -> ModelResponse:
-        """Send the payload to the model and return its HTTP response.
-
-        Args:
-            model_id: Catalog ID of the model.
-            payload: Raw request body.
-            headers: Caller headers to forward with the request.
-
-        Returns:
-            The model's status, body and headers.
-
-        Raises:
-            ModelUnavailableError: The request got no HTTP response.
-            ResultTooLargeError: The response body exceeds the size limit.
-        """
-        ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,7 +163,7 @@ def check_tile(model: ModelBinding, payload: bytes) -> None:
 
 
 class ModelInference(InferenceTarget):
-    """Raw requests against catalog models through the inference proxy."""
+    """Scheduled raw requests against catalog models through the inference proxy."""
 
     def __init__(
         self,
