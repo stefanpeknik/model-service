@@ -111,7 +111,10 @@ class BuilderRegistryTests(unittest.TestCase):
 
 
 class BuilderWiringTests(unittest.TestCase):
-    """A registered builder's pieces must agree; a new builder is checked here."""
+    """A registered builder's pieces must agree; a new builder is checked here.
+
+    `tests/facade/test_deployment_files.py` checks the Helm side.
+    """
 
     def test_every_builder_implements_its_declaration(self) -> None:
         import importlib
@@ -133,15 +136,6 @@ class BuilderWiringTests(unittest.TestCase):
                 self.assertIs(inputs, spec.input_model)
                 self.assertIs(configuration, spec.configuration)
                 self.assertIs(outputs, spec.output_model)
-
-    def test_every_deployed_builder_is_registered(self) -> None:
-        from pathlib import Path
-
-        import yaml
-
-        values = Path(__file__).parents[2] / "deploy/helm/rayservice/values.yaml"
-        deployed = yaml.safe_load(values.read_text(encoding="utf-8"))["builders"]
-        self.assertLessEqual(set(deployed), set(BUILDERS))
 
 
 if __name__ == "__main__":

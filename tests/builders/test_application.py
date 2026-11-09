@@ -23,6 +23,7 @@ from model_service.builders.contracts import (
     BuilderResult,
     ContractViolation,
     ExecutionContext,
+    FailureCode,
     IncompatibleModelError,
     InlineOutput,
     InvalidInvocation,
@@ -38,12 +39,15 @@ from tests.support.builder_fixtures import (
     DECLARED,
     EMBEDDING_MODEL,
     SPATIAL_MODEL,
+    FakeDeployment,
     FunctionBuilder,
     StrideConfiguration,
     artifact_output,
+    deployments,
     inline_output,
     invocation,
     outputs_model,
+    running_config,
     spec,
 )
 
@@ -242,6 +246,21 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
         )
         with self.assertRaises(IncompatibleModelError):
             await application.run(invocation("test"), EMBEDDING_MODEL)
+
+    async def test_a_mismatched_model_fails_before_inputs_are_fetched(self) -> None:
+        async def build(_context: BuilderContext) -> BuilderResult:
+            self.fail("a mismatched model must not run")
+
+        running = FakeDeployment(running_config(SPATIAL_MODEL) | {"tile_size": 64})
+        application = BuilderApplication(
+            spec(),
+            run(build),
+            {"test": RaisingAdapter(AssertionError("access must not open"))},
+            model_handles=deployments(classifier=running),
+        )
+        with self.assertRaises(BuilderFailure) as raised:
+            await application.run(invocation("test"), SPATIAL_MODEL)
+        self.assertEqual(raised.exception.code, FailureCode.MODEL_CONTRACT_MISMATCH)
 
     async def test_configuration_uses_defaults_or_resolved_values(self) -> None:
         seen: list[object] = []

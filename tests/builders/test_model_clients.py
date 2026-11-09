@@ -53,6 +53,8 @@ class VerifyTests(unittest.IsolatedAsyncioTestCase):
     async def test_a_model_running_as_declared_passes(self) -> None:
         await spatial_client(running_config(SPATIAL)).verify()
         await embedding_client(running_config(EMBEDDING)).verify()
+        # Keys outside the contract are the model's own business.
+        await spatial_client(running_config(SPATIAL) | {"max_batch_size": 8}).verify()
 
     async def test_a_running_model_that_differs_is_rejected(self) -> None:
         valid = running_config(SPATIAL)
@@ -63,7 +65,6 @@ class VerifyTests(unittest.IsolatedAsyncioTestCase):
             spatial_client(valid | {"tile_size": True}),
             spatial_client(valid | {"mpp": float("nan")}),
             spatial_client({"tile_size": 4}),
-            spatial_client(valid | {"unexpected": 1}),
             embedding_client(running_config(EMBEDDING) | {"tile_size": 8}),
             embedding_client(running_config(EMBEDDING) | {"summaries": ["global"]}),
         ]
@@ -99,6 +100,9 @@ class CallTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(scores.shape, (1, 2, 2))
         self.assertEqual(scores.dtype, np.float32)
+        for answer in ([[0.1, 0.2], [0.3, 0.4]], [[[0.1, 0.2], [0.3, 0.4]]]):
+            client = spatial_client(running_config(SPATIAL), answer)
+            self.assertEqual((await client.predict(TILE)).shape, (1, 2, 2))
 
     async def test_features_are_returned_as_given(self) -> None:
         features = np.ones((2, 8), dtype=np.float32)
@@ -141,6 +145,11 @@ class CallTests(unittest.IsolatedAsyncioTestCase):
                 "predict",
             ),
             (spatial_client(running_config(SPATIAL), "high"), "predict"),
+            # Right count, wrong layout: (4, 1) is not a 2x2 grid.
+            (
+                spatial_client(running_config(SPATIAL), [[0.1], [0.2], [0.3], [0.4]]),
+                "predict",
+            ),
             (embedding_client(config, np.ones(8, dtype=np.float32)), "embed"),
             (embedding_client(config, np.ones((2, 8), dtype=np.float64)), "embed"),
             (embedding_client(config, np.ones((2, 0), dtype=np.float32)), "embed"),

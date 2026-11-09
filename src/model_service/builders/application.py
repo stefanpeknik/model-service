@@ -16,6 +16,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from pydantic import ValidationError
+
 from model_service.builders.artifacts import atomic_artifact
 from model_service.builders.cleanup import close_resource
 from model_service.builders.contracts import (
@@ -350,11 +352,13 @@ class BuilderApplication:
             timeout = asyncio.timeout(max(0, remaining))
             try:
                 async with timeout:
+                    # Before input access: a mismatched model fails without
+                    # fetching inputs.
+                    client = client_for(model, self._model_handles)
+                    await client.verify()
                     access = await self._create_access(
                         invocation, execution_context or ExecutionContext(), model
                     )
-                    client = client_for(model, self._model_handles)
-                    await client.verify()
                     outputs = await self._builder.run(
                         BuilderContext(
                             access=access,
@@ -406,10 +410,20 @@ class BuilderApplication:
 
         Returns:
             The builder's `BuilderInputs` subclass; omitted optional inputs are None.
+
+        Raises:
+            InvalidInvocation: The inputs do not fit the builder's inputs model.
         """
-        return self._spec.input_model(
-            **{name: access.input_path(name) for name in invocation.inputs}
-        )
+        try:
+            return self._spec.input_model(
+                **{name: access.input_path(name) for name in invocation.inputs}
+            )
+        except ValidationError as error:
+            # Names only: the paths may reveal provider storage.
+            fields = sorted({".".join(map(str, e["loc"])) for e in error.errors()})
+            raise InvalidInvocation(
+                f"inputs are invalid: {', '.join(fields)}"
+            ) from error
 
     def _output_paths(self, invocation: Invocation) -> dict[str, str]:
         """Map each artifact output to the path the builder writes it to.

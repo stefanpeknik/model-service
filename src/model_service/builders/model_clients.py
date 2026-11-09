@@ -151,15 +151,20 @@ class SpatialScoresClient(ModelClient[SpatialScoresModel]):
     def _matches(self, running: dict[str, object]) -> bool:
         """Compare the running geometry with the declaration.
 
+        Other keys the model reports are ignored.
+
         Args:
-            running: `tile_size`, `output_tile_size`, `n_channels` and `mpp`.
+            running: At least `tile_size`, `output_tile_size`, `n_channels` and
+                `mpp`.
 
         Returns:
-            Whether every value equals the declaration's.
+            Whether every one is valid and equals the declaration's.
         """
+        keys = self.declaration.model_dump(exclude={"id", "contract"}).keys()
         try:
             model = SpatialScoresModel.model_validate(
-                {"id": self.declaration.id, **running}
+                {"id": self.declaration.id}
+                | {key: running[key] for key in keys if key in running}
             )
         except ValidationError:
             return False
@@ -171,12 +176,16 @@ class SpatialScoresClient(ModelClient[SpatialScoresModel]):
         Args:
             tile: CHW uint8 tile of the declared `tile_size`.
 
+        The model may answer flat, as `(n_channels, output_tile_size,
+        output_tile_size)`, or as `(output_tile_size, output_tile_size)` for one
+        channel.
+
         Returns:
             Finite scores shaped `(n_channels, output_tile_size, output_tile_size)`.
 
         Raises:
-            BuilderFailure: The call failed (retryable) or returned the wrong
-                number of values or a non-finite one (not retryable).
+            BuilderFailure: The call failed (retryable), or returned another shape
+                or a non-finite value (not retryable).
         """
         import numpy as np
 
@@ -186,7 +195,14 @@ class SpatialScoresClient(ModelClient[SpatialScoresModel]):
             scores = np.asarray(await self._call("predict", tile), dtype=np.float32)
         except (TypeError, ValueError) as error:
             raise self._invalid_output() from error
-        if scores.size != np.prod(shape) or not np.isfinite(scores).all():
+        accepted = {shape, (scores.size,), ()} | (
+            {shape[1:]} if model.n_channels == 1 else set()
+        )
+        if (
+            scores.size != np.prod(shape)
+            or scores.shape not in accepted
+            or not np.isfinite(scores).all()
+        ):
             raise self._invalid_output()
         return scores.reshape(shape)
 
@@ -253,5 +269,16 @@ def client_for(
 
     Returns:
         The client of the model's contract, not yet verified.
+
+    Raises:
+        BuilderFailure: No client serves the contract (not retryable).
     """
-    return CLIENTS[declaration.contract](declaration, handles)
+    try:
+        client = CLIENTS[declaration.contract]
+    except KeyError as error:
+        raise BuilderFailure(
+            code=FailureCode.MODEL_CONTRACT_MISMATCH,
+            safe_message=f"no model client serves {declaration.contract!r}",
+            retryable=False,
+        ) from error
+    return client(declaration, handles)
