@@ -38,11 +38,11 @@ from model_service.wire.invocation import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from model_service.builder_service.settings import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
     from model_service.catalog import ModelCatalog
     from model_service.providers.provider import FacadeContribution
     from model_service.providers.shared_storage import SharedStorageAccessAdapter
-    from model_service.replica.settings import ReplicaSettings
     from model_service.scheduler.provider_adapter import (
         BeforeMutation,
         ProviderFinishOutcome,

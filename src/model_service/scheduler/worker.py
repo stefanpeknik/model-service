@@ -11,12 +11,12 @@ import logging
 from contextlib import suppress
 from typing import TYPE_CHECKING
 
-from model_service.replica.client import (
+from model_service.scheduler import raw_inference
+from model_service.scheduler.dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,
     UnknownOutcomeError,
 )
-from model_service.scheduler import tile_executions
 from model_service.scheduler.executions import (
     ExecutionError,
     IncompatibleModelError,
@@ -55,13 +55,13 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from datetime import timedelta
 
-    from model_service.replica.client import BuilderDispatch
     from model_service.scheduler.active_work import ActiveWorkRegistry
+    from model_service.scheduler.dispatch import BuilderDispatch
     from model_service.scheduler.executions import ModelResolver, ProviderName
     from model_service.scheduler.provider_adapter import ProviderAdapter
+    from model_service.scheduler.raw_inference import InferenceTarget
     from model_service.scheduler.records import Settlement
     from model_service.scheduler.store.repository import ExecutionRepository
-    from model_service.scheduler.tile_executions import InferenceTarget
 
 
 class ExecutionWorker:
@@ -465,7 +465,7 @@ class ExecutionWorker:
                 ),
                 retryable=False,
             )
-        except tile_executions.IncompatibleInputError as error:
+        except raw_inference.IncompatibleInputError as error:
             return ProcessingFailed(
                 error=ExecutionError(ExecutionErrorCode.INCOMPATIBLE_INPUT, str(error)),
                 retryable=False,
@@ -474,7 +474,7 @@ class ExecutionWorker:
             response = await self._inference.call(
                 claim.model_id, claim.payload, claim.invocation.headers
             )
-        except tile_executions.ModelUnavailableError:
+        except raw_inference.ModelUnavailableError:
             return ProcessingFailed(
                 error=ExecutionError(
                     ExecutionErrorCode.MODEL_UNAVAILABLE,
@@ -482,7 +482,7 @@ class ExecutionWorker:
                 ),
                 retryable=True,
             )
-        except tile_executions.ResultTooLargeError:
+        except raw_inference.ResultTooLargeError:
             return ProcessingFailed(
                 error=ExecutionError(
                     ExecutionErrorCode.RESULT_TOO_LARGE,
@@ -490,7 +490,7 @@ class ExecutionWorker:
                 ),
                 retryable=False,
             )
-        return tile_executions.settlement(response)
+        return raw_inference.settlement(response)
 
     async def _run_builder(self, claim: WorkClaim) -> Settlement:
         """Resolve the model's current binding and dispatch the builder.

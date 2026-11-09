@@ -14,17 +14,17 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from ray import serve
 
-from model_service.builders.registry import get_builder
-from model_service.providers.enabled import PROVIDERS
-from model_service.replica.protocol import (
+from model_service.builder_service.protocol import (
     ErrorCode,
     ErrorResponse,
     RunRequest,
     error,
     run_http,
 )
-from model_service.replica.runner import BuilderApplication
-from model_service.replica.settings import DeploymentSettings, ReplicaSettings
+from model_service.builder_service.runner import BuilderApplication
+from model_service.builder_service.settings import DeploymentSettings, ReplicaSettings
+from model_service.builders.registry import get_builder
+from model_service.providers.registry import PROVIDERS
 from model_service.wire.result import BuilderResult
 
 

@@ -1,7 +1,7 @@
 """Public scheduler requests, execution views and safe failure types.
 
-Lease fields and protected provider context live in domain.py and never appear
-in an ExecutionView.
+Lease fields and protected provider context live in records.py and never appear
+in an ExecutionView; statuses and error codes are in status.py.
 """
 
 from __future__ import annotations

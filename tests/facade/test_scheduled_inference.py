@@ -22,9 +22,9 @@ from model_service.facade.wiring import model_resolver
 from model_service.inference.contracts import SpatialScoresModel, TileEmbeddingModel
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
 from model_service.providers.standalone import StandaloneProviderAdapter
+from model_service.scheduler.raw_inference import IncompatibleInputError
 from model_service.scheduler.records import Admission, RetryPolicy, SubmissionIdentity
 from model_service.scheduler.scheduler import ExecutionScheduler
-from model_service.scheduler.tile_executions import IncompatibleInputError
 from model_service.wire.invocation import InputAccessContext, Invocation
 from model_service.wire.result import BuilderResult
 from tests.support.memory_repository import FakeDispatch, InMemoryExecutionRepository

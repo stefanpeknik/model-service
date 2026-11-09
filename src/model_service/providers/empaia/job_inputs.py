@@ -16,12 +16,12 @@ from typing import TYPE_CHECKING
 from pydantic import ValidationError
 
 from model_service.builders.input_access import InputAccess, InputAccessFactory
+from model_service.cleanup import close_resource
 from model_service.providers.empaia.app_service.gateway import (
     EmpaiaGatewayError,
     EmpaiaInputState,
     EmpaiaJobContext,
 )
-from model_service.replica.cleanup import close_resource
 from model_service.wire.failures import BuilderFailure, FailureCode, InvalidInvocation
 from model_service.wire.invocation import ExecutionContext, ProviderInput
 

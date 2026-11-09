@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING
 
 import httpx
 
+from model_service.builder_service.client import HTTPBuilderDispatch
 from model_service.inference.contracts import SpatialScoresModel
-from model_service.replica.client import (
+from model_service.scheduler.dispatch import (
     ConfirmedRejectionError,
-    HTTPBuilderDispatch,
     RemoteFailureError,
     UnknownOutcomeError,
 )

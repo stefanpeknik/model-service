@@ -7,9 +7,10 @@
 - transitions.py: the state rules every repository applies, including the
   retry-or-fail decision when an attempt ends (settle).
 - records.py: internal records, leases, retry policy and outcomes.
-- tile_executions.py: scheduled single-tile inference.
+- raw_inference.py: a raw model request run as an execution.
 - provider_adapter.py: the interface a provider implements to admit and finish jobs.
-- service.py: what the API needs from the scheduler; settings.py: process settings.
+- interface.py: what the API needs from the scheduler; settings.py: process settings.
+- dispatch.py: the interface for sending a builder run, and how a send can end.
 - store/: the PostgreSQL repository, its rows and migrations.
 """
 

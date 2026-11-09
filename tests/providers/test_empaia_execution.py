@@ -10,6 +10,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
+from model_service.builder_service.runner import BuilderApplication
 from model_service.builders.heatmap.spec import HeatmapOutputs
 from model_service.builders.registry import get_builder
 from model_service.inference.contracts import ModelBinding, SpatialScoresModel
@@ -22,7 +23,6 @@ from model_service.providers.empaia.app_service.gateway import (
 from model_service.providers.empaia.job_adapter import EmpaiaProviderAdapter
 from model_service.providers.empaia.job_inputs import EmpaiaInputAccessAdapter
 from model_service.providers.empaia.publishers import Commit, PublisherRegistry
-from model_service.replica.runner import BuilderApplication
 from model_service.scheduler.active_work import ActiveWorkRegistry
 from model_service.scheduler.executions import (
     InvalidScheduleRequestError,

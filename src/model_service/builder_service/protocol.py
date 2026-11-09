@@ -27,7 +27,7 @@ from model_service.wire.result import (
 
 
 if TYPE_CHECKING:
-    from model_service.replica.runner import BuilderApplication
+    from model_service.builder_service.runner import BuilderApplication
 
 
 @dataclass(frozen=True, slots=True)

@@ -5,12 +5,12 @@ from datetime import UTC, datetime
 
 from pydantic import ValidationError
 
+from model_service.builder_service.protocol import RUN_REQUEST
 from model_service.inference.contracts import (
     MODEL_BINDING,
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from model_service.replica.protocol import RUN_REQUEST
 from model_service.wire.invocation import INVOCATION, InputKind
 from model_service.wire.result import RESULT, OutputKind
 

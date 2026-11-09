@@ -6,7 +6,6 @@ malformed responses leave the outcome unknown, because the builder may have run.
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from urllib.parse import quote
@@ -14,7 +13,17 @@ from urllib.parse import quote
 import httpx
 from pydantic import TypeAdapter, ValidationError
 
-from model_service.replica.protocol import RUN_REQUEST, ErrorResponse, RunRequest
+from model_service.builder_service.protocol import (
+    RUN_REQUEST,
+    ErrorResponse,
+    RunRequest,
+)
+from model_service.scheduler.dispatch import (
+    BuilderDispatch,
+    ConfirmedRejectionError,
+    RemoteFailureError,
+    UnknownOutcomeError,
+)
 from model_service.wire.result import RESULT
 
 
@@ -25,59 +34,6 @@ if TYPE_CHECKING:
 
 
 _ERROR_RESPONSE = TypeAdapter(ErrorResponse)
-
-
-class BuilderDispatch(ABC):
-    @abstractmethod
-    async def run(
-        self,
-        builder_id: str,
-        invocation: Invocation,
-        model: ModelBinding,
-        execution_context: ExecutionContext,
-    ) -> BuilderResult:
-        """Run a builder for one invocation attempt.
-
-        Args:
-            builder_id: Registered builder id.
-            invocation: Invocation to run.
-            model: Model binding resolved for this attempt.
-            execution_context: Attempt identity and protected provider state.
-
-        Returns:
-            The builder's result.
-        """
-        ...
-
-
-class ConfirmedRejectionError(RuntimeError):
-    def __init__(self, retry_after: timedelta | None = None) -> None:
-        """Record a rejection that happened before the builder started work.
-
-        Args:
-            retry_after: Delay the builder asked for, if it sent one.
-        """
-        super().__init__("builder rejected the request before starting it")
-        self.retry_after = retry_after
-
-
-class UnknownOutcomeError(RuntimeError):
-    pass
-
-
-class RemoteFailureError(RuntimeError):
-    def __init__(self, *, code: str, safe_message: str, retryable: bool) -> None:
-        """Record a safe failure the builder reported.
-
-        Args:
-            code: Stable failure code from the builder.
-            safe_message: Message safe to show callers.
-            retryable: Whether the builder considers a retry worthwhile.
-        """
-        super().__init__(safe_message)
-        self.code = code
-        self.safe_message = safe_message
-        self.retryable = retryable
 
 
 class HTTPBuilderDispatch(BuilderDispatch):

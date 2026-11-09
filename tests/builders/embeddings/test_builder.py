@@ -13,6 +13,10 @@ import httpx
 import numpy as np
 from fastapi import FastAPI
 
+from model_service.builder_service.client import HTTPBuilderDispatch
+from model_service.builder_service.protocol import RunRequest, run_http
+from model_service.builder_service.runner import BuilderApplication
+from model_service.builder_service.settings import ReplicaSettings
 from model_service.builders.embeddings.builder import EmbeddingBuilder
 from model_service.builders.registry import get_builder
 from model_service.catalog import ModelCatalog
@@ -22,10 +26,6 @@ from model_service.facade.wiring import model_resolver
 from model_service.inference.contracts import TileEmbeddingModel
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
 from model_service.providers.standalone import StandaloneProviderAdapter
-from model_service.replica.client import HTTPBuilderDispatch
-from model_service.replica.protocol import RunRequest, run_http
-from model_service.replica.runner import BuilderApplication
-from model_service.replica.settings import ReplicaSettings
 from model_service.scheduler.scheduler import ExecutionScheduler
 from tests.support.builder_contract import BuilderContractTests
 from tests.support.builder_fixtures import write_slide

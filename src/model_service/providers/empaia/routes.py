@@ -38,7 +38,7 @@ from model_service.scheduler.status import ExecutionStatus
 
 if TYPE_CHECKING:
     from model_service.scheduler.executions import ExecutionView
-    from model_service.scheduler.service import Capacity, Scheduler
+    from model_service.scheduler.interface import Capacity, Scheduler
 
 
 @dataclass(frozen=True, slots=True)

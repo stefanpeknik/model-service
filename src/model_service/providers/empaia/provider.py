@@ -18,10 +18,10 @@ from model_service.providers.provider import FacadeContribution, Provider
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from model_service.builder_service.settings import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
     from model_service.catalog import ModelCatalog
     from model_service.providers.empaia.registration import Marketplace
-    from model_service.replica.settings import ReplicaSettings
     from model_service.scheduler.settings import SchedulerSettings
 
 

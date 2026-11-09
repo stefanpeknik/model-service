@@ -22,7 +22,7 @@ from model_service.facade.http_errors import (
 )
 
 # FastAPI reads these annotations at runtime.
-from model_service.facade.requests import (
+from model_service.facade.request_bodies import (
     ImmediateBuilderRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations.
     ScheduledBuilderRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations.
 )
@@ -31,7 +31,7 @@ from model_service.inference.contracts import (
     InferenceContract,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
 from model_service.providers.standalone import NAME as STANDALONE
-from model_service.replica.client import (
+from model_service.scheduler.dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,
     UnknownOutcomeError,
@@ -55,7 +55,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable
 
     from model_service.facade.synchronous_runs import BuilderRunner
-    from model_service.scheduler.service import Scheduler
+    from model_service.scheduler.interface import Scheduler
 
 
 @dataclass(frozen=True, slots=True)

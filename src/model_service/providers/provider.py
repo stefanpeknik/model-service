@@ -1,7 +1,7 @@
 """What each provider adds to the facade and to builder replicas.
 
 The facade and the builder ingress compose the providers in
-`providers/enabled.py` and
+`providers/registry.py` and
 name none of them. A provider contributes its scheduler adapter, its routes and
 background work to the facade, reads its block of the model files, and gives
 builder replicas the access adapters for the inputs it hands out. Each
@@ -20,11 +20,11 @@ if TYPE_CHECKING:
 
     from fastapi import APIRouter
 
+    from model_service.builder_service.settings import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
     from model_service.catalog import ModelCatalog
-    from model_service.replica.settings import ReplicaSettings
+    from model_service.scheduler.interface import Capacity, Scheduler
     from model_service.scheduler.provider_adapter import ProviderAdapter
-    from model_service.scheduler.service import Capacity, Scheduler
     from model_service.scheduler.settings import SchedulerSettings
     from model_service.wire.invocation import InputAccessKind
 

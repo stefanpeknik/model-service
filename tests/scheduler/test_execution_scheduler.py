@@ -11,12 +11,12 @@ from typing import TYPE_CHECKING, Any
 
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
 from model_service.providers.standalone import StandaloneProviderAdapter
-from model_service.replica.client import (
+from model_service.scheduler.active_work import ActiveWorkRegistry
+from model_service.scheduler.dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,
     UnknownOutcomeError,
 )
-from model_service.scheduler.active_work import ActiveWorkRegistry
 from model_service.scheduler.executions import (
     IncompatibleModelError,
     InvalidScheduleRequestError,
