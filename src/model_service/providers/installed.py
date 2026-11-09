@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from model_service.providers.empaia.composition import PROVIDER as EMPAIA
 from model_service.providers.standalone import PROVIDER as STANDALONE
 
 
@@ -15,4 +16,4 @@ if TYPE_CHECKING:
     from model_service.providers.composition import Provider
 
 
-PROVIDERS: tuple[Provider, ...] = (STANDALONE,)
+PROVIDERS: tuple[Provider, ...] = (STANDALONE, EMPAIA)

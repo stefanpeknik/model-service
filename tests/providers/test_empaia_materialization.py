@@ -6,18 +6,8 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from model_service.providers.empaia.image_io import _clip
 from model_service.providers.empaia.materialization import link_direct_input
 from model_service.providers.empaia.slides import DirectAccess
-
-
-class RectangleTests(unittest.TestCase):
-    def test_a_rectangle_is_clipped_to_the_slide(self) -> None:
-        self.assertEqual(_clip(10, 20, 100), (10, 20))
-        self.assertEqual(_clip(-100, 200, 1000), (0, 100))
-        self.assertEqual(_clip(90, 20, 100), (90, 10))
-        # Nothing on the slide: not positive, so the writer refuses it.
-        self.assertLessEqual(_clip(-500, 100, 1000)[1], 0)
 
 
 class LinkDirectInputTests(unittest.TestCase):

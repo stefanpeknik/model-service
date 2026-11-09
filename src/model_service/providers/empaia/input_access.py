@@ -121,7 +121,7 @@ class EmpaiaInputAccess(InputAccess):
     async def aclose(self) -> None:
         """Close the gateway and delete materialized inputs.
 
-        Outputs stay for publication.
+        Outputs stay until provider finish has published them.
         """
         try:
             await self._gateway.close()
@@ -130,7 +130,7 @@ class EmpaiaInputAccess(InputAccess):
 
 
 def job_workspace(root: Path, api_url: str, job_id: str) -> Path:
-    """Return the directory of all attempt workspaces of one EMPAIA job.
+    """Return the directory of all attempt workspaces of one EMPAIA job; provider finish removes it.
 
     Args:
         root: The workspace root.

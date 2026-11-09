@@ -1,6 +1,7 @@
 """Specify the EMPAIA job boundary, protected credentials, and configurable gateway factory.
 
-Input access uses this boundary in the builder process.
+Provider admission and finish use this boundary in the scheduler process; input access
+uses it in the builder process.
 """
 
 from __future__ import annotations
@@ -18,6 +19,9 @@ if TYPE_CHECKING:
 
 
 type MutationGuard = Callable[[], Awaitable[None]]
+
+PROVIDER_NAME = "empaia"
+INPUT_ACCESS_KIND = "empaia"
 
 
 class PrimitiveType(StrEnum):
@@ -115,6 +119,9 @@ class EmpaiaInputState(BaseModel):
 
     api_url: Annotated[str, Field(min_length=1)]
     job_id: Annotated[str, Field(min_length=1)]
+    # Recorded at admission; nothing depends on it yet. Executions admitted
+    # before it was recorded have none.
+    mode: Annotated[EmpaiaJobMode | None, Field(strict=False)] = None
 
 
 class EmpaiaJobContext(EmpaiaInputState):
@@ -246,7 +253,7 @@ class EmpaiaGateway(ABC):
 
     @abstractmethod
     async def close(self) -> None:
-        """Release the gateway's HTTP resources after use."""
+        """Release the gateway's HTTP resources after admission, input use, or reporting."""
         ...
 
 

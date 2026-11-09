@@ -1,3 +1,11 @@
+{{/* EMPAIA settings (EmpaiaSettings) for every process that talks to App Service. */}}
+{{- define "model-service.empaiaEnv" -}}
+- name: EMPAIA_API_URLS
+  value: {{ .Values.empaia.apiUrls | toJson | quote }}
+- name: EMPAIA_WORKSPACE_ROOT
+  value: {{ .Values.empaia.workspaceRoot | quote }}
+{{- end }}
+
 {{/*
 The installation's slide volume, where direct access links slides from. It is
 read-only at the volume, not only the mount, so kubelet never re-owns the

@@ -24,6 +24,7 @@ template:
         env:
           - name: HTTPS_PROXY
             value: http://proxy.ics.muni.cz:3128
+{{- include "model-service.empaiaEnv" . | nindent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -46,6 +47,10 @@ template:
             mountPath: /mnt/cache
           - name: huggingface-cache
             mountPath: /mnt/huggingface_cache
+{{- if .Values.empaia.workspaceClaim }}
+          - name: empaia-workspace
+            mountPath: {{ .Values.empaia.workspaceRoot | quote }}
+{{- end }}
 {{- include "model-service.slideVolumeMount" . | nindent 10 }}
     volumes:
       - name: data
@@ -66,4 +71,9 @@ template:
       - name: huggingface-cache
         persistentVolumeClaim:
           claimName: huggingface-cache-pvc
+{{- if .Values.empaia.workspaceClaim }}
+      - name: empaia-workspace
+        persistentVolumeClaim:
+          claimName: {{ .Values.empaia.workspaceClaim | quote }}
+{{- end }}
 {{- include "model-service.slideVolume" . | nindent 6 }}
