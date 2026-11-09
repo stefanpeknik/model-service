@@ -1,4 +1,4 @@
-"""Rendered model files, as the model catalog reads them."""
+"""Rendered model files, as the chart passes them to the facade's catalog."""
 
 from __future__ import annotations
 

@@ -1,8 +1,8 @@
 """The Helm values, model files and registered builders agree, before anything deploys.
 
-Each values file is checked as the chart reads it: its `models` name model
-files and its `builders` become Ray applications. Mistakes here otherwise
-surface only when Ray Serve deploys them.
+Each values file is checked as the chart reads it: its `models` become the
+facade's catalog and its `builders` become Ray applications. Mistakes here
+otherwise surface only when the facade starts.
 """
 
 from __future__ import annotations

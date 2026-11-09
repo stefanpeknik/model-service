@@ -39,3 +39,18 @@ rayImage:
   tag: 2.58.0-py312
   pullPolicy: Always
 
+executionScheduler:
+  enabled: false
+  replicas: 2
+  image:
+    repository: cerit.io/rationai/model-service-execution-scheduler
+    tag: ""
+    pullPolicy: IfNotPresent
+  rayServeOrigin: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 1
+      memory: 512Mi

@@ -1,0 +1,87 @@
+{{- if .Values.executionScheduler.enabled }}
+{{- $imageTag := required "executionScheduler.image.tag is required" .Values.executionScheduler.image.tag }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-execution-scheduler
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: model-service-execution-scheduler
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.executionScheduler.replicas }}
+  # A model or config change restarts the facade; replace it one pod at a time,
+  # never dropping below the set replicas, so the API stays up.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: model-service-execution-scheduler
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+        checksum/model-catalog: {{ include (print $.Template.BasePath "/model-catalog.yaml") . | sha256sum }}
+      labels:
+        app.kubernetes.io/name: model-service-execution-scheduler
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: execution-scheduler
+          image: "{{ .Values.executionScheduler.image.repository }}:{{ $imageTag }}"
+          imagePullPolicy: {{ .Values.executionScheduler.image.pullPolicy }}
+          command: ["uvicorn", "model_service.facade.main:app", "--host", "0.0.0.0", "--port", "8080"]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: RAY_SERVE_ORIGIN
+              value: {{ default (printf "http://%s-serve-svc.%s.svc.cluster.local:8000" .Release.Name (.Release.Namespace | default "rationai-jobs-ns")) .Values.executionScheduler.rayServeOrigin | quote }}
+            - name: MODEL_CATALOG_PATH
+              value: /etc/model-service/model-catalog.json
+            - name: BUILDER_IDS
+              value: {{ keys .Values.builders | sortAlpha | toJson | quote }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.executionScheduler.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsUser: 10001
+            runAsGroup: 10001
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: model-catalog
+              mountPath: /etc/model-service
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: model-catalog
+          configMap:
+            name: {{ .Release.Name }}-model-catalog
+{{- end }}

@@ -17,8 +17,10 @@ dependencies = [
     "pillow>=11.3.0",
     "pyyaml>=6.0.2",
     "pydantic>=2.10.0",
+    "pydantic-settings>=2.10.0,<3",
     "ratiopath>=1.0.3",
     "ray[serve]>=2.58.0",
+    "uvicorn>=0.30.0",
 ]
 
 [dependency-groups]
