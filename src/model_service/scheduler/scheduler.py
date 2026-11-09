@@ -1,0 +1,338 @@
+"""Own durable admission, public status projection, cancellation, and worker lifetime.
+
+This layer selects provider adapters and coordinates repository calls.
+ExecutionTransitions decides state changes; ExecutionWorker performs leased work.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from contextlib import asynccontextmanager
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
+from uuid import uuid4
+
+from model_service.scheduler.active_work import ActiveWorkRegistry
+from model_service.scheduler.contracts import (
+    ExecutionStatus,
+    ExecutionView,
+    InvalidScheduleRequestError,
+    ScheduleRequest,
+    ScheduleResult,
+    SchedulingUnavailableError,
+)
+from model_service.scheduler.domain import (
+    Admission,
+    ExecutionRecord,
+    SubmissionIdentity,
+    WorkKind,
+)
+from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
+from model_service.scheduler.worker import ExecutionWorker
+
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Callable, Mapping
+
+    from model_service.builders.client import BuilderDispatch
+    from model_service.scheduler.contracts import ModelResolver, ProviderName
+    from model_service.scheduler.providers import ProviderAdapter
+    from model_service.scheduler.store.repository import ExecutionRepository
+
+
+class ExecutionScheduler:
+    """Admission, status, cancellation and the background worker's lifetime."""
+
+    def __init__(
+        self,
+        *,
+        repository: ExecutionRepository,
+        dispatch: BuilderDispatch,
+        providers: Mapping[ProviderName, ProviderAdapter],
+        resolve_model: ModelResolver,
+        default_timeout: timedelta,
+        maximum_timeout: timedelta,
+        clock: Callable[[], datetime] | None = None,
+        lease_duration: timedelta = timedelta(seconds=60),
+        poll_interval: float = 0.5,
+        max_concurrent: int = 1,
+    ) -> None:
+        """Validate timing settings and wire a worker with a private local cancellation registry.
+
+        No tasks start here; `running` starts the worker.
+
+        Args:
+            repository: Durable execution store.
+            dispatch: Client that runs builders.
+            providers: Provider adapters by provider name.
+            resolve_model: Resolver of the current model binding for a builder and model.
+            default_timeout: Execution timeout when the request gives none.
+            maximum_timeout: Upper bound on a requested timeout.
+            clock: Source of the current time; defaults to UTC now.
+            lease_duration: How long a claim stays valid without renewal.
+            poll_interval: Seconds between worker polls for due work.
+            max_concurrent: Maximum builder executions this process runs at once.
+
+        Raises:
+            ValueError: lease_duration or poll_interval is not positive.
+        """
+        if lease_duration <= timedelta(0):
+            raise ValueError("lease_duration must be positive")
+        if poll_interval <= 0:
+            raise ValueError("poll_interval must be positive")
+        self._repository = repository
+        self._providers = dict(providers)
+        self._resolve_model = resolve_model
+        self._default_timeout = default_timeout
+        self._maximum_timeout = maximum_timeout
+        self._clock = clock or (lambda: datetime.now(UTC))
+        self._active_work = ActiveWorkRegistry()
+        self._worker = ExecutionWorker(
+            repository=repository,
+            providers=self._providers,
+            dispatch=dispatch,
+            resolve_model=resolve_model,
+            owner=f"execution-scheduler-{uuid4()}",
+            lease_duration=lease_duration,
+            active_work=self._active_work,
+            max_concurrent=max_concurrent,
+        )
+        self._poll_interval = poll_interval
+        self._running = False
+        self._worker_task: asyncio.Task[None] | None = None
+
+    @asynccontextmanager
+    async def running(self) -> AsyncIterator[None]:
+        """Start and join worker tasks for this context's lifetime.
+
+        On exit the worker is stopped and cancelled.
+
+        Yields:
+            None while the worker runs.
+
+        Raises:
+            RuntimeError: The scheduler is already running.
+        """
+        if self._running:
+            raise RuntimeError("execution scheduler is already running")
+        self._running = True
+        stop = asyncio.Event()
+        try:
+            async with asyncio.TaskGroup() as tasks:
+                worker_task = tasks.create_task(
+                    self._worker.run(stop, poll_interval=self._poll_interval)
+                )
+                self._worker_task = worker_task
+                try:
+                    yield
+                finally:
+                    stop.set()
+                    worker_task.cancel()
+        finally:
+            self._running = False
+            self._worker_task = None
+
+    @property
+    def alive(self) -> bool:
+        """Whether the worker still claims work; a process without one is useless."""
+        return self._worker_task is not None and not self._worker_task.done()
+
+    async def check_ready(self) -> None:
+        """Translate repository readiness failures into a public scheduling availability error.
+
+        Raises:
+            SchedulingUnavailableError: The execution repository is unavailable.
+        """
+        try:
+            await self._repository.check_ready()
+        except ExecutionRepositoryUnavailableError as error:
+            raise SchedulingUnavailableError(
+                "execution repository is temporarily unavailable"
+            ) from error
+
+    async def schedule(self, request: ScheduleRequest) -> ScheduleResult:
+        """Identify and replay a submission, prepare new inputs, then admit the complete execution.
+
+        A replayed submission returns the existing execution without preparing again.
+        The deadline is the requested timeout, shortened to the provider's deadline cap.
+
+        Args:
+            request: Provider schedule request.
+
+        Returns:
+            The execution view and whether this call created it.
+
+        Raises:
+            UnknownBuilderError: The resolver does not know the builder.
+            UnknownModelError: The resolver does not know the model.
+            IncompatibleModelError: The model does not fit the builder.
+            InvalidScheduleRequestError: The provider is unknown, the timeout is not positive, or the effective deadline has already passed.
+            ScheduleConflictError: The idempotency key was used for a different request.
+            SchedulingUnavailableError: The execution repository is unavailable.
+        """
+        self._resolve_model(request.builder_id, request.model_id)
+        try:
+            provider = self._providers[request.provider]
+        except KeyError as error:
+            raise InvalidScheduleRequestError("unknown provider") from error
+        identity = provider.identify(request)
+        if (existing := await self._find(identity)) is not None:
+            return ScheduleResult(self._view(existing), created=False)
+        deadline_at = self._clock() + self._requested_timeout(
+            request.requested_timeout_seconds
+        )
+        prepared = await provider.prepare(request, deadline_at)
+        if prepared.deadline_cap is not None and prepared.deadline_cap < deadline_at:
+            deadline_at = prepared.deadline_cap
+        if deadline_at <= self._clock():
+            raise InvalidScheduleRequestError(
+                "effective execution deadline has expired"
+            )
+        invocation = replace(prepared.invocation, deadline_at=deadline_at)
+        return await self._admit(
+            Admission(
+                identity=identity,
+                builder_id=request.builder_id,
+                model_id=request.model_id,
+                invocation=invocation,
+                protected_context=prepared.protected_context,
+                deadline_at=deadline_at,
+                terminal_report_deadline_at=(prepared.terminal_report_deadline_at),
+                priority=prepared.priority,
+            )
+        )
+
+    async def _find(self, identity: SubmissionIdentity) -> ExecutionRecord | None:
+        """Look up an earlier execution with the same submission identity.
+
+        Args:
+            identity: Replay identity of the submission.
+
+        Returns:
+            The existing execution, or None if this is a new submission.
+
+        Raises:
+            ScheduleConflictError: The key was used for a request with a different fingerprint.
+            SchedulingUnavailableError: The execution repository is unavailable.
+        """
+        try:
+            return await self._repository.find_submission(identity)
+        except ExecutionRepositoryUnavailableError as error:
+            raise SchedulingUnavailableError(
+                "execution scheduling is temporarily unavailable"
+            ) from error
+
+    async def _admit(self, admission: Admission) -> ScheduleResult:
+        """Store a new execution, or return the one a concurrent submission admitted first.
+
+        Args:
+            admission: Complete execution to admit.
+
+        Returns:
+            The execution view and whether this call created it.
+
+        Raises:
+            ScheduleConflictError: A concurrent submission used the key for a different request.
+            SchedulingUnavailableError: The execution repository is unavailable.
+        """
+        try:
+            admitted = await self._repository.admit(admission)
+        except ExecutionRepositoryUnavailableError as error:
+            raise SchedulingUnavailableError(
+                "execution scheduling is temporarily unavailable"
+            ) from error
+        return ScheduleResult(self._view(admitted.execution), created=admitted.created)
+
+    async def get(self, execution_id: str) -> ExecutionView:
+        """Read a durable record and project only its caller-visible status and terminal outcome.
+
+        Args:
+            execution_id: ID of the execution.
+
+        Returns:
+            The public execution view.
+
+        Raises:
+            UnknownExecutionError: No execution has this ID.
+            SchedulingUnavailableError: The execution repository is unavailable.
+        """
+        try:
+            execution = await self._repository.get(execution_id)
+        except ExecutionRepositoryUnavailableError as error:
+            raise SchedulingUnavailableError(
+                "execution repository is temporarily unavailable"
+            ) from error
+        return self._view(execution)
+
+    async def cancel(self, execution_id: str) -> ExecutionView:
+        """Record cancellation and fence the current claim, then cancel any local task.
+
+        Args:
+            execution_id: ID of the execution to cancel.
+
+        Returns:
+            The execution view after the cancellation request.
+
+        Raises:
+            UnknownExecutionError: No execution has this ID.
+            SchedulingUnavailableError: The execution repository is unavailable.
+        """
+        try:
+            execution = await self._repository.request_cancel(execution_id)
+        except ExecutionRepositoryUnavailableError as error:
+            raise SchedulingUnavailableError(
+                "execution repository is temporarily unavailable"
+            ) from error
+        self._active_work.cancel(execution_id)
+        return self._view(execution)
+
+    def _requested_timeout(self, seconds: int | None) -> timedelta:
+        """Use the default timeout or clamp a positive requested timeout to the configured maximum.
+
+        Args:
+            seconds: Requested timeout in seconds, or None for the default.
+
+        Returns:
+            The timeout to apply.
+
+        Raises:
+            InvalidScheduleRequestError: The requested timeout is not positive.
+        """
+        if seconds is None:
+            return self._default_timeout
+        if seconds <= 0:
+            raise InvalidScheduleRequestError("requested timeout must be positive")
+        return min(timedelta(seconds=seconds), self._maximum_timeout)
+
+    @staticmethod
+    def _view(execution: ExecutionRecord) -> ExecutionView:
+        """Convert a record to the public execution view.
+
+        Hides internal fields; the result appears only on success and the error only on failure.
+
+        Args:
+            execution: Durable execution record.
+
+        Returns:
+            The caller-visible view, with provider_pending set while a provider report is outstanding.
+        """
+        return ExecutionView(
+            id=execution.id,
+            builder_id=execution.builder_id,
+            model_id=execution.model_id,
+            status=execution.status,
+            result=(
+                execution.result
+                if execution.status is ExecutionStatus.SUCCEEDED
+                else None
+            ),
+            error=(
+                execution.error if execution.status is ExecutionStatus.FAILED else None
+            ),
+            provider_pending=execution.work_kind
+            in {
+                WorkKind.PROVIDER_FAILURE_REPORT,
+                WorkKind.PROVIDER_CANCELLATION_REPORT,
+            },
+        )

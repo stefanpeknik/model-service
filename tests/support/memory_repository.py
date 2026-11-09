@@ -7,11 +7,22 @@ tests without real waiting. This adapter does not survive process exit.
 from __future__ import annotations
 
 import asyncio
+import inspect
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from model_service.builders.contracts import (
+    BuilderResult,
+    ExecutionContext,
+    InferenceContract,
+    Invocation,
+    ModelBinding,
+    SpatialScoresModel,
+    TileEmbeddingModel,
+)
+from model_service.builders.registry import get_builder
 from model_service.scheduler.contracts import (
     ExecutionStatus,
     ScheduleConflictError,
@@ -32,7 +43,7 @@ from model_service.scheduler.transitions import ExecutionTransitions
 
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Callable
+    from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 
 
 def utc_now() -> datetime:
@@ -324,3 +335,39 @@ class InMemoryExecutionRepository:
             return self._executions[execution_id]
         except KeyError as error:
             raise UnknownExecutionError(execution_id) from error
+
+
+def resolve_test_model(builder_id: str, model_id: str) -> ModelBinding:
+    """Resolve any model ID to a small binding of the contract the builder accepts."""
+    spec = get_builder(builder_id)
+    if spec.accepts is InferenceContract.SPATIAL_SCORES:
+        return SpatialScoresModel(
+            id=model_id, tile_size=8, output_tile_size=1, n_channels=1, mpp=0.5
+        )
+    return TileEmbeddingModel(id=model_id, tile_size=8, mpp=0.5)
+
+
+type Handler = Callable[
+    [Invocation, ExecutionContext], BuilderResult | Awaitable[BuilderResult]
+]
+
+
+class FakeDispatch:
+    """Run in-process handlers by builder ID and record the models they received."""
+
+    def __init__(self, handlers: Mapping[str, Handler]) -> None:
+        self._handlers = dict(handlers)
+        self.models: list[ModelBinding] = []
+
+    async def run(
+        self,
+        builder_id: str,
+        invocation: Invocation,
+        model: ModelBinding,
+        execution_context: ExecutionContext,
+    ) -> BuilderResult:
+        self.models.append(model)
+        value = self._handlers[builder_id](invocation, execution_context)
+        if inspect.isawaitable(value):
+            return await value
+        return value

@@ -1,4 +1,4 @@
-"""Specify atomic persistence operations for durable executions.
+"""Specify atomic persistence operations used by the scheduler and worker.
 
 Adapters apply the shared ExecutionTransitions rules.
 Adapters translate storage failures into ExecutionRepositoryUnavailableError.

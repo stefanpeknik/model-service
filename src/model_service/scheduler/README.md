@@ -1,13 +1,15 @@
 # Execution scheduler
 
-Durable executions of builder invocations: the state rules, the persistence
-interface and the provider interface. A repository admits, claims, renews and
-settles executions under these rules.
+Durable executions of builder invocations. `ExecutionScheduler` admits, reads
+and cancels; its worker claims due work and moves it through processing and
+provider finish.
 
 | Module | Owns |
 | --- | --- |
+| `scheduler.py` | Admission (validates builder, model and provider), views, cancellation, worker lifetime |
+| `worker.py` | Claim loop, lease renewal, dispatch, settlement |
 | `transitions.py` | Every state change: admit, claim, renew, settle, cancel, lease recovery, deadlines |
-| `domain.py`, `contracts.py` | Internal records, schedule requests and safe errors |
+| `domain.py`, `contracts.py` | Internal records and public request/view types |
 | `store/repository.py` | The persistence interface |
 | `providers.py` | Provider interface: identify, prepare, finish |
 
@@ -21,14 +23,15 @@ queued ──claim──► running (processing) ──result──► running (
 cancel ─────────────────────────────────────────────────────► cancelled ──► cancellation report
 ```
 
-- A builder that rejects for lack of capacity is retried without spending an
-  attempt.
+- Each attempt resolves the model's current catalog entry; a model removed or
+  made incompatible since admission fails the execution without retry.
+- A builder that rejects with 429 is retried without spending an attempt.
 - A publication that fails or whose outcome is unknown is not retried; the
   execution fails and the provider gets a failure report.
-- A lease that expires is recovered by retrying or failing its attempt. Every
-  write checks the fencing token, so a stale attempt cannot overwrite a newer
-  one.
+- Leases are renewed every third of their duration. Renewal errors are retried
+  until the lease would have expired; then the attempt stops and another
+  claim recovers it. Every write checks the fencing token, so a stale worker
+  cannot overwrite a newer attempt.
 
-Tests: `tests/scheduler/test_transitions.py`, `tests/scheduler/test_retry_policy.py`
-and `tests/support/repository_contract.py` (the repository contract, run against
-the in-memory repository).
+Tests: `tests/scheduler/test_execution_scheduler.py` (behaviour, in-memory
+repository) and `tests/support/repository_contract.py` (the repository contract).

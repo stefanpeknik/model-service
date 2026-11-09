@@ -1,6 +1,19 @@
-"""Durable execution state rules and the seams around them, without a worker.
+"""Expose caller-facing durable scheduling contracts.
 
-transitions.ExecutionTransitions owns every state change; store.repository is the
-persistence interface and providers is the provider interface. Persistence
+Start with scheduler.ExecutionScheduler for admission and worker lifetime;
+transitions.ExecutionTransitions owns the shared state rules. Persistence
 implementations remain separate.
 """
+
+from model_service.scheduler.contracts import (
+    ExecutionView,
+    ScheduleRequest,
+    ScheduleResult,
+)
+
+
+__all__ = [
+    "ExecutionView",
+    "ScheduleRequest",
+    "ScheduleResult",
+]
