@@ -39,12 +39,12 @@ from model_service.scheduler.records import (
     SubmissionIdentity,
     WorkKind,
 )
+from model_service.scheduler.store.migrate import MIGRATIONS_DIRECTORY
 from model_service.scheduler.store.payloads import PayloadStore
 from model_service.scheduler.store.postgres import PostgresExecutionRepository
 from model_service.scheduler.store.protected_context import ProtectedContextCipher
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
 from model_service.scheduler.store.rows import ExecutionRow
-from model_service.scheduler.store.schema import MIGRATIONS_DIRECTORY
 from model_service.wire.invocation import (
     INVOCATION,
     InputAccessContext,
@@ -198,7 +198,7 @@ class PostgresExecutionRepositoryTests(
                 encoding="utf-8",
             )
             with patch(
-                "model_service.scheduler.store.schema.MIGRATIONS_DIRECTORY", directory
+                "model_service.scheduler.store.migrate.MIGRATIONS_DIRECTORY", directory
             ):
                 await asyncio.gather(
                     self.repository.initialize(), self._repository().initialize()
@@ -231,7 +231,7 @@ class PostgresExecutionRepositoryTests(
                 encoding="utf-8",
             )
             with patch(
-                "model_service.scheduler.store.schema.MIGRATIONS_DIRECTORY", directory
+                "model_service.scheduler.store.migrate.MIGRATIONS_DIRECTORY", directory
             ):
                 with self.assertRaises(ExecutionRepositoryUnavailableError):
                     await self.repository.initialize()
@@ -260,7 +260,7 @@ class PostgresExecutionRepositoryTests(
             directory = Path(temporary_directory)
             shutil.copy(MIGRATIONS_DIRECTORY / "0001-create-executions.sql", directory)
             with patch(
-                "model_service.scheduler.store.schema.MIGRATIONS_DIRECTORY", directory
+                "model_service.scheduler.store.migrate.MIGRATIONS_DIRECTORY", directory
             ):
                 await self.repository.initialize()
         deadline = datetime.now(UTC) + timedelta(minutes=5)
@@ -327,7 +327,7 @@ class PostgresExecutionRepositoryTests(
             for path in MIGRATIONS_DIRECTORY.glob("000[123]-*.sql"):
                 shutil.copy(path, directory)
             with patch(
-                "model_service.scheduler.store.schema.MIGRATIONS_DIRECTORY", directory
+                "model_service.scheduler.store.migrate.MIGRATIONS_DIRECTORY", directory
             ):
                 await self.repository.initialize()
         deadline = datetime.now(UTC) + timedelta(minutes=5)
@@ -384,7 +384,7 @@ class PostgresExecutionRepositoryTests(
         with (
             TemporaryDirectory() as temporary_directory,
             patch(
-                "model_service.scheduler.store.schema.MIGRATIONS_DIRECTORY",
+                "model_service.scheduler.store.migrate.MIGRATIONS_DIRECTORY",
                 Path(temporary_directory),
             ),
             self.assertRaises(ExecutionRepositoryUnavailableError),

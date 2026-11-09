@@ -9,7 +9,9 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import Field, StrictBool, TypeAdapter
 
 from model_service.inference.contracts import (
@@ -123,3 +125,28 @@ async def run_http(
             exc.safe_message,
             retryable=exc.retryable,
         ) from exc
+
+
+async def invalid_request(
+    _request: Request, _error: RequestValidationError
+) -> JSONResponse:
+    # Do not echo the request: it may contain provider credentials.
+    """Answer a malformed request without echoing it, since it may hold credentials.
+
+    Args:
+        _request: The rejected request.
+        _error: The validation error.
+
+    Returns:
+        A 422 response with the invalid-invocation envelope.
+    """
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        content={
+            "detail": {
+                "code": ErrorCode.INVALID_INVOCATION,
+                "message": "builder invocation is invalid",
+                "retryable": False,
+            }
+        },
+    )

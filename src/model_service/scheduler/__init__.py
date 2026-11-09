@@ -11,8 +11,8 @@
 - provider_adapter.py: the interface a provider implements to admit and finish jobs.
 - interface.py: what the API needs from the scheduler; settings.py: process settings.
 - dispatch.py: the interface for sending a builder run, and how a send can end.
-- store/: the PostgreSQL repository (the claim, renewal and settlement SQL is in
-  store/postgres.py), its rows and migrations.
+- store/: persistence: postgres/ (admission, claims, settlement, maintenance),
+  rows.py, payloads.py, migrate.py and migrations/.
 """
 
 from model_service.scheduler.executions import (

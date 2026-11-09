@@ -1,4 +1,4 @@
-"""Close builder resources with bounded waiting while preserving caller cancellation.
+"""Close a resource within a timeout while preserving caller cancellation.
 
 Cancellation-resistant cleanup tasks remain strongly referenced until they finish, and
 their exceptions are consumed to avoid unhandled-task warnings.

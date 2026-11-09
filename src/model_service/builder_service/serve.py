@@ -9,9 +9,8 @@ import importlib
 import logging
 from typing import TYPE_CHECKING
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, status
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
 from ray import serve
 
 from model_service.builder_service.protocol import (
@@ -19,6 +18,7 @@ from model_service.builder_service.protocol import (
     ErrorResponse,
     RunRequest,
     error,
+    invalid_request,
     run_http,
 )
 from model_service.builder_service.runner import BuilderApplication
@@ -33,32 +33,7 @@ if TYPE_CHECKING:
 
 
 fastapi = FastAPI()
-
-
-@fastapi.exception_handler(RequestValidationError)
-async def invalid_request(
-    _request: Request, _error: RequestValidationError
-) -> JSONResponse:
-    # Do not echo the request: it may contain provider credentials.
-    """Answer a malformed request without echoing it, since it may hold credentials.
-
-    Args:
-        _request: The rejected request.
-        _error: The validation error.
-
-    Returns:
-        A 422 response with the invalid-invocation envelope.
-    """
-    return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-        content={
-            "detail": {
-                "code": ErrorCode.INVALID_INVOCATION,
-                "message": "builder invocation is invalid",
-                "retryable": False,
-            }
-        },
-    )
+fastapi.add_exception_handler(RequestValidationError, invalid_request)  # type: ignore[arg-type]
 
 
 def build_application(config: DeploymentSettings) -> BuilderApplication:

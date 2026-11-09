@@ -1,1 +1,1 @@
-"""Execution persistence: repository interface, PostgreSQL, rows, payloads, encryption."""
+"""Execution persistence: repository interface, PostgreSQL, rows, payloads, migrations, encryption."""

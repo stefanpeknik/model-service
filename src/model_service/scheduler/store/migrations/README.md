@@ -12,7 +12,7 @@ configuration, then run from the repository root:
 
 ```sh
 UV_CACHE_DIR=.cache/uv uv run --locked --offline python \
-  -m model_service.scheduler.store.schema
+  -m model_service.scheduler.store.migrate
 ```
 
 The default schema is `model_service`. `--schema NAME` selects an isolated target
