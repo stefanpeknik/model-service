@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     import numpy as np
     from numpy.typing import NDArray
 
-    from model_service.builders.model_clients import SpatialScoresClient
+    from model_service.inference.clients import SpatialScoresClient
 
 
 logger = logging.getLogger(__name__)

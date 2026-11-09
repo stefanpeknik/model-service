@@ -11,12 +11,12 @@ from model_service.builders.embeddings.declaration import (
     EmbeddingOutputs,
 )
 from model_service.builders.embeddings.processor import build_embeddings
-from model_service.builders.model_clients import TileEmbeddingClient
+from model_service.inference.clients import TileEmbeddingClient
 
 
 if TYPE_CHECKING:
     from model_service.builders.base import BuilderContext
-    from model_service.builders.settings import WorkerSettings
+    from model_service.replica.settings import WorkerSettings
 
 
 class EmbeddingBuilder(

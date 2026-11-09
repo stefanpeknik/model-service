@@ -6,12 +6,7 @@ from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from model_service.builders.contracts import (
-    BuilderResult,
-    InputAccessContext,
-    Invocation,
-)
-from model_service.scheduler.contracts import (
+from model_service.scheduler.api import (
     ExecutionError,
     ExecutionStatus,
     InferenceInvocation,
@@ -20,7 +15,7 @@ from model_service.scheduler.contracts import (
     ResultUnavailableError,
     UnknownExecutionError,
 )
-from model_service.scheduler.domain import (
+from model_service.scheduler.records import (
     Admission,
     InferenceSucceeded,
     Priority,
@@ -31,6 +26,8 @@ from model_service.scheduler.domain import (
     SubmissionIdentity,
     WorkKind,
 )
+from model_service.wire.invocation import InputAccessContext, Invocation
+from model_service.wire.result import BuilderResult
 
 
 if TYPE_CHECKING:

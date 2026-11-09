@@ -20,27 +20,21 @@ from httpx import (
     Response,
 )
 
-from model_service.builders.client import (
+from model_service.catalog import ModelCatalog
+from model_service.facade.health import DeploymentHealth
+from model_service.facade.http_app import create_app
+from model_service.facade.inference import HttpInferenceProxy, ModelInference
+from model_service.facade.synchronous import SynchronousBuilderService
+from model_service.facade.wiring import model_resolver
+from model_service.inference.contracts import SpatialScoresModel, TileEmbeddingModel
+from model_service.providers.shared_storage import SharedStorageAccessAdapter
+from model_service.providers.standalone import StandaloneProviderAdapter
+from model_service.replica.client import (
     ConfirmedRejectionError,
     RemoteFailureError,
     UnknownOutcomeError,
 )
-from model_service.builders.contracts import (
-    BuilderResult,
-    InlineOutput,
-    SharedArtifact,
-    SpatialScoresModel,
-    TileEmbeddingModel,
-)
-from model_service.facade.api import create_app
-from model_service.facade.app import model_resolver
-from model_service.facade.catalog import ModelCatalog
-from model_service.facade.health import DeploymentHealth
-from model_service.facade.inference import HttpInferenceProxy, ModelInference
-from model_service.facade.synchronous import SynchronousBuilderService
-from model_service.providers.shared_storage import SharedStorageAccessAdapter
-from model_service.providers.standalone import StandaloneProviderAdapter
-from model_service.scheduler.contracts import (
+from model_service.scheduler.api import (
     ExecutionStatus,
     ExecutionView,
     Operation,
@@ -50,6 +44,7 @@ from model_service.scheduler.contracts import (
 )
 from model_service.scheduler.scheduler import ExecutionScheduler
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
+from model_service.wire.result import BuilderResult, InlineOutput, SharedArtifact
 from tests.support.memory_repository import InMemoryExecutionRepository
 
 
@@ -59,12 +54,9 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
     from starlette.types import Message, Scope
 
-    from model_service.builders.contracts import (
-        ExecutionContext,
-        Invocation,
-        ModelBinding,
-    )
-    from model_service.scheduler.domain import ExecutionRecord
+    from model_service.inference.contracts import ModelBinding
+    from model_service.scheduler.records import ExecutionRecord
+    from model_service.wire.invocation import ExecutionContext, Invocation
 
     type Handler = Callable[
         [str, Invocation, ModelBinding, ExecutionContext], Awaitable[BuilderResult]

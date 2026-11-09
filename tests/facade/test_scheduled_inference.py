@@ -11,33 +11,29 @@ import httpx
 import lz4.frame
 from httpx import ASGITransport, AsyncClient
 
-from model_service.builders.contracts import (
-    BuilderResult,
-    InputAccessContext,
-    Invocation,
-    SpatialScoresModel,
-    TileEmbeddingModel,
-)
-from model_service.facade.api import create_app
-from model_service.facade.app import model_resolver
-from model_service.facade.catalog import ModelCatalog
+from model_service.catalog import ModelCatalog
+from model_service.facade.http_app import create_app
 from model_service.facade.inference import (
     HttpInferenceProxy,
     ModelInference,
     check_tile,
 )
+from model_service.facade.wiring import model_resolver
+from model_service.inference.contracts import SpatialScoresModel, TileEmbeddingModel
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
 from model_service.providers.standalone import StandaloneProviderAdapter
-from model_service.scheduler.domain import Admission, RetryPolicy, SubmissionIdentity
 from model_service.scheduler.inference import IncompatibleInputError
+from model_service.scheduler.records import Admission, RetryPolicy, SubmissionIdentity
 from model_service.scheduler.scheduler import ExecutionScheduler
+from model_service.wire.invocation import InputAccessContext, Invocation
+from model_service.wire.result import BuilderResult
 from tests.support.memory_repository import FakeDispatch, InMemoryExecutionRepository
 
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from model_service.builders.contracts import ExecutionContext
+    from model_service.wire.invocation import ExecutionContext
 
 
 CLASSIFIER = SpatialScoresModel(

@@ -23,7 +23,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from model_service.scheduler.contracts import (
+from model_service.scheduler.api import (
     ExecutionError,
     ExecutionStatus,
     Operation,
@@ -31,7 +31,7 @@ from model_service.scheduler.contracts import (
     ScheduleConflictError,
     UnknownExecutionError,
 )
-from model_service.scheduler.domain import (
+from model_service.scheduler.records import (
     Admission,
     AdmissionResult,
     ExecutionRecord,
@@ -43,12 +43,12 @@ from model_service.scheduler.domain import (
     WorkClaim,
     WorkKind,
 )
-from model_service.scheduler.store.models import DEFAULT_SCHEMA, ExecutionRow
 from model_service.scheduler.store.payloads import PayloadMissingError, StoredPayload
 from model_service.scheduler.store.repository import (
     ExecutionRepository,
     ExecutionRepositoryUnavailableError,
 )
+from model_service.scheduler.store.rows import DEFAULT_SCHEMA, ExecutionRow
 from model_service.scheduler.store.schema import initialize_execution_schema
 from model_service.scheduler.transitions import (
     ExecutionTransitions,

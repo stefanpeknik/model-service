@@ -14,8 +14,8 @@ from pydantic_settings import BaseSettings
 from yoyo import get_backend, read_migrations
 from yoyo.exceptions import BadMigration, LockTimeout, MigrationConflict
 
-from model_service.scheduler.store.models import DEFAULT_SCHEMA
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
+from model_service.scheduler.store.rows import DEFAULT_SCHEMA
 
 
 MIGRATIONS_DIRECTORY = Path(__file__).with_name("migrations")

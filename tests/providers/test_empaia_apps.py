@@ -15,8 +15,9 @@ from jsonschema import ValidationError
 from pydantic import ValidationError as SettingsError
 
 from model_service.builders.registry import get_builder
-from model_service.facade.catalog import ModelCatalog
-from model_service.providers.empaia.apps import (
+from model_service.catalog import ModelCatalog
+from model_service.providers.empaia.credentials import ClientCredentials
+from model_service.providers.empaia.ead import (
     VIEWER_CONFIG_KEY,
     AppMode,
     EmpaiaListing,
@@ -25,9 +26,8 @@ from model_service.providers.empaia.apps import (
     generate_ead,
     parse_listings,
 )
-from model_service.providers.empaia.composition import CATALOG_BLOCK
-from model_service.providers.empaia.credentials import ClientCredentials
-from model_service.providers.empaia.io import BUILDER_IO
+from model_service.providers.empaia.ead_io import BUILDER_IO
+from model_service.providers.empaia.plugin import CATALOG_BLOCK
 from model_service.providers.empaia.publishers import default_publishers
 from model_service.providers.empaia.registration import (
     Marketplace,
@@ -127,7 +127,7 @@ class AppDefinitionTests(unittest.TestCase):
             "description": "Finds.",
             "modes": ["preprocessing"],
         }
-        with self.assertLogs("model_service.providers.empaia.apps", "ERROR") as logs:
+        with self.assertLogs("model_service.providers.empaia.ead", "ERROR") as logs:
             parsed = parse_listings(
                 {
                     "good": valid,
@@ -274,7 +274,7 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
         settings = EmpaiaSettings(
             marketplace_url="https://marketplace.example", organization_id="org-1"
         )
-        from model_service.providers.empaia.composition import _marketplace
+        from model_service.providers.empaia.plugin import _marketplace
 
         marketplace = _marketplace(settings)
         assert marketplace is not None

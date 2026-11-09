@@ -15,13 +15,14 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from model_service.builders.contracts import BuilderResult, JsonValue
-    from model_service.scheduler.contracts import (
+    from model_service.scheduler.api import (
         ExecutionError,
         ProviderName,
         ScheduleRequest,
     )
-    from model_service.scheduler.domain import PreparedInvocation, SubmissionIdentity
+    from model_service.scheduler.records import PreparedInvocation, SubmissionIdentity
+    from model_service.wire.json import JsonValue
+    from model_service.wire.result import BuilderResult
 
 
 @dataclass(frozen=True, slots=True)

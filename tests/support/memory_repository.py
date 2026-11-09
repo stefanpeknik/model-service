@@ -17,24 +17,21 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from model_service.builders.contracts import (
-    BuilderResult,
-    ExecutionContext,
+from model_service.builders.registry import get_builder
+from model_service.inference.contracts import (
     InferenceContract,
-    Invocation,
     ModelBinding,
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from model_service.builders.registry import get_builder
-from model_service.scheduler.contracts import (
+from model_service.scheduler.api import (
     ExecutionStatus,
     Operation,
     ResultUnavailableError,
     ScheduleConflictError,
     UnknownExecutionError,
 )
-from model_service.scheduler.domain import (
+from model_service.scheduler.records import (
     Admission,
     AdmissionResult,
     ExecutionRecord,
@@ -55,6 +52,8 @@ from model_service.scheduler.transitions import (
     ExecutionTransitions,
     SettlementAccepted,
 )
+from model_service.wire.invocation import ExecutionContext, Invocation
+from model_service.wire.result import BuilderResult
 
 
 if TYPE_CHECKING:

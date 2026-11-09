@@ -67,7 +67,7 @@ spec:
 {{- end }}
 {{- range $id, $builder := .Values.builders }}
       - name: builder-{{ $id }}
-        import_path: model_service.builders.serve:app
+        import_path: model_service.replica.serve:app
         route_prefix: /builders/{{ $id }}
         deployments:
           - name: BuilderDeployment

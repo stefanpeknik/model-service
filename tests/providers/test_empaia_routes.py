@@ -6,11 +6,11 @@ import unittest
 
 from httpx import ASGITransport, AsyncClient
 
-from model_service.builders.contracts import SpatialScoresModel, UnknownModelError
-from model_service.facade.api import create_app
-from model_service.facade.catalog import ModelCatalog
+from model_service.catalog import ModelCatalog
+from model_service.facade.http_app import create_app
+from model_service.inference.contracts import SpatialScoresModel
 from model_service.providers.empaia.routes import create_router
-from model_service.scheduler.contracts import (
+from model_service.scheduler.api import (
     ExecutionError,
     ExecutionStatus,
     ExecutionView,
@@ -19,6 +19,7 @@ from model_service.scheduler.contracts import (
     ScheduleResult,
     UnknownExecutionError,
 )
+from model_service.wire.errors import UnknownModelError
 
 
 PROSTATE = SpatialScoresModel(

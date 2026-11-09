@@ -9,22 +9,15 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any
 
-from model_service.builders.client import (
+from model_service.providers.shared_storage import SharedStorageAccessAdapter
+from model_service.providers.standalone import StandaloneProviderAdapter
+from model_service.replica.client import (
     ConfirmedRejectionError,
     RemoteFailureError,
     UnknownOutcomeError,
 )
-from model_service.builders.contracts import (
-    BuilderResult,
-    ExecutionContext,
-    InputAccessContext,
-    Invocation,
-    SharedArtifact,
-)
-from model_service.providers.shared_storage import SharedStorageAccessAdapter
-from model_service.providers.standalone import StandaloneProviderAdapter
 from model_service.scheduler.active_work import ActiveWorkRegistry
-from model_service.scheduler.contracts import (
+from model_service.scheduler.api import (
     ExecutionStatus,
     IncompatibleModelError,
     InvalidScheduleRequestError,
@@ -34,7 +27,13 @@ from model_service.scheduler.contracts import (
     UnknownBuilderError,
     UnknownModelError,
 )
-from model_service.scheduler.domain import (
+from model_service.scheduler.providers import (
+    ProviderCancellation,
+    ProviderFailure,
+    ProviderFinishFailureError,
+    ProviderSuccess,
+)
+from model_service.scheduler.records import (
     Admission,
     PreparedInvocation,
     ProcessingSucceeded,
@@ -45,17 +44,17 @@ from model_service.scheduler.domain import (
     SubmissionIdentity,
     WorkKind,
 )
-from model_service.scheduler.providers import (
-    ProviderCancellation,
-    ProviderFailure,
-    ProviderFinishFailureError,
-    ProviderSuccess,
-)
 from model_service.scheduler.scheduler import ExecutionScheduler
 from model_service.scheduler.store.repository import (
     ExecutionRepositoryUnavailableError,
 )
 from model_service.scheduler.worker import ExecutionWorker
+from model_service.wire.invocation import (
+    ExecutionContext,
+    InputAccessContext,
+    Invocation,
+)
+from model_service.wire.result import BuilderResult, SharedArtifact
 from tests.support.memory_repository import (
     FakeDispatch,
     InMemoryExecutionRepository,
@@ -66,9 +65,10 @@ from tests.support.memory_repository import (
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from model_service.builders.contracts import JsonValue, ModelBinding
-    from model_service.scheduler.contracts import ModelResolver
+    from model_service.inference.contracts import ModelBinding
+    from model_service.scheduler.api import ModelResolver
     from model_service.scheduler.providers import BeforeMutation, ProviderFinishOutcome
+    from model_service.wire.json import JsonValue
 
 
 class StandaloneProvider:

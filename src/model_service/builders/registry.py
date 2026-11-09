@@ -8,14 +8,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from model_service.builders.contracts import UnknownBuilderError
 from model_service.builders.embeddings.declaration import SPEC as TILE_EMBEDDINGS
 from model_service.builders.heatmap.declaration import SPEC as HEATMAP
+from model_service.wire.errors import UnknownBuilderError
 
 
 if TYPE_CHECKING:
-    from model_service.builders.contracts import BuilderOutputs, BuilderResult
-    from model_service.builders.spec import BuilderSpec
+    from model_service.builders.spec import BuilderOutputs, BuilderSpec
+    from model_service.wire.result import BuilderResult
 
 
 BUILDERS: dict[str, BuilderSpec] = {

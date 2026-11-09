@@ -14,38 +14,38 @@ from typing import TYPE_CHECKING, Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from model_service.builders.contracts import (
+from model_service.builders.registry import get_builder
+from model_service.providers.plugin import Provider
+from model_service.scheduler.api import (
+    InvalidScheduleRequestError,
+    ProviderName,
+    ScheduleRequest,
+)
+from model_service.scheduler.providers import ProviderAdapter
+from model_service.scheduler.records import PreparedInvocation, SubmissionIdentity
+from model_service.wire.errors import InvalidInvocation
+from model_service.wire.invocation import (
     SHARED_STORAGE,
     BuilderInput,
     Deadline,
     ExecutionContext,
     InputAccessContext,
-    InvalidInvocation,
     Invocation,
     SharedPathInput,
 )
-from model_service.builders.registry import get_builder
-from model_service.providers.composition import Provider
-from model_service.scheduler.contracts import (
-    InvalidScheduleRequestError,
-    ProviderName,
-    ScheduleRequest,
-)
-from model_service.scheduler.domain import PreparedInvocation, SubmissionIdentity
-from model_service.scheduler.providers import ProviderAdapter
 
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from model_service.builders.access import AccessAdapter
-    from model_service.builders.contracts import JsonValue
-    from model_service.builders.settings import WorkerSettings
-    from model_service.facade.catalog import ModelCatalog
+    from model_service.catalog import ModelCatalog
     from model_service.facade.settings import SchedulerSettings
-    from model_service.providers.composition import FacadeContribution
+    from model_service.providers.plugin import FacadeContribution
     from model_service.providers.shared_storage import SharedStorageAccessAdapter
+    from model_service.replica.access import AccessAdapter
+    from model_service.replica.settings import WorkerSettings
     from model_service.scheduler.providers import BeforeMutation, ProviderFinishOutcome
+    from model_service.wire.json import JsonValue
 
 
 NAME: ProviderName = "standalone"
@@ -211,7 +211,7 @@ class StandaloneProvider(Provider):
         Returns:
             The facade contribution.
         """
-        from model_service.providers.composition import FacadeContribution
+        from model_service.providers.plugin import FacadeContribution
         from model_service.providers.shared_storage import SharedStorageAccessAdapter
 
         del catalog

@@ -7,31 +7,31 @@ from typing import TYPE_CHECKING, Annotated
 
 from fastapi import Header
 
-from model_service.builders.contracts import (
-    IncompatibleModelError,
-    UnknownBuilderError,
-    UnknownModelError,
-)
 from model_service.facade.errors import (
     ApiErrorCode,
     http_error,
     lookup_error,
     unavailable,
 )
-from model_service.scheduler.contracts import (
+from model_service.scheduler.api import (
     InferenceScheduleRequest,
     InvalidScheduleRequestError,
     ScheduleConflictError,
     SchedulingUnavailableError,
 )
 from model_service.scheduler.inference import IncompatibleInputError
+from model_service.wire.errors import (
+    IncompatibleModelError,
+    UnknownBuilderError,
+    UnknownModelError,
+)
 
 
 if TYPE_CHECKING:
     from fastapi import Response
 
     from model_service.facade.ports import Scheduler
-    from model_service.scheduler.contracts import ScheduleRequest, ScheduleResult
+    from model_service.scheduler.api import ScheduleRequest, ScheduleResult
 
 
 logger = logging.getLogger(__name__)

@@ -10,7 +10,7 @@ from pydantic import Field
 
 from model_service.facade.auth import Access, Action
 from model_service.facade.errors import ERRORS, ApiErrorCode, http_error, unavailable
-from model_service.scheduler.contracts import (
+from model_service.scheduler.api import (
     ExecutionView,
     ResultUnavailableError,
     SchedulingUnavailableError,

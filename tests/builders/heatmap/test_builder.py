@@ -15,12 +15,6 @@ from unittest.mock import AsyncMock, patch
 
 import numpy as np
 
-from model_service.builders.application import BuilderApplication
-from model_service.builders.contracts import (
-    SharedArtifact,
-    SharedPathInput,
-    SpatialScoresModel,
-)
 from model_service.builders.heatmap.builder import HeatmapBuilder
 from model_service.builders.heatmap.processor import (
     HeatmapRequest,
@@ -28,8 +22,12 @@ from model_service.builders.heatmap.processor import (
 )
 from model_service.builders.heatmap.score_grid import read_score_grid
 from model_service.builders.registry import get_builder
-from model_service.builders.settings import WorkerSettings
+from model_service.inference.contracts import SpatialScoresModel
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
+from model_service.replica.application import BuilderApplication
+from model_service.replica.settings import WorkerSettings
+from model_service.wire.invocation import SharedPathInput
+from model_service.wire.result import SharedArtifact
 from tests.support.builder_contract import BuilderContractTests
 from tests.support.builder_fixtures import invocation, write_slide
 
@@ -365,8 +363,8 @@ class HeatmapBuilderTests(unittest.IsolatedAsyncioTestCase):
 
 class UnreadableInputTests(unittest.TestCase):
     def test_a_file_that_is_not_a_slide_is_an_invalid_input(self) -> None:
-        from model_service.builders.contracts import InvalidInvocation
         from model_service.builders.slides.tile_reader import open_slide
+        from model_service.wire.errors import InvalidInvocation
 
         with TemporaryDirectory() as directory:
             path = Path(directory) / "notes.txt"

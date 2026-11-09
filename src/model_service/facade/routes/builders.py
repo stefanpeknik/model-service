@@ -12,20 +12,6 @@ from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, Request, Response, status
 
-from model_service.builders.client import (
-    ConfirmedRejectionError,
-    RemoteFailureError,
-    UnknownOutcomeError,
-)
-from model_service.builders.contracts import (
-    BuilderResult,
-    IncompatibleModelError,
-    InferenceContract,
-    InvalidInvocation,
-    JsonValue,
-    UnknownBuilderError,
-    UnknownModelError,
-)
 from model_service.builders.registry import BUILDERS
 from model_service.facade.auth import Access, Action
 from model_service.facade.errors import ERRORS, ApiErrorCode, http_error, lookup_error
@@ -36,10 +22,30 @@ from model_service.facade.requests import (
     ScheduledBuilderRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations.
 )
 from model_service.facade.routes.common import require_idempotency_key, submit
+from model_service.inference.contracts import (
+    InferenceContract,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
+)
 from model_service.providers.standalone import NAME as STANDALONE
-from model_service.scheduler.contracts import (
+from model_service.replica.client import (
+    ConfirmedRejectionError,
+    RemoteFailureError,
+    UnknownOutcomeError,
+)
+from model_service.scheduler.api import (
     ScheduleRequest,
     ScheduleResult,
+)
+from model_service.wire.errors import (
+    IncompatibleModelError,
+    InvalidInvocation,
+    UnknownBuilderError,
+    UnknownModelError,
+)
+from model_service.wire.json import (
+    JsonValue,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
+)
+from model_service.wire.result import (
+    BuilderResult,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
 
 

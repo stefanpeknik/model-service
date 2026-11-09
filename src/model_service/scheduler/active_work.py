@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import asyncio
 
-    from model_service.scheduler.domain import Settlement
+    from model_service.scheduler.records import Settlement
 
 
 class ActiveWorkRegistry:

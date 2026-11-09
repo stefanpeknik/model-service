@@ -23,22 +23,12 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from psycopg.errors import CheckViolation
 from psycopg.types.json import Jsonb
 
-from model_service.builders.contracts import (
-    INVOCATION,
-    RESULT,
-    BuilderResult,
-    InlineOutput,
-    InputAccessContext,
-    Invocation,
-    SharedArtifact,
-    SharedPathInput,
-)
-from model_service.scheduler.contracts import (
+from model_service.scheduler.api import (
     InferenceResult,
     ScheduleConflictError,
     UnknownExecutionError,
 )
-from model_service.scheduler.domain import (
+from model_service.scheduler.records import (
     Admission,
     InferenceSucceeded,
     ProcessingSucceeded,
@@ -49,12 +39,24 @@ from model_service.scheduler.domain import (
     SubmissionIdentity,
     WorkKind,
 )
-from model_service.scheduler.store.models import ExecutionRow
 from model_service.scheduler.store.payloads import PayloadStore
 from model_service.scheduler.store.postgres import PostgresExecutionRepository
 from model_service.scheduler.store.protected_context import ProtectedContextCipher
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
+from model_service.scheduler.store.rows import ExecutionRow
 from model_service.scheduler.store.schema import MIGRATIONS_DIRECTORY
+from model_service.wire.invocation import (
+    INVOCATION,
+    InputAccessContext,
+    Invocation,
+    SharedPathInput,
+)
+from model_service.wire.result import (
+    RESULT,
+    BuilderResult,
+    InlineOutput,
+    SharedArtifact,
+)
 from tests.support.repository_contract import (
     INFERENCE_LIMIT,
     INFERENCE_RETENTION,

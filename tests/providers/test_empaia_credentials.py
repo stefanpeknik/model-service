@@ -9,8 +9,8 @@ from datetime import UTC, datetime, timedelta
 
 import jwt
 
-from model_service.providers.empaia.provider import EmpaiaProviderAdapter
-from model_service.scheduler.contracts import (
+from model_service.providers.empaia.scheduling import EmpaiaProviderAdapter
+from model_service.scheduler.api import (
     InvalidScheduleRequestError,
     ScheduleRequest,
 )

@@ -11,12 +11,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from model_service.builders.artifacts import atomic_artifact
-from model_service.builders.contracts import (
-    BuilderInputs,
-    BuilderOutputs,
-    SharedArtifact,
-)
-from model_service.builders.model_clients import ModelClient
+from model_service.builders.spec import BuilderInputs, BuilderOutputs
+from model_service.inference.clients import ModelClient
+from model_service.wire.result import SharedArtifact
 
 
 if TYPE_CHECKING:
@@ -26,7 +23,7 @@ if TYPE_CHECKING:
 
     from pydantic import BaseModel
 
-    from model_service.builders.access import InputAccess
+    from model_service.replica.access import InputAccess
 
 
 @dataclass(frozen=True, slots=True)

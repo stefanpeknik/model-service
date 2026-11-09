@@ -15,6 +15,12 @@ from aiohttp import ClientError, ClientResponseError, ContentTypeError
 from rationai.empaia import Client
 from rationai.empaia.typing import primitives
 
+from model_service.providers.empaia.app_service_types import (
+    DirectAccess,
+    Rectangle,
+    SlideLevel,
+    SlideMetadata,
+)
 from model_service.providers.empaia.gateway import (
     EmpaiaGateway,
     EmpaiaGatewayError,
@@ -31,12 +37,6 @@ from model_service.providers.empaia.responses import (
     RectangleResponse,
     SlideResponse,
 )
-from model_service.providers.empaia.slides import (
-    DirectAccess,
-    Rectangle,
-    SlideLevel,
-    SlideMetadata,
-)
 
 
 if TYPE_CHECKING:
@@ -45,13 +45,13 @@ if TYPE_CHECKING:
     from rationai.empaia.typing import SlideInfo
     from rationai.empaia.utils.scalar_output import PixelmapTileSet
 
-    from model_service.builders.contracts import JsonValue
+    from model_service.providers.empaia.app_service_types import RectangleMaskWriter
     from model_service.providers.empaia.gateway import (
         EmpaiaGatewayFactory,
         MutationGuard,
     )
     from model_service.providers.empaia.settings import EmpaiaSettings
-    from model_service.providers.empaia.slides import RectangleMaskWriter
+    from model_service.wire.json import JsonValue
 
 
 class HttpEmpaiaGateway(EmpaiaGateway):
@@ -89,7 +89,7 @@ class HttpEmpaiaGateway(EmpaiaGateway):
         self._job_id = job_id
         self._client = client or Client(api_url, job_id, credential)
         if rectangle_writer is None:
-            from model_service.providers.empaia.image_io import VipsRectangleMaskWriter
+            from model_service.providers.empaia.pixelmaps import VipsRectangleMaskWriter
 
         self._rectangle_writer = rectangle_writer or VipsRectangleMaskWriter()
 

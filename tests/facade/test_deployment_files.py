@@ -13,9 +13,9 @@ from pathlib import Path
 import yaml
 
 from model_service.builders.registry import BUILDERS
-from model_service.facade.catalog import ModelCatalog
-from model_service.providers.empaia.apps import app_definitions, parse_listings
-from model_service.providers.empaia.composition import CATALOG_BLOCK
+from model_service.catalog import ModelCatalog
+from model_service.providers.empaia.ead import app_definitions, parse_listings
+from model_service.providers.empaia.plugin import CATALOG_BLOCK
 from model_service.providers.empaia.publishers import default_publishers
 
 

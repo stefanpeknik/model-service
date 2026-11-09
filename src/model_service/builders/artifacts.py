@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from model_service.builders.contracts import InvalidInvocation
+from model_service.wire.errors import InvalidInvocation
 
 
 if TYPE_CHECKING:

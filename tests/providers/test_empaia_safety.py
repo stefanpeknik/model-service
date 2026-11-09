@@ -8,12 +8,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock
 
-from model_service.builders.contracts import BuilderResult, SharedArtifact
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.input_access import job_workspace
-from model_service.providers.empaia.provider import EmpaiaProviderAdapter
 from model_service.providers.empaia.publishers import PublisherRegistry
-from model_service.scheduler.contracts import (
+from model_service.providers.empaia.scheduling import EmpaiaProviderAdapter
+from model_service.scheduler.api import (
     ExecutionError,
     InvalidScheduleRequestError,
     ScheduleRequest,
@@ -23,6 +22,7 @@ from model_service.scheduler.providers import (
     ProviderFinishFailureError,
     ProviderSuccess,
 )
+from model_service.wire.result import BuilderResult, SharedArtifact
 
 
 # Publishes nothing: these tests are about the workspace.

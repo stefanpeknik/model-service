@@ -10,7 +10,6 @@ from types import SimpleNamespace
 import numpy as np
 from rationai.empaia.typing import SlideInfo
 
-from model_service.builders.contracts import SharedArtifact
 from model_service.builders.heatmap.score_grid import (
     MEDIA_TYPE,
     ScoreGrid,
@@ -18,7 +17,8 @@ from model_service.builders.heatmap.score_grid import (
 )
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.http_gateway import HttpEmpaiaGateway
-from model_service.providers.empaia.image_io import ScoreGridPublisher
+from model_service.providers.empaia.pixelmaps import ScoreGridPublisher
+from model_service.wire.result import SharedArtifact
 from tests.providers.empaia_fixtures import SLIDE_ID
 
 

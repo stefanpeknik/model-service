@@ -7,7 +7,7 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
-from model_service.builders.contracts import BuilderFailure, FailureCode
+from model_service.wire.errors import BuilderFailure, FailureCode
 
 
 if TYPE_CHECKING:
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     import numpy as np
     from numpy.typing import NDArray
 
-    from model_service.builders.model_clients import TileEmbeddingClient
+    from model_service.inference.clients import TileEmbeddingClient
 
 
 async def build_embeddings(

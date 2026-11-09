@@ -8,23 +8,28 @@ from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, create_model
 
-from model_service.builders.contracts import (
+from model_service.builders.spec import (
     Artifact,
     BuilderInputs,
-    BuilderOutput,
     BuilderOutputs,
-    BuilderResult,
-    InferenceContract,
-    InlineOutput,
+    BuilderSpec,
     Input,
-    InputAccessContext,
-    Invocation,
-    OutputKind,
-    SharedArtifact,
+    InputSpec,
+    OutputSpec,
+)
+from model_service.inference.contracts import (
+    InferenceContract,
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from model_service.builders.spec import BuilderSpec, InputSpec, OutputSpec
+from model_service.wire.invocation import InputAccessContext, Invocation
+from model_service.wire.result import (
+    BuilderOutput,
+    BuilderResult,
+    InlineOutput,
+    OutputKind,
+    SharedArtifact,
+)
 
 
 if TYPE_CHECKING:
@@ -33,8 +38,8 @@ if TYPE_CHECKING:
     import numpy as np
 
     from model_service.builders.base import BuilderContext
-    from model_service.builders.contracts import ModelBinding
-    from model_service.builders.model_clients import HandleLookup
+    from model_service.inference.clients import HandleLookup
+    from model_service.inference.contracts import ModelBinding
 
 
 SPATIAL_MODEL = SpatialScoresModel(

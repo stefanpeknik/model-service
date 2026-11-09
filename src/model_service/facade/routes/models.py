@@ -12,26 +12,28 @@ from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
-from model_service.builders.contracts import (
-    InferenceContract,
-    JsonValue,
-    ModelBinding,
-    UnknownModelError,
-)
 from model_service.facade.auth import Access, Action
 from model_service.facade.errors import ERRORS, ApiErrorCode, http_error, lookup_error
 from model_service.facade.inference import inference_headers
 from model_service.facade.routes.common import require_idempotency_key, submit
-from model_service.scheduler.contracts import InferenceScheduleRequest, ScheduleResult
+from model_service.inference.contracts import (  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
+    InferenceContract,
+    ModelBinding,
+)
+from model_service.scheduler.api import InferenceScheduleRequest, ScheduleResult
 from model_service.scheduler.inference import (
     IncompatibleInputError,
     ModelUnavailableError,
     ResultTooLargeError,
 )
+from model_service.wire.errors import UnknownModelError
+from model_service.wire.json import (
+    JsonValue,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
+)
 
 
 if TYPE_CHECKING:
-    from model_service.facade.catalog import ModelCatalog
+    from model_service.catalog import ModelCatalog
     from model_service.facade.ports import Scheduler
     from model_service.scheduler.inference import InferenceTarget
 
@@ -53,7 +55,7 @@ def model_view(model: ModelBinding) -> ModelView:
     Returns:
         The model's ID, contract, contract parameters and compatible builders.
     """
-    from model_service.facade.catalog import ModelCatalog
+    from model_service.catalog import ModelCatalog
 
     return ModelView(
         id=model.id,

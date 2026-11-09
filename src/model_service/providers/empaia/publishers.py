@@ -16,16 +16,17 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
-from model_service.builders.contracts import InlineOutput, SharedArtifact
 from model_service.providers.empaia.gateway import EmpaiaGatewayError, PrimitiveType
+from model_service.wire.result import InlineOutput, SharedArtifact
 
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from model_service.builders.contracts import BuilderOutput, ModelBinding
     from model_service.builders.spec import OutputSpec
+    from model_service.inference.contracts import ModelBinding
     from model_service.providers.empaia.gateway import EmpaiaGateway
+    from model_service.wire.result import BuilderOutput
 
 
 type PublisherKey = tuple[str, str | None]
@@ -192,7 +193,7 @@ def default_publishers() -> PublisherRegistry:
         The registry.
     """
     from model_service.builders.heatmap.score_grid import MEDIA_TYPE as SCORE_GRID
-    from model_service.providers.empaia.image_io import ScoreGridPublisher
+    from model_service.providers.empaia.pixelmaps import ScoreGridPublisher
 
     publishers: dict[PublisherKey, OutputPublisher] = {
         (output_type, None): PrimitivePublisher(output_type)

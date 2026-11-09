@@ -7,29 +7,29 @@ from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 from zipfile import BadZipFile
 
-from model_service.builders.contracts import (
-    BuilderResult,
-    InlineOutput,
-    OutputKind,
-    SharedArtifact,
-    SpatialScoresModel,
-)
 from model_service.builders.heatmap.score_grid import MEDIA_TYPE
 from model_service.builders.registry import get_builder
 from model_service.builders.spec import OutputSpec
-from model_service.providers.empaia.apps import AppMode, EmpaiaListing, app_definitions
+from model_service.inference.contracts import SpatialScoresModel
+from model_service.providers.empaia.ead import AppMode, EmpaiaListing, app_definitions
+from model_service.providers.empaia.ead_io import BUILDER_IO
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
-from model_service.providers.empaia.image_io import _clip
-from model_service.providers.empaia.io import BUILDER_IO
-from model_service.providers.empaia.provider import EmpaiaProviderAdapter
+from model_service.providers.empaia.pixelmaps import _clip
 from model_service.providers.empaia.publishers import (
     PrimitivePublisher,
     PublisherRegistry,
     default_publishers,
 )
+from model_service.providers.empaia.scheduling import EmpaiaProviderAdapter
 from model_service.scheduler.providers import (
     ProviderFinishFailureError,
     ProviderSuccess,
+)
+from model_service.wire.result import (
+    BuilderResult,
+    InlineOutput,
+    OutputKind,
+    SharedArtifact,
 )
 from tests.support.builder_fixtures import outputs_model
 
@@ -118,7 +118,7 @@ class AppPublishabilityTests(unittest.TestCase):
         single = app_definitions(
             [model(1)], {"prostate-classifier-1": LISTING}, PUBLISHERS
         )
-        with self.assertLogs("model_service.providers.empaia.apps", "INFO") as logs:
+        with self.assertLogs("model_service.providers.empaia.ead", "INFO") as logs:
             multi = app_definitions(
                 [model(3)], {"prostate-classifier-1": LISTING}, PUBLISHERS
             )
@@ -140,7 +140,7 @@ class AppPublishabilityTests(unittest.TestCase):
             ),
         )
 
-        with self.assertLogs("model_service.providers.empaia.apps", "INFO"):
+        with self.assertLogs("model_service.providers.empaia.ead", "INFO"):
             apps = app_definitions(
                 [model(1)],
                 {"prostate-classifier-1": LISTING},
@@ -241,7 +241,7 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "model_service.providers.empaia.provider.get_builder",
+                "model_service.providers.empaia.scheduling.get_builder",
                 return_value=with_score,
             ),
             patch(

@@ -9,12 +9,12 @@ from typing import TYPE_CHECKING, Annotated
 
 from pydantic import Field
 
-from model_service.builders.contracts import Deadline
 from model_service.providers.standalone import BuilderRequest
+from model_service.wire.invocation import Deadline
 
 
 if TYPE_CHECKING:
-    from model_service.builders.contracts import JsonValue
+    from model_service.wire.json import JsonValue
 
 
 class ImmediateBuilderRequest(BuilderRequest):

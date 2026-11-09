@@ -26,8 +26,8 @@ from model_service.scheduler.inference import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from model_service.builders.contracts import ModelBinding
-    from model_service.facade.catalog import ModelCatalog
+    from model_service.catalog import ModelCatalog
+    from model_service.inference.contracts import ModelBinding
 
 
 _REQUEST_HEADERS = frozenset({"x-output-dtype", "x-pool-tokens"})

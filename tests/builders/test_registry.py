@@ -5,18 +5,19 @@ from __future__ import annotations
 import unittest
 from datetime import UTC, datetime, timedelta
 
-from model_service.builders.contracts import (
-    IncompatibleModelError,
-    InputAccessContext,
-    InvalidInvocation,
-    Invocation,
-    SharedPathInput,
-    SpatialScoresModel,
-    TileEmbeddingModel,
-    UnknownBuilderError,
-)
 from model_service.builders.heatmap.declaration import HeatmapConfiguration
 from model_service.builders.registry import BUILDERS, get_builder
+from model_service.inference.contracts import SpatialScoresModel, TileEmbeddingModel
+from model_service.wire.errors import (
+    IncompatibleModelError,
+    InvalidInvocation,
+    UnknownBuilderError,
+)
+from model_service.wire.invocation import (
+    InputAccessContext,
+    Invocation,
+    SharedPathInput,
+)
 
 
 SPATIAL = SpatialScoresModel(

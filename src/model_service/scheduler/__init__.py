@@ -5,7 +5,7 @@ transitions.ExecutionTransitions owns the shared state rules. Persistence
 implementations remain separate.
 """
 
-from model_service.scheduler.contracts import (
+from model_service.scheduler.api import (
     ExecutionView,
     ScheduleRequest,
     ScheduleResult,

@@ -8,11 +8,11 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException
 
-from model_service.builders.contracts import UnknownBuilderError, UnknownModelError
+from model_service.wire.errors import UnknownBuilderError, UnknownModelError
 
 
 if TYPE_CHECKING:
-    from model_service.scheduler.contracts import SchedulingUnavailableError
+    from model_service.scheduler.api import SchedulingUnavailableError
 
 
 class ApiErrorCode(StrEnum):

@@ -15,7 +15,7 @@ from uuid import uuid4
 
 from model_service.scheduler import inference
 from model_service.scheduler.active_work import ActiveWorkRegistry
-from model_service.scheduler.contracts import (
+from model_service.scheduler.api import (
     ExecutionStatus,
     ExecutionView,
     InferenceInvocation,
@@ -28,7 +28,7 @@ from model_service.scheduler.contracts import (
     ScheduleResult,
     SchedulingUnavailableError,
 )
-from model_service.scheduler.domain import (
+from model_service.scheduler.records import (
     Admission,
     ExecutionRecord,
     SubmissionIdentity,
@@ -41,8 +41,8 @@ from model_service.scheduler.worker import ExecutionWorker
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Mapping
 
-    from model_service.builders.client import BuilderDispatch
-    from model_service.scheduler.contracts import ModelResolver, ProviderName
+    from model_service.replica.client import BuilderDispatch
+    from model_service.scheduler.api import ModelResolver, ProviderName
     from model_service.scheduler.inference import InferenceTarget
     from model_service.scheduler.providers import ProviderAdapter
     from model_service.scheduler.store.repository import ExecutionRepository

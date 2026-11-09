@@ -11,14 +11,13 @@ import logging
 from contextlib import suppress
 from typing import TYPE_CHECKING
 
-from model_service.builders.client import (
+from model_service.replica.client import (
     ConfirmedRejectionError,
     RemoteFailureError,
     UnknownOutcomeError,
 )
-from model_service.builders.contracts import BuilderResult, ExecutionContext
 from model_service.scheduler import inference
-from model_service.scheduler.contracts import (
+from model_service.scheduler.api import (
     ExecutionError,
     ExecutionErrorCode,
     IncompatibleModelError,
@@ -27,7 +26,14 @@ from model_service.scheduler.contracts import (
     UnknownBuilderError,
     UnknownModelError,
 )
-from model_service.scheduler.domain import (
+from model_service.scheduler.providers import (
+    ProviderCancellation,
+    ProviderFailure,
+    ProviderFinishFailureError,
+    ProviderFinishOutcome,
+    ProviderSuccess,
+)
+from model_service.scheduler.records import (
     ProcessingFailed,
     ProcessingRejected,
     ProcessingSucceeded,
@@ -38,14 +44,9 @@ from model_service.scheduler.domain import (
     WorkClaim,
     WorkKind,
 )
-from model_service.scheduler.providers import (
-    ProviderCancellation,
-    ProviderFailure,
-    ProviderFinishFailureError,
-    ProviderFinishOutcome,
-    ProviderSuccess,
-)
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
+from model_service.wire.invocation import ExecutionContext
+from model_service.wire.result import BuilderResult
 
 
 logger = logging.getLogger(__name__)
@@ -55,12 +56,12 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from datetime import timedelta
 
-    from model_service.builders.client import BuilderDispatch
+    from model_service.replica.client import BuilderDispatch
     from model_service.scheduler.active_work import ActiveWorkRegistry
-    from model_service.scheduler.contracts import ModelResolver, ProviderName
-    from model_service.scheduler.domain import Settlement
+    from model_service.scheduler.api import ModelResolver, ProviderName
     from model_service.scheduler.inference import InferenceTarget
     from model_service.scheduler.providers import ProviderAdapter
+    from model_service.scheduler.records import Settlement
     from model_service.scheduler.store.repository import ExecutionRepository
 
 

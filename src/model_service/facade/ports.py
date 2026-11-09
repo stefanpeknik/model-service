@@ -12,15 +12,15 @@ from typing import TYPE_CHECKING, Protocol
 
 
 if TYPE_CHECKING:
-    from model_service.builders.contracts import BuilderResult
     from model_service.facade.requests import ImmediateBuilderRequest
-    from model_service.scheduler.contracts import (
+    from model_service.scheduler.api import (
         ExecutionView,
         InferenceResult,
         InferenceScheduleRequest,
         ScheduleRequest,
         ScheduleResult,
     )
+    from model_service.wire.result import BuilderResult
 
 
 class Scheduler(Protocol):

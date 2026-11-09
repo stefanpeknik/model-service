@@ -11,13 +11,13 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING, Never
 
-from model_service.scheduler.contracts import (
+from model_service.scheduler.api import (
     ExecutionError,
     ExecutionErrorCode,
     ExecutionStatus,
     Operation,
 )
-from model_service.scheduler.domain import (
+from model_service.scheduler.records import (
     Admission,
     ExecutionRecord,
     InferenceSucceeded,
@@ -36,7 +36,7 @@ from model_service.scheduler.domain import (
 if TYPE_CHECKING:
     from datetime import datetime, timedelta
 
-    from model_service.scheduler.domain import RetryPolicy, Settlement
+    from model_service.scheduler.records import RetryPolicy, Settlement
 
 
 @dataclass(frozen=True, slots=True)

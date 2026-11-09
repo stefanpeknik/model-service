@@ -6,18 +6,18 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict
 
-from model_service.builders.contracts import (
+from model_service.builders.spec import (
     Artifact,
     BuilderInputs,
     BuilderOutputs,
-    InferenceContract,
-    SharedArtifact,
-)
-from model_service.builders.spec import (
     BuilderSpec,
     RegionOfInterest,
     Slide,
     StrideFraction,
+)
+from model_service.inference.contracts import InferenceContract
+from model_service.wire.result import (
+    SharedArtifact,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
 
 

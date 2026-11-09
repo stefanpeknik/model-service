@@ -14,17 +14,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Union, get_args, get_origin
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from model_service.builders.contracts import (
-    Artifact,
-    BuilderInputs,
-    BuilderOutputs,
-    IncompatibleModelError,
-    InferenceContract,
+from model_service.inference.contracts import (
+    InferenceContract,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
+)
+from model_service.wire.errors import IncompatibleModelError, InvalidInvocation
+from model_service.wire.result import (
+    BuilderResult,
     InlineOutput,
-    Input,
-    InvalidInvocation,
     OutputKind,
     SharedArtifact,
 )
@@ -33,7 +31,72 @@ from model_service.builders.contracts import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from model_service.builders.contracts import Invocation, JsonValue, ModelBinding
+    from model_service.inference.contracts import ModelBinding
+    from model_service.wire.invocation import Invocation
+    from model_service.wire.json import JsonValue
+
+
+@dataclass(frozen=True, slots=True)
+class Artifact:
+    """Declares a `SharedArtifact` output field: its media type and default file name.
+
+    Used as `Annotated[SharedArtifact, Artifact(...)]` in a `BuilderOutputs` model.
+    """
+
+    media_type: str | None = None
+    # Output file name when the invocation names no output path.
+    default_path: str | None = None
+
+
+class BuilderOutputs(BaseModel):
+    """A builder's outputs, one field per output.
+
+    A field is a `SharedArtifact`, annotated with `Artifact`, or an
+    `InlineOutput`. A builder returns its own subclass; the registry derives the
+    builder's output declaration from the fields, and the application turns it
+    into the generic `BuilderResult` that is sent and stored.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    def result(self) -> BuilderResult:
+        """Return the outputs as the generic result that is sent and stored.
+
+        Returns:
+            A `BuilderResult` with one entry per field.
+        """
+        return BuilderResult(outputs=dict(self))
+
+
+@dataclass(frozen=True, slots=True)
+class Input:
+    """Declares a `BuilderInputs` field's media type.
+
+    Used as `Annotated[Path, Input(...)]`, or `Annotated[Path | None, Input(...)]`
+    for an optional input.
+    """
+
+    media_type: str | None = None
+
+
+class BuilderInputs(BaseModel):
+    """A builder's inputs, one field per input, as local files.
+
+    A field is a `Path` (required) or `Path | None` defaulting to None
+    (optional), annotated with `Input`. The registry derives the builder's input
+    declaration from the fields; the application resolves each supplied input to
+    a local file through the input access and hands the builder an instance.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    def paths(self) -> tuple[Path, ...]:
+        """Return the supplied inputs' paths.
+
+        Returns:
+            One path per input the invocation supplied, in field order.
+        """
+        return tuple(path for path in dict(self).values() if path is not None)
 
 
 # Input and configuration fields builders share.

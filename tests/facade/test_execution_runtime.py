@@ -13,11 +13,11 @@ from unittest.mock import AsyncMock, patch
 import lz4.frame
 from httpx import ASGITransport, AsyncClient, MockTransport, Request, Response
 
-from model_service.facade.app import create_app
-from model_service.facade.catalog import CatalogError
+from model_service.catalog import CatalogError
 from model_service.facade.settings import SchedulerSettings
-from tests.facade.test_model_catalog import embedding_document, spatial_document
+from model_service.facade.wiring import create_app
 from tests.support.memory_repository import InMemoryExecutionRepository
+from tests.test_catalog import embedding_document, spatial_document
 
 
 class RuntimeTestCase(unittest.IsolatedAsyncioTestCase):
@@ -78,10 +78,10 @@ class ExecutionRuntimeTests(RuntimeTestCase):
             patch.object(repository, "initialize", initialized, create=True),
             patch.object(repository, "maintain", side_effect=maintained.set),
             patch(
-                "model_service.facade.app.PostgresExecutionRepository",
+                "model_service.facade.wiring.PostgresExecutionRepository",
                 return_value=repository,
             ),
-            patch("model_service.facade.app.httpx.AsyncClient", return_value=client),
+            patch("model_service.facade.wiring.httpx.AsyncClient", return_value=client),
         ):
             app = create_app(self.settings())
             async with app.router.lifespan_context(app):
@@ -98,10 +98,10 @@ class ExecutionRuntimeTests(RuntimeTestCase):
         with (
             patch.object(repository, "initialize", initialized, create=True),
             patch(
-                "model_service.facade.app.PostgresExecutionRepository",
+                "model_service.facade.wiring.PostgresExecutionRepository",
                 return_value=repository,
             ),
-            patch("model_service.facade.app.httpx.AsyncClient", return_value=client),
+            patch("model_service.facade.wiring.httpx.AsyncClient", return_value=client),
         ):
             app = create_app(self.settings())
             with self.assertRaisesRegex(RuntimeError, "database unavailable"):
@@ -121,7 +121,8 @@ class ExecutionRuntimeTests(RuntimeTestCase):
 
         async with AsyncClient(transport=MockTransport(serve)) as serve_client:
             with patch(
-                "model_service.facade.app.httpx.AsyncClient", return_value=serve_client
+                "model_service.facade.wiring.httpx.AsyncClient",
+                return_value=serve_client,
             ):
                 app = create_app(self.settings(BUILDER_IDS='["heatmap"]'))
             async with AsyncClient(
@@ -145,7 +146,8 @@ class ExecutionRuntimeTests(RuntimeTestCase):
         )
         async with AsyncClient(transport=MockTransport(serve)) as serve_client:
             with patch(
-                "model_service.facade.app.httpx.AsyncClient", return_value=serve_client
+                "model_service.facade.wiring.httpx.AsyncClient",
+                return_value=serve_client,
             ):
                 app = create_app(settings)
             async with AsyncClient(

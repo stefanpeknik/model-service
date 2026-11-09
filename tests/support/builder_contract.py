@@ -14,18 +14,14 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 import numpy as np
 
-from model_service.builders.application import BuilderApplication
-from model_service.builders.contracts import (
-    BuilderFailure,
-    FailureCode,
-    InferenceContract,
-    InvalidInvocation,
-    SharedArtifact,
-    SharedPathInput,
-)
 from model_service.builders.registry import get_builder
-from model_service.builders.settings import WorkerSettings
+from model_service.inference.contracts import InferenceContract
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
+from model_service.replica.application import BuilderApplication
+from model_service.replica.settings import WorkerSettings
+from model_service.wire.errors import BuilderFailure, FailureCode, InvalidInvocation
+from model_service.wire.invocation import SharedPathInput
+from model_service.wire.result import SharedArtifact
 from tests.support.builder_fixtures import (
     FakeDeployment,
     invocation,
@@ -37,11 +33,9 @@ from tests.support.builder_fixtures import (
 if TYPE_CHECKING:
     import unittest
 
-    from model_service.builders.contracts import (
-        BuilderInput,
-        BuilderResult,
-        ModelBinding,
-    )
+    from model_service.inference.contracts import ModelBinding
+    from model_service.wire.invocation import BuilderInput
+    from model_service.wire.result import BuilderResult
 
     _Base = unittest.IsolatedAsyncioTestCase
 else:

@@ -6,19 +6,16 @@ import unittest
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
-from model_service.builders.contracts import (
-    BuilderResult,
-    InputAccessContext,
-    Invocation,
-)
-from model_service.scheduler.contracts import ExecutionErrorCode, ExecutionStatus
-from model_service.scheduler.domain import (
+from model_service.scheduler.api import ExecutionErrorCode, ExecutionStatus
+from model_service.scheduler.records import (
     Admission,
     RetryPolicy,
     SubmissionIdentity,
     WorkKind,
 )
 from model_service.scheduler.transitions import ExecutionTransitions
+from model_service.wire.invocation import InputAccessContext, Invocation
+from model_service.wire.result import BuilderResult
 
 
 NOW = datetime(2026, 11, 2, tzinfo=UTC)

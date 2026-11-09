@@ -22,8 +22,8 @@ from model_service.facade.auth import Access, Action
 from model_service.facade.errors import ERRORS, ApiErrorCode, http_error, unavailable
 from model_service.facade.routes.common import submit
 from model_service.providers.empaia.gateway import PROVIDER_NAME
-from model_service.providers.empaia.provider import EmpaiaSchedulePayload
-from model_service.scheduler.contracts import (
+from model_service.providers.empaia.scheduling import EmpaiaSchedulePayload
+from model_service.scheduler.api import (
     ExecutionStatus,
     ScheduleRequest,
     SchedulingUnavailableError,
@@ -33,7 +33,7 @@ from model_service.scheduler.contracts import (
 
 if TYPE_CHECKING:
     from model_service.facade.ports import Capacity, Scheduler
-    from model_service.scheduler.contracts import ExecutionView
+    from model_service.scheduler.api import ExecutionView
 
 
 @dataclass(frozen=True, slots=True)

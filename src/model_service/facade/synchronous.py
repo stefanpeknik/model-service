@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from model_service.builders.contracts import ExecutionContext
 from model_service.builders.registry import get_builder
 from model_service.facade.ports import BuilderRunner
+from model_service.wire.invocation import ExecutionContext
 
 
 if TYPE_CHECKING:
-    from model_service.builders.client import BuilderDispatch
-    from model_service.builders.contracts import BuilderResult
-    from model_service.facade.catalog import ModelCatalog
+    from model_service.catalog import ModelCatalog
     from model_service.facade.requests import ImmediateBuilderRequest
+    from model_service.replica.client import BuilderDispatch
+    from model_service.wire.result import BuilderResult
 
 
 class SynchronousBuilderService(BuilderRunner):

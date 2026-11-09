@@ -14,12 +14,12 @@ from model_service.builders.heatmap.processor import (
     HeatmapRequest,
     SlideHeatmapProcessor,
 )
-from model_service.builders.model_clients import SpatialScoresClient
+from model_service.inference.clients import SpatialScoresClient
 
 
 if TYPE_CHECKING:
     from model_service.builders.base import BuilderContext
-    from model_service.builders.settings import WorkerSettings
+    from model_service.replica.settings import WorkerSettings
 
 
 class HeatmapBuilder(

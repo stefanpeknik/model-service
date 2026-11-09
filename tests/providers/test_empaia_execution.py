@@ -10,17 +10,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
-from model_service.builders.application import BuilderApplication
-from model_service.builders.contracts import (
-    BuilderResult,
-    ExecutionContext,
-    Invocation,
-    ModelBinding,
-    SharedArtifact,
-    SpatialScoresModel,
-)
 from model_service.builders.heatmap.declaration import HeatmapOutputs
 from model_service.builders.registry import get_builder
+from model_service.inference.contracts import ModelBinding, SpatialScoresModel
 from model_service.providers.empaia.gateway import (
     EmpaiaGatewayError,
     EmpaiaInputState,
@@ -28,21 +20,24 @@ from model_service.providers.empaia.gateway import (
     EmpaiaJobMode,
 )
 from model_service.providers.empaia.input_access import EmpaiaInputAccessAdapter
-from model_service.providers.empaia.provider import EmpaiaProviderAdapter
 from model_service.providers.empaia.publishers import Commit, PublisherRegistry
+from model_service.providers.empaia.scheduling import EmpaiaProviderAdapter
+from model_service.replica.application import BuilderApplication
 from model_service.scheduler.active_work import ActiveWorkRegistry
-from model_service.scheduler.contracts import (
+from model_service.scheduler.api import (
     InvalidScheduleRequestError,
     ScheduleRequest,
     SchedulingUnavailableError,
 )
-from model_service.scheduler.domain import Priority, RetryPolicy
 from model_service.scheduler.providers import (
     ProviderFinishFailureError,
     ProviderSuccess,
 )
+from model_service.scheduler.records import Priority, RetryPolicy
 from model_service.scheduler.scheduler import ExecutionScheduler
 from model_service.scheduler.worker import ExecutionWorker
+from model_service.wire.invocation import ExecutionContext, Invocation
+from model_service.wire.result import BuilderResult, SharedArtifact
 from tests.support.builder_fixtures import deployments
 from tests.support.memory_repository import InMemoryExecutionRepository
 
@@ -51,8 +46,9 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from model_service.builders.base import BuilderContext
-    from model_service.builders.contracts import BuilderOutput, JsonValue
     from model_service.providers.empaia.gateway import EmpaiaGateway, MutationGuard
+    from model_service.wire.json import JsonValue
+    from model_service.wire.result import BuilderOutput
 
 
 MODEL = SpatialScoresModel(
