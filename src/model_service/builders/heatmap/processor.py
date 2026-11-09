@@ -1,7 +1,7 @@
 """Build a whole-slide score map from model tiles.
 
 OpenSlide reads run in a thread pool and predictions run concurrently through the
-predictor. A memory-mapped MaskBuilder averages overlapping scores into a grid
+model client. A memory-mapped MaskBuilder averages overlapping scores into a grid
 at the model's output resolution, which is written as a score grid.
 """
 
@@ -10,18 +10,20 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from model_service.builders.score_grid import ScoreGrid, write_score_grid
+from model_service.builders.heatmap.score_grid import ScoreGrid, write_score_grid
 
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from model_service.builders.contracts import SpatialScoresModel
+    import numpy as np
+    from numpy.typing import NDArray
+
+    from model_service.builders.model_clients import SpatialScoresClient
 
 
 logger = logging.getLogger(__name__)
@@ -64,28 +66,18 @@ class _StageTiming:
         return f"{self.seconds / self.count * 1000:.0f} ms"
 
 
-class TilePredictor(ABC):
-    @abstractmethod
-    async def predict(self, tile: object) -> object:
-        """Score one tile.
-
-        Args:
-            tile: CHW uint8 tile.
-
-        Returns:
-            `n_channels x output_tile_size²` scores for the tile.
-        """
-        ...
-
-
 class SlideHeatmapProcessor:
     def __init__(
-        self, predictor: TilePredictor, *, num_threads: int, max_concurrent_tasks: int
+        self,
+        client: SpatialScoresClient,
+        *,
+        num_threads: int,
+        max_concurrent_tasks: int,
     ) -> None:
         """Configure the processor.
 
         Args:
-            predictor: Predictor that scores each tile.
+            client: Client of the model that scores each tile.
             num_threads: Threads for slide reads.
             max_concurrent_tasks: Tiles in flight at once.
 
@@ -94,17 +86,17 @@ class SlideHeatmapProcessor:
         """
         if num_threads <= 0 or max_concurrent_tasks <= 0:
             raise ValueError("heatmap thread and concurrency limits must be positive")
-        self._predictor = predictor
+        self._client = client
         self._num_threads = num_threads
         self._max_concurrent_tasks = max_concurrent_tasks
 
-    async def build(self, model: SpatialScoresModel, request: HeatmapRequest) -> None:
+    async def build(self, request: HeatmapRequest) -> None:
         """Score a slide's grid tiles and write the averaged score grid.
 
         Overlapping tile scores are averaged; progress is logged every minute.
+        Tile size, output geometry and mpp come from the model's declaration.
 
         Args:
-            model: Declaration giving tile size, output geometry and mpp.
             request: Slide, mask, output path and tiling options.
 
         Raises:
@@ -114,8 +106,9 @@ class SlideHeatmapProcessor:
         from ratiopath.masks.mask_builders import MaskBuilder
         from ratiopath.tiling import grid_tiles
 
-        from model_service.builders.tile_reader import TileReader, open_slide
+        from model_service.builders.slides.tile_reader import TileReader, open_slide
 
+        model = self._client.declaration
         tile_size = model.tile_size
         output_tile_size = model.output_tile_size
         n_channels = model.n_channels
@@ -159,7 +152,7 @@ class SlideHeatmapProcessor:
             reads = _StageTiming()
             predictions = _StageTiming()
 
-            def timed_read(x: int, y: int) -> tuple[object, float]:
+            def timed_read(x: int, y: int) -> tuple[NDArray[np.uint8] | None, float]:
                 # Timed in the thread, so waiting for a free thread is not counted.
                 began = time.perf_counter()
                 tile = reader.read(x, y, tile_size)
@@ -175,7 +168,7 @@ class SlideHeatmapProcessor:
                         return
                     reads.add(read_seconds)
                     began = time.perf_counter()
-                    prediction = await self._predictor.predict(tile)
+                    prediction = await self._client.predict(tile)
                     predictions.add(time.perf_counter() - began)
                     batch = np.asarray(prediction, dtype=np.float32).reshape(
                         1, n_channels, output_tile_size, output_tile_size

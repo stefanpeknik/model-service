@@ -14,8 +14,9 @@ from model_service.builders.contracts import (
     SharedArtifact,
     SpatialScoresModel,
 )
-from model_service.builders.registry import OutputSpec, get_builder
-from model_service.builders.score_grid import MEDIA_TYPE
+from model_service.builders.heatmap.score_grid import MEDIA_TYPE
+from model_service.builders.registry import get_builder
+from model_service.builders.spec import OutputSpec
 from model_service.providers.empaia.apps import AppMode, EmpaiaListing, app_definitions
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.image_io import _clip
@@ -134,7 +135,7 @@ class AppPublishabilityTests(unittest.TestCase):
         spec = get_builder("heatmap")
         spec = replace(
             spec,
-            result=outputs_model(
+            output_model=outputs_model(
                 {**spec.outputs, "glands": OutputSpec(kind=OutputKind.INLINE)}
             ),
         )
@@ -216,7 +217,7 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
         heatmap = get_builder("heatmap")
         with_score = replace(
             heatmap,
-            result=outputs_model(
+            output_model=outputs_model(
                 {**heatmap.outputs, "score": OutputSpec(kind=OutputKind.INLINE)}
             ),
         )

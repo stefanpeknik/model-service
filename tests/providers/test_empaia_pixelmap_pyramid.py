@@ -11,7 +11,7 @@ import numpy as np
 from rationai.empaia.typing import SlideInfo
 
 from model_service.builders.contracts import SharedArtifact
-from model_service.builders.score_grid import (
+from model_service.builders.heatmap.score_grid import (
     MEDIA_TYPE,
     ScoreGrid,
     write_score_grid,

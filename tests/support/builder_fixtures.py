@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, create_model
 
 from model_service.builders.contracts import (
     Artifact,
+    BuilderInputs,
     BuilderOutput,
     BuilderOutputs,
     BuilderResult,
     InferenceContract,
     InlineOutput,
+    Input,
     InputAccessContext,
     Invocation,
     OutputKind,
@@ -21,16 +24,17 @@ from model_service.builders.contracts import (
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from model_service.builders.registry import BuilderSpec, InputSpec, OutputSpec
+from model_service.builders.spec import BuilderSpec, InputSpec, OutputSpec
 
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
-    from pathlib import Path
 
     import numpy as np
 
     from model_service.builders.application import BuilderContext
+    from model_service.builders.contracts import ModelBinding
+    from model_service.builders.model_clients import HandleLookup
 
 
 SPATIAL_MODEL = SpatialScoresModel(
@@ -61,11 +65,65 @@ def spec(
     return BuilderSpec(
         id="test-builder",
         accepts=accepts,
-        inputs=inputs or {},
-        result=outputs_model(outputs or {}),
+        input_model=inputs_model(inputs or {}),
+        output_model=outputs_model(outputs or {}),
         configuration=configuration,
         implementation="tests.support.builder_fixtures:FunctionBuilder",
     )
+
+
+def inputs_model(inputs: Mapping[str, InputSpec]) -> type[BuilderInputs]:
+    """A builder inputs model declaring these inputs, for test specs."""
+    fields: dict[str, Any] = {}
+    for name, item in inputs.items():
+        marker = Input(item.media_type)
+        if item.required:
+            fields[name] = (Annotated[Path, marker], ...)
+        else:
+            fields[name] = (Annotated[Path | None, marker], None)
+    return create_model("TestInputs", __base__=BuilderInputs, **fields)
+
+
+class _Method:
+    def __init__(self, function: Callable[..., object]) -> None:
+        self.function = function
+        self.calls = 0
+
+    async def remote(self, *args: object) -> object:
+        self.calls += 1
+        return self.function(*args)
+
+
+class FakeDeployment:
+    """Stands in for a model's Ray Serve handle: `get_config` plus given methods."""
+
+    def __init__(
+        self, config: Mapping[str, object], **methods: Callable[..., object]
+    ) -> None:
+        self.get_config = _Method(lambda: dict(config))
+        for name, function in methods.items():
+            setattr(self, name, _Method(function))
+
+
+def running_config(model: ModelBinding) -> dict[str, object]:
+    """What a deployment of exactly this declaration reports from `get_config`."""
+    values = model.model_dump(exclude={"id", "contract"})
+    if "summaries" in values:
+        values["summaries"] = list(values["summaries"])
+    return values
+
+
+def deployments(*models: ModelBinding, **by_id: FakeDeployment) -> HandleLookup:
+    """A handle lookup serving each model as declared, or the given deployments by id."""
+    handles: dict[str, object] = {
+        model.id: FakeDeployment(running_config(model)) for model in models
+    }
+    handles.update(by_id)
+    return handles.__getitem__  # type: ignore[return-value]
+
+
+# The fixture models, running as declared.
+DECLARED = deployments(SPATIAL_MODEL, EMBEDDING_MODEL)
 
 
 def outputs_model(outputs: Mapping[str, OutputSpec]) -> type[BuilderOutputs]:

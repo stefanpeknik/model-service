@@ -183,7 +183,7 @@ async def get_config(self) -> dict[str, Any]:
   }
 ```
 
-The builder calls it with `await model.get_config.remote()` before each run and fails with `model_contract_mismatch` if the values differ from the model's catalog declaration; keep it cheap and avoid any I/O.
+The contract's model client (`src/model_service/builders/model_clients.py`) calls it with `await model.get_config.remote()` before each run and fails with `model_contract_mismatch` if the values differ from the model's catalog declaration; keep it cheap and avoid any I/O.
 
 A `tile-embedding` model (used by the `tile-embeddings` builder) instead provides `get_config()` returning `tile_size` and `summaries`, and `async def embed(self, tile)`: one CHW uint8 tile in, float32 `(dim,)` (one summary) or `(len(summaries), dim)` out, with the model's own preprocessing and pooling inside. See `src/model_service/models/virchow2.py`. Builders call both by handle; the raw HTTP route should wrap the same code. `tests/facade/test_model_catalog.py` fails if a model file's implementation lacks the methods of its contract.
 
@@ -258,12 +258,8 @@ Builders in `src/model_service/builders/` do the whole-slide work; a model only 
 2. **Tile embeddings:** a `tile-embedding` model works with the `tile-embeddings`
    builder, which writes one feature row per selected tile to HDF5.
 3. **Other slide-level outputs** (a slide score, annotations, statistics) need a
-   new builder: an entry in `src/model_service/builders/registry.py` declaring the contract it
-   accepts, its inputs, its configuration and its outputs model (a
-   `BuilderOutputs` subclass, one field per output, with `Artifact` giving a
-   file's media type and default name), and a class implementing
-   `Builder[Model, Configuration, Outputs]` whose `run` returns that model. It
-   then gets the public routes, scheduling and the SDK for free.
+   new builder, and a model that fits neither contract needs a new contract:
+   see [Adding a builder or an inference contract](adding-builders.md).
 
 ## Next Step
 

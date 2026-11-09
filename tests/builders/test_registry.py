@@ -16,11 +16,8 @@ from model_service.builders.contracts import (
     TileEmbeddingModel,
     UnknownBuilderError,
 )
-from model_service.builders.registry import (
-    BUILDERS,
-    HeatmapConfiguration,
-    get_builder,
-)
+from model_service.builders.heatmap.declaration import HeatmapConfiguration
+from model_service.builders.registry import BUILDERS, get_builder
 
 
 SPATIAL = SpatialScoresModel(
@@ -111,6 +108,40 @@ class BuilderRegistryTests(unittest.TestCase):
             validate_model(get_builder("heatmap"), EMBEDDING)
         with self.assertRaises(IncompatibleModelError):
             validate_model(get_builder("tile-embeddings"), SPATIAL)
+
+
+class BuilderWiringTests(unittest.TestCase):
+    """A registered builder's pieces must agree; a new builder is checked here."""
+
+    def test_every_builder_implements_its_declaration(self) -> None:
+        import importlib
+        from typing import get_args, get_origin
+
+        from model_service.builders.application import Builder
+
+        for spec in BUILDERS.values():
+            with self.subTest(spec.id):
+                module_name, _, class_name = spec.implementation.partition(":")
+                implementation = getattr(
+                    importlib.import_module(module_name), class_name
+                )
+                (base,) = [
+                    b for b in implementation.__orig_bases__ if get_origin(b) is Builder
+                ]
+                client, inputs, configuration, outputs = get_args(base)
+                self.assertEqual(client.contract, spec.accepts)
+                self.assertIs(inputs, spec.input_model)
+                self.assertIs(configuration, spec.configuration)
+                self.assertIs(outputs, spec.output_model)
+
+    def test_every_deployed_builder_is_registered(self) -> None:
+        from pathlib import Path
+
+        import yaml
+
+        values = Path(__file__).parents[2] / "deploy/helm/rayservice/values.yaml"
+        deployed = yaml.safe_load(values.read_text(encoding="utf-8"))["builders"]
+        self.assertLessEqual(set(deployed), set(BUILDERS))
 
 
 if __name__ == "__main__":

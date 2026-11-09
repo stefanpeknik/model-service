@@ -13,7 +13,7 @@ from model_service.builders.heatmap.processor import (
     HeatmapRequest,
     SlideHeatmapProcessor,
 )
-from model_service.builders.score_grid import ScoreGrid, read_score_grid
+from model_service.builders.heatmap.score_grid import ScoreGrid, read_score_grid
 from tests.support.builder_fixtures import write_slide
 
 
@@ -26,6 +26,13 @@ class LandmarkPredictor:
         self.output_tile_size = output_tile_size
         self.constant = constant
         self.calls = 0
+        self.declaration = SpatialScoresModel(
+            id="landmark",
+            tile_size=32,
+            output_tile_size=output_tile_size,
+            n_channels=1,
+            mpp=0.5,
+        )
 
     async def predict(self, tile: object) -> np.ndarray:
         self.calls += 1
@@ -75,15 +82,10 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
             write_slide(mask_path, selected)
         output = directory / "heatmap.npz"
         await SlideHeatmapProcessor(
-            predictor, num_threads=1, max_concurrent_tasks=2
+            predictor,  # type: ignore[arg-type]
+            num_threads=1,
+            max_concurrent_tasks=2,
         ).build(
-            SpatialScoresModel(
-                id="landmark",
-                tile_size=32,
-                output_tile_size=predictor.output_tile_size,
-                n_channels=1,
-                mpp=0.5,
-            ),
             HeatmapRequest(
                 slide_path=directory / "slide.tiff",
                 mask_path=mask_path,

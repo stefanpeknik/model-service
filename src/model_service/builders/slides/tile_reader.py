@@ -17,7 +17,7 @@ from openslide import PROPERTY_NAME_MPP_X, PROPERTY_NAME_MPP_Y, OpenSlideError
 from ratiopath.openslide import OpenSlide
 
 from model_service.builders.contracts import InvalidInvocation
-from model_service.builders.tissue import find_tissue
+from model_service.builders.slides.tissue import find_tissue
 
 
 if TYPE_CHECKING:
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
     from numpy.typing import NDArray
 
-    from model_service.builders.tissue import TissueMask
+    from model_service.builders.slides.tissue import TissueMask
 
 
 @contextmanager

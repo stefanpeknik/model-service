@@ -157,7 +157,7 @@ _Avoid_: Local path
 
 **Builder configuration**:
 A builder's processing settings (stride, background skipping) with defaults
-in `src/model_service/builders/registry.py`. Standalone requests do not set them; EMPAIA jobs may.
+in the builder's `declaration.py`. Standalone requests do not set them; EMPAIA jobs may.
 _Avoid_: Execution spec, model parameters
 
 **Model target MPP**:
@@ -188,7 +188,7 @@ _Avoid_: Coverage mask, when meaning tissue; tissue mask
 **Tissue mask**:
 A mask separating tissue from background, so a builder can skip empty glass.
 The heatmap builder computes its own from colour saturation
-(`src/model_service/builders/tissue.py`) until QC publishes one; QC computes one
+(`src/model_service/builders/slides/tissue.py`) until QC publishes one; QC computes one
 internally to filter its tiles but does not publish it.
 _Avoid_: Coverage mask
 

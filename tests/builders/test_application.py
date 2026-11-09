@@ -31,10 +31,11 @@ from model_service.builders.contracts import (
     SharedPathInput,
 )
 from model_service.builders.http import RunRequest, run_http
-from model_service.builders.registry import InputSpec
+from model_service.builders.spec import InputSpec
 from model_service.providers.empaia.input_access import EmpaiaInputAccessAdapter
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
 from tests.support.builder_fixtures import (
+    DECLARED,
     EMBEDDING_MODEL,
     SPATIAL_MODEL,
     FunctionBuilder,
@@ -122,6 +123,7 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
             spec(**spec_options),
             builder,
             {"test": FixedAccessAdapter(self.root)},
+            model_handles=DECLARED,
         )
 
     async def test_artifact_is_published_atomically_at_default_path(self) -> None:
@@ -190,8 +192,8 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
         seen: dict[str, Path | None] = {}
 
         async def build(context: BuilderContext) -> BuilderResult:
-            seen["slide"] = context.input_path("slide")
-            seen["mask"] = context.optional_input_path("region_of_interest")
+            seen["slide"] = context.inputs.slide  # type: ignore[attr-defined]
+            seen["mask"] = context.inputs.region_of_interest  # type: ignore[attr-defined]
             return BuilderResult({})
 
         builder = self.application(
@@ -236,6 +238,7 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
             spec(),
             run(build),
             {"test": RaisingAdapter(AssertionError("access must not open"))},
+            model_handles=DECLARED,
         )
         with self.assertRaises(IncompatibleModelError):
             await application.run(invocation("test"), EMBEDDING_MODEL)
@@ -267,7 +270,7 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
         seen: list[object] = []
 
         async def build(context: BuilderContext) -> BuilderResult:
-            seen.append(context.model)
+            seen.append(context.model.declaration)
             return BuilderResult({})
 
         await self.application(run(build)).run(invocation("test"), SPATIAL_MODEL)
@@ -378,7 +381,9 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
             "cleanup timeout": FixedAccessAdapter(self.root, TimingOutCloseAccess),
         }
         for name, adapter in adapters.items():
-            application = BuilderApplication(spec(), run(build), {"test": adapter})
+            application = BuilderApplication(
+                spec(), run(build), {"test": adapter}, model_handles=DECLARED
+            )
             with self.subTest(name), self.assertRaises(BuilderFailure) as raised:
                 await application.run(invocation("test"), SPATIAL_MODEL)
             self.assertEqual(raised.exception.code, "builder_internal_error")
@@ -457,7 +462,7 @@ class BuilderHTTPTests(unittest.IsolatedAsyncioTestCase):
             return Gateway()
 
         async def build(context: BuilderContext) -> BuilderResult:
-            context.input_path("slide")
+            context.inputs.slide  # type: ignore[attr-defined]  # noqa: B018
             return BuilderResult({"score": InlineOutput(1)})
 
         with TemporaryDirectory() as directory:
@@ -465,6 +470,7 @@ class BuilderHTTPTests(unittest.IsolatedAsyncioTestCase):
                 spec(inputs={"slide": InputSpec()}, outputs={"score": inline_output()}),
                 FunctionBuilder(build),
                 {"empaia": EmpaiaInputAccessAdapter(gateway_factory, Path(directory))},
+                model_handles=DECLARED,
             )
             api = FastAPI()
 
@@ -519,12 +525,13 @@ class BuilderHTTPTests(unittest.IsolatedAsyncioTestCase):
             application = BuilderApplication(
                 replace(
                     spec(outputs={"path": inline_output()}),
-                    result=outputs_model(
+                    output_model=outputs_model(
                         {"path": inline_output(), "artifact": artifact_output()}
                     ),
                 ),
                 FunctionBuilder(build),
                 {"shared_storage": SharedStorageAccessAdapter([Path(directory)])},
+                model_handles=DECLARED,
             )
             api = FastAPI()
 

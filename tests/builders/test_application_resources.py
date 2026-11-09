@@ -34,6 +34,7 @@ from model_service.scheduler.contracts import ExecutionStatus, ScheduleRequest
 from model_service.scheduler.scheduler import ExecutionScheduler
 from model_service.scheduler.worker import ExecutionWorker
 from tests.support.builder_fixtures import (
+    DECLARED,
     SPATIAL_MODEL,
     FunctionBuilder,
     artifact_output,
@@ -53,7 +54,9 @@ async def empty(_context: BuilderContext) -> BuilderResult:
 
 
 def application(builder: Any, adapter: Any, **options: Any) -> BuilderApplication:
-    return BuilderApplication(spec(), builder, {"test": adapter}, **options)
+    return BuilderApplication(
+        spec(), builder, {"test": adapter}, model_handles=DECLARED, **options
+    )
 
 
 class Adapter:
@@ -368,7 +371,10 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
             builder_spec = spec(outputs={"artifact": artifact_output()})
             shared_storage = SharedStorageAccessAdapter([Path(directory)])
             builder = BuilderApplication(
-                builder_spec, FunctionBuilder(build), {"shared_storage": shared_storage}
+                builder_spec,
+                FunctionBuilder(build),
+                {"shared_storage": shared_storage},
+                model_handles=DECLARED,
             )
 
             class Dispatch:

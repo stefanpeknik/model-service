@@ -9,7 +9,7 @@ from tempfile import TemporaryDirectory
 import numpy as np
 from ratiopath.openslide import OpenSlide
 
-from model_service.builders.tissue import find_tissue, tissue_pixels
+from model_service.builders.slides.tissue import find_tissue, tissue_pixels
 from tests.support.builder_fixtures import write_slide
 
 

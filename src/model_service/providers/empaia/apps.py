@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
     from model_service.builders.contracts import ModelBinding
-    from model_service.builders.registry import BuilderSpec
+    from model_service.builders.spec import BuilderSpec
     from model_service.providers.empaia.io import BuilderIo
     from model_service.providers.empaia.publishers import PublisherRegistry
 

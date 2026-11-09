@@ -5,6 +5,7 @@
 | [How model-service is put together](architecture/core.md) | Packages, request flow, contracts, capacity |
 | [Specification](spec.md) | What the core must do and how it was accepted |
 | [Adding models](guides/adding-models.md) | YAML-only onboarding, or a new inference implementation |
+| [Adding a builder or an inference contract](guides/adding-builders.md) | A new slide-level output, or a new kind of model, wired from declaration to Helm |
 | [Deployment guide](guides/deployment-guide.md), [configuration reference](guides/configuration-reference.md) | Helm chart and values |
 | [rationai-infra-test-ns deployment](operations/rationai-test-ns.md) | The test deployment beside the EMPAIA test instance: building images, upgrading, the GPU and quota rules |
 | [Core acceptance, 2026-10-14](operations/core-acceptance-2026-10-14.md) | Live evidence for the current core |

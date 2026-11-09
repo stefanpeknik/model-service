@@ -17,7 +17,6 @@ from model_service.builders.application import BuilderApplication
 from model_service.builders.client import HTTPBuilderDispatch
 from model_service.builders.contracts import TileEmbeddingModel
 from model_service.builders.embeddings.builder import EmbeddingBuilder
-from model_service.builders.embeddings.predictor import RayEmbeddingPredictor
 from model_service.builders.http import RunRequest, run_http
 from model_service.builders.registry import get_builder
 from model_service.builders.settings import WorkerSettings
@@ -28,6 +27,7 @@ from model_service.facade.synchronous import SynchronousBuilderService
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
 from model_service.providers.standalone import StandaloneProviderAdapter
 from model_service.scheduler.scheduler import ExecutionScheduler
+from tests.support.builder_contract import BuilderContractTests
 from tests.support.builder_fixtures import write_slide
 from tests.support.memory_repository import InMemoryExecutionRepository
 
@@ -82,6 +82,14 @@ class FakeEmbeddingDeployment:
         return np.full(shape, float(tile.mean()), dtype=np.float32)
 
 
+@unittest.skipUnless(HAS_NATIVE, "libvips or h5py is unavailable")
+class EmbeddingContractTests(BuilderContractTests, unittest.IsolatedAsyncioTestCase):
+    builder_id = "tile-embeddings"
+    model = TileEmbeddingModel(
+        id="encoder", tile_size=TILE, mpp=0.5, summaries=("global", "mean")
+    )
+
+
 @unittest.skipUnless(HAS_NATIVE, "libvips, h5py or lz4 is unavailable")
 class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
@@ -109,14 +117,9 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
         settings = WorkerSettings(num_threads=1, max_concurrent_tasks=3)
         application = BuilderApplication(
             get_builder("tile-embeddings"),
-            EmbeddingBuilder(
-                settings,
-                predictor=lambda model: RayEmbeddingPredictor(
-                    model,
-                    self.model,  # type: ignore[arg-type]
-                ),
-            ),
+            EmbeddingBuilder(settings),
             {"shared_storage": storage},
+            model_handles=lambda _model_id: self.model,  # type: ignore[arg-type, return-value]
         )
         ray = FastAPI()
 

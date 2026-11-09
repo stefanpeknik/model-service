@@ -5,17 +5,16 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from model_service.builders.application import Builder
-from model_service.builders.artifacts import atomic_artifact
-from model_service.builders.contracts import (
-    SharedArtifact,
-    SpatialScoresModel,
+from model_service.builders.heatmap.declaration import (
+    HeatmapConfiguration,
+    HeatmapInputs,
+    HeatmapOutputs,
 )
-from model_service.builders.heatmap.predictor import RayModelPredictor
 from model_service.builders.heatmap.processor import (
     HeatmapRequest,
     SlideHeatmapProcessor,
 )
-from model_service.builders.registry import HeatmapConfiguration, HeatmapOutputs
+from model_service.builders.model_clients import SpatialScoresClient
 
 
 if TYPE_CHECKING:
@@ -23,7 +22,9 @@ if TYPE_CHECKING:
     from model_service.builders.settings import WorkerSettings
 
 
-class HeatmapBuilder(Builder[SpatialScoresModel, HeatmapConfiguration, HeatmapOutputs]):
+class HeatmapBuilder(
+    Builder[SpatialScoresClient, HeatmapInputs, HeatmapConfiguration, HeatmapOutputs]
+):
     def __init__(self, settings: WorkerSettings) -> None:
         """Configure the builder for a replica.
 
@@ -33,47 +34,38 @@ class HeatmapBuilder(Builder[SpatialScoresModel, HeatmapConfiguration, HeatmapOu
         self._settings = settings
 
     async def run(
-        self, context: BuilderContext[SpatialScoresModel, HeatmapConfiguration]
+        self,
+        context: BuilderContext[
+            SpatialScoresClient, HeatmapInputs, HeatmapConfiguration
+        ],
     ) -> HeatmapOutputs:
         """Write a slide's score grid to an `.npz` artifact.
 
-        Checks the running model against its catalog entry first, then writes
-        through a temporary file so a failed run leaves no partial artifact.
-
         Args:
-            context: The run's inputs, model and configuration.
+            context: The verified model, the slide and optional region of interest,
+                and the configuration.
 
         Returns:
             The `heatmap` artifact.
 
         Raises:
-            BuilderFailure: The model's configuration is invalid or differs from its
-                catalog entry.
+            BuilderFailure: A model call failed or returned invalid scores.
             InvalidInvocation: The slide or region of interest is unreadable, or the
                 output would replace an input.
         """
-        model = context.model
-        config = context.configuration
-        predictor = RayModelPredictor(model.id)
-        await predictor.verify(model)
         processor = SlideHeatmapProcessor(
-            predictor,
+            context.model,
             num_threads=self._settings.num_threads,
             max_concurrent_tasks=self._settings.max_concurrent_tasks,
         )
-        slide = context.input_path("slide")
-        mask = context.optional_input_path("region_of_interest")
-        destination = context.output_path("heatmap")
-        inputs = (slide,) if mask is None else (slide, mask)
-        with atomic_artifact(destination, inputs=inputs) as temporary:
+        with context.write_artifact("heatmap") as heatmap:
             await processor.build(
-                model,
                 HeatmapRequest(
-                    slide_path=slide,
-                    mask_path=mask,
-                    output_path=temporary,
-                    stride_fraction=config.stride_fraction,
-                    skip_background=config.skip_background,
-                ),
+                    slide_path=context.inputs.slide,
+                    mask_path=context.inputs.region_of_interest,
+                    output_path=heatmap.path,
+                    stride_fraction=context.configuration.stride_fraction,
+                    skip_background=context.configuration.skip_background,
+                )
             )
-        return HeatmapOutputs(heatmap=SharedArtifact(path=str(destination)))
+        return HeatmapOutputs(heatmap=heatmap.artifact)

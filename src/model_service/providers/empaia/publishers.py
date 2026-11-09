@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from model_service.builders.contracts import BuilderOutput, ModelBinding
-    from model_service.builders.registry import OutputSpec
+    from model_service.builders.spec import OutputSpec
     from model_service.providers.empaia.gateway import EmpaiaGateway
 
 
@@ -204,7 +204,7 @@ def default_publishers() -> PublisherRegistry:
     Returns:
         The registry.
     """
-    from model_service.builders.score_grid import MEDIA_TYPE as SCORE_GRID
+    from model_service.builders.heatmap.score_grid import MEDIA_TYPE as SCORE_GRID
     from model_service.providers.empaia.image_io import ScoreGridPublisher
 
     publishers: dict[PublisherKey, OutputPublisher] = {

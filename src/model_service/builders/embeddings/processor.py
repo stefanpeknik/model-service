@@ -16,8 +16,7 @@ if TYPE_CHECKING:
     import numpy as np
     from numpy.typing import NDArray
 
-    from model_service.builders.contracts import TileEmbeddingModel
-    from model_service.builders.embeddings.predictor import EmbeddingPredictor
+    from model_service.builders.model_clients import TileEmbeddingClient
 
 
 async def build_embeddings(
@@ -25,8 +24,7 @@ async def build_embeddings(
     mask_path: Path | None,
     output_path: Path,
     *,
-    predictor: EmbeddingPredictor,
-    model: TileEmbeddingModel,
+    client: TileEmbeddingClient,
     stride_fraction: float,
     num_threads: int,
     max_concurrent_tasks: int,
@@ -40,22 +38,22 @@ async def build_embeddings(
         slide_path: Slide to tile.
         mask_path: Optional region-of-interest mask limiting which tiles are read.
         output_path: HDF5 file to create.
-        predictor: Predictor that embeds each tile.
-        model: Declaration giving tile size, mpp and summary names.
+        client: Client of the model that embeds each tile.
         stride_fraction: Stride as a fraction of the tile size.
         num_threads: Threads for slide reads.
         max_concurrent_tasks: Tiles in flight at once.
 
     Raises:
         InvalidInvocation: The slide or mask is not a readable slide.
-        BuilderFailure: Feature dimensions change between tiles, or the predictor
+        BuilderFailure: Feature dimensions change between tiles, or the model
             fails.
     """
     import h5py
     from ratiopath.tiling import grid_tiles
 
-    from model_service.builders.tile_reader import TileReader, open_slide
+    from model_service.builders.slides.tile_reader import TileReader, open_slide
 
+    model = client.declaration
     tile_size = model.tile_size
     stride = max(1, round(tile_size * stride_fraction))
     loop = asyncio.get_running_loop()
@@ -93,7 +91,7 @@ async def build_embeddings(
 
         async def infer(x: int, y: int) -> tuple[int, int, NDArray[np.float32] | None]:
             tile = await loop.run_in_executor(executor, reader.read, x, y, tile_size)
-            return x, y, None if tile is None else await predictor.predict(tile)
+            return x, y, None if tile is None else await client.embed(tile)
 
         async def append_oldest() -> None:
             nonlocal features

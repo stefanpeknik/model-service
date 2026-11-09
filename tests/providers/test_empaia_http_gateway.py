@@ -14,7 +14,11 @@ from aiohttp.test_utils import TestServer
 from rationai.empaia import Client
 
 from model_service.builders.contracts import SharedArtifact
-from model_service.builders.score_grid import MEDIA_TYPE, ScoreGrid, write_score_grid
+from model_service.builders.heatmap.score_grid import (
+    MEDIA_TYPE,
+    ScoreGrid,
+    write_score_grid,
+)
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.http_gateway import (
     HttpEmpaiaGateway,

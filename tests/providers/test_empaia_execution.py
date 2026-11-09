@@ -19,7 +19,8 @@ from model_service.builders.contracts import (
     SharedArtifact,
     SpatialScoresModel,
 )
-from model_service.builders.registry import HeatmapOutputs, get_builder
+from model_service.builders.heatmap.declaration import HeatmapOutputs
+from model_service.builders.registry import get_builder
 from model_service.providers.empaia.gateway import (
     EmpaiaGatewayError,
     EmpaiaInputState,
@@ -42,6 +43,7 @@ from model_service.scheduler.providers import (
 )
 from model_service.scheduler.scheduler import ExecutionScheduler
 from model_service.scheduler.worker import ExecutionWorker
+from tests.support.builder_fixtures import deployments
 from tests.support.memory_repository import InMemoryExecutionRepository
 
 
@@ -136,6 +138,7 @@ def copy_inputs_application(
         get_builder("heatmap"),
         CopyInputsBuilder(),
         {"empaia": EmpaiaInputAccessAdapter(service.gateway, Path(directory))},
+        model_handles=deployments(MODEL),
     )
 
 
@@ -257,8 +260,8 @@ class CopyInputsBuilder:
     """Write both materialized inputs into the artifact, proving access reaches the builder."""
 
     async def run(self, context: BuilderContext) -> BuilderResult:
-        slide = context.input_path("slide").read_bytes()
-        roi = context.input_path("region_of_interest").read_bytes()
+        slide = context.inputs.slide.read_bytes()
+        roi = context.inputs.region_of_interest.read_bytes()
         output = context.output_path("heatmap")
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(slide + b"|" + roi)

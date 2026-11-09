@@ -11,28 +11,26 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import ModuleType, SimpleNamespace
 from typing import TYPE_CHECKING, Any, Self
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
 import numpy as np
 
 from model_service.builders.application import BuilderApplication
 from model_service.builders.contracts import (
-    BuilderFailure,
-    FailureCode,
     SharedArtifact,
     SharedPathInput,
     SpatialScoresModel,
 )
 from model_service.builders.heatmap.builder import HeatmapBuilder
-from model_service.builders.heatmap.predictor import RayModelPredictor
 from model_service.builders.heatmap.processor import (
     HeatmapRequest,
     SlideHeatmapProcessor,
 )
+from model_service.builders.heatmap.score_grid import read_score_grid
 from model_service.builders.registry import get_builder
-from model_service.builders.score_grid import read_score_grid
 from model_service.builders.settings import WorkerSettings
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
+from tests.support.builder_contract import BuilderContractTests
 from tests.support.builder_fixtures import invocation, write_slide
 
 
@@ -114,7 +112,9 @@ def module(name: str, **members: object) -> ModuleType:
 class HeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
     async def test_orchestration_score_grid_and_cleanup(self) -> None:
         recorded: dict[str, Any] = {}
-        predictor = SimpleNamespace(predict=AsyncMock(return_value=0.75))
+        predictor = SimpleNamespace(
+            predict=AsyncMock(return_value=0.75), declaration=spatial()
+        )
 
         def grid_tiles(**options: object) -> list[tuple[int, int]]:
             recorded["grid_options"] = options
@@ -129,8 +129,8 @@ class HeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
             ),
             "ratiopath.openslide": module("ratiopath.openslide", OpenSlide=FakeSlide),
             "ratiopath.tiling": module("ratiopath.tiling", grid_tiles=grid_tiles),
-            "model_service.builders.tile_reader": module(
-                "model_service.builders.tile_reader",
+            "model_service.builders.slides.tile_reader": module(
+                "model_service.builders.slides.tile_reader",
                 TileReader=FakeTileReader,
                 open_slide=lambda path, _name: FakeSlide(str(path)),
             ),
@@ -146,7 +146,7 @@ class HeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
             processor = SlideHeatmapProcessor(
                 predictor, num_threads=1, max_concurrent_tasks=2
             )
-            await processor.build(spatial(), request)
+            await processor.build(request)
             np.testing.assert_array_equal(recorded["batch"], [[[[0.75]]]])
             grid = read_score_grid(output)
             np.testing.assert_array_equal(grid.values, 0.25)
@@ -158,13 +158,15 @@ class HeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
             )
 
             predictor.predict.return_value = np.array([[0.1, 0.2], [0.3, 0.4]])
-            await processor.build(spatial(output_tile_size=2), request)
+            predictor.declaration = spatial(output_tile_size=2)
+            await processor.build(request)
             np.testing.assert_allclose(recorded["batch"], [[[[0.1, 0.2], [0.3, 0.4]]]])
 
             predictor.predict.return_value = [0.75]
             with self.assertRaises(ValueError):
-                await processor.build(spatial(output_tile_size=2), request)
+                await processor.build(request)
             self.assertTrue(recorded["cleaned"])
+            predictor.declaration = spatial()
 
             cancelled = asyncio.Event()
             both_started = asyncio.Event()
@@ -190,7 +192,7 @@ class HeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
             predictor.predict.side_effect = failing_prediction
             recorded["check_cleanup"] = lambda: self.assertTrue(cancelled.is_set())
             with self.assertRaisesRegex(RuntimeError, "prediction failed"):
-                await processor.build(spatial(), request)
+                await processor.build(request)
             self.assertTrue(cancelled.is_set())
             self.assertTrue(recorded["cleaned"])
 
@@ -213,7 +215,7 @@ class HeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
             loop.set_exception_handler(lambda _loop, context: unhandled.append(context))
             try:
                 with self.assertRaisesRegex(RuntimeError, "simultaneous failure"):
-                    await processor.build(spatial(), request)
+                    await processor.build(request)
                 gc.collect()
                 await asyncio.sleep(0)
                 self.assertEqual(unhandled, [])
@@ -240,47 +242,9 @@ def fake_handle(config: dict[str, object], score: object = 0.75) -> SimpleNamesp
     )
 
 
-def ray_module(handle: object) -> dict[str, ModuleType]:
-    get_handle = Mock(return_value=handle)
-    return {"ray": module("ray", serve=SimpleNamespace(get_app_handle=get_handle))}
-
-
-class RayModelPredictorTests(unittest.IsolatedAsyncioTestCase):
-    async def test_verify_accepts_matching_configuration_and_forwards_tiles(
-        self,
-    ) -> None:
-        handle = fake_handle(
-            {"tile_size": 4, "output_tile_size": 1, "n_channels": 1, "mpp": 0.5}
-        )
-        modules = ray_module(handle)
-        with patch.dict(sys.modules, modules):
-            predictor = RayModelPredictor("classifier")
-            modules["ray"].serve.get_app_handle.assert_not_called()
-            await predictor.verify(spatial())
-            tile = np.zeros((3, 4, 4), dtype=np.uint8)
-            self.assertEqual(await predictor.predict(tile), 0.75)
-        modules["ray"].serve.get_app_handle.assert_called_once_with("classifier")
-        self.assertIs(handle.predict.remote.call_args.args[0], tile)
-
-    async def test_verify_rejects_a_running_model_that_differs(self) -> None:
-        valid = {"tile_size": 4, "output_tile_size": 1, "n_channels": 1, "mpp": 0.5}
-        for config in (
-            valid | {"tile_size": 8},
-            valid | {"mpp": 0.25},
-            valid | {"n_channels": 2},
-            valid | {"tile_size": True},
-            valid | {"mpp": float("nan")},
-            {"tile_size": 4},
-            valid | {"unexpected": 1},
-        ):
-            with (
-                self.subTest(config=config),
-                patch.dict(sys.modules, ray_module(fake_handle(config))),
-                self.assertRaises(BuilderFailure) as raised,
-            ):
-                await RayModelPredictor("classifier").verify(spatial())
-            self.assertEqual(raised.exception.code, FailureCode.MODEL_CONTRACT_MISMATCH)
-            self.assertFalse(raised.exception.retryable)
+class HeatmapContractTests(BuilderContractTests, unittest.IsolatedAsyncioTestCase):
+    builder_id = "heatmap"
+    model = spatial(tile_size=32, output_tile_size=4)
 
 
 class HeatmapBuilderTests(unittest.IsolatedAsyncioTestCase):
@@ -315,17 +279,17 @@ class HeatmapBuilderTests(unittest.IsolatedAsyncioTestCase):
             get_builder("heatmap"),
             HeatmapBuilder(WorkerSettings(num_threads=1, max_concurrent_tasks=2)),
             {"shared_storage": SharedStorageAccessAdapter([self.root])},
+            model_handles=lambda _model_id: handle,  # type: ignore[arg-type, return-value]
         )
-        with patch("ray.serve.get_app_handle", return_value=handle):
-            result = await application.run(
-                invocation(
-                    "shared_storage",
-                    {"root": str(self.root)},
-                    inputs=inputs,
-                    resolved_configuration=configuration,
-                ),
-                self.model,
-            )
+        result = await application.run(
+            invocation(
+                "shared_storage",
+                {"root": str(self.root)},
+                inputs=inputs,
+                resolved_configuration=configuration,
+            ),
+            self.model,
+        )
         artifact = result.outputs["heatmap"]
         assert isinstance(artifact, SharedArtifact)
         return artifact
@@ -389,14 +353,6 @@ class HeatmapBuilderTests(unittest.IsolatedAsyncioTestCase):
                 if case == "default":
                     np.testing.assert_array_equal(scores[:, 64:], 0)
 
-    async def test_contract_mismatch_fails_before_writing(self) -> None:
-        handle = fake_handle(self.config | {"tile_size": 64})
-        with self.assertRaises(BuilderFailure) as raised:
-            await self.run_builder(handle)
-        self.assertEqual(raised.exception.code, FailureCode.MODEL_CONTRACT_MISMATCH)
-        handle.predict.remote.assert_not_awaited()
-        self.assertEqual(list(self.root.glob("*heatmap*")), [])
-
     async def test_slide_smaller_than_the_model_tile_is_padded(self) -> None:
         self.model = spatial(tile_size=1024, output_tile_size=1024)
         handle = fake_handle(
@@ -407,17 +363,17 @@ class HeatmapBuilderTests(unittest.IsolatedAsyncioTestCase):
         np.testing.assert_allclose(self.scores(artifact), 0.375)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class UnreadableInputTests(unittest.TestCase):
     def test_a_file_that_is_not_a_slide_is_an_invalid_input(self) -> None:
         from model_service.builders.contracts import InvalidInvocation
-        from model_service.builders.tile_reader import open_slide
+        from model_service.builders.slides.tile_reader import open_slide
 
         with TemporaryDirectory() as directory:
             path = Path(directory) / "notes.txt"
             path.write_text("not a slide")
             with self.assertRaises(InvalidInvocation), open_slide(path, "slide"):
                 pass
+
+
+if __name__ == "__main__":
+    unittest.main()

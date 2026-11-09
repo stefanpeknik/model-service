@@ -30,7 +30,7 @@ behind one public API that can also run builders durably.
 | --- | --- |
 | `src/model_service/models/` | Inference implementations (binary classifier, segmentation, Virchow2, Prov-GigaPath). Each serves any trained model that fits it; the trained model is chosen in YAML. |
 | `deploy/helm/rayservice/models/` | One file per model deployment: an `inference` declaration plus the Ray Serve application. The same file feeds the RayService and the facade's catalog. |
-| `src/model_service/builders/` | Builder registry, the builder runtime (validation, deadline, input access, cleanup) and the two builders. One Ray ingress, `src/model_service/builders/serve.py`, hosts any builder. |
+| `src/model_service/builders/` | The builder runtime (validation, model verification, deadline, input access, atomic artifacts, cleanup), one model client per inference contract (`model_clients.py`), shared slide reading (`slides/`) and one package per builder (`heatmap/`, `embeddings/`: `declaration.py`, `builder.py`, processing), listed in `registry.py`. One Ray ingress, `src/model_service/builders/serve.py`, hosts any builder. See [Adding a builder](../guides/adding-builders.md). |
 | `src/model_service/facade/` | The facade: public API, model catalog, synchronous runs, raw inference proxy, process wiring. |
 | `src/model_service/scheduler/` | Durable executions: admission, leases with fencing, retries, deadlines, cancellation, provider finish. PostgreSQL with Yoyo migrations. |
 | `src/model_service/providers/` | Providers: standalone (shared storage) and EMPAIA (AppService input and publication). `providers/composition.py` lists them; the facade and the builder ingress compose what each contributes and name none of them. |
@@ -94,8 +94,14 @@ finish. `POST /v1/executions/lookup` polls many executions at once.
 
 | Contract | Models | How a builder calls it | Declared where |
 | --- | --- | --- | --- |
-| `spatial-scores` | binary classifier, semantic segmentation, constant test model | Ray handle `predict(CHW uint8)`; the heatmap builder checks `get_config()` against the declaration before starting | `tile_size`, `output_tile_size`, `n_channels`, `mpp` in `user_config` |
-| `tile-embedding` | Virchow2, Prov-GigaPath | Ray handle `embed(CHW uint8)` → pooled features; the builder checks `get_config()` (`tile_size`, `summaries`) first | `tile_size` in `user_config`; `mpp`, `summaries` in `inference` |
+| `spatial-scores` | binary classifier, semantic segmentation, constant test model | `SpatialScoresClient`: Ray handle `predict(CHW uint8)` → `n_channels x output_tile_size²` finite scores | `tile_size`, `output_tile_size`, `n_channels`, `mpp` in `user_config` |
+| `tile-embedding` | Virchow2, Prov-GigaPath | `TileEmbeddingClient`: Ray handle `embed(CHW uint8)` → finite float32 features per summary | `tile_size` in `user_config`; `mpp`, `summaries` in `inference` |
+
+Before a builder runs, the application checks the running model's
+`get_config()` against its catalog entry (`model_contract_mismatch` if they
+differ). Every builder of a contract then calls the model through the same
+client: a failed call is `model_failed` (retried), and an answer outside the
+contract is `invalid_model_output` (not retried).
 
 ## Capacity and failure behaviour
 

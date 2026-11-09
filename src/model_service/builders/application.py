@@ -10,14 +10,17 @@ import asyncio
 import inspect
 import logging
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from model_service.builders.artifacts import atomic_artifact
 from model_service.builders.cleanup import close_resource
 from model_service.builders.contracts import (
     BuilderFailure,
+    BuilderInputs,
     BuilderOutputs,
     BuilderResult,
     ContractViolation,
@@ -29,10 +32,11 @@ from model_service.builders.contracts import (
     SharedArtifact,
     is_json_value,
 )
+from model_service.builders.model_clients import client_for, ray_handle
 
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Mapping
+    from collections.abc import Awaitable, Iterator, Mapping
 
     from pydantic import BaseModel
 
@@ -40,10 +44,9 @@ if TYPE_CHECKING:
         InputAccessKind,
         Invocation,
         ModelBinding,
-        SpatialScoresModel,
-        TileEmbeddingModel,
     )
-    from model_service.builders.registry import BuilderSpec
+    from model_service.builders.model_clients import HandleLookup, ModelClient
+    from model_service.builders.spec import BuilderSpec
 
 
 logger = logging.getLogger(__name__)
@@ -116,48 +119,29 @@ class AccessAdapter(ABC):
 
 
 @dataclass(frozen=True, slots=True)
-class BuilderContext[M: SpatialScoresModel | TileEmbeddingModel, C: BaseModel]:
-    """What one builder run gets; `M` and `C` are its model and configuration types.
+class BuilderContext[K: ModelClient[Any], I: BuilderInputs, C: BaseModel]:
+    """What one builder run gets: its model, inputs and configuration, typed.
 
-    The application checks the model against the builder's contract and resolves
-    the configuration with the builder's own class before building it, so a
-    builder can rely on these types without checking them again.
+    The application checks the model against the builder's contract and its
+    running deployment against the catalog, resolves the inputs to local files
+    and the configuration with the builder's own classes before building it, so
+    a builder can rely on these types without checking them again.
     """
 
     access: InputAccess
-    input_names: frozenset[str]
+    # The verified client of the model's contract; `model.declaration` is its
+    # catalog entry.
+    model: K
+    inputs: I
     configuration: C
-    model: M
     deadline_at: datetime
     output_paths: Mapping[str, str]
-
-    def input_path(self, name: str) -> Path:
-        """Return the local path of a required input.
-
-        Args:
-            name: Input name from the builder's declaration.
-
-        Returns:
-            Local path of the input.
-        """
-        return self.access.input_path(name)
-
-    def optional_input_path(self, name: str) -> Path | None:
-        """Return the local path of an optional input, if the invocation supplied it.
-
-        Args:
-            name: Input name from the builder's declaration.
-
-        Returns:
-            Local path of the input, or None when the invocation omitted it.
-        """
-        return self.access.input_path(name) if name in self.input_names else None
 
     def output_path(self, output: str) -> Path:
         """Return where to write a declared artifact output.
 
         Uses the invocation's `output_path` override when it set one, otherwise the
-        output's default path.
+        output's default path. `write_artifact` is the usual way to write one.
 
         Args:
             output: Output name from the builder's declaration.
@@ -170,18 +154,63 @@ class BuilderContext[M: SpatialScoresModel | TileEmbeddingModel, C: BaseModel]:
         """
         return self.access.output_path(self.output_paths[output])
 
+    @contextmanager
+    def write_artifact(self, output: str) -> Iterator[PendingArtifact]:
+        """Write an artifact output atomically.
+
+        The builder writes `pending.path`, a temporary file next to the
+        destination; on success it replaces the destination, and on failure it
+        is removed, so a failed run leaves no partial artifact. After the block,
+        `pending.artifact` is the output to return.
+
+        Args:
+            output: Output name from the builder's declaration.
+
+        Yields:
+            The pending artifact.
+
+        Raises:
+            InvalidInvocation: The destination is one of the inputs.
+            RuntimeError: The block did not write a regular file.
+        """
+        destination = self.output_path(output)
+        with atomic_artifact(destination, inputs=self.inputs.paths()) as temporary:
+            yield PendingArtifact(path=temporary, destination=destination)
+
+
+@dataclass(frozen=True, slots=True)
+class PendingArtifact:
+    """An artifact being written by `BuilderContext.write_artifact`."""
+
+    # Where the builder writes; closed before the block ends.
+    path: Path
+    destination: Path
+
+    @property
+    def artifact(self) -> SharedArtifact:
+        """The finished artifact, to return in the builder's outputs."""
+        return SharedArtifact(path=str(self.destination))
+
 
 class Builder[
-    M: SpatialScoresModel | TileEmbeddingModel,
+    K: ModelClient[Any],
+    I: BuilderInputs,
     C: BaseModel,
     R: BuilderOutputs,
 ](ABC):
+    """Produces a builder's outputs from a slide and a model.
+
+    `K` is the model client of the contract it accepts; `I`, `C` and `R` are its
+    declared inputs, configuration and outputs models.
+    """
+
     @abstractmethod
-    async def run(self, context: BuilderContext[M, C]) -> R:
+    async def run(self, context: BuilderContext[K, I, C]) -> R:
         """Produce the builder's outputs for one invocation.
 
         Args:
-            context: Resolved inputs, configuration, model and deadline.
+            context: Verified model client, resolved inputs, configuration and
+                deadline.
 
         Returns:
             The builder's outputs model, one field per declared output.
@@ -260,10 +289,11 @@ class BuilderApplication:
     def __init__(
         self,
         spec: BuilderSpec,
-        builder: Builder[Any, Any, Any],
+        builder: Builder[Any, Any, Any, Any],
         access_adapters: Mapping[InputAccessKind, AccessAdapter],
         *,
         cleanup_timeout_seconds: float = 10,
+        model_handles: HandleLookup = ray_handle,
     ) -> None:
         """Bind a builder to its declaration and access adapters.
 
@@ -272,11 +302,14 @@ class BuilderApplication:
             builder: Builder implementation to run.
             access_adapters: Adapter per input access kind an invocation may name.
             cleanup_timeout_seconds: Time allowed for closing the input access.
+            model_handles: Looks up a model's deployment handle by id; replaceable
+                in tests.
         """
         self._spec = spec
         self._builder = builder
         self._access_adapters = dict(access_adapters)
         self._cleanup_timeout_seconds = cleanup_timeout_seconds
+        self._model_handles = model_handles
 
     async def run(
         self,
@@ -303,8 +336,10 @@ class BuilderApplication:
                 invalid, or the model is incompatible.
             ContractViolation: The builder returned outputs that differ from its
                 declaration.
-            BuilderFailure: The deadline passed (not retryable), the builder or the
-                cleanup failed unexpectedly (retryable), or the builder raised one.
+            BuilderFailure: The running model differs from its catalog entry, the
+                deadline passed (both not retryable), the builder or the cleanup
+                failed unexpectedly (retryable), or the model client or builder
+                raised one.
         """
         validate_invocation(self._spec, invocation)
         validate_model(self._spec, model)
@@ -318,14 +353,16 @@ class BuilderApplication:
                     access = await self._create_access(
                         invocation, execution_context or ExecutionContext(), model
                     )
+                    client = client_for(model, self._model_handles)
+                    await client.verify()
                     outputs = await self._builder.run(
                         BuilderContext(
                             access=access,
-                            input_names=frozenset(invocation.inputs),
+                            model=client,
+                            inputs=self._resolve_inputs(invocation, access),
                             configuration=self._spec.resolve_configuration(
                                 invocation.resolved_configuration
                             ),
-                            model=model,
                             deadline_at=invocation.deadline_at,
                             output_paths=self._output_paths(invocation),
                         )
@@ -357,6 +394,22 @@ class BuilderApplication:
             if access is not None:
                 await self._close(access, primary_failure)
         return result
+
+    def _resolve_inputs(
+        self, invocation: Invocation, access: InputAccess
+    ) -> BuilderInputs:
+        """Resolve the supplied inputs to local files, as the builder's inputs model.
+
+        Args:
+            invocation: Invocation naming the supplied inputs.
+            access: Access resolving each input to a local file.
+
+        Returns:
+            The builder's `BuilderInputs` subclass; omitted optional inputs are None.
+        """
+        return self._spec.input_model(
+            **{name: access.input_path(name) for name in invocation.inputs}
+        )
 
     def _output_paths(self, invocation: Invocation) -> dict[str, str]:
         """Map each artifact output to the path the builder writes it to.

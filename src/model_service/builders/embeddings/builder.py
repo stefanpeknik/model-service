@@ -5,81 +5,61 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from model_service.builders.application import Builder
-from model_service.builders.artifacts import atomic_artifact
-from model_service.builders.contracts import (
-    SharedArtifact,
-    TileEmbeddingModel,
+from model_service.builders.embeddings.declaration import (
+    EmbeddingConfiguration,
+    EmbeddingInputs,
+    EmbeddingOutputs,
 )
-from model_service.builders.embeddings.predictor import RayEmbeddingPredictor
 from model_service.builders.embeddings.processor import build_embeddings
-from model_service.builders.registry import EmbeddingConfiguration, EmbeddingOutputs
+from model_service.builders.model_clients import TileEmbeddingClient
 
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from model_service.builders.application import BuilderContext
-    from model_service.builders.embeddings.predictor import EmbeddingPredictor
     from model_service.builders.settings import WorkerSettings
 
 
 class EmbeddingBuilder(
-    Builder[TileEmbeddingModel, EmbeddingConfiguration, EmbeddingOutputs]
+    Builder[
+        TileEmbeddingClient, EmbeddingInputs, EmbeddingConfiguration, EmbeddingOutputs
+    ]
 ):
-    def __init__(
-        self,
-        settings: WorkerSettings,
-        *,
-        predictor: Callable[[TileEmbeddingModel], EmbeddingPredictor] = (
-            RayEmbeddingPredictor
-        ),
-    ) -> None:
+    def __init__(self, settings: WorkerSettings) -> None:
         """Configure the builder for a replica.
 
         Args:
             settings: Replica settings for thread and concurrency limits.
-            predictor: Factory creating a predictor for a model; replaceable in tests.
         """
         self._settings = settings
-        self._predictor = predictor
 
     async def run(
-        self, context: BuilderContext[TileEmbeddingModel, EmbeddingConfiguration]
+        self,
+        context: BuilderContext[
+            TileEmbeddingClient, EmbeddingInputs, EmbeddingConfiguration
+        ],
     ) -> EmbeddingOutputs:
         """Write a slide's tile embeddings to an HDF5 artifact.
 
-        Checks the running model against its catalog entry first, then writes
-        through a temporary file so a failed run leaves no partial artifact.
-
         Args:
-            context: The run's inputs, model and configuration.
+            context: The verified model, the slide and optional region of interest,
+                and the configuration.
 
         Returns:
             The `embeddings` artifact.
 
         Raises:
-            BuilderFailure: The model's configuration differs from its catalog
-                entry, a model request fails, or the model returns invalid features.
+            BuilderFailure: A model call failed or returned invalid features.
             InvalidInvocation: The slide or region of interest is unreadable, or the
                 output would replace an input.
         """
-        model = context.model
-        config = context.configuration
-        predictor = self._predictor(model)
-        await predictor.verify()
-        slide = context.input_path("slide")
-        mask = context.optional_input_path("region_of_interest")
-        destination = context.output_path("embeddings")
-        inputs = (slide,) if mask is None else (slide, mask)
-        with atomic_artifact(destination, inputs=inputs) as temporary:
+        with context.write_artifact("embeddings") as embeddings:
             await build_embeddings(
-                slide,
-                mask,
-                temporary,
-                predictor=predictor,
-                model=model,
-                stride_fraction=config.stride_fraction,
+                context.inputs.slide,
+                context.inputs.region_of_interest,
+                embeddings.path,
+                client=context.model,
+                stride_fraction=context.configuration.stride_fraction,
                 num_threads=self._settings.num_threads,
                 max_concurrent_tasks=self._settings.max_concurrent_tasks,
             )
-        return EmbeddingOutputs(embeddings=SharedArtifact(path=str(destination)))
+        return EmbeddingOutputs(embeddings=embeddings.artifact)

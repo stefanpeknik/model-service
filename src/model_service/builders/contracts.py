@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, Literal
 
 from pydantic import (
     BaseModel,
@@ -22,6 +22,10 @@ from pydantic import (
 )
 from pydantic import JsonValue as PydanticJsonValue
 from pydantic.dataclasses import dataclass as validated_dataclass
+
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 _JSON_VALUE: TypeAdapter[PydanticJsonValue] = TypeAdapter(
@@ -261,6 +265,37 @@ class BuilderOutputs(BaseModel):
             A `BuilderResult` with one entry per field.
         """
         return BuilderResult(outputs=dict(self))
+
+
+@dataclass(frozen=True, slots=True)
+class Input:
+    """Declares a `BuilderInputs` field's media type.
+
+    Used as `Annotated[Path, Input(...)]`, or `Annotated[Path | None, Input(...)]`
+    for an optional input.
+    """
+
+    media_type: str | None = None
+
+
+class BuilderInputs(BaseModel):
+    """A builder's inputs, one field per input, as local files.
+
+    A field is a `Path` (required) or `Path | None` defaulting to None
+    (optional), annotated with `Input`. The registry derives the builder's input
+    declaration from the fields; the application resolves each supplied input to
+    a local file through the input access and hands the builder an instance.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    def paths(self) -> tuple[Path, ...]:
+        """Return the supplied inputs' paths.
+
+        Returns:
+            One path per input the invocation supplied, in field order.
+        """
+        return tuple(path for path in dict(self).values() if path is not None)
 
 
 class FailureCode(StrEnum):

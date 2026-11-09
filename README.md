@@ -30,6 +30,14 @@ A model that fits an existing implementation needs only YAML: add
 `deploy/helm/rayservice/models/<id>.yaml`, list it under `models:` in the values file,
 and `helm upgrade`. See [Adding models](docs/guides/adding-models.md).
 
+## Add a builder
+
+A new slide-level output is a builder package under
+`src/model_service/builders/` (a declaration and a `Builder`), one line in
+`registry.py` and an entry under `builders:` in the values file. A new kind of
+model adds an inference contract and its model client. See
+[Adding a builder or an inference contract](docs/guides/adding-builders.md).
+
 ## Use it
 
 ```python

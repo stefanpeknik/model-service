@@ -204,11 +204,6 @@ if __name__ == "__main__":
     unittest.main()
 
 
-# Methods a builder calls through a deployment handle, per contract.
-_HANDLE_METHODS = {
-    InferenceContract.SPATIAL_SCORES: ("get_config", "predict"),
-    InferenceContract.TILE_EMBEDDING: ("get_config", "embed"),
-}
 MODEL_FILES = sorted(
     Path(__file__).parents[2].joinpath("deploy/helm/rayservice/models").rglob("*.yaml")
 )
@@ -222,6 +217,8 @@ class ModelImplementationTests(unittest.TestCase):
 
         import yaml
 
+        from model_service.builders.model_clients import CLIENTS
+
         self.assertTrue(MODEL_FILES)
         for path in MODEL_FILES:
             with self.subTest(path.name):
@@ -233,7 +230,8 @@ class ModelImplementationTests(unittest.TestCase):
                     document["serve"]["deployments"][0]["name"],
                 )
                 implementation = deployment.func_or_class
-                for method in _HANDLE_METHODS[contract]:
+                # The methods the contract's model client calls by handle.
+                for method in CLIENTS[contract].methods:
                     self.assertTrue(
                         callable(getattr(implementation, method, None)),
                         f"{module_name} lacks {method} for {contract}",

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from model_service.builders.contracts import SharedArtifact, SpatialScoresModel
-from model_service.builders.score_grid import read_score_grid
+from model_service.builders.heatmap.score_grid import read_score_grid
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.http_gateway import RectangleMaskWriter, SlideLevel
 from model_service.providers.empaia.publishers import OutputPublisher
