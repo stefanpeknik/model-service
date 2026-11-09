@@ -8,10 +8,8 @@ from typing import TYPE_CHECKING
 
 from model_service.scheduler.executions import (
     ExecutionError,
-    ExecutionStatus,
     InferenceInvocation,
     InferenceResult,
-    Operation,
     ResultUnavailableError,
     UnknownExecutionError,
 )
@@ -26,6 +24,7 @@ from model_service.scheduler.records import (
     SubmissionIdentity,
     WorkKind,
 )
+from model_service.scheduler.status import ExecutionStatus, Operation
 from model_service.wire.invocation import InputAccessContext, Invocation
 from model_service.wire.result import BuilderResult
 

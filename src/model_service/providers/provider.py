@@ -20,12 +20,12 @@ if TYPE_CHECKING:
 
     from fastapi import APIRouter
 
+    from model_service.builders.input_access import InputAccessFactory
     from model_service.catalog import ModelCatalog
-    from model_service.facade.ports import Capacity, Scheduler
-    from model_service.facade.settings import SchedulerSettings
-    from model_service.providers.input_files import InputAccessFactory
     from model_service.replica.settings import ReplicaSettings
     from model_service.scheduler.provider_adapter import ProviderAdapter
+    from model_service.scheduler.service import Capacity, Scheduler
+    from model_service.scheduler.settings import SchedulerSettings
     from model_service.wire.invocation import InputAccessKind
 
 

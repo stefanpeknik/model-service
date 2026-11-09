@@ -11,12 +11,7 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING, Never
 
-from model_service.scheduler.executions import (
-    ExecutionError,
-    ExecutionErrorCode,
-    ExecutionStatus,
-    Operation,
-)
+from model_service.scheduler.executions import ExecutionError
 from model_service.scheduler.records import (
     Admission,
     ExecutionRecord,
@@ -30,6 +25,11 @@ from model_service.scheduler.records import (
     StaleWorkClaimError,
     WorkClaim,
     WorkKind,
+)
+from model_service.scheduler.status import (
+    ExecutionErrorCode,
+    ExecutionStatus,
+    Operation,
 )
 
 

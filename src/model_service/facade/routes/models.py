@@ -39,7 +39,7 @@ from model_service.wire.json import (
 
 if TYPE_CHECKING:
     from model_service.catalog import ModelCatalog
-    from model_service.facade.ports import Scheduler
+    from model_service.scheduler.service import Scheduler
     from model_service.scheduler.tile_executions import InferenceTarget
 
 

@@ -2,14 +2,14 @@
 
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
+
+from model_service.builders.base import BuilderSettings
 
 
-class ReplicaSettings(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+class ReplicaSettings(BuilderSettings):
+    """A builder's settings plus what the replica's providers need."""
 
-    num_threads: int = Field(default=2, gt=0)
-    max_concurrent_tasks: int = Field(default=4, gt=0)
     shared_storage_roots: tuple[Path, ...] = ()
 
 

@@ -11,7 +11,10 @@ from datetime import timedelta
 from enum import IntEnum, StrEnum
 from typing import TYPE_CHECKING
 
-from model_service.scheduler.executions import Operation, ProviderName
+from model_service.scheduler.executions import (
+    ProviderName,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
+)
+from model_service.scheduler.status import Operation
 
 
 if TYPE_CHECKING:
@@ -19,11 +22,11 @@ if TYPE_CHECKING:
 
     from model_service.scheduler.executions import (
         ExecutionError,
-        ExecutionStatus,
         InferenceResult,
         StoredInvocation,
         StoredResult,
     )
+    from model_service.scheduler.status import ExecutionStatus
     from model_service.wire.invocation import Invocation
     from model_service.wire.json import JsonValue
     from model_service.wire.result import BuilderResult

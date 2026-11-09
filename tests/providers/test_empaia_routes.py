@@ -12,13 +12,12 @@ from model_service.inference.contracts import SpatialScoresModel
 from model_service.providers.empaia.routes import create_router
 from model_service.scheduler.executions import (
     ExecutionError,
-    ExecutionStatus,
     ExecutionView,
-    Operation,
     ScheduleRequest,
     ScheduleResult,
     UnknownExecutionError,
 )
+from model_service.scheduler.status import ExecutionStatus, Operation
 from model_service.wire.failures import UnknownModelError
 
 

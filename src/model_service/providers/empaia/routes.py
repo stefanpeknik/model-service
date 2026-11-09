@@ -29,16 +29,16 @@ from model_service.facade.routes.common import submit
 from model_service.providers.empaia.app_service.gateway import PROVIDER_NAME
 from model_service.providers.empaia.job_adapter import EmpaiaSchedulePayload
 from model_service.scheduler.executions import (
-    ExecutionStatus,
     ScheduleRequest,
     SchedulingUnavailableError,
     UnknownExecutionError,
 )
+from model_service.scheduler.status import ExecutionStatus
 
 
 if TYPE_CHECKING:
-    from model_service.facade.ports import Capacity, Scheduler
     from model_service.scheduler.executions import ExecutionView
+    from model_service.scheduler.service import Capacity, Scheduler
 
 
 @dataclass(frozen=True, slots=True)

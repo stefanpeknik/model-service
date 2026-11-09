@@ -25,8 +25,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from model_service.scheduler.executions import (
     ExecutionError,
-    ExecutionStatus,
-    Operation,
     ResultUnavailableError,
     ScheduleConflictError,
     UnknownExecutionError,
@@ -43,6 +41,7 @@ from model_service.scheduler.records import (
     WorkClaim,
     WorkKind,
 )
+from model_service.scheduler.status import ExecutionStatus, Operation
 from model_service.scheduler.store.payloads import PayloadMissingError, StoredPayload
 from model_service.scheduler.store.repository import (
     ExecutionRepository,

@@ -29,7 +29,7 @@ from model_service.wire.result import BuilderResult
 
 
 if TYPE_CHECKING:
-    from model_service.providers.input_files import InputAccessFactory
+    from model_service.builders.input_access import InputAccessFactory
 
 
 fastapi = FastAPI()

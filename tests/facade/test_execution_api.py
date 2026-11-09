@@ -35,14 +35,13 @@ from model_service.replica.client import (
     UnknownOutcomeError,
 )
 from model_service.scheduler.executions import (
-    ExecutionStatus,
     ExecutionView,
-    Operation,
     ScheduleRequest,
     ScheduleResult,
     SchedulingUnavailableError,
 )
 from model_service.scheduler.scheduler import ExecutionScheduler
+from model_service.scheduler.status import ExecutionStatus, Operation
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
 from model_service.wire.result import BuilderResult, InlineOutput, SharedArtifact
 from tests.support.memory_repository import InMemoryExecutionRepository

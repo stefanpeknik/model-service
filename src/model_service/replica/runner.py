@@ -38,9 +38,9 @@ if TYPE_CHECKING:
 
     from model_service.builders.base import Builder
     from model_service.builders.declarations import BuilderSpec
+    from model_service.builders.input_access import InputAccess, InputAccessFactory
     from model_service.inference.clients import HandleLookup
     from model_service.inference.contracts import ModelBinding
-    from model_service.providers.input_files import InputAccess, InputAccessFactory
     from model_service.wire.invocation import InputAccessKind, Invocation
 
 

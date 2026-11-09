@@ -19,10 +19,8 @@ from model_service.replica.client import (
 from model_service.scheduler import tile_executions
 from model_service.scheduler.executions import (
     ExecutionError,
-    ExecutionErrorCode,
     IncompatibleModelError,
     InferenceInvocation,
-    Operation,
     UnknownBuilderError,
     UnknownModelError,
 )
@@ -44,6 +42,7 @@ from model_service.scheduler.records import (
     WorkClaim,
     WorkKind,
 )
+from model_service.scheduler.status import ExecutionErrorCode, Operation
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
 from model_service.wire.invocation import ExecutionContext
 from model_service.wire.result import BuilderResult

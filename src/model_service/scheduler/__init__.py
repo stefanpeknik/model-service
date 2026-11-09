@@ -1,6 +1,7 @@
 """Durable executions: admission, leases, retries, deadlines and provider finish.
 
-- executions.py: what callers see: statuses, views, schedule requests, errors.
+- executions.py: what callers see: views, schedule requests, errors.
+- status.py: execution statuses, kinds and error codes.
 - scheduler.py: ExecutionScheduler, admission and the worker's lifetime.
 - worker.py: claims work, runs attempts, renews leases, settles outcomes.
 - transitions.py: the state rules every repository applies, including the
@@ -8,6 +9,7 @@
 - records.py: internal records, leases, retry policy and outcomes.
 - tile_executions.py: scheduled single-tile inference.
 - provider_adapter.py: the interface a provider implements to admit and finish jobs.
+- service.py: what the API needs from the scheduler; settings.py: process settings.
 - store/: the PostgreSQL repository, its rows and migrations.
 """
 

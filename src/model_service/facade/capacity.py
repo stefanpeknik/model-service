@@ -16,8 +16,8 @@ from typing import TYPE_CHECKING
 
 from httpx import HTTPError
 
-from model_service.facade.ports import Capacity
-from model_service.scheduler.executions import ExecutionStatus
+from model_service.scheduler.service import Capacity
+from model_service.scheduler.status import ExecutionStatus
 
 
 if TYPE_CHECKING:

@@ -30,8 +30,8 @@ from model_service.wire.failures import (
 if TYPE_CHECKING:
     from fastapi import Response
 
-    from model_service.facade.ports import Scheduler
     from model_service.scheduler.executions import ScheduleRequest, ScheduleResult
+    from model_service.scheduler.service import Scheduler
 
 
 logger = logging.getLogger(__name__)

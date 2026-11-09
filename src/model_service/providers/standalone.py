@@ -38,9 +38,8 @@ from model_service.wire.invocation import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from model_service.builders.input_access import InputAccessFactory
     from model_service.catalog import ModelCatalog
-    from model_service.facade.settings import SchedulerSettings
-    from model_service.providers.input_files import InputAccessFactory
     from model_service.providers.provider import FacadeContribution
     from model_service.providers.shared_storage import SharedStorageAccessAdapter
     from model_service.replica.settings import ReplicaSettings
@@ -48,6 +47,7 @@ if TYPE_CHECKING:
         BeforeMutation,
         ProviderFinishOutcome,
     )
+    from model_service.scheduler.settings import SchedulerSettings
     from model_service.wire.json import JsonValue
 
 

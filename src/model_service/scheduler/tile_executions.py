@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING
 from model_service.scheduler.executions import (
     INFERENCE_PROVIDER,
     ExecutionError,
-    ExecutionErrorCode,
     InferenceResult,
 )
 from model_service.scheduler.records import (
@@ -26,6 +25,7 @@ from model_service.scheduler.records import (
     ProcessingRejected,
     SubmissionIdentity,
 )
+from model_service.scheduler.status import ExecutionErrorCode
 
 
 if TYPE_CHECKING:

@@ -32,12 +32,11 @@ from sqlalchemy.types import TypeDecorator
 from model_service.scheduler.executions import (
     STORED_INVOCATION,
     STORED_RESULT,
-    ExecutionStatus,
-    Operation,
     StoredInvocation,
     StoredResult,
 )
 from model_service.scheduler.records import WorkKind
+from model_service.scheduler.status import ExecutionStatus, Operation
 
 
 if TYPE_CHECKING:

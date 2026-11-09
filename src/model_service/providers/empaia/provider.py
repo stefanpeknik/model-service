@@ -18,11 +18,11 @@ from model_service.providers.provider import FacadeContribution, Provider
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from model_service.builders.input_access import InputAccessFactory
     from model_service.catalog import ModelCatalog
-    from model_service.facade.settings import SchedulerSettings
     from model_service.providers.empaia.registration import Marketplace
-    from model_service.providers.input_files import InputAccessFactory
     from model_service.replica.settings import ReplicaSettings
+    from model_service.scheduler.settings import SchedulerSettings
 
 
 # The model files' block it reads: how a model is offered in EMPAIA.
@@ -55,9 +55,7 @@ class EmpaiaProvider(Provider):
             jsonschema.ValidationError: If a generated EAD fails the EAD v3 schema.
         """
         from model_service.providers.empaia.ead import app_definitions, parse_listings
-        from model_service.providers.empaia.job_adapter import (
-            EmpaiaProviderAdapter,
-        )
+        from model_service.providers.empaia.job_adapter import EmpaiaProviderAdapter
         from model_service.providers.empaia.publishers import default_publishers
         from model_service.providers.empaia.registration import register_until_done
         from model_service.providers.empaia.routes import create_router

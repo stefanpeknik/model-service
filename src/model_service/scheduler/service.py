@@ -1,8 +1,7 @@
-"""What the public routes need from the rest of the facade process.
+"""What the API needs from the scheduler: the Scheduler interface and capacity explanations.
 
-The routes depend on these interfaces; the scheduler, the capacity explainer
-and the synchronous builder service implement them. Kept apart from the routes
-so the implementations do not import the HTTP layer.
+The facade's routes and providers' routes depend on these; ExecutionScheduler
+implements Scheduler.
 """
 
 from __future__ import annotations
@@ -12,7 +11,6 @@ from typing import TYPE_CHECKING, Protocol
 
 
 if TYPE_CHECKING:
-    from model_service.facade.requests import ImmediateBuilderRequest
     from model_service.scheduler.executions import (
         ExecutionView,
         InferenceResult,
@@ -20,7 +18,6 @@ if TYPE_CHECKING:
         ScheduleRequest,
         ScheduleResult,
     )
-    from model_service.wire.result import BuilderResult
 
 
 class Scheduler(Protocol):
@@ -164,30 +161,3 @@ class NoCapacityInfo(Capacity):
             The execution unchanged.
         """
         return execution
-
-
-class BuilderRunner(ABC):
-    @abstractmethod
-    async def run(
-        self, builder_id: str, model_id: str, request: ImmediateBuilderRequest
-    ) -> BuilderResult:
-        """Run a builder with a model while the caller waits.
-
-        Args:
-            builder_id: The builder to run.
-            model_id: The model the builder uses.
-            request: Inputs, configuration and deadline.
-
-        Returns:
-            The builder's result.
-
-        Raises:
-            UnknownBuilderError: If the builder is not registered.
-            UnknownModelError: If the model is not deployed.
-            IncompatibleModelError: If the builder does not accept the model.
-            InvalidInvocation: If the request is invalid.
-            ConfirmedRejectionError: If the builder refused for lack of capacity.
-            RemoteFailureError: If the builder failed.
-            UnknownOutcomeError: If it is unknown whether the builder ran.
-        """
-        ...

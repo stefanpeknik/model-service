@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from model_service.builders.base import Builder
+from model_service.builders.base import Builder, BuilderSettings
 from model_service.builders.heatmap.processor import (
     HeatmapRequest,
     SlideHeatmapProcessor,
@@ -19,13 +19,12 @@ from model_service.inference.clients import SpatialScoresClient
 
 if TYPE_CHECKING:
     from model_service.builders.base import BuilderContext
-    from model_service.replica.settings import ReplicaSettings
 
 
 class HeatmapBuilder(
     Builder[SpatialScoresClient, HeatmapInputs, HeatmapConfiguration, HeatmapOutputs]
 ):
-    def __init__(self, settings: ReplicaSettings) -> None:
+    def __init__(self, settings: BuilderSettings) -> None:
         """Configure the builder for a replica.
 
         Args:

@@ -10,6 +10,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from pydantic import BaseModel, ConfigDict, Field
+
 from model_service.builders.declarations import BuilderInputs, BuilderOutputs
 from model_service.builders.output_files import atomic_artifact
 from model_service.inference.clients import ModelClient
@@ -21,9 +23,16 @@ if TYPE_CHECKING:
     from datetime import datetime
     from pathlib import Path
 
-    from pydantic import BaseModel
+    from model_service.builders.input_access import InputAccess
 
-    from model_service.providers.input_files import InputAccess
+
+class BuilderSettings(BaseModel):
+    """Per-replica limits a builder reads, from its Ray `user_config`."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    num_threads: int = Field(default=2, gt=0)
+    max_concurrent_tasks: int = Field(default=4, gt=0)
 
 
 @dataclass(frozen=True, slots=True)

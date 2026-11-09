@@ -16,13 +16,11 @@ from uuid import uuid4
 from model_service.scheduler import tile_executions
 from model_service.scheduler.active_work import ActiveWorkRegistry
 from model_service.scheduler.executions import (
-    ExecutionStatus,
     ExecutionView,
     InferenceInvocation,
     InferenceResult,
     InferenceScheduleRequest,
     InvalidScheduleRequestError,
-    Operation,
     ResultUnavailableError,
     ScheduleRequest,
     ScheduleResult,
@@ -34,6 +32,7 @@ from model_service.scheduler.records import (
     SubmissionIdentity,
     WorkKind,
 )
+from model_service.scheduler.status import ExecutionStatus, Operation
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
 from model_service.scheduler.worker import ExecutionWorker
 

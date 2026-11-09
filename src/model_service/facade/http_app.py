@@ -18,9 +18,9 @@ from model_service.facade.health import (
     DeploymentStatus,
 )
 from model_service.facade.http_errors import ApiErrorCode, http_error
-from model_service.facade.ports import NoCapacityInfo
 from model_service.facade.routes import builders, executions, models
 from model_service.scheduler.executions import SchedulingUnavailableError
+from model_service.scheduler.service import NoCapacityInfo
 
 
 if TYPE_CHECKING:
@@ -29,8 +29,9 @@ if TYPE_CHECKING:
     from starlette.types import Lifespan
 
     from model_service.catalog import ModelCatalog
-    from model_service.facade.ports import BuilderRunner, Capacity, Scheduler
+    from model_service.facade.synchronous_runs import BuilderRunner
     from model_service.providers.provider import RouteFactory
+    from model_service.scheduler.service import Capacity, Scheduler
     from model_service.scheduler.tile_executions import InferenceTarget
 
 

@@ -7,9 +7,10 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
-from model_service.scheduler.executions import ExecutionStatus, ScheduleRequest
+from model_service.scheduler.executions import ScheduleRequest
 from model_service.scheduler.records import RetryPolicy
 from model_service.scheduler.scheduler import ExecutionScheduler
+from model_service.scheduler.status import ExecutionStatus
 from model_service.wire.result import BuilderResult
 from tests.scheduler.test_execution_scheduler import MutableClock, StandaloneProvider
 from tests.support.memory_repository import (

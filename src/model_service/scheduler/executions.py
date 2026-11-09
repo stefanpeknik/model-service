@@ -8,12 +8,15 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import Annotated
 
 from pydantic import Field, TypeAdapter
 
 from model_service.inference.contracts import ModelBinding
+from model_service.scheduler.status import (
+    ExecutionStatus,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
+    Operation,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
+)
 from model_service.wire.failures import (
     IncompatibleModelError,
     UnknownBuilderError,
@@ -27,47 +30,6 @@ from model_service.wire.result import BuilderResult
 
 
 __all__ = ["IncompatibleModelError", "UnknownBuilderError", "UnknownModelError"]
-
-
-class ExecutionStatus(StrEnum):
-    QUEUED = "queued"
-    RUNNING = "running"
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-
-    @property
-    def terminal(self) -> bool:
-        """Whether an execution in this status is finished for good."""
-        return self in {
-            ExecutionStatus.SUCCEEDED,
-            ExecutionStatus.FAILED,
-            ExecutionStatus.CANCELLED,
-        }
-
-
-class Operation(StrEnum):
-    """What an execution runs: a builder over a slide, or one raw model request."""
-
-    BUILDER = "builder"
-    INFERENCE = "inference"
-
-
-class ExecutionErrorCode(StrEnum):
-    BUILDER_OUTCOME_UNKNOWN = "builder_outcome_unknown"
-    PROVIDER_FINISH_OUTCOME_UNKNOWN = "provider_finish_outcome_unknown"
-    PROCESSING_ATTEMPTS_EXHAUSTED = "processing_attempts_exhausted"
-    PROVIDER_FINISH_ATTEMPTS_EXHAUSTED = "provider_finish_attempts_exhausted"
-    DEADLINE_EXCEEDED = "execution_deadline_exceeded"
-    UNKNOWN_MODEL = "unknown_model"
-    INCOMPATIBLE_MODEL = "incompatible_model"
-    INCOMPATIBLE_INPUT = "incompatible_input"
-    MODEL_REJECTED_INPUT = "model_rejected_input"
-    MODEL_FAILED = "model_failed"
-    MODEL_UNAVAILABLE = "model_unavailable"
-    RESULT_TOO_LARGE = "inference_result_too_large"
-    REQUEST_UNAVAILABLE = "inference_request_unavailable"
-    PROTECTED_CONTEXT_UNREADABLE = "protected_context_unreadable"
 
 
 # The integration a scheduled execution belongs to; each provider names itself.

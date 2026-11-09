@@ -36,10 +36,7 @@ from model_service.replica.client import (
     RemoteFailureError,
     UnknownOutcomeError,
 )
-from model_service.scheduler.executions import (
-    ScheduleRequest,
-    ScheduleResult,
-)
+from model_service.scheduler.executions import ScheduleRequest, ScheduleResult
 from model_service.wire.failures import (
     IncompatibleModelError,
     InvalidInvocation,
@@ -57,7 +54,8 @@ from model_service.wire.result import (
 if TYPE_CHECKING:
     from collections.abc import Awaitable
 
-    from model_service.facade.ports import BuilderRunner, Scheduler
+    from model_service.facade.synchronous_runs import BuilderRunner
+    from model_service.scheduler.service import Scheduler
 
 
 @dataclass(frozen=True, slots=True)

@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from collections.abc import Collection
     from datetime import timedelta
 
-    from model_service.scheduler.executions import Operation
     from model_service.scheduler.records import (
         Admission,
         AdmissionResult,
@@ -24,6 +23,7 @@ if TYPE_CHECKING:
         SubmissionIdentity,
         WorkClaim,
     )
+    from model_service.scheduler.status import Operation
 
 
 class ExecutionRepository(ABC):

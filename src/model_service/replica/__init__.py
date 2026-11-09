@@ -4,5 +4,5 @@
 - runner.py: runs one invocation: checks, deadline, cleanup.
 - protocol.py: the request and error format of its HTTP API.
 - client.py: how the facade and scheduler call a replica.
-- settings.py: replica settings (threads, concurrency).
+- settings.py: replica settings (a builder's BuilderSettings plus storage roots).
 """

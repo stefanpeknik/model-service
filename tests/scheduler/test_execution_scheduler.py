@@ -18,7 +18,6 @@ from model_service.replica.client import (
 )
 from model_service.scheduler.active_work import ActiveWorkRegistry
 from model_service.scheduler.executions import (
-    ExecutionStatus,
     IncompatibleModelError,
     InvalidScheduleRequestError,
     ScheduleConflictError,
@@ -45,6 +44,7 @@ from model_service.scheduler.records import (
     WorkKind,
 )
 from model_service.scheduler.scheduler import ExecutionScheduler
+from model_service.scheduler.status import ExecutionStatus
 from model_service.scheduler.store.repository import (
     ExecutionRepositoryUnavailableError,
 )

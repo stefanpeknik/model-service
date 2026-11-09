@@ -14,8 +14,8 @@ import lz4.frame
 from httpx import ASGITransport, AsyncClient, MockTransport, Request, Response
 
 from model_service.catalog import CatalogError
-from model_service.facade.settings import SchedulerSettings
 from model_service.facade.wiring import create_facade
+from model_service.scheduler.settings import SchedulerSettings
 from tests.support.memory_repository import InMemoryExecutionRepository
 from tests.test_catalog import embedding_document, spatial_document
 

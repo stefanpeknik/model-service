@@ -1,4 +1,4 @@
-"""Read scheduler process settings from environment variables.
+"""Settings of the facade process, which also runs the scheduler, from the environment.
 
 Required storage, encryption, and dispatch settings are separate from optional
 per-model origins; each provider reads its own settings. Parsed durations feed runtime wiring and retry policies.

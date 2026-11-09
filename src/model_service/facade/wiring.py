@@ -14,12 +14,12 @@ from model_service.facade.capacity import ServeCapacity
 from model_service.facade.health import DeploymentHealth
 from model_service.facade.http_app import create_app as create_api
 from model_service.facade.raw_inference_proxy import HttpInferenceProxy, ModelInference
-from model_service.facade.settings import SchedulerSettings
 from model_service.facade.synchronous_runs import SynchronousBuilderService
 from model_service.providers.enabled import PROVIDERS
 from model_service.replica.client import HTTPBuilderDispatch
 from model_service.scheduler.records import RetryPolicy
 from model_service.scheduler.scheduler import ExecutionScheduler
+from model_service.scheduler.settings import SchedulerSettings
 from model_service.scheduler.store.payloads import PayloadStore
 from model_service.scheduler.store.postgres import PostgresExecutionRepository
 from model_service.scheduler.store.protected_context import ProtectedContextCipher

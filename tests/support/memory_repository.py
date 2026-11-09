@@ -25,8 +25,6 @@ from model_service.inference.contracts import (
     TileEmbeddingModel,
 )
 from model_service.scheduler.executions import (
-    ExecutionStatus,
-    Operation,
     ResultUnavailableError,
     ScheduleConflictError,
     UnknownExecutionError,
@@ -43,6 +41,7 @@ from model_service.scheduler.records import (
     WorkClaim,
     WorkKind,
 )
+from model_service.scheduler.status import ExecutionStatus, Operation
 from model_service.scheduler.store.payloads import (
     PayloadMissingError,
     PayloadStore,
