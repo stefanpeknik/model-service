@@ -25,7 +25,7 @@ from model_service.builders.http import (
 )
 from model_service.builders.registry import get_builder
 from model_service.builders.settings import DeploymentSettings, WorkerSettings
-from model_service.providers.composition import load_providers
+from model_service.providers.installed import PROVIDERS
 
 
 if TYPE_CHECKING:
@@ -78,7 +78,7 @@ def build_application(config: DeploymentSettings) -> BuilderApplication:
     implementation = getattr(importlib.import_module(module_name), class_name)
     settings = WorkerSettings.model_validate(config.model_dump(exclude={"builder_id"}))
     adapters: dict[str, AccessAdapter] = {}
-    for provider in load_providers():
+    for provider in PROVIDERS:
         adapters.update(provider.input_access(settings))
     return BuilderApplication(spec, implementation(settings), adapters)
 

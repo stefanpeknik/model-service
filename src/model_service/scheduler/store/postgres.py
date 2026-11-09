@@ -900,7 +900,7 @@ class PostgresExecutionRepository(ExecutionRepository):
         self._apply_state(row, execution)
         if (
             execution.operation is Operation.INFERENCE
-            and execution.status in _TERMINAL
+            and execution.status.terminal
             and row.request_path is not None
         ):
             _delete_after_commit(session, [row.request_path])
@@ -1204,11 +1204,6 @@ def _is_uuid(value: str) -> bool:
         return str(UUID(value)) == value
     except ValueError:
         return False
-
-
-_TERMINAL = frozenset(
-    {ExecutionStatus.SUCCEEDED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED}
-)
 
 
 def _stored_request(row: ExecutionRow) -> StoredPayload | None:

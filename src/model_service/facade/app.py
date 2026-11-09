@@ -18,7 +18,7 @@ from model_service.facade.health import DeploymentHealth
 from model_service.facade.inference import HttpInferenceProxy, ModelInference
 from model_service.facade.settings import SchedulerSettings
 from model_service.facade.synchronous import SynchronousBuilderService
-from model_service.providers.composition import load_providers
+from model_service.providers.installed import PROVIDERS
 from model_service.scheduler.domain import RetryPolicy
 from model_service.scheduler.scheduler import ExecutionScheduler
 from model_service.scheduler.store.payloads import PayloadStore
@@ -73,7 +73,7 @@ def create_app(settings: SchedulerSettings | None = None) -> FastAPI:
         ValueError: If the provider context key is not a valid base64 key.
     """
     config = settings or SchedulerSettings.from_environment()
-    providers = load_providers()
+    providers = PROVIDERS
     catalog = ModelCatalog.from_file(
         config.model_catalog_path,
         [p.catalog_block for p in providers if p.catalog_block is not None],

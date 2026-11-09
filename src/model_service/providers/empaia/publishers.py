@@ -17,7 +17,7 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from model_service.builders.contracts import InlineOutput, SharedArtifact
-from model_service.providers.empaia.gateway import EmpaiaGatewayError
+from model_service.providers.empaia.gateway import EmpaiaGatewayError, PrimitiveType
 
 
 if TYPE_CHECKING:
@@ -80,9 +80,7 @@ class PrimitivePublisher(OutputPublisher):
         Raises:
             ValueError: If EMPAIA has no such primitive.
         """
-        if output_type not in _PRIMITIVE_VALUES:
-            raise ValueError(f"EMPAIA has no {output_type!r} primitive")
-        self._type = output_type
+        self._type = PrimitiveType(output_type)
 
     def accepts(self, model: ModelBinding) -> bool:
         """Accept every model; a primitive does not depend on it.
@@ -112,23 +110,12 @@ class PrimitivePublisher(OutputPublisher):
             EmpaiaGatewayError: Not retryable if the output is not inline or its value
                 does not fit the type; an empty string does not fit.
         """
-        if not isinstance(output, InlineOutput) or not _PRIMITIVE_VALUES[self._type](
-            output.value
-        ):
+        if not isinstance(output, InlineOutput) or not self._type.fits(output.value):
             raise EmpaiaGatewayError.invalid(
                 f"EMPAIA output {name!r} must be a {self._type} value"
             )
         value = output.value
         return lambda: gateway.post_primitive(name, self._type, value)
-
-
-# bool is an int in Python, and a float primitive takes whole numbers too.
-_PRIMITIVE_VALUES = {
-    "bool": lambda v: isinstance(v, bool),
-    "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
-    "float": lambda v: isinstance(v, int | float) and not isinstance(v, bool),
-    "string": lambda v: isinstance(v, str) and bool(v),
-}
 
 
 class PublisherRegistry:
@@ -209,7 +196,7 @@ def default_publishers() -> PublisherRegistry:
 
     publishers: dict[PublisherKey, OutputPublisher] = {
         (output_type, None): PrimitivePublisher(output_type)
-        for output_type in _PRIMITIVE_VALUES
+        for output_type in PrimitiveType
     }
     publishers["continuous_pixelmap", SCORE_GRID] = ScoreGridPublisher()
     return PublisherRegistry(publishers)

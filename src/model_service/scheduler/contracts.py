@@ -35,6 +35,15 @@ class ExecutionStatus(StrEnum):
     FAILED = "failed"
     CANCELLED = "cancelled"
 
+    @property
+    def terminal(self) -> bool:
+        """Whether an execution in this status is finished for good."""
+        return self in {
+            ExecutionStatus.SUCCEEDED,
+            ExecutionStatus.FAILED,
+            ExecutionStatus.CANCELLED,
+        }
+
 
 class Operation(StrEnum):
     """What an execution runs: a builder over a slide, or one raw model request."""

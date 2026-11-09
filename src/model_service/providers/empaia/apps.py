@@ -58,11 +58,12 @@ class AppMode(StrEnum):
     STANDALONE = "standalone"
     PREPROCESSING = "preprocessing"
 
-
-_MODE_DESCRIPTION = {
-    AppMode.STANDALONE: "Runs on the region of interest you draw.",
-    AppMode.PREPROCESSING: "Runs on the whole slide when the slide is preprocessed.",
-}
+    @property
+    def description(self) -> str:
+        """The sentence an app's description gets for this mode."""
+        if self is AppMode.STANDALONE:
+            return "Runs on the region of interest you draw."
+        return "Runs on the whole slide when the slide is preprocessed."
 
 
 # The app's global configuration key the AigoPath case browser reads its
@@ -424,7 +425,7 @@ def generate_ead(
             f"org.empaia.rationai.{_identifier(spec.id)}_{_identifier(model_id)}.v3.0"
         ),
         "description": " ".join(
-            [listing.description, *(_MODE_DESCRIPTION[m] for m in listing.modes)]
+            [listing.description, *(m.description for m in listing.modes)]
         ),
         # The RationAI direct-access route serves apps allowed raw slide access.
         "permissions": {

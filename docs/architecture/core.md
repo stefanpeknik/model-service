@@ -64,7 +64,7 @@ catalog and the scheduler know none of them. How builders appear in EMPAIA, the
 EAD `io` of their inputs and outputs, lives in `providers/empaia/io.py`. The
 facade's public builder routes are the standalone provider's front door and
 build on its request body. Adding a provider means a package and one entry in
-`PROVIDERS`.
+`PROVIDERS` (`providers/installed.py`).
 
 ## A request, end to end
 

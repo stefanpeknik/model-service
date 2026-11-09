@@ -22,6 +22,7 @@ from model_service.providers.empaia.gateway import (
     EmpaiaGatewayError,
     EmpaiaJobContext,
     EmpaiaJobMode,
+    PrimitiveType,
 )
 from model_service.providers.empaia.materialization import (
     link_direct_input,
@@ -469,11 +470,12 @@ type _PostPrimitive = (
 )
 
 
-_PRIMITIVES: dict[str, type[_PostPrimitive]] = {
-    "bool": primitives.PostBoolPrimitive,
-    "integer": primitives.PostIntegerPrimitive,
-    "float": primitives.PostFloatPrimitive,
-    "string": primitives.PostStringPrimitive,
+# The SDK's request model for each primitive type.
+_PRIMITIVES: dict[PrimitiveType, type[_PostPrimitive]] = {
+    PrimitiveType.BOOL: primitives.PostBoolPrimitive,
+    PrimitiveType.INTEGER: primitives.PostIntegerPrimitive,
+    PrimitiveType.FLOAT: primitives.PostFloatPrimitive,
+    PrimitiveType.STRING: primitives.PostStringPrimitive,
 }
 
 
@@ -495,9 +497,12 @@ def _primitive_output(
         EmpaiaGatewayError: Not retryable if EMPAIA has no such primitive type or
             the value does not fit it.
     """
-    kind = _PRIMITIVES.get(output_type)
-    if kind is None:
-        raise EmpaiaGatewayError.invalid(f"EMPAIA has no {output_type!r} primitive")
+    try:
+        kind = _PRIMITIVES[PrimitiveType(output_type)]
+    except ValueError as error:
+        raise EmpaiaGatewayError.invalid(
+            f"EMPAIA has no {output_type!r} primitive"
+        ) from error
     try:
         return kind.model_validate(
             {

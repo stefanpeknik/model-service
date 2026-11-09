@@ -1,6 +1,7 @@
 """What each provider adds to the facade and to builder replicas.
 
-The facade and the builder ingress compose the providers in `PROVIDERS` and
+The facade and the builder ingress compose the providers in
+`providers/installed.py` and
 name none of them. A provider contributes its scheduler adapter, its routes and
 background work to the facade, reads its block of the model files, and gives
 builder replicas the access adapters for the inputs it hands out. Each
@@ -9,7 +10,6 @@ provider imports what only one process needs inside the method for it.
 
 from __future__ import annotations
 
-import importlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -72,29 +72,3 @@ class Provider(ABC):
             The access adapters by the input access kind they serve.
         """
         ...
-
-
-PROVIDERS = (
-    "model_service.providers.standalone:PROVIDER",
-    "model_service.providers.empaia.composition:PROVIDER",
-)
-
-
-def load_providers(names: tuple[str, ...] = PROVIDERS) -> list[Provider]:
-    """Import the providers named as `module:attribute`.
-
-    Args:
-        names: Provider references, in the order to compose them.
-
-    Returns:
-        The providers, in the order of `names`.
-
-    Raises:
-        ImportError: If a named module cannot be imported.
-        AttributeError: If a module lacks the named attribute.
-    """
-    providers = []
-    for name in names:
-        module, _, attribute = name.partition(":")
-        providers.append(getattr(importlib.import_module(module), attribute))
-    return providers
