@@ -210,9 +210,9 @@ type Deadline = Annotated[
 class Invocation:
     """One request to run a builder; stored durably for scheduled executions.
 
-    `resolved_configuration` is None when the run uses the builder's current
-    defaults, chosen when each attempt starts; a provider may resolve it from its
-    own job's configuration instead.
+    `resolved_configuration` is None for standalone work, which uses the builder's
+    current defaults when each attempt starts. A provider admitting an external
+    job resolves it from the job's configuration.
     """
 
     inputs: Annotated[dict[str, BuilderInput], Field(strict=True)]

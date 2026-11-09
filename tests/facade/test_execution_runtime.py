@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
+import base64
 import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import lz4.frame
 from httpx import ASGITransport, AsyncClient, MockTransport, Request, Response
@@ -14,6 +16,7 @@ from httpx import ASGITransport, AsyncClient, MockTransport, Request, Response
 from model_service.facade.app import create_app
 from model_service.facade.catalog import CatalogError
 from model_service.facade.settings import SchedulerSettings
+from tests.support.memory_repository import InMemoryExecutionRepository
 from tests.support.model_documents import embedding_document, spatial_document
 
 
@@ -30,15 +33,20 @@ class RuntimeTestCase(unittest.IsolatedAsyncioTestCase):
     def settings(self, **environment: str) -> SchedulerSettings:
         return SchedulerSettings.from_environment(
             {
+                "DATABASE_URL": "postgresql://unused",
+                "PROVIDER_CONTEXT_KEY": base64.urlsafe_b64encode(b"x" * 32).decode(),
                 "RAY_SERVE_ORIGIN": "http://builder-serve",
                 "MODEL_CATALOG_PATH": str(self.catalog_path),
+                "SHARED_STORAGE_ROOTS": json.dumps([str(self.directory)]),
                 **environment,
             }
         )
 
 
 class ExecutionRuntimeTests(RuntimeTestCase):
-    async def test_construction_loads_catalog_without_contacting_ray(self) -> None:
+    async def test_construction_loads_catalog_without_contacting_the_database(
+        self,
+    ) -> None:
         app = create_app(self.settings())
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://model-service"
@@ -60,12 +68,45 @@ class ExecutionRuntimeTests(RuntimeTestCase):
         with self.assertRaises(KeyError):
             create_app(self.settings(BUILDER_IDS='["missing"]'))
 
-    async def test_lifespan_closes_client(self) -> None:
+    async def test_lifespan_initializes_repository_and_closes_client(self) -> None:
+        repository = InMemoryExecutionRepository()
+        initialized = AsyncMock()
+        maintained = asyncio.Event()
+        tasks_before = asyncio.all_tasks()
         client = AsyncClient(transport=MockTransport(lambda _request: Response(503)))
-        with patch("model_service.facade.app.httpx.AsyncClient", return_value=client):
+        with (
+            patch.object(repository, "initialize", initialized, create=True),
+            patch.object(repository, "maintain", side_effect=maintained.set),
+            patch(
+                "model_service.facade.app.PostgresExecutionRepository",
+                return_value=repository,
+            ),
+            patch("model_service.facade.app.httpx.AsyncClient", return_value=client),
+        ):
             app = create_app(self.settings())
             async with app.router.lifespan_context(app):
+                initialized.assert_awaited_once()
+                await asyncio.wait_for(maintained.wait(), timeout=1)
                 self.assertFalse(client.is_closed)
+            self.assertTrue(client.is_closed)
+            self.assertEqual(asyncio.all_tasks(), tasks_before)
+
+    async def test_lifespan_closes_client_when_initialization_fails(self) -> None:
+        repository = InMemoryExecutionRepository()
+        initialized = AsyncMock(side_effect=RuntimeError("database unavailable"))
+        client = AsyncClient(transport=MockTransport(lambda _request: Response(503)))
+        with (
+            patch.object(repository, "initialize", initialized, create=True),
+            patch(
+                "model_service.facade.app.PostgresExecutionRepository",
+                return_value=repository,
+            ),
+            patch("model_service.facade.app.httpx.AsyncClient", return_value=client),
+        ):
+            app = create_app(self.settings())
+            with self.assertRaisesRegex(RuntimeError, "database unavailable"):
+                async with app.router.lifespan_context(app):
+                    self.fail("startup unexpectedly succeeded")
             self.assertTrue(client.is_closed)
 
     async def test_health_expects_deployed_builders_and_catalog_models(self) -> None:

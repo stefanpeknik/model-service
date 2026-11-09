@@ -48,7 +48,7 @@ type ProviderName = str
 
 @dataclass(frozen=True, slots=True)
 class ScheduleRequest:
-    """`body` is provider-specific."""
+    """`body` is provider-specific; standalone bodies are a `BuilderRequest`."""
 
     builder_id: str
     model_id: str

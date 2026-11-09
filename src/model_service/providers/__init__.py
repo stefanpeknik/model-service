@@ -1,1 +1,1 @@
-"""Provider integrations: shared storage."""
+"""Provider integrations: shared storage, standalone scheduling and external job providers."""

@@ -1,4 +1,4 @@
-"""Check the public API: catalog listings, builder runs and safe errors."""
+"""Check the public API: catalog listings, builder runs, scheduling and safe errors."""
 
 from __future__ import annotations
 
@@ -28,14 +28,28 @@ from model_service.builders.client import (
 from model_service.builders.contracts import (
     BuilderResult,
     InlineOutput,
+    SharedArtifact,
     SpatialScoresModel,
     TileEmbeddingModel,
 )
 from model_service.facade.api import create_app
+from model_service.facade.app import model_resolver
 from model_service.facade.catalog import ModelCatalog
 from model_service.facade.health import DeploymentHealth
 from model_service.facade.inference import HttpInferenceProxy, ModelInference
 from model_service.facade.synchronous import SynchronousBuilderService
+from model_service.providers.shared_storage import SharedStorageAccessAdapter
+from model_service.providers.standalone import StandaloneProviderAdapter
+from model_service.scheduler.contracts import (
+    ExecutionStatus,
+    ExecutionView,
+    ScheduleRequest,
+    ScheduleResult,
+    SchedulingUnavailableError,
+)
+from model_service.scheduler.scheduler import ExecutionScheduler
+from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
+from tests.support.memory_repository import InMemoryExecutionRepository
 
 
 if TYPE_CHECKING:
@@ -49,6 +63,7 @@ if TYPE_CHECKING:
         Invocation,
         ModelBinding,
     )
+    from model_service.scheduler.domain import ExecutionRecord
 
     type Handler = Callable[
         [str, Invocation, ModelBinding, ExecutionContext], Awaitable[BuilderResult]
@@ -65,6 +80,7 @@ PROSTATE = SpatialScoresModel(
 VIRCHOW = TileEmbeddingModel(id="virchow2", tile_size=224, mpp=0.5)
 CATALOG = ModelCatalog([PROSTATE, VIRCHOW])
 RUN = "/v1/builders/heatmap/models/prostate-classifier-1/run"
+SCHEDULE = "/v1/builders/heatmap/models/prostate-classifier-1/schedule"
 
 
 class FakeDispatch:
@@ -87,6 +103,34 @@ class FakeDispatch:
         return await self._handler(builder_id, invocation, model, execution_context)
 
 
+class RecordingScheduler:
+    """Record admitted requests and return a fixed queued execution."""
+
+    def __init__(self) -> None:
+        self.requests: list[ScheduleRequest] = []
+
+    async def check_ready(self) -> None:
+        return None
+
+    async def schedule(self, request: ScheduleRequest) -> ScheduleResult:
+        self.requests.append(request)
+        return ScheduleResult(
+            execution=ExecutionView(
+                id="execution-1",
+                builder_id=request.builder_id,
+                model_id=request.model_id,
+                status=ExecutionStatus.QUEUED,
+            ),
+            created=True,
+        )
+
+    async def get(self, execution_id: str) -> ExecutionView:
+        raise AssertionError(execution_id)
+
+    async def cancel(self, execution_id: str) -> ExecutionView:
+        raise AssertionError(execution_id)
+
+
 class ApiTestCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         directory = TemporaryDirectory()
@@ -95,6 +139,25 @@ class ApiTestCase(unittest.IsolatedAsyncioTestCase):
         (self.root / "slide.svs").touch()
         (self.root / "roi.tiff").touch()
         self.dispatch = FakeDispatch()
+        self.repository = InMemoryExecutionRepository()
+        self.scheduler = self.make_scheduler(self.repository, self.dispatch)
+
+    def make_scheduler(
+        self, repository: InMemoryExecutionRepository, dispatch: FakeDispatch
+    ) -> ExecutionScheduler:
+        return ExecutionScheduler(
+            repository=repository,
+            dispatch=dispatch,
+            providers={
+                "standalone": StandaloneProviderAdapter(
+                    SharedStorageAccessAdapter([self.root])
+                )
+            },
+            resolve_model=model_resolver(CATALOG),
+            default_timeout=timedelta(hours=1),
+            maximum_timeout=timedelta(hours=6),
+            poll_interval=0.01,
+        )
 
     def client(self, app: FastAPI, *, raise_app_exceptions: bool = True) -> AsyncClient:
         return AsyncClient(
@@ -108,7 +171,7 @@ class ApiTestCase(unittest.IsolatedAsyncioTestCase):
             "builder_runner": SynchronousBuilderService(CATALOG, self.dispatch),
         }
         options.update(kwargs)
-        return create_app(**options)  # type: ignore[arg-type]
+        return create_app(self.scheduler, **options)  # type: ignore[arg-type]
 
     def builder_request(self) -> dict[str, object]:
         return {
@@ -128,6 +191,23 @@ class ApiTestCase(unittest.IsolatedAsyncioTestCase):
             "output_path": "outputs/heatmap.tiff",
             "deadline_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
         }
+
+    def schedule_request(self) -> dict[str, object]:
+        return self.builder_request()
+
+    async def schedule(
+        self,
+        client: AsyncClient,
+        body: dict[str, object] | None = None,
+        *,
+        key: str | None = "request-1",
+        url: str = SCHEDULE,
+    ) -> Response:
+        return await client.post(
+            url,
+            json=self.schedule_request() if body is None else body,
+            headers={} if key is None else {"Idempotency-Key": key},
+        )
 
     def assert_error(
         self,
@@ -197,6 +277,132 @@ class CatalogRouteTests(ApiTestCase):
             {"heatmap": {"kind": "shared_artifact", "media_type": "application/x-npz"}},
         )
         self.assertEqual(heatmap["configuration"]["stride_fraction"], 0.5)
+
+
+class ScheduleRouteTests(ApiTestCase):
+    async def test_schedule_replay_poll_and_cancel(self) -> None:
+        async with self.client(self.app()) as client:
+            created = await self.schedule(client)
+            replay = await self.schedule(client)
+            execution_id = created.json()["execution"]["id"]
+            polled = await client.get(f"/v1/executions/{execution_id}")
+            cancelled = await client.post(f"/v1/executions/{execution_id}/cancel")
+            unknown = await client.get("/v1/executions/missing")
+
+        self.assertEqual(created.status_code, 202, created.text)
+        self.assertTrue(created.json()["created"])
+        self.assertEqual(replay.status_code, 200)
+        self.assertFalse(replay.json()["created"])
+        self.assertEqual(replay.json()["execution"]["id"], execution_id)
+        self.assertEqual(
+            polled.json(),
+            {
+                "id": execution_id,
+                "builder_id": "heatmap",
+                "model_id": "prostate-classifier-1",
+                "status": "queued",
+                "result": None,
+                "error": None,
+                "provider_pending": False,
+                "message": None,
+            },
+        )
+        self.assertEqual(cancelled.json()["status"], "cancelled")
+        self.assert_error(unknown, 404, "unknown_execution")
+
+    async def test_lookup_and_validation_errors_are_distinct(self) -> None:
+        body = self.schedule_request()
+        async with self.client(self.app()) as client:
+            unknown_builder = await self.schedule(
+                client, url="/v1/builders/missing/models/prostate-classifier-1/schedule"
+            )
+            unknown_model = await self.schedule(
+                client, url="/v1/builders/heatmap/models/missing/schedule"
+            )
+            incompatible = await self.schedule(
+                client, url="/v1/builders/heatmap/models/virchow2/schedule"
+            )
+            empty_key = await self.schedule(client, key="")
+            no_key = await self.schedule(client, key=None)
+            key_in_body = await self.schedule(
+                client, {**body, "idempotency_key": "request-1"}, key=None
+            )
+            settings = await self.schedule(
+                client, {**body, "configuration": {"stride_fraction": 0.25}}
+            )
+            bad_timeout = await self.schedule(
+                client, {**body, "requested_timeout_seconds": 0}
+            )
+            provider = await self.schedule(client, {**body, "provider": "standalone"})
+
+        self.assert_error(unknown_builder, 404, "unknown_builder")
+        self.assert_error(unknown_model, 404, "unknown_model")
+        self.assert_error(incompatible, 422, "incompatible_model")
+        for response in (
+            empty_key,
+            no_key,
+            key_in_body,
+            settings,
+            bad_timeout,
+            provider,
+        ):
+            self.assert_error(response, 422, "invalid_request")
+
+    async def test_admission_checks_inputs_and_allowed_roots(self) -> None:
+        request = self.schedule_request()
+        with TemporaryDirectory() as other:
+            cases = [
+                {**request, "inputs": {}},
+                {
+                    **request,
+                    "inputs": {"slide": {"kind": "shared_path", "path": "absent.svs"}},
+                },
+                {
+                    **request,
+                    "input_access": {
+                        "kind": "shared_storage",
+                        "state": {"root": other},
+                    },
+                },
+            ]
+            async with self.client(self.app()) as client:
+                responses = [
+                    await self.schedule(client, case, key=f"case-{i}")
+                    for i, case in enumerate(cases)
+                ]
+
+        for response in responses:
+            self.assert_error(response, 422, "invalid_request")
+        self.assertIn("not allowed", responses[2].json()["detail"]["message"])
+
+    async def test_scheduled_execution_dispatches_current_model_binding(self) -> None:
+        artifact = str(self.root / "heatmap.tiff")
+
+        async def produce(*_args: object) -> BuilderResult:
+            return BuilderResult(
+                outputs={
+                    "heatmap": SharedArtifact(path=artifact, media_type="image/tiff")
+                }
+            )
+
+        self.dispatch = FakeDispatch(produce)
+        self.scheduler = self.make_scheduler(self.repository, self.dispatch)
+        async with self.client(self.app()) as client:
+            admitted = await self.schedule(client)
+            execution_id = admitted.json()["execution"]["id"]
+            async with self.scheduler.running(), asyncio.timeout(2):
+                while True:
+                    state = await client.get(f"/v1/executions/{execution_id}")
+                    if state.json()["status"] == "succeeded":
+                        break
+                    await asyncio.sleep(0.01)
+
+        self.assertEqual(state.json()["result"]["outputs"]["heatmap"]["path"], artifact)
+        [(builder_id, invocation, model, context)] = self.dispatch.calls
+        self.assertEqual(builder_id, "heatmap")
+        self.assertEqual(model, PROSTATE)
+        self.assertIsNone(invocation.resolved_configuration)
+        self.assertIsNotNone(context.processing_attempt_id)
 
 
 class RunRouteTests(ApiTestCase):
@@ -364,18 +570,30 @@ class HealthAndAvailabilityTests(ApiTestCase):
             routes=["/builders/heatmap", "/prostate-classifier-1"],
         )
 
-    async def test_missing_routes_are_separate_from_liveness(self) -> None:
+    async def test_a_facade_without_a_running_worker_is_not_live(self) -> None:
+        async with self.client(self.app()) as client:
+            stopped = await client.get("/healthz")
+            async with self.scheduler.running():
+                live = await client.get("/healthz")
+
+        self.assertEqual(stopped.status_code, 503)
+        self.assertEqual(live.status_code, 200)
+
+    async def test_missing_routes_are_separate_from_readiness(self) -> None:
         routes = {"/builders/heatmap/": "heatmap"}
         async with (
             AsyncClient(
                 transport=MockTransport(lambda _request: Response(200, json=routes))
             ) as ray,
             self.client(self.app(deployment_health=self.health(ray))) as client,
+            self.scheduler.running(),
         ):
             live = await client.get("/healthz")
+            ready = await client.get("/readyz")
             deployments = await client.get("/healthz/deployments")
 
         self.assertEqual(live.status_code, 200)
+        self.assertEqual(ready.status_code, 200)
         self.assertEqual(deployments.status_code, 503)
         self.assertEqual(
             deployments.json(),
@@ -400,6 +618,70 @@ class HealthAndAvailabilityTests(ApiTestCase):
         self.assertEqual(deployments.status_code, 200)
         self.assertEqual(deployments.json()["status"], "ready")
         self.assertEqual(unconfigured.json()["status"], "not_configured")
+
+    async def test_ray_outage_keeps_durable_api_usable(self) -> None:
+        def unavailable(request: Request) -> Response:
+            raise ConnectError("Ray is unavailable", request=request)
+
+        async with (
+            AsyncClient(transport=MockTransport(unavailable)) as ray,
+            self.client(self.app(deployment_health=self.health(ray))) as client,
+        ):
+            ready = await client.get("/readyz")
+            deployments = await client.get("/healthz/deployments")
+            admitted = await self.schedule(client)
+            execution_id = admitted.json()["execution"]["id"]
+            polled = await client.get(f"/v1/executions/{execution_id}")
+            cancelled = await client.post(f"/v1/executions/{execution_id}/cancel")
+
+        self.assertEqual(ready.status_code, 200)
+        self.assertEqual(deployments.status_code, 503)
+        self.assertEqual(deployments.json()["status"], "unreachable")
+        self.assertEqual(admitted.status_code, 202)
+        self.assertEqual(polled.json()["status"], "queued")
+        self.assertEqual(cancelled.json()["status"], "cancelled")
+
+    async def test_database_outage_is_retryable(self) -> None:
+        class UnavailableRepository(InMemoryExecutionRepository):
+            async def check_ready(self) -> None:
+                raise ExecutionRepositoryUnavailableError("database unavailable")
+
+            async def get(self, execution_id: str) -> ExecutionRecord:
+                raise ExecutionRepositoryUnavailableError(execution_id)
+
+            async def request_cancel(self, execution_id: str) -> ExecutionRecord:
+                raise ExecutionRepositoryUnavailableError(execution_id)
+
+            async def find_submission(self, identity: object) -> None:
+                raise ExecutionRepositoryUnavailableError("database unavailable")
+
+        self.scheduler = self.make_scheduler(UnavailableRepository(), self.dispatch)
+        async with (
+            self.client(self.app(), raise_app_exceptions=False) as client,
+            self.scheduler.running(),
+        ):
+            responses = [
+                await client.get("/readyz"),
+                await client.get("/v1/executions/execution-1"),
+                await client.post("/v1/executions/execution-1/cancel"),
+                await self.schedule(client),
+            ]
+            live = await client.get("/healthz")
+
+        for response in responses:
+            self.assert_error(response, 503, "scheduling_unavailable", retryable=True)
+        self.assertEqual(live.status_code, 200)
+
+    async def test_scheduler_unavailability_is_retryable(self) -> None:
+        class UnavailableScheduler(RecordingScheduler):
+            async def schedule(self, request: ScheduleRequest) -> ScheduleResult:
+                raise SchedulingUnavailableError("temporarily unavailable")
+
+        app = create_app(UnavailableScheduler(), catalog=CATALOG)
+        async with self.client(app) as client:
+            response = await self.schedule(client)
+
+        self.assert_error(response, 503, "scheduling_unavailable", retryable=True)
 
 
 class RawInferenceTests(ApiTestCase):

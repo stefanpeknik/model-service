@@ -1,14 +1,14 @@
-"""Read facade process settings from environment variables.
+"""Read scheduler process settings from environment variables.
 
-The Ray Serve origin is required; the catalog path, builder selection and raw
-inference origins, timeout and size limits are optional.
+Required storage, encryption, and dispatch settings are separate from optional
+per-model origins; each provider reads its own settings. Parsed durations feed runtime wiring and retry policies.
 """
 
 from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Self
 
 from pydantic import (
     BeforeValidator,
@@ -18,6 +18,7 @@ from pydantic import (
     StringConstraints,
     TypeAdapter,
     field_validator,
+    model_validator,
 )
 from pydantic_settings import BaseSettings, EnvSettingsSource, SettingsConfigDict
 
@@ -52,7 +53,7 @@ _RequiredString = Annotated[str, StringConstraints(min_length=1)]
 
 
 class SchedulerSettings(BaseSettings):
-    """Hold catalog, dispatch and raw inference settings for the facade process."""
+    """Hold database, transport, retry, lease, capacity, and deadline settings for the public scheduler process."""
 
     model_config = SettingsConfigDict(
         frozen=True,
@@ -62,13 +63,31 @@ class SchedulerSettings(BaseSettings):
         hide_input_in_errors=True,
     )
 
+    database_url: _RequiredString = Field(validation_alias="DATABASE_URL", repr=False)
+    database_pool_size: int = Field(
+        default=20, gt=0, validation_alias="DATABASE_POOL_SIZE"
+    )
+    provider_context_key: _RequiredString = Field(
+        validation_alias="PROVIDER_CONTEXT_KEY", repr=False
+    )
     ray_serve_origin: _RequiredString = Field(validation_alias="RAY_SERVE_ORIGIN")
+    ray_dashboard_origin: str | None = Field(
+        default=None, validation_alias="RAY_DASHBOARD_ORIGIN"
+    )
+    capacity_grace: _SecondsDuration = Field(
+        default=timedelta(seconds=60),
+        ge=timedelta(0),
+        validation_alias="CAPACITY_GRACE_SECONDS",
+    )
     model_catalog_path: Path = Field(
         default=Path("/etc/model-service/model-catalog.json"),
         validation_alias="MODEL_CATALOG_PATH",
     )
     builder_ids: frozenset[_RequiredString] | None = Field(
         default=None, min_length=1, validation_alias="BUILDER_IDS"
+    )
+    shared_storage_roots: tuple[Path, ...] = Field(
+        default=(), validation_alias="SHARED_STORAGE_ROOTS"
     )
     inference_serve_origin: str | None = Field(
         default=None, validation_alias="INFERENCE_SERVE_ORIGIN"
@@ -80,6 +99,42 @@ class SchedulerSettings(BaseSettings):
         default=timedelta(minutes=15),
         gt=timedelta(0),
         validation_alias="INFERENCE_TIMEOUT_SECONDS",
+    )
+    lease_duration: _SecondsDuration = Field(
+        default=timedelta(seconds=60), gt=timedelta(0), validation_alias="LEASE_SECONDS"
+    )
+    poll_interval: FiniteFloat = Field(
+        default=0.5, gt=0, validation_alias="WORKER_POLL_SECONDS"
+    )
+    processing_attempts: int = Field(
+        default=3, gt=0, validation_alias="PROCESSING_ATTEMPTS"
+    )
+    provider_finish_attempts: int = Field(
+        default=3, gt=0, validation_alias="PROVIDER_FINISH_ATTEMPTS"
+    )
+    initial_backoff: _SecondsDuration = Field(
+        default=timedelta(seconds=5),
+        ge=timedelta(0),
+        validation_alias="INITIAL_BACKOFF_SECONDS",
+    )
+    maximum_backoff: _SecondsDuration = Field(
+        default=timedelta(minutes=5),
+        ge=timedelta(0),
+        validation_alias="MAXIMUM_BACKOFF_SECONDS",
+    )
+    default_deadline: _SecondsDuration = Field(
+        default=timedelta(hours=6),
+        gt=timedelta(0),
+        validation_alias="DEFAULT_DEADLINE_SECONDS",
+    )
+    maximum_deadline: _SecondsDuration = Field(
+        default=timedelta(hours=24),
+        gt=timedelta(0),
+        validation_alias="MAXIMUM_DEADLINE_SECONDS",
+    )
+    per_model_limit: int = Field(default=1, gt=0, validation_alias="PER_MODEL_LIMIT")
+    max_concurrent_executions: int = Field(
+        default=4, gt=0, validation_alias="MAX_CONCURRENT_EXECUTIONS"
     )
     inference_max_request_bytes: int = Field(
         default=2 * 1024 * 1024, gt=0, validation_alias="INFERENCE_MAX_REQUEST_BYTES"
@@ -139,11 +194,12 @@ class SchedulerSettings(BaseSettings):
 
     @field_validator(
         "inference_serve_origin",
+        "ray_dashboard_origin",
         mode="before",
     )
     @classmethod
     def _empty_optional_setting(cls, value: object) -> object:
-        """Treat a blank optional origin as absent.
+        """Treat blank optional origins as absent.
 
         Args:
             value: The raw setting.
@@ -154,3 +210,22 @@ class SchedulerSettings(BaseSettings):
         if isinstance(value, str):
             return value.strip() or None
         return value
+
+    @model_validator(mode="after")
+    def _validate_policy_bounds(self) -> Self:
+        """Reject a maximum backoff or deadline shorter than its initial or default value.
+
+        Returns:
+            The settings unchanged.
+
+        Raises:
+            ValueError: If maximum backoff is shorter than initial backoff, or
+                maximum deadline is shorter than default deadline.
+        """
+        if self.maximum_backoff < self.initial_backoff:
+            raise ValueError("maximum backoff must not be shorter than initial backoff")
+        if self.maximum_deadline < self.default_deadline:
+            raise ValueError(
+                "maximum deadline must not be shorter than default deadline"
+            )
+        return self

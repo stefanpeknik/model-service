@@ -1,8 +1,10 @@
 """Who is calling, and may they do this? Pluggable; nothing is enforced by default.
 
 An `Authenticator` turns a request into a `Principal` or rejects it (401). An
-`Authorizer` decides whether that principal may perform an `Action` (403). Both
-default to letting everyone in.
+`Authorizer` decides whether that principal may perform an `Action`, on the
+execution it names if any (403). The public API and each provider's routes
+get their own `Access`, so a provider's service token (a job service's, say) and
+direct users can be checked differently. All default to letting everyone in.
 """
 
 from __future__ import annotations
@@ -24,6 +26,11 @@ if TYPE_CHECKING:
 class Action(StrEnum):
     READ_CATALOG = "read_catalog"
     RUN = "run"
+    SCHEDULE = "schedule"
+    READ_EXECUTION = "read_execution"
+    CANCEL_EXECUTION = "cancel_execution"
+    # A job a provider's own route submits, e.g. for an external job service.
+    SUBMIT_PROVIDER_JOB = "submit_provider_job"
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,12 +71,15 @@ class Authenticator(ABC):
 
 class Authorizer(ABC):
     @abstractmethod
-    async def authorize(self, principal: Principal, action: Action) -> None:
+    async def authorize(
+        self, principal: Principal, action: Action, execution_id: str | None
+    ) -> None:
         """Decide whether the principal may perform the action; return to allow.
 
         Args:
             principal: The authenticated caller.
             action: What the caller wants to do.
+            execution_id: The execution the route names, or None.
 
         Raises:
             AuthorizationError: If the principal may not perform the action.
@@ -91,12 +101,15 @@ class AllowAnonymous(Authenticator):
 
 
 class AllowAll(Authorizer):
-    async def authorize(self, principal: Principal, action: Action) -> None:
+    async def authorize(
+        self, principal: Principal, action: Action, execution_id: str | None
+    ) -> None:
         """Allow every action.
 
         Args:
             principal: The caller; ignored.
             action: The requested action; ignored.
+            execution_id: The execution the route names; ignored.
         """
         return None
 
@@ -109,6 +122,7 @@ class Access:
     def require(self, action: Action) -> Any:
         """Make a route dependency that authenticates the caller and authorizes `action`.
 
+        The check runs on the route's `execution_id` path parameter if it has one.
         The dependency answers 401 (with `WWW-Authenticate: Bearer`) when
         authentication fails and 403 when authorization fails.
 
@@ -130,7 +144,9 @@ class Access:
                     headers={"WWW-Authenticate": "Bearer"},
                 ) from error
             try:
-                await self.authorizer.authorize(principal, action)
+                await self.authorizer.authorize(
+                    principal, action, request.path_params.get("execution_id")
+                )
             except AuthorizationError as error:
                 raise http_error(
                     403, ApiErrorCode.FORBIDDEN, "this action is not allowed"

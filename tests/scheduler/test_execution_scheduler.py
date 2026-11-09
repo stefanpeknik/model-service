@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import unittest
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any
 
 from model_service.builders.client import (
@@ -19,10 +21,14 @@ from model_service.builders.contracts import (
     Invocation,
     SharedArtifact,
 )
+from model_service.providers.shared_storage import SharedStorageAccessAdapter
+from model_service.providers.standalone import StandaloneProviderAdapter
 from model_service.scheduler.active_work import ActiveWorkRegistry
 from model_service.scheduler.contracts import (
     ExecutionStatus,
     IncompatibleModelError,
+    InvalidScheduleRequestError,
+    ScheduleConflictError,
     ScheduleRequest,
     UnknownBuilderError,
     UnknownModelError,
@@ -995,6 +1001,107 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(processing_complete.status, "running")
         self.assertEqual(processing_complete.result, result)
 
+    async def test_standalone_replay_skips_preparation_and_conflict_is_rejected(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "slide.svs").touch()
+            (root / "roi.tiff").touch()
+            clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
+            repository = InMemoryExecutionRepository(clock=clock)
+            provider = StandaloneProviderAdapter(SharedStorageAccessAdapter([root]))
+            scheduler = ExecutionScheduler(
+                repository=repository,
+                dispatch=FakeDispatch({}),
+                providers={provider.name: provider},
+                resolve_model=resolve_test_model,
+                default_timeout=timedelta(hours=1),
+                maximum_timeout=timedelta(hours=6),
+                clock=clock,
+            )
+            request = self._standalone_request(root)
+
+            first = await scheduler.schedule(request)
+            (root / "slide.svs").unlink()
+            replay = await scheduler.schedule(request)
+
+            self.assertTrue(first.created)
+            self.assertFalse(replay.created)
+            self.assertEqual(replay.execution.id, first.execution.id)
+
+            conflicting_body = dict(request.body)
+            conflicting_body["output_path"] = "outputs/other.tiff"
+            with self.assertRaises(ScheduleConflictError):
+                await scheduler.schedule(
+                    ScheduleRequest(
+                        builder_id=request.builder_id,
+                        model_id=request.model_id,
+                        provider=request.provider,
+                        body=conflicting_body,
+                        idempotency_key=request.idempotency_key,
+                    )
+                )
+
+    async def test_invalid_standalone_path_creates_no_execution(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "roi.tiff").touch()
+            clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
+            repository = InMemoryExecutionRepository(clock=clock)
+            provider = StandaloneProviderAdapter(SharedStorageAccessAdapter([root]))
+            scheduler = ExecutionScheduler(
+                repository=repository,
+                dispatch=FakeDispatch({}),
+                providers={provider.name: provider},
+                resolve_model=resolve_test_model,
+                default_timeout=timedelta(hours=1),
+                maximum_timeout=timedelta(hours=6),
+                clock=clock,
+            )
+            request = self._standalone_request(root)
+
+            with self.assertRaises(InvalidScheduleRequestError):
+                await scheduler.schedule(request)
+
+            (root / "slide.svs").touch()
+            admitted = await scheduler.schedule(request)
+            self.assertTrue(admitted.created)
+
+    async def test_invalid_standalone_configuration_creates_no_execution(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "slide.svs").touch()
+            (root / "roi.tiff").touch()
+            clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
+            repository = InMemoryExecutionRepository(clock=clock)
+            provider = StandaloneProviderAdapter(SharedStorageAccessAdapter([root]))
+            scheduler = ExecutionScheduler(
+                repository=repository,
+                dispatch=FakeDispatch({}),
+                providers={provider.name: provider},
+                resolve_model=resolve_test_model,
+                default_timeout=timedelta(hours=1),
+                maximum_timeout=timedelta(hours=6),
+                clock=clock,
+            )
+            valid_request = self._standalone_request(root)
+            invalid_body = dict(valid_request.body)
+            invalid_body["resolved_configuration"] = {"output_path": "heatmap.tiff"}
+            invalid_request = ScheduleRequest(
+                builder_id=valid_request.builder_id,
+                model_id=valid_request.model_id,
+                provider=valid_request.provider,
+                body=invalid_body,
+                idempotency_key=valid_request.idempotency_key,
+            )
+
+            with self.assertRaises(InvalidScheduleRequestError):
+                await scheduler.schedule(invalid_request)
+
+            admitted = await scheduler.schedule(valid_request)
+            self.assertTrue(admitted.created)
+
     @staticmethod
     def _request(
         key: str = "request-1",
@@ -1041,6 +1148,30 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             max_concurrent=max_concurrent,
         )
         return scheduler, worker
+
+    @staticmethod
+    def _standalone_request(root: Path) -> ScheduleRequest:
+        """Build a complete shared-storage prostate schedule request rooted at the fixture directory."""
+        return ScheduleRequest(
+            builder_id="heatmap",
+            model_id="prostate-classifier-1",
+            provider="standalone",
+            body={
+                "inputs": {
+                    "slide": {"kind": "shared_path", "path": "slide.svs"},
+                    "region_of_interest": {
+                        "kind": "shared_path",
+                        "path": "roi.tiff",
+                    },
+                },
+                "output_path": "outputs/heatmap.tiff",
+                "input_access": {
+                    "kind": "shared_storage",
+                    "state": {"root": str(root)},
+                },
+            },
+            idempotency_key="request-1",
+        )
 
 
 if __name__ == "__main__":

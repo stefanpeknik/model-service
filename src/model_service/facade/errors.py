@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException
 
 from model_service.builders.contracts import UnknownBuilderError, UnknownModelError
+
+
+if TYPE_CHECKING:
+    from model_service.scheduler.contracts import SchedulingUnavailableError
 
 
 class ApiErrorCode(StrEnum):
@@ -16,6 +20,9 @@ class ApiErrorCode(StrEnum):
     UNKNOWN_BUILDER = "unknown_builder"
     UNKNOWN_MODEL = "unknown_model"
     INCOMPATIBLE_MODEL = "incompatible_model"
+    SCHEDULE_CONFLICT = "schedule_conflict"
+    SCHEDULING_UNAVAILABLE = "scheduling_unavailable"
+    UNKNOWN_EXECUTION = "unknown_execution"
     BUILDER_BACKPRESSURE = "builder_backpressure"
     BUILDER_UNAVAILABLE = "builder_unavailable"
     PAYLOAD_TOO_LARGE = "payload_too_large"
@@ -37,8 +44,22 @@ class ErrorResponse:
 
 
 ERRORS: dict[int | str, dict[str, Any]] = {
-    code: {"model": ErrorResponse} for code in (404, 413, 422, 429, 503)
+    code: {"model": ErrorResponse} for code in (404, 409, 413, 422, 429, 503)
 }
+
+
+def unavailable(error: SchedulingUnavailableError) -> HTTPException:
+    """Map a storage outage to a retryable 503.
+
+    Args:
+        error: The scheduling outage.
+
+    Returns:
+        The HTTP error to raise.
+    """
+    return http_error(
+        503, ApiErrorCode.SCHEDULING_UNAVAILABLE, str(error), retryable=True
+    )
 
 
 def lookup_error(error: Exception) -> HTTPException:

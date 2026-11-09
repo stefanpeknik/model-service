@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib
 import logging
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -14,7 +15,7 @@ from fastapi.responses import JSONResponse
 from ray import serve
 
 from model_service.builders.application import BuilderApplication
-from model_service.builders.contracts import SHARED_STORAGE, BuilderResult
+from model_service.builders.contracts import BuilderResult
 from model_service.builders.http import (
     ErrorCode,
     ErrorResponse,
@@ -24,7 +25,11 @@ from model_service.builders.http import (
 )
 from model_service.builders.registry import get_builder
 from model_service.builders.settings import DeploymentSettings, WorkerSettings
-from model_service.providers.shared_storage import SharedStorageAccessAdapter
+from model_service.providers.installed import PROVIDERS
+
+
+if TYPE_CHECKING:
+    from model_service.builders.access import AccessAdapter
 
 
 fastapi = FastAPI()
@@ -57,7 +62,7 @@ async def invalid_request(
 
 
 def build_application(config: DeploymentSettings) -> BuilderApplication:
-    """Load the configured builder with shared-storage input access.
+    """Load the configured builder and its providers' access adapters.
 
     Args:
         config: Deployment settings naming the builder and worker settings.
@@ -72,9 +77,9 @@ def build_application(config: DeploymentSettings) -> BuilderApplication:
     module_name, _, class_name = spec.implementation.partition(":")
     implementation = getattr(importlib.import_module(module_name), class_name)
     settings = WorkerSettings.model_validate(config.model_dump(exclude={"builder_id"}))
-    adapters = {
-        SHARED_STORAGE: SharedStorageAccessAdapter(settings.shared_storage_roots)
-    }
+    adapters: dict[str, AccessAdapter] = {}
+    for provider in PROVIDERS:
+        adapters.update(provider.input_access(settings))
     return BuilderApplication(spec, implementation(settings), adapters)
 
 

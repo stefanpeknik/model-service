@@ -1,15 +1,16 @@
 """`/v1/builders`: the builder catalog, and runs of a builder with a model.
 
-`/v1/builders/{builder}/models/{model}/run` waits for the result.
+`/v1/builders/{builder}/models/{model}/run` waits for the result;
+`.../schedule` admits a durable execution with shared-storage inputs.
 """
 
 from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request, Response, status
 
 from model_service.builders.client import (
     ConfirmedRejectionError,
@@ -29,16 +30,23 @@ from model_service.builders.registry import BUILDERS
 from model_service.facade.auth import Access, Action
 from model_service.facade.errors import ERRORS, ApiErrorCode, http_error, lookup_error
 
-# FastAPI reads this annotation at runtime.
+# FastAPI reads these annotations at runtime.
 from model_service.facade.requests import (
     ImmediateBuilderRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations.
+    ScheduledBuilderRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations.
+)
+from model_service.facade.routes.common import require_idempotency_key, submit
+from model_service.providers.standalone import NAME as STANDALONE
+from model_service.scheduler.contracts import (
+    ScheduleRequest,
+    ScheduleResult,
 )
 
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
 
-    from model_service.facade.ports import BuilderRunner
+    from model_service.facade.ports import BuilderRunner, Scheduler
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,10 +70,13 @@ class BuilderView:
     configuration: dict[str, JsonValue]
 
 
-def create_router(builder_runner: BuilderRunner | None, access: Access) -> APIRouter:
-    """Build the `/v1/builders` router: the catalog and synchronous runs.
+def create_router(
+    scheduler: Scheduler, builder_runner: BuilderRunner | None, access: Access
+) -> APIRouter:
+    """Build the `/v1/builders` router: the catalog, synchronous runs and scheduling.
 
     Args:
+        scheduler: Admits durable executions.
         builder_runner: Runs builders synchronously; None makes `/run` answer 503.
         access: Guards the routes.
 
@@ -151,6 +162,32 @@ def create_router(builder_runner: BuilderRunner | None, access: Access) -> APIRo
                 "builder outcome is unknown",
                 retryable=True,
             ) from error
+
+    @router.post(
+        "/{builder_id}/models/{model_id}/schedule",
+        status_code=status.HTTP_202_ACCEPTED,
+        responses={200: {"model": ScheduleResult}, **ERRORS},
+        dependencies=[access.require(Action.SCHEDULE)],
+    )
+    async def schedule_builder(
+        builder_id: str,
+        model_id: str,
+        body: ScheduledBuilderRequest,
+        response: Response,
+        idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+    ) -> ScheduleResult:
+        return await submit(
+            scheduler,
+            ScheduleRequest(
+                builder_id=builder_id,
+                model_id=model_id,
+                provider=STANDALONE,
+                body=body.builder_request(),
+                requested_timeout_seconds=body.requested_timeout_seconds,
+                idempotency_key=idempotency_key,
+            ),
+            response,
+        )
 
     return router
 

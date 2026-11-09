@@ -1,5 +1,7 @@
 {{- if .Values.executionScheduler.enabled }}
 {{- $imageTag := required "executionScheduler.image.tag is required" .Values.executionScheduler.image.tag }}
+{{- $databaseSecret := required "executionScheduler.database.existingSecret is required" .Values.executionScheduler.database.existingSecret }}
+{{- $encryptionSecret := required "executionScheduler.encryption.existingSecret is required" .Values.executionScheduler.encryption.existingSecret }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -45,12 +47,26 @@ spec:
             - name: http
               containerPort: 8080
           env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $databaseSecret }}
+                  key: {{ .Values.executionScheduler.database.urlKey }}
+            - name: PROVIDER_CONTEXT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $encryptionSecret }}
+                  key: {{ .Values.executionScheduler.encryption.keyKey }}
             - name: RAY_SERVE_ORIGIN
               value: {{ default (printf "http://%s-serve-svc.%s.svc.cluster.local:8000" .Release.Name (.Release.Namespace | default "rationai-jobs-ns")) .Values.executionScheduler.rayServeOrigin | quote }}
+            - name: RAY_DASHBOARD_ORIGIN
+              value: {{ default (printf "http://%s-head-svc.%s.svc.cluster.local:8265" .Release.Name (.Release.Namespace | default "rationai-jobs-ns")) .Values.executionScheduler.rayDashboardOrigin | quote }}
             - name: MODEL_CATALOG_PATH
               value: /etc/model-service/model-catalog.json
             - name: BUILDER_IDS
               value: {{ keys .Values.builders | sortAlpha | toJson | quote }}
+            - name: SHARED_STORAGE_ROOTS
+              value: {{ .Values.sharedStorageRoots | toJson | quote }}
             {{- if .Values.executionScheduler.inferenceServeOrigin }}
             - name: INFERENCE_SERVE_ORIGIN
               value: {{ .Values.executionScheduler.inferenceServeOrigin | quote }}
@@ -61,9 +77,29 @@ spec:
             {{- end }}
             - name: INFERENCE_TIMEOUT_SECONDS
               value: {{ default 900 .Values.executionScheduler.inferenceTimeoutSeconds | quote }}
+            - name: LEASE_SECONDS
+              value: {{ .Values.executionScheduler.leaseSeconds | quote }}
+            - name: WORKER_POLL_SECONDS
+              value: {{ .Values.executionScheduler.workerPollSeconds | quote }}
+            - name: PROCESSING_ATTEMPTS
+              value: {{ .Values.executionScheduler.processingAttempts | quote }}
+            - name: PROVIDER_FINISH_ATTEMPTS
+              value: {{ .Values.executionScheduler.providerFinishAttempts | quote }}
+            - name: INITIAL_BACKOFF_SECONDS
+              value: {{ .Values.executionScheduler.initialBackoffSeconds | quote }}
+            - name: MAXIMUM_BACKOFF_SECONDS
+              value: {{ .Values.executionScheduler.maximumBackoffSeconds | quote }}
+            - name: DEFAULT_DEADLINE_SECONDS
+              value: {{ .Values.executionScheduler.defaultDeadlineSeconds | quote }}
+            - name: MAXIMUM_DEADLINE_SECONDS
+              value: {{ .Values.executionScheduler.maximumDeadlineSeconds | quote }}
+            - name: PER_MODEL_LIMIT
+              value: {{ .Values.executionScheduler.perModelLimit | quote }}
+            - name: MAX_CONCURRENT_EXECUTIONS
+              value: {{ .Values.executionScheduler.maxConcurrentExecutions | quote }}
           readinessProbe:
             httpGet:
-              path: /healthz
+              path: /readyz
               port: http
             periodSeconds: 5
             timeoutSeconds: 3
@@ -88,10 +124,19 @@ spec:
             - name: model-catalog
               mountPath: /etc/model-service
               readOnly: true
+            {{- if .Values.executionScheduler.sharedStorage.existingClaim }}
+            - name: shared-storage
+              mountPath: {{ .Values.executionScheduler.sharedStorage.mountPath | quote }}
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
         - name: model-catalog
           configMap:
             name: {{ .Release.Name }}-model-catalog
+        {{- if .Values.executionScheduler.sharedStorage.existingClaim }}
+        - name: shared-storage
+          persistentVolumeClaim:
+            claimName: {{ .Values.executionScheduler.sharedStorage.existingClaim | quote }}
+        {{- end }}
 {{- end }}
