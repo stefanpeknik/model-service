@@ -5,7 +5,10 @@
 - worker.py: claims work, runs attempts, renews leases, settles outcomes.
 - transitions.py: the state rules every repository applies.
 - records.py: internal records, leases, retry policy and outcomes.
-- raw_inference.py: scheduled single-tile inference.
+- tile_executions.py: scheduled single-tile inference.
+
+When an attempt ends, transitions.py decides retry or failure (settle), using
+the retry policy in records.py.
 - providers.py: the interface a provider implements to admit and finish jobs.
 - store/: the PostgreSQL repository, its rows and migrations.
 """

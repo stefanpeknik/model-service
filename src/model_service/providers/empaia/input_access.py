@@ -15,12 +15,12 @@ from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
-from model_service.providers.access import AccessAdapter, InputAccess
-from model_service.providers.empaia.gateway import (
+from model_service.providers.empaia.app_service.gateway import (
     EmpaiaGatewayError,
     EmpaiaInputState,
     EmpaiaJobContext,
 )
+from model_service.providers.input_files import AccessAdapter, InputAccess
 from model_service.replica.cleanup import close_resource
 from model_service.wire.failures import BuilderFailure, FailureCode, InvalidInvocation
 from model_service.wire.invocation import ExecutionContext, ProviderInput
@@ -31,15 +31,15 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from model_service.inference.contracts import ModelBinding
-    from model_service.providers.empaia.app_service_types import (
+    from model_service.providers.empaia.app_service.gateway import (
+        EmpaiaGateway,
+        EmpaiaGatewayFactory,
+    )
+    from model_service.providers.empaia.app_service.types import (
         DirectAccess,
         Rectangle,
         RectangleMaskWriter,
         SlideMetadata,
-    )
-    from model_service.providers.empaia.gateway import (
-        EmpaiaGateway,
-        EmpaiaGatewayFactory,
     )
     from model_service.wire.invocation import Invocation
 

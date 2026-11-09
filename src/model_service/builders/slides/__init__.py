@@ -1,1 +1,1 @@
-"""Slide reading shared by builders: tile reads at a model resolution, tissue."""
+"""Slide reading builders share: tiles at a model resolution, and tissue detection."""

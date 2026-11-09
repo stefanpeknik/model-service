@@ -4,7 +4,7 @@
 - http_app.py: create_app, assembles the FastAPI app from routes/.
 - routes/: one module per URL prefix; requests.py holds their bodies.
 - errors.py: the public error envelope; ports.py: what routes need.
-- raw_inference.py: forwards raw tiles to models.
-- synchronous.py: runs a builder while the caller waits.
+- raw_inference_proxy.py: forwards raw tiles to models.
+- synchronous_runs.py: runs a builder while the caller waits.
 - capacity.py, health.py: Ray Serve state for executions and readiness.
 """

@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, cast
 import httpx
 from fastapi import FastAPI
 
-from model_service.builders.artifacts import atomic_artifact
+from model_service.builders.output_files import atomic_artifact
 from model_service.builders.spec import InputSpec
 from model_service.providers.empaia.input_access import EmpaiaInputAccessAdapter
 from model_service.providers.shared_storage import SharedStorageAccessAdapter

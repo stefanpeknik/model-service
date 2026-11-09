@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 import httpx
 import lz4.frame
 
-from model_service.scheduler.raw_inference import (
+from model_service.scheduler.tile_executions import (
     IncompatibleInputError,
     InferenceTarget,
     ModelResponse,

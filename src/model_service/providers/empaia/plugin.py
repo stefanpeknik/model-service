@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from model_service.providers.empaia.gateway import INPUT_ACCESS_KIND
-from model_service.providers.empaia.http_gateway import http_gateway_factory
+from model_service.providers.empaia.app_service.gateway import INPUT_ACCESS_KIND
+from model_service.providers.empaia.app_service.http import http_gateway_factory
 from model_service.providers.empaia.settings import EmpaiaSettings
 from model_service.providers.plugin import FacadeContribution, Provider
 
@@ -20,8 +20,8 @@ if TYPE_CHECKING:
 
     from model_service.catalog import ModelCatalog
     from model_service.facade.settings import SchedulerSettings
-    from model_service.providers.access import AccessAdapter
     from model_service.providers.empaia.registration import Marketplace
+    from model_service.providers.input_files import AccessAdapter
     from model_service.replica.settings import ReplicaSettings
 
 
@@ -55,12 +55,12 @@ class EmpaiaProvider(Provider):
             jsonschema.ValidationError: If a generated EAD fails the EAD v3 schema.
         """
         from model_service.providers.empaia.ead import app_definitions, parse_listings
+        from model_service.providers.empaia.jobs import (
+            EmpaiaProviderAdapter,
+        )
         from model_service.providers.empaia.publishers import default_publishers
         from model_service.providers.empaia.registration import register_until_done
         from model_service.providers.empaia.routes import create_router
-        from model_service.providers.empaia.scheduler_adapter import (
-            EmpaiaProviderAdapter,
-        )
 
         del settings
         empaia = EmpaiaSettings()

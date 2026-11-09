@@ -16,7 +16,7 @@ from model_service.replica.client import (
     RemoteFailureError,
     UnknownOutcomeError,
 )
-from model_service.scheduler import raw_inference
+from model_service.scheduler import tile_executions
 from model_service.scheduler.executions import (
     ExecutionError,
     ExecutionErrorCode,
@@ -60,9 +60,9 @@ if TYPE_CHECKING:
     from model_service.scheduler.active_work import ActiveWorkRegistry
     from model_service.scheduler.executions import ModelResolver, ProviderName
     from model_service.scheduler.providers import ProviderAdapter
-    from model_service.scheduler.raw_inference import InferenceTarget
     from model_service.scheduler.records import Settlement
     from model_service.scheduler.store.repository import ExecutionRepository
+    from model_service.scheduler.tile_executions import InferenceTarget
 
 
 class ExecutionWorker:
@@ -466,7 +466,7 @@ class ExecutionWorker:
                 ),
                 retryable=False,
             )
-        except raw_inference.IncompatibleInputError as error:
+        except tile_executions.IncompatibleInputError as error:
             return ProcessingFailed(
                 error=ExecutionError(ExecutionErrorCode.INCOMPATIBLE_INPUT, str(error)),
                 retryable=False,
@@ -475,7 +475,7 @@ class ExecutionWorker:
             response = await self._inference.call(
                 claim.model_id, claim.payload, claim.invocation.headers
             )
-        except raw_inference.ModelUnavailableError:
+        except tile_executions.ModelUnavailableError:
             return ProcessingFailed(
                 error=ExecutionError(
                     ExecutionErrorCode.MODEL_UNAVAILABLE,
@@ -483,7 +483,7 @@ class ExecutionWorker:
                 ),
                 retryable=True,
             )
-        except raw_inference.ResultTooLargeError:
+        except tile_executions.ResultTooLargeError:
             return ProcessingFailed(
                 error=ExecutionError(
                     ExecutionErrorCode.RESULT_TOO_LARGE,
@@ -491,7 +491,7 @@ class ExecutionWorker:
                 ),
                 retryable=False,
             )
-        return raw_inference.settlement(response)
+        return tile_executions.settlement(response)
 
     async def _run_builder(self, claim: WorkClaim) -> Settlement:
         """Resolve the model's current binding and dispatch the builder.

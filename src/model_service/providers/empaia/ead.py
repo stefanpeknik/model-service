@@ -2,7 +2,7 @@
 
 A model file opts in with an `empaia` block: how the model is presented and in
 which modes it runs. Every builder that accepts the model's contract, is listed
-in `io.BUILDER_IO`, and whose outputs all have a publisher that takes the model
+in `ead_builder_io.BUILDER_IO`, and whose outputs all have a publisher that takes the model
 then becomes one app with the listed modes. In standalone mode it takes all
 of the builder's EMPAIA inputs (e.g. a region of interest); in preprocessing
 mode only the required ones, because EMPAIA starts it with a slide alone. The
@@ -32,7 +32,7 @@ from pydantic import (
 )
 
 from model_service.builders.registry import BUILDERS
-from model_service.providers.empaia.ead_io import BUILDER_IO
+from model_service.providers.empaia.ead_builder_io import BUILDER_IO
 
 
 if TYPE_CHECKING:
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 
     from model_service.builders.spec import BuilderSpec
     from model_service.inference.contracts import ModelBinding
-    from model_service.providers.empaia.ead_io import BuilderIo
+    from model_service.providers.empaia.ead_builder_io import BuilderIo
     from model_service.providers.empaia.publishers import PublisherRegistry
 
 

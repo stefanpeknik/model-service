@@ -1,4 +1,7 @@
-"""Internal HTTP contract between the facade/scheduler and Ray builder replicas."""
+"""The HTTP contract between the facade or scheduler and a builder replica.
+
+Its error format is internal; the public API's is facade/errors.py.
+"""
 
 from __future__ import annotations
 

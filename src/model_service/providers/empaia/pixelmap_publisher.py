@@ -12,22 +12,22 @@ from typing import TYPE_CHECKING
 
 from model_service.builders.heatmap.score_grid import read_score_grid
 from model_service.inference.contracts import SpatialScoresModel
-from model_service.providers.empaia.app_service_types import (
+from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
+from model_service.providers.empaia.app_service.types import (
     RectangleMaskWriter,
     SlideLevel,
 )
-from model_service.providers.empaia.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.publishers import OutputPublisher
 from model_service.wire.result import SharedArtifact
 
 
 if TYPE_CHECKING:
     from model_service.inference.contracts import ModelBinding
-    from model_service.providers.empaia.app_service_types import (
+    from model_service.providers.empaia.app_service.gateway import EmpaiaGateway
+    from model_service.providers.empaia.app_service.types import (
         Rectangle,
         SlideMetadata,
     )
-    from model_service.providers.empaia.gateway import EmpaiaGateway
     from model_service.providers.empaia.publishers import Commit
     from model_service.wire.result import BuilderOutput
 

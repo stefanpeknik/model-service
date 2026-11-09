@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 from model_service.builders.registry import BUILDERS, get_builder
-from model_service.providers.empaia.gateway import EmpaiaGatewayError
+from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.input_access import EmpaiaInputAccessAdapter
 from model_service.providers.shared_storage import SharedStorageAccessAdapter
 from model_service.providers.standalone import StandaloneProviderAdapter

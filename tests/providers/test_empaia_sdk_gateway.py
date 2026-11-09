@@ -10,11 +10,11 @@ from aiohttp import web
 from aiohttp.test_utils import TestServer
 from rationai.empaia import Client
 
-from model_service.providers.empaia.gateway import (
+from model_service.providers.empaia.app_service.gateway import (
     EmpaiaGatewayError,
     EmpaiaJobContext,
 )
-from model_service.providers.empaia.http_gateway import (
+from model_service.providers.empaia.app_service.http import (
     HttpEmpaiaGateway,
     http_gateway_factory,
 )

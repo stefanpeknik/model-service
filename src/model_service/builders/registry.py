@@ -1,7 +1,7 @@
 """The available builders, one declaration per builder package.
 
-Adding a builder adds its `declaration.SPEC` here; offering it in EMPAIA also
-takes an entry in `providers/empaia/ead_io.py`. See
+Adding a builder adds its package's `spec.SPEC` here; offering it in EMPAIA also
+takes an entry in `providers/empaia/ead_builder_io.py`. See
 `docs/guides/adding-builders.md`.
 """
 
@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from model_service.builders.embeddings.declaration import SPEC as TILE_EMBEDDINGS
-from model_service.builders.heatmap.declaration import SPEC as HEATMAP
+from model_service.builders.embeddings.spec import SPEC as TILE_EMBEDDINGS
+from model_service.builders.heatmap.spec import SPEC as HEATMAP
 from model_service.wire.failures import UnknownBuilderError
 
 

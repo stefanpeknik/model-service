@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from model_service.builders.artifacts import atomic_artifact
+from model_service.builders.output_files import atomic_artifact
 from model_service.builders.spec import BuilderInputs, BuilderOutputs
 from model_service.inference.clients import ModelClient
 from model_service.wire.result import SharedArtifact
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
     from pydantic import BaseModel
 
-    from model_service.providers.access import InputAccess
+    from model_service.providers.input_files import InputAccess
 
 
 @dataclass(frozen=True, slots=True)

@@ -5,14 +5,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from model_service.builders.base import Builder
-from model_service.builders.heatmap.declaration import (
-    HeatmapConfiguration,
-    HeatmapInputs,
-    HeatmapOutputs,
-)
 from model_service.builders.heatmap.processor import (
     HeatmapRequest,
     SlideHeatmapProcessor,
+)
+from model_service.builders.heatmap.spec import (
+    HeatmapConfiguration,
+    HeatmapInputs,
+    HeatmapOutputs,
 )
 from model_service.inference.clients import SpatialScoresClient
 

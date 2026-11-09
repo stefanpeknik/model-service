@@ -17,7 +17,7 @@ from model_service.builders.embeddings.builder import EmbeddingBuilder
 from model_service.builders.registry import get_builder
 from model_service.catalog import ModelCatalog
 from model_service.facade.http_app import create_app
-from model_service.facade.synchronous import SynchronousBuilderService
+from model_service.facade.synchronous_runs import SynchronousBuilderService
 from model_service.facade.wiring import model_resolver
 from model_service.inference.contracts import TileEmbeddingModel
 from model_service.providers.shared_storage import SharedStorageAccessAdapter

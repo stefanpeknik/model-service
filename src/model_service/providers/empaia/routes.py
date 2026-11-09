@@ -21,8 +21,8 @@ from pydantic import Field
 from model_service.facade.auth import Access, Action
 from model_service.facade.errors import ERRORS, ApiErrorCode, http_error, unavailable
 from model_service.facade.routes.common import submit
-from model_service.providers.empaia.gateway import PROVIDER_NAME
-from model_service.providers.empaia.scheduler_adapter import EmpaiaSchedulePayload
+from model_service.providers.empaia.app_service.gateway import PROVIDER_NAME
+from model_service.providers.empaia.jobs import EmpaiaSchedulePayload
 from model_service.scheduler.executions import (
     ExecutionStatus,
     ScheduleRequest,

@@ -5,12 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from model_service.builders.base import Builder
-from model_service.builders.embeddings.declaration import (
+from model_service.builders.embeddings.processor import build_embeddings
+from model_service.builders.embeddings.spec import (
     EmbeddingConfiguration,
     EmbeddingInputs,
     EmbeddingOutputs,
 )
-from model_service.builders.embeddings.processor import build_embeddings
 from model_service.inference.clients import TileEmbeddingClient
 
 

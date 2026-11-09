@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from model_service.providers.empaia.app_service_types import DirectAccess
+from model_service.providers.empaia.app_service.types import DirectAccess
 from model_service.providers.empaia.input_access import link_direct_input
 
 

@@ -23,8 +23,8 @@ from httpx import (
 from model_service.catalog import ModelCatalog
 from model_service.facade.health import DeploymentHealth
 from model_service.facade.http_app import create_app
-from model_service.facade.raw_inference import HttpInferenceProxy, ModelInference
-from model_service.facade.synchronous import SynchronousBuilderService
+from model_service.facade.raw_inference_proxy import HttpInferenceProxy, ModelInference
+from model_service.facade.synchronous_runs import SynchronousBuilderService
 from model_service.facade.wiring import model_resolver
 from model_service.inference.contracts import SpatialScoresModel, TileEmbeddingModel
 from model_service.providers.shared_storage import SharedStorageAccessAdapter

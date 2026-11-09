@@ -10,7 +10,7 @@ from typing import Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 
-from model_service.providers.empaia.gateway import EmpaiaGatewayError
+from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 
 
 type NonEmptyString = Annotated[str, Field(min_length=1)]

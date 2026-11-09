@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from model_service.catalog import ModelCatalog
     from model_service.facade.ports import BuilderRunner, Capacity, Scheduler
     from model_service.providers.plugin import RouteFactory
-    from model_service.scheduler.raw_inference import InferenceTarget
+    from model_service.scheduler.tile_executions import InferenceTarget
 
 
 def create_app(

@@ -11,16 +11,16 @@ from model_service.builders.heatmap.score_grid import MEDIA_TYPE
 from model_service.builders.registry import get_builder
 from model_service.builders.spec import OutputSpec
 from model_service.inference.contracts import SpatialScoresModel
+from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.ead import AppMode, EmpaiaListing, app_definitions
-from model_service.providers.empaia.ead_io import BUILDER_IO
-from model_service.providers.empaia.gateway import EmpaiaGatewayError
-from model_service.providers.empaia.pixelmaps import _clip
+from model_service.providers.empaia.ead_builder_io import BUILDER_IO
+from model_service.providers.empaia.jobs import EmpaiaProviderAdapter
+from model_service.providers.empaia.pixelmap_publisher import _clip
 from model_service.providers.empaia.publishers import (
     PrimitivePublisher,
     PublisherRegistry,
     default_publishers,
 )
-from model_service.providers.empaia.scheduler_adapter import EmpaiaProviderAdapter
 from model_service.scheduler.providers import (
     ProviderFinishFailureError,
     ProviderSuccess,
@@ -241,7 +241,7 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "model_service.providers.empaia.scheduler_adapter.get_builder",
+                "model_service.providers.empaia.jobs.get_builder",
                 return_value=with_score,
             ),
             patch(

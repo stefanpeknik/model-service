@@ -23,9 +23,7 @@ import jwt
 from pydantic import Field, ValidationError
 
 from model_service.builders.registry import get_builder, parse_result
-from model_service.providers.empaia.ead import VIEWER_CONFIG_KEY
-from model_service.providers.empaia.ead_io import BUILDER_IO
-from model_service.providers.empaia.gateway import (
+from model_service.providers.empaia.app_service.gateway import (
     INPUT_ACCESS_KIND,
     PROVIDER_NAME,
     EmpaiaGateway,
@@ -35,6 +33,8 @@ from model_service.providers.empaia.gateway import (
     EmpaiaJobContext,
     EmpaiaJobMode,
 )
+from model_service.providers.empaia.ead import VIEWER_CONFIG_KEY
+from model_service.providers.empaia.ead_builder_io import BUILDER_IO
 from model_service.providers.empaia.input_access import job_workspace
 from model_service.providers.empaia.publishers import default_publishers
 from model_service.scheduler.executions import (
@@ -65,7 +65,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from model_service.builders.spec import BuilderSpec
-    from model_service.providers.empaia.ead_io import BuilderIo
+    from model_service.providers.empaia.ead_builder_io import BuilderIo
     from model_service.providers.empaia.publishers import PublisherRegistry
     from model_service.scheduler.providers import BeforeMutation
     from model_service.wire.json import JsonValue

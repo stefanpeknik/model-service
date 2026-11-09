@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from ray import serve
 
 from model_service.builders.registry import get_builder
-from model_service.providers.installed import PROVIDERS
+from model_service.providers.enabled import PROVIDERS
 from model_service.replica.application import BuilderApplication
 from model_service.replica.protocol import (
     ErrorCode,
@@ -29,7 +29,7 @@ from model_service.wire.result import BuilderResult
 
 
 if TYPE_CHECKING:
-    from model_service.providers.access import AccessAdapter
+    from model_service.providers.input_files import AccessAdapter
 
 
 fastapi = FastAPI()

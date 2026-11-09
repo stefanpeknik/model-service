@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 
     from model_service.catalog import ModelCatalog
     from model_service.facade.settings import SchedulerSettings
-    from model_service.providers.access import AccessAdapter
+    from model_service.providers.input_files import AccessAdapter
     from model_service.providers.plugin import FacadeContribution
     from model_service.providers.shared_storage import SharedStorageAccessAdapter
     from model_service.replica.settings import ReplicaSettings

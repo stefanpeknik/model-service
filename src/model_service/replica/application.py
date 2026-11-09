@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from model_service.builders.spec import BuilderSpec
     from model_service.inference.clients import HandleLookup
     from model_service.inference.contracts import ModelBinding
-    from model_service.providers.access import AccessAdapter, InputAccess
+    from model_service.providers.input_files import AccessAdapter, InputAccess
     from model_service.wire.invocation import InputAccessKind, Invocation
 
 

@@ -10,18 +10,18 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
-from model_service.builders.heatmap.declaration import HeatmapOutputs
+from model_service.builders.heatmap.spec import HeatmapOutputs
 from model_service.builders.registry import get_builder
 from model_service.inference.contracts import ModelBinding, SpatialScoresModel
-from model_service.providers.empaia.gateway import (
+from model_service.providers.empaia.app_service.gateway import (
     EmpaiaGatewayError,
     EmpaiaInputState,
     EmpaiaJobContext,
     EmpaiaJobMode,
 )
 from model_service.providers.empaia.input_access import EmpaiaInputAccessAdapter
+from model_service.providers.empaia.jobs import EmpaiaProviderAdapter
 from model_service.providers.empaia.publishers import Commit, PublisherRegistry
-from model_service.providers.empaia.scheduler_adapter import EmpaiaProviderAdapter
 from model_service.replica.application import BuilderApplication
 from model_service.scheduler.active_work import ActiveWorkRegistry
 from model_service.scheduler.executions import (
@@ -46,7 +46,10 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from model_service.builders.base import BuilderContext
-    from model_service.providers.empaia.gateway import EmpaiaGateway, MutationGuard
+    from model_service.providers.empaia.app_service.gateway import (
+        EmpaiaGateway,
+        MutationGuard,
+    )
     from model_service.wire.json import JsonValue
     from model_service.wire.result import BuilderOutput
 
