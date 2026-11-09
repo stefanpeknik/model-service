@@ -1,4 +1,4 @@
-"""Internal HTTP contract between callers and Ray builder replicas."""
+"""Internal HTTP contract between the facade and Ray builder replicas."""
 
 from __future__ import annotations
 

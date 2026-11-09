@@ -1,6 +1,6 @@
 """Builder invocations, model bindings, results and safe errors.
 
-Everything here crosses a process boundary (caller → Ray builder replica), so
+Everything here crosses a process boundary (facade → Ray builder replica), so
 the types are strict and JSON-serializable.
 """
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 from pydantic import (
     BaseModel,
@@ -76,9 +76,16 @@ class InferenceContract(StrEnum):
 
 
 class _ModelBinding(BaseModel):
-    """A model's declaration: what builders need to drive it."""
+    """A model's catalog declaration: what builders need to drive it.
+
+    A model file gives each field in its `inference` block if the field is in
+    `inference_fields`, otherwise in its first deployment's `user_config`, which
+    the model implementation also reads.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
+
+    inference_fields: ClassVar[tuple[str, ...]] = ()
 
     id: Annotated[str, Field(min_length=1)]
     tile_size: Annotated[int, Field(strict=True, gt=0)]
@@ -97,6 +104,9 @@ class SpatialScoresModel(_ModelBinding):
 
 class TileEmbeddingModel(_ModelBinding):
     """Ray-handle model returning float32 embeddings for an RGB tile."""
+
+    # The implementation hard-codes these; the file states them for the catalog.
+    inference_fields = ("mpp",)
 
     contract: Literal[InferenceContract.TILE_EMBEDDING] = (
         InferenceContract.TILE_EMBEDDING

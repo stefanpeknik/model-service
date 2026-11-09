@@ -1,4 +1,7 @@
-- name: episeg-1
+inference:
+  contract: spatial-scores
+serve:
+  name: episeg-1
   import_path: model_service.models.semantic_segmentation:app
   route_prefix: /episeg-1
   deployments:

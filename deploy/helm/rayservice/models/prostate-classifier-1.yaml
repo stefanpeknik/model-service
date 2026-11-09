@@ -1,4 +1,7 @@
-- name: prostate-classifier-1
+inference:
+  contract: spatial-scores
+serve:
+  name: prostate-classifier-1
   import_path: model_service.models.binary_classifier:app
   route_prefix: /prostate-classifier-1
   deployments:

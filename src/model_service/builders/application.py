@@ -96,7 +96,7 @@ class BuilderApplication:
                 invalid, or the model is incompatible.
             ContractViolation: The builder returned outputs that differ from its
                 declaration.
-            BuilderFailure: The running model differs from its declaration, the
+            BuilderFailure: The running model differs from its catalog entry, the
                 deadline passed (both not retryable), the builder or the cleanup
                 failed unexpectedly (retryable), or the model client or builder
                 raised one.
