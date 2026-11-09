@@ -32,6 +32,7 @@ spec:
         app.kubernetes.io/name: model-service-execution-scheduler
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+{{- include "model-service.empaiaDns" . | nindent 6 }}
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true

@@ -92,3 +92,8 @@ executionScheduler:
     limits:
       cpu: 1
       memory: 512Mi
+
+empaia:
+  # Extra DNS search domains for pods that call AppService, when the
+  # installation hands out short host names from another namespace.
+  dnsSearches: []

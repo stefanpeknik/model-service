@@ -21,6 +21,7 @@ dependencies = [
     "pydantic>=2.10.0",
     "pydantic-settings>=2.10.0,<3",
     "ratiopath>=1.0.3",
+    "rationai-empaia>=0.1.2",
     "ray[serve]>=2.58.0",
     "sqlalchemy[asyncio]>=2.0.36,<2.1",
     "uvicorn>=0.30.0",
@@ -35,6 +36,9 @@ dev = [
     "ruff>=0.14.6",
 ]
 docs = ["mkdocs>=1.6.0", "mkdocs-material>=9.6.0", "pymdown-extensions>=10.0"]
+
+[tool.uv.sources]
+rationai-empaia = { git = "ssh://git@gitlab.ics.muni.cz/524810/empaia.git", branch = "feat/job-configuration-client-on-mr10" }
 
 [build-system]
 requires = ["hatchling>=1.25"]

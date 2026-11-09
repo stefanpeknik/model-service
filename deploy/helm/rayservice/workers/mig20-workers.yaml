@@ -6,6 +6,7 @@ rayStartParams:
   num-gpus: "1"
 template:
   spec:
+{{- include "model-service.empaiaDns" . | nindent 4 }}
     securityContext:
       fsGroup: 1000
       fsGroupChangePolicy: OnRootMismatch
