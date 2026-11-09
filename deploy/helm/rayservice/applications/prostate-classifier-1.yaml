@@ -1,8 +1,6 @@
 - name: prostate-classifier-1
-  import_path: models.binary_classifier:app
+  import_path: model_service.models.binary_classifier:app
   route_prefix: /prostate-classifier-1
-  runtime_env:
-    working_dir: https://github.com/RationAI/model-service/archive/refs/heads/main.zip
   deployments:
     - name: BinaryClassifier
       max_ongoing_requests: 512
@@ -27,5 +25,5 @@
         trt_cache_path: /mnt/cache/trt_cache/binary-classifier-1/b256
         trt_builder_optimization_level: 3
         model:
-          _target_: providers.model_provider:mlflow
+          _target_: model_service.models.artifacts:mlflow
           artifact_uri: mlflow-artifacts:/65/aebc892f526047249b972f200bef4381/artifacts/checkpoints/epoch=0-step=6972/prostate_model_norm.onnx

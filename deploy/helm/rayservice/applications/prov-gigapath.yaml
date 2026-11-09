@@ -1,12 +1,11 @@
-- name: virchow2
-  import_path: models.virchow2:app
-  route_prefix: /virchow2
+- name: prov-gigapath
+  import_path: model_service.models.prov_gigapath:app
+  route_prefix: /prov-gigapath
   runtime_env:
     config:
       setup_timeout_seconds: 1800
-    working_dir: https://github.com/RationAI/model-service/archive/refs/heads/main.zip
   deployments:
-    - name: Virchow2
+    - name: ProvGigaPath
       max_ongoing_requests: 1024
       max_queued_requests: 8192
       autoscaling_config:
@@ -25,4 +24,4 @@
         max_batch_size: 512
         batch_wait_timeout_s: 0.1
         model:
-          repo_id: paige-ai/Virchow2
+          repo_id: prov-gigapath/prov-gigapath

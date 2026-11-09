@@ -42,7 +42,7 @@ class HeatmapBuilder:
         from ratiopath.openslide import OpenSlide
         from ratiopath.tiling import grid_tiles
 
-        from misc.fetch_tissue_tile import fetch_tissue_tile
+        from model_service.misc.fetch_tissue_tile import fetch_tissue_tile
 
         model = serve.get_app_handle(model_id)
         model_config = await model.get_config.remote()
