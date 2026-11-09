@@ -29,7 +29,7 @@ from model_service.providers.installed import PROVIDERS
 
 
 if TYPE_CHECKING:
-    from model_service.builders.application import AccessAdapter
+    from model_service.builders.access import AccessAdapter
 
 
 fastapi = FastAPI()

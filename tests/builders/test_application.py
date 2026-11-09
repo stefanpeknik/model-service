@@ -53,7 +53,7 @@ from tests.support.builder_fixtures import (
 
 
 if TYPE_CHECKING:
-    from model_service.builders.application import BuilderContext
+    from model_service.builders.base import BuilderContext
 
 
 class FixedAccess:

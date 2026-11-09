@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 import httpx
 
-from model_service.builders.application import validate_model
 from model_service.builders.client import HTTPBuilderDispatch
 from model_service.builders.registry import BUILDERS, get_builder
 from model_service.facade.api import create_app as create_api
@@ -49,7 +48,7 @@ def model_resolver(catalog: ModelCatalog) -> ModelResolver:
     def resolve(builder_id: str, model_id: str) -> ModelBinding:
         spec = get_builder(builder_id)
         model = catalog.get(model_id)
-        validate_model(spec, model)
+        spec.check_model(model)
         return model
 
     return resolve

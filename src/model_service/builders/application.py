@@ -1,7 +1,9 @@
 """Run one builder invocation behind validation, a deadline and resource cleanup.
 
-Access adapters turn provider-specific inputs into local paths, so builders only
-see `BuilderContext`.
+The application checks the invocation and the model against the builder's
+declaration, verifies the running model through its contract's client, opens the
+inputs through the provider's access adapter, runs the builder before the
+deadline, checks its outputs and always closes the access.
 """
 
 from __future__ import annotations
@@ -9,16 +11,14 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
-from abc import ABC, abstractmethod
-from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
 
-from model_service.builders.artifacts import atomic_artifact
+from model_service.builders.base import BuilderContext
 from model_service.builders.cleanup import close_resource
 from model_service.builders.contracts import (
     BuilderFailure,
@@ -28,7 +28,6 @@ from model_service.builders.contracts import (
     ContractViolation,
     ExecutionContext,
     FailureCode,
-    IncompatibleModelError,
     InlineOutput,
     InvalidInvocation,
     SharedArtifact,
@@ -38,253 +37,20 @@ from model_service.builders.model_clients import client_for, ray_handle
 
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Iterator, Mapping
+    from collections.abc import Mapping
 
-    from pydantic import BaseModel
-
+    from model_service.builders.access import AccessAdapter, InputAccess
+    from model_service.builders.base import Builder
     from model_service.builders.contracts import (
         InputAccessKind,
         Invocation,
         ModelBinding,
     )
-    from model_service.builders.model_clients import HandleLookup, ModelClient
+    from model_service.builders.model_clients import HandleLookup
     from model_service.builders.spec import BuilderSpec
 
 
 logger = logging.getLogger(__name__)
-
-
-class InputAccess(ABC):
-    @abstractmethod
-    def input_path(self, name: str) -> Path:
-        """Resolve a named invocation input to a local file.
-
-        Args:
-            name: Input name from the builder's declaration.
-
-        Returns:
-            Local path the builder can read the input from.
-        """
-        ...
-
-    @abstractmethod
-    def output_path(self, relative_path: str) -> Path:
-        """Resolve an output's relative path to the local file to write.
-
-        Args:
-            relative_path: Output path relative to the invocation's output location.
-
-        Returns:
-            Local path the builder writes the artifact to.
-        """
-        ...
-
-    @abstractmethod
-    def is_visible_artifact(self, path: Path) -> bool:
-        """Check that a returned artifact is a file this access exposes to callers.
-
-        Args:
-            path: Artifact path a builder returned in its result.
-
-        Returns:
-            True when the path is a file inside the access's visible output area.
-        """
-        ...
-
-    @abstractmethod
-    async def aclose(self) -> None:
-        """Release what the access holds, such as fetched inputs or temporary files."""
-        ...
-
-
-class AccessAdapter(ABC):
-    # The model tells an adapter that fetches slides which resolution the builder reads.
-    @abstractmethod
-    def create(
-        self,
-        invocation: Invocation,
-        execution_context: ExecutionContext,
-        model: ModelBinding,
-    ) -> InputAccess | Awaitable[InputAccess]:
-        """Create the input access for one invocation attempt.
-
-        Args:
-            invocation: Invocation whose inputs and outputs the access resolves.
-            execution_context: Attempt identity and protected provider state.
-            model: Model binding; tells an adapter that fetches slides which
-                resolution the builder reads.
-
-        Returns:
-            The access, or an awaitable resolving to it.
-        """
-        ...
-
-
-@dataclass(frozen=True, slots=True)
-class BuilderContext[K: ModelClient[Any], I: BuilderInputs, C: BaseModel]:
-    """What one builder run gets: its model, inputs and configuration, typed.
-
-    The application checks the model against the builder's contract and its
-    running deployment against the catalog, resolves the inputs to local files
-    and the configuration with the builder's own classes before building it, so
-    a builder can rely on these types without checking them again.
-    """
-
-    access: InputAccess
-    # The verified client of the model's contract; `model.declaration` is its
-    # catalog entry.
-    model: K
-    inputs: I
-    configuration: C
-    deadline_at: datetime
-    output_paths: Mapping[str, str]
-
-    def output_path(self, output: str) -> Path:
-        """Return where to write a declared artifact output.
-
-        Uses the invocation's `output_path` override when it set one, otherwise the
-        output's default path. `write_artifact` is the usual way to write one.
-
-        Args:
-            output: Output name from the builder's declaration.
-
-        Returns:
-            Local path for the output file.
-
-        Raises:
-            KeyError: The output has no path, i.e. it is not an artifact output.
-        """
-        return self.access.output_path(self.output_paths[output])
-
-    @contextmanager
-    def write_artifact(self, output: str) -> Iterator[PendingArtifact]:
-        """Write an artifact output atomically.
-
-        The builder writes `pending.path`, a temporary file next to the
-        destination; on success it replaces the destination, and on failure it
-        is removed, so a failed run leaves no partial artifact. After the block,
-        `pending.artifact` is the output to return.
-
-        Args:
-            output: Output name from the builder's declaration.
-
-        Yields:
-            The pending artifact.
-
-        Raises:
-            InvalidInvocation: The destination is one of the inputs.
-            RuntimeError: The block did not write a regular file.
-        """
-        destination = self.output_path(output)
-        with atomic_artifact(destination, inputs=self.inputs.paths()) as temporary:
-            yield PendingArtifact(path=temporary, destination=destination)
-
-
-@dataclass(frozen=True, slots=True)
-class PendingArtifact:
-    """An artifact being written by `BuilderContext.write_artifact`."""
-
-    # Where the builder writes; closed before the block ends.
-    path: Path
-    destination: Path
-
-    @property
-    def artifact(self) -> SharedArtifact:
-        """The finished artifact, to return in the builder's outputs."""
-        return SharedArtifact(path=str(self.destination))
-
-
-class Builder[
-    K: ModelClient[Any],
-    I: BuilderInputs,
-    C: BaseModel,
-    R: BuilderOutputs,
-](ABC):
-    """Produces a builder's outputs from a slide and a model.
-
-    `K` is the model client of the contract it accepts; `I`, `C` and `R` are its
-    declared inputs, configuration and outputs models.
-    """
-
-    @abstractmethod
-    async def run(self, context: BuilderContext[K, I, C]) -> R:
-        """Produce the builder's outputs for one invocation.
-
-        Args:
-            context: Verified model client, resolved inputs, configuration and
-                deadline.
-
-        Returns:
-            The builder's outputs model, one field per declared output.
-        """
-        ...
-
-
-def validate_invocation(
-    spec: BuilderSpec, invocation: Invocation, *, now: datetime | None = None
-) -> None:
-    """Check an invocation against a builder's declaration before running it.
-
-    Args:
-        spec: Declaration of the builder to run.
-        invocation: Invocation to check.
-        now: Time to compare the deadline against; defaults to the current UTC time.
-
-    Raises:
-        InvalidInvocation: The deadline lacks a timezone or has passed, inputs are
-            unknown or missing, the configuration is invalid, or `output_path` is
-            set for a builder without exactly one artifact output.
-    """
-    deadline = invocation.deadline_at
-    if deadline.tzinfo is None or deadline.utcoffset() is None:
-        raise InvalidInvocation("deadline_at must include a timezone")
-    if deadline <= (now or datetime.now(UTC)):
-        raise InvalidInvocation("deadline_at must be in the future")
-    unknown = invocation.inputs.keys() - spec.inputs.keys()
-    if unknown:
-        raise InvalidInvocation(f"unknown inputs: {', '.join(sorted(unknown))}")
-    missing = {
-        name
-        for name, input_spec in spec.inputs.items()
-        if input_spec.required and name not in invocation.inputs
-    }
-    if missing:
-        raise InvalidInvocation(f"missing inputs: {', '.join(sorted(missing))}")
-    if invocation.resolved_configuration is not None:
-        spec.resolve_configuration(invocation.resolved_configuration)
-    if invocation.output_path is not None and _artifact_output(spec) is None:
-        raise InvalidInvocation(f"{spec.id} has no artifact output to place")
-
-
-def validate_model(spec: BuilderSpec, model: ModelBinding) -> None:
-    """Check that a model's inference contract is the one the builder accepts.
-
-    Args:
-        spec: Declaration of the builder to run.
-        model: Model binding resolved for the attempt.
-
-    Raises:
-        IncompatibleModelError: The model's contract differs from `spec.accepts`.
-    """
-    if model.contract != spec.accepts:
-        raise IncompatibleModelError(
-            f"model {model.id!r} ({model.contract}) is incompatible with "
-            f"builder {spec.id!r} ({spec.accepts})"
-        )
-
-
-def _artifact_output(spec: BuilderSpec) -> str | None:
-    """Find the single artifact output an invocation's `output_path` can place.
-
-    Args:
-        spec: Builder declaration.
-
-    Returns:
-        The name of the only output with a default path, or None when there are
-        none or several.
-    """
-    names = [name for name, output in spec.outputs.items() if output.default_path]
-    return names[0] if len(names) == 1 else None
 
 
 class BuilderApplication:
@@ -343,8 +109,8 @@ class BuilderApplication:
                 failed unexpectedly (retryable), or the model client or builder
                 raised one.
         """
-        validate_invocation(self._spec, invocation)
-        validate_model(self._spec, model)
+        self._spec.check_invocation(invocation)
+        self._spec.check_model(model)
         access: InputAccess | None = None
         primary_failure: BaseException | None = None
         try:
@@ -440,7 +206,7 @@ class BuilderApplication:
             for name, output in self._spec.outputs.items()
             if output.default_path is not None
         }
-        artifact = _artifact_output(self._spec)
+        artifact = self._spec.placeable_output
         if invocation.output_path is not None and artifact is not None:
             paths[artifact] = invocation.output_path
         return paths

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from model_service.builders.application import Builder
+from model_service.builders.base import Builder
 from model_service.builders.embeddings.declaration import (
     EmbeddingConfiguration,
     EmbeddingInputs,
@@ -15,7 +15,7 @@ from model_service.builders.model_clients import TileEmbeddingClient
 
 
 if TYPE_CHECKING:
-    from model_service.builders.application import BuilderContext
+    from model_service.builders.base import BuilderContext
     from model_service.builders.settings import WorkerSettings
 
 

@@ -10,7 +10,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
-from model_service.builders.application import BuilderApplication, validate_model
+from model_service.builders.application import BuilderApplication
 from model_service.builders.contracts import (
     BuilderResult,
     ExecutionContext,
@@ -50,7 +50,7 @@ from tests.support.memory_repository import InMemoryExecutionRepository
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from model_service.builders.application import BuilderContext
+    from model_service.builders.base import BuilderContext
     from model_service.builders.contracts import BuilderOutput, JsonValue
     from model_service.providers.empaia.gateway import EmpaiaGateway, MutationGuard
 
@@ -74,7 +74,7 @@ API_URL = "https://empaia.invalid"
 def resolve_model(builder_id: str, model_id: str) -> ModelBinding:
     if model_id != MODEL.id:
         raise KeyError(model_id)
-    validate_model(get_builder(builder_id), MODEL)
+    get_builder(builder_id).check_model(MODEL)
     return MODEL
 
 

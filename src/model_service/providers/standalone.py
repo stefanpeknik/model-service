@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from model_service.builders.application import validate_invocation
 from model_service.builders.contracts import (
     SHARED_STORAGE,
     BuilderInput,
@@ -39,7 +38,7 @@ from model_service.scheduler.providers import ProviderAdapter
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from model_service.builders.application import AccessAdapter
+    from model_service.builders.access import AccessAdapter
     from model_service.builders.contracts import JsonValue
     from model_service.builders.settings import WorkerSettings
     from model_service.facade.catalog import ModelCatalog
@@ -162,8 +161,7 @@ class StandaloneProviderAdapter(ProviderAdapter):
             ) from error
         invocation = body.invocation(deadline_at)
         try:
-            validate_invocation(
-                get_builder(request.builder_id),
+            get_builder(request.builder_id).check_invocation(
                 invocation,
                 now=deadline_at - timedelta(microseconds=1),
             )

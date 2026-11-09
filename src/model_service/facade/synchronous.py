@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from model_service.builders.application import validate_invocation, validate_model
 from model_service.builders.contracts import ExecutionContext
 from model_service.builders.registry import get_builder
 from model_service.facade.routes.builders import BuilderRunner
@@ -49,9 +48,9 @@ class SynchronousBuilderService(BuilderRunner):
         """
         spec = get_builder(builder_id)
         model = self._catalog.get(model_id)
-        validate_model(spec, model)
+        spec.check_model(model)
         invocation = request.invocation(request.deadline_at)
-        validate_invocation(spec, invocation)
+        spec.check_invocation(invocation)
         return await self._dispatch.run(
             builder_id, invocation, model, ExecutionContext()
         )

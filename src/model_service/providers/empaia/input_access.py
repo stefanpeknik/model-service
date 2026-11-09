@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
-from model_service.builders.application import AccessAdapter, InputAccess
+from model_service.builders.access import AccessAdapter, InputAccess
 from model_service.builders.cleanup import close_resource
 from model_service.builders.contracts import (
     BuilderFailure,

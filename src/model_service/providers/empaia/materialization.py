@@ -10,7 +10,7 @@ from model_service.providers.empaia.gateway import EmpaiaGatewayError
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from model_service.providers.empaia.http_gateway import (
+    from model_service.providers.empaia.slides import (
         DirectAccess,
         Rectangle,
         RectangleMaskWriter,

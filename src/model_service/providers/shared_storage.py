@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from model_service.builders.application import AccessAdapter, InputAccess
+from model_service.builders.access import AccessAdapter, InputAccess
 from model_service.builders.contracts import InvalidInvocation, SharedPathInput
 
 

@@ -20,12 +20,9 @@ from model_service.builders.heatmap.score_grid import (
     write_score_grid,
 )
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
-from model_service.providers.empaia.http_gateway import (
-    HttpEmpaiaGateway,
-    Rectangle,
-    SlideMetadata,
-)
+from model_service.providers.empaia.http_gateway import HttpEmpaiaGateway
 from model_service.providers.empaia.image_io import ScoreGridPublisher
+from model_service.providers.empaia.slides import Rectangle, SlideMetadata
 from tests.providers.empaia_fixtures import PIXELMAP_ID, SLIDE_ID, created
 
 

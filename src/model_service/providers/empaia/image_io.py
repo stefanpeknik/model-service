@@ -13,18 +13,18 @@ from typing import TYPE_CHECKING
 from model_service.builders.contracts import SharedArtifact, SpatialScoresModel
 from model_service.builders.heatmap.score_grid import read_score_grid
 from model_service.providers.empaia.gateway import EmpaiaGatewayError
-from model_service.providers.empaia.http_gateway import RectangleMaskWriter, SlideLevel
 from model_service.providers.empaia.publishers import OutputPublisher
+from model_service.providers.empaia.slides import RectangleMaskWriter, SlideLevel
 
 
 if TYPE_CHECKING:
     from model_service.builders.contracts import BuilderOutput, ModelBinding
     from model_service.providers.empaia.gateway import EmpaiaGateway
-    from model_service.providers.empaia.http_gateway import (
+    from model_service.providers.empaia.publishers import Commit
+    from model_service.providers.empaia.slides import (
         Rectangle,
         SlideMetadata,
     )
-    from model_service.providers.empaia.publishers import Commit
 
 
 class ScoreGridPublisher(OutputPublisher):

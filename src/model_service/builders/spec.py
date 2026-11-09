@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import types
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Union, get_args, get_origin
 
@@ -19,6 +20,7 @@ from model_service.builders.contracts import (
     Artifact,
     BuilderInputs,
     BuilderOutputs,
+    IncompatibleModelError,
     InferenceContract,
     InlineOutput,
     Input,
@@ -31,7 +33,7 @@ from model_service.builders.contracts import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from model_service.builders.contracts import JsonValue
+    from model_service.builders.contracts import Invocation, JsonValue, ModelBinding
 
 
 # Input and configuration fields builders share.
@@ -129,6 +131,65 @@ class BuilderSpec:
         """Derive the input and output declarations from their models."""
         object.__setattr__(self, "inputs", input_specs(self.input_model))
         object.__setattr__(self, "outputs", output_specs(self.output_model))
+
+    @property
+    def placeable_output(self) -> str | None:
+        """The single artifact output an invocation's `output_path` can place.
+
+        Returns:
+            The name of the only output with a default path, or None when there
+            are none or several.
+        """
+        names = [name for name, output in self.outputs.items() if output.default_path]
+        return names[0] if len(names) == 1 else None
+
+    def check_invocation(
+        self, invocation: Invocation, *, now: datetime | None = None
+    ) -> None:
+        """Check an invocation against this declaration before running it.
+
+        Args:
+            invocation: Invocation to check.
+            now: Time to compare the deadline against; the current UTC time if None.
+
+        Raises:
+            InvalidInvocation: The deadline lacks a timezone or has passed, inputs
+                are unknown or missing, the configuration is invalid, or
+                `output_path` is set for a builder without exactly one artifact
+                output.
+        """
+        deadline = invocation.deadline_at
+        if deadline.tzinfo is None or deadline.utcoffset() is None:
+            raise InvalidInvocation("deadline_at must include a timezone")
+        if deadline <= (now or datetime.now(UTC)):
+            raise InvalidInvocation("deadline_at must be in the future")
+        if unknown := invocation.inputs.keys() - self.inputs.keys():
+            raise InvalidInvocation(f"unknown inputs: {', '.join(sorted(unknown))}")
+        if missing := {
+            name
+            for name, item in self.inputs.items()
+            if item.required and name not in invocation.inputs
+        }:
+            raise InvalidInvocation(f"missing inputs: {', '.join(sorted(missing))}")
+        if invocation.resolved_configuration is not None:
+            self.resolve_configuration(invocation.resolved_configuration)
+        if invocation.output_path is not None and self.placeable_output is None:
+            raise InvalidInvocation(f"{self.id} has no artifact output to place")
+
+    def check_model(self, model: ModelBinding) -> None:
+        """Check that a model's inference contract is the one this builder accepts.
+
+        Args:
+            model: Model binding resolved for the attempt.
+
+        Raises:
+            IncompatibleModelError: The model's contract differs from `accepts`.
+        """
+        if model.contract != self.accepts:
+            raise IncompatibleModelError(
+                f"model {model.id!r} ({model.contract}) is incompatible with "
+                f"builder {self.id!r} ({self.accepts})"
+            )
 
     def resolve_configuration(
         self, overrides: Mapping[str, JsonValue] | None = None

@@ -18,7 +18,7 @@ from model_service.providers.empaia.settings import EmpaiaSettings
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from model_service.builders.application import AccessAdapter
+    from model_service.builders.access import AccessAdapter
     from model_service.builders.settings import WorkerSettings
     from model_service.facade.catalog import ModelCatalog
     from model_service.facade.settings import SchedulerSettings

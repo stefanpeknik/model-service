@@ -45,7 +45,7 @@ from tests.support.memory_repository import InMemoryExecutionRepository
 
 
 if TYPE_CHECKING:
-    from model_service.builders.application import BuilderContext
+    from model_service.builders.base import BuilderContext
     from model_service.builders.contracts import Invocation, ModelBinding
 
 

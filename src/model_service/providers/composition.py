@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
     from fastapi import APIRouter
 
-    from model_service.builders.application import AccessAdapter
+    from model_service.builders.access import AccessAdapter
     from model_service.builders.contracts import InputAccessKind
     from model_service.builders.settings import WorkerSettings
     from model_service.facade.catalog import ModelCatalog

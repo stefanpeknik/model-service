@@ -5,7 +5,6 @@ from __future__ import annotations
 import unittest
 from datetime import UTC, datetime, timedelta
 
-from model_service.builders.application import validate_invocation, validate_model
 from model_service.builders.contracts import (
     IncompatibleModelError,
     InputAccessContext,
@@ -81,8 +80,8 @@ class BuilderRegistryTests(unittest.TestCase):
         self,
     ) -> None:
         spec = get_builder("heatmap")
-        validate_invocation(spec, invocation())
-        validate_invocation(spec, invocation(inputs={"slide": SharedPathInput("s")}))
+        spec.check_invocation(invocation())
+        spec.check_invocation(invocation(inputs={"slide": SharedPathInput("s")}))
         cases: dict[str, Invocation] = {
             "missing inputs": invocation(inputs={}),
             "unknown inputs": invocation(
@@ -99,15 +98,15 @@ class BuilderRegistryTests(unittest.TestCase):
                 self.subTest(message=message),
                 self.assertRaisesRegex(InvalidInvocation, message),
             ):
-                validate_invocation(spec, value)
+                spec.check_invocation(value)
 
     def test_validate_model_rejects_other_contracts(self) -> None:
-        validate_model(get_builder("heatmap"), SPATIAL)
-        validate_model(get_builder("tile-embeddings"), EMBEDDING)
+        get_builder("heatmap").check_model(SPATIAL)
+        get_builder("tile-embeddings").check_model(EMBEDDING)
         with self.assertRaises(IncompatibleModelError):
-            validate_model(get_builder("heatmap"), EMBEDDING)
+            get_builder("heatmap").check_model(EMBEDDING)
         with self.assertRaises(IncompatibleModelError):
-            validate_model(get_builder("tile-embeddings"), SPATIAL)
+            get_builder("tile-embeddings").check_model(SPATIAL)
 
 
 class BuilderWiringTests(unittest.TestCase):
@@ -120,7 +119,7 @@ class BuilderWiringTests(unittest.TestCase):
         import importlib
         from typing import get_args, get_origin
 
-        from model_service.builders.application import Builder
+        from model_service.builders.base import Builder
 
         for spec in BUILDERS.values():
             with self.subTest(spec.id):

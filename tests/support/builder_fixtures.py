@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
     import numpy as np
 
-    from model_service.builders.application import BuilderContext
+    from model_service.builders.base import BuilderContext
     from model_service.builders.contracts import ModelBinding
     from model_service.builders.model_clients import HandleLookup
 

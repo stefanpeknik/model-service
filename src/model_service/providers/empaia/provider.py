@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, Annotated, Never
 import jwt
 from pydantic import Field, ValidationError
 
-from model_service.builders.application import validate_invocation
 from model_service.builders.contracts import (
     InputAccessContext,
     InvalidInvocation,
@@ -250,8 +249,7 @@ class EmpaiaProviderAdapter(ProviderAdapter):
             deadline_at=effective_deadline,
         )
         try:
-            validate_invocation(
-                spec,
+            spec.check_invocation(
                 invocation,
                 now=effective_deadline - timedelta(microseconds=1),
             )
