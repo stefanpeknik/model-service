@@ -58,7 +58,7 @@ class EmpaiaProvider(Provider):
             app_definitions,
             parse_listings,
         )
-        from model_service.providers.empaia.jes_routes import create_router
+        from model_service.providers.empaia.job_routes import create_router
         from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
         from model_service.providers.empaia.publishing.publishers import (
             default_publishers,

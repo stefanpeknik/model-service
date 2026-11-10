@@ -15,6 +15,11 @@ from uuid import uuid4
 
 from model_service.scheduler import raw_inference
 from model_service.scheduler.active_work import ActiveWorkRegistry
+from model_service.scheduler.execution_records import (
+    Admission,
+    ExecutionRecord,
+    WorkKind,
+)
 from model_service.scheduler.executions import (
     ExecutionView,
     InferenceInvocation,
@@ -26,7 +31,6 @@ from model_service.scheduler.executions import (
     ScheduleResult,
     SchedulingUnavailableError,
 )
-from model_service.scheduler.records import Admission, ExecutionRecord, WorkKind
 from model_service.scheduler.status import ExecutionStatus, Operation
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
 from model_service.scheduler.worker import ExecutionWorker

@@ -17,6 +17,17 @@ from model_service.scheduler.builder_dispatch import (
     RemoteFailureError,
     UnknownOutcomeError,
 )
+from model_service.scheduler.execution_records import (
+    ProcessingFailed,
+    ProcessingRejected,
+    ProcessingSucceeded,
+    ProviderFinishFailed,
+    ProviderFinishSucceeded,
+    RenewDirective,
+    StaleWorkClaimError,
+    WorkClaim,
+    WorkKind,
+)
 from model_service.scheduler.executions import (
     ExecutionError,
     IncompatibleModelError,
@@ -30,17 +41,6 @@ from model_service.scheduler.provider_adapter import (
     ProviderFinishFailureError,
     ProviderFinishOutcome,
     ProviderSuccess,
-)
-from model_service.scheduler.records import (
-    ProcessingFailed,
-    ProcessingRejected,
-    ProcessingSucceeded,
-    ProviderFinishFailed,
-    ProviderFinishSucceeded,
-    RenewDirective,
-    StaleWorkClaimError,
-    WorkClaim,
-    WorkKind,
 )
 from model_service.scheduler.status import ExecutionErrorCode, Operation
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
@@ -57,10 +57,10 @@ if TYPE_CHECKING:
 
     from model_service.scheduler.active_work import ActiveWorkRegistry
     from model_service.scheduler.builder_dispatch import BuilderDispatch
+    from model_service.scheduler.execution_records import Settlement
     from model_service.scheduler.executions import ModelResolver, ProviderName
     from model_service.scheduler.provider_adapter import ProviderAdapter
     from model_service.scheduler.raw_inference import InferenceTarget
-    from model_service.scheduler.records import Settlement
     from model_service.scheduler.store.repository import ExecutionRepository
 
 

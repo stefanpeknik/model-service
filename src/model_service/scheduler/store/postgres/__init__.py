@@ -6,9 +6,11 @@ governs leases.
 """
 
 from model_service.scheduler.store.postgres.admission_sql import AdmissionOperations
+from model_service.scheduler.store.postgres.attempt_outcome_sql import (
+    SettlementOperations,
+)
 from model_service.scheduler.store.postgres.claim_sql import ClaimOperations
 from model_service.scheduler.store.postgres.maintenance_sql import MaintenanceOperations
-from model_service.scheduler.store.postgres.settlement_sql import SettlementOperations
 from model_service.scheduler.store.repository import ExecutionRepository
 
 

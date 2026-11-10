@@ -29,13 +29,13 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
 
+from model_service.scheduler.execution_records import WorkKind
 from model_service.scheduler.executions import (
     STORED_INVOCATION,
     STORED_RESULT,
     StoredInvocation,
     StoredResult,
 )
-from model_service.scheduler.records import WorkKind
 from model_service.scheduler.status import ExecutionStatus, Operation
 
 

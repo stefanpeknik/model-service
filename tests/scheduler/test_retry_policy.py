@@ -3,7 +3,7 @@
 import unittest
 from datetime import timedelta
 
-from model_service.scheduler.records import RetryPolicy
+from model_service.scheduler.execution_records import RetryPolicy
 
 
 class RetryPolicyTests(unittest.TestCase):

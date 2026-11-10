@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from model_service.scheduler.records import (
+from model_service.scheduler.execution_records import (
     ExecutionRecord,
     InferenceSucceeded,
     Settlement,

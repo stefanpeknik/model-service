@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import and_, delete, func, or_, select
 
-from model_service.scheduler.records import WorkKind
+from model_service.scheduler.execution_records import WorkKind
 from model_service.scheduler.status import ExecutionStatus, Operation
 from model_service.scheduler.store.postgres.base import (
     _ORPHAN_SWEEP_SECONDS,

@@ -24,10 +24,10 @@ from model_service.providers.standalone.provider import StandaloneProviderAdapte
 from model_service.providers.standalone.shared_storage import (
     SharedStorageAccessFactory,
 )
+from model_service.scheduler.execution_records import Admission, RetryPolicy
 from model_service.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.scheduler.provider_adapter import SubmissionIdentity
 from model_service.scheduler.raw_inference import IncompatibleInputError
-from model_service.scheduler.records import Admission, RetryPolicy
 from model_service.wire.invocation import InputAccessContext, Invocation
 from model_service.wire.result import BuilderResult
 from tests.support.memory_repository import FakeDispatch, InMemoryExecutionRepository

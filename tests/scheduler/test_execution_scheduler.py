@@ -19,6 +19,15 @@ from model_service.scheduler.builder_dispatch import (
     RemoteFailureError,
     UnknownOutcomeError,
 )
+from model_service.scheduler.execution_records import (
+    Admission,
+    ProcessingSucceeded,
+    ProviderFinishSucceeded,
+    RenewDirective,
+    RetryPolicy,
+    StaleWorkClaimError,
+    WorkKind,
+)
 from model_service.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.scheduler.executions import (
     IncompatibleModelError,
@@ -36,15 +45,6 @@ from model_service.scheduler.provider_adapter import (
     ProviderFinishFailureError,
     ProviderSuccess,
     SubmissionIdentity,
-)
-from model_service.scheduler.records import (
-    Admission,
-    ProcessingSucceeded,
-    ProviderFinishSucceeded,
-    RenewDirective,
-    RetryPolicy,
-    StaleWorkClaimError,
-    WorkKind,
 )
 from model_service.scheduler.status import ExecutionStatus
 from model_service.scheduler.store.repository import (

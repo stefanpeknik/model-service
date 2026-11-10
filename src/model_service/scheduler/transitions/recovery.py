@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from model_service.scheduler.executions import ExecutionError
-from model_service.scheduler.records import (
+from model_service.scheduler.execution_records import (
     ExecutionRecord,
     WorkKind,
 )
+from model_service.scheduler.executions import ExecutionError
 from model_service.scheduler.status import (
     ExecutionErrorCode,
     ExecutionStatus,

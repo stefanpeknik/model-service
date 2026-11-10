@@ -8,10 +8,14 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
+from model_service.scheduler.execution_records import (
+    Admission,
+    AdmissionResult,
+    ExecutionRecord,
+)
 from model_service.scheduler.executions import (
     ScheduleConflictError,
 )
-from model_service.scheduler.records import Admission, AdmissionResult, ExecutionRecord
 from model_service.scheduler.store.rows import ExecutionRow
 
 

@@ -56,7 +56,7 @@ if TYPE_CHECKING:
     from starlette.types import Message, Scope
 
     from model_service.inference.contracts import ModelBinding
-    from model_service.scheduler.records import ExecutionRecord
+    from model_service.scheduler.execution_records import ExecutionRecord
     from model_service.wire.invocation import ExecutionContext, Invocation
 
     type Handler = Callable[

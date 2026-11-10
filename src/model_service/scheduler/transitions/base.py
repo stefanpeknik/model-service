@@ -6,14 +6,14 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING, Never
 
-from model_service.scheduler.executions import ExecutionError
-from model_service.scheduler.records import (
+from model_service.scheduler.execution_records import (
     ExecutionRecord,
     RenewDirective,
     StaleWorkClaimError,
     WorkClaim,
     WorkKind,
 )
+from model_service.scheduler.executions import ExecutionError
 from model_service.scheduler.status import (
     ExecutionErrorCode,
     ExecutionStatus,
@@ -24,7 +24,7 @@ from model_service.scheduler.status import (
 if TYPE_CHECKING:
     from datetime import datetime, timedelta
 
-    from model_service.scheduler.records import RetryPolicy
+    from model_service.scheduler.execution_records import RetryPolicy
 
 
 @dataclass(frozen=True, slots=True)

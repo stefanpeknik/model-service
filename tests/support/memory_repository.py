@@ -24,12 +24,7 @@ from model_service.inference.contracts import (
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from model_service.scheduler.executions import (
-    ResultUnavailableError,
-    ScheduleConflictError,
-    UnknownExecutionError,
-)
-from model_service.scheduler.records import (
+from model_service.scheduler.execution_records import (
     Admission,
     AdmissionResult,
     ExecutionRecord,
@@ -39,6 +34,11 @@ from model_service.scheduler.records import (
     Settlement,
     WorkClaim,
     WorkKind,
+)
+from model_service.scheduler.executions import (
+    ResultUnavailableError,
+    ScheduleConflictError,
+    UnknownExecutionError,
 )
 from model_service.scheduler.status import ExecutionStatus, Operation
 from model_service.scheduler.store.payloads import (

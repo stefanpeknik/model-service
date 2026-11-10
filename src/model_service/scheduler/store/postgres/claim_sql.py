@@ -8,14 +8,14 @@ from uuid import uuid4
 
 from sqlalchemy import and_, func, or_, select
 
-from model_service.scheduler.executions import (
-    ResultUnavailableError,
-)
-from model_service.scheduler.records import (
+from model_service.scheduler.execution_records import (
     ExecutionRecord,
     RenewDirective,
     WorkClaim,
     WorkKind,
+)
+from model_service.scheduler.executions import (
+    ResultUnavailableError,
 )
 from model_service.scheduler.status import ExecutionStatus, Operation
 from model_service.scheduler.store.payloads import PayloadMissingError, StoredPayload
