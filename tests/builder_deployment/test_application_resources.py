@@ -16,10 +16,10 @@ from model_service.builder_deployment.runner import BuilderApplication
 from model_service.builders.input_access import close_resource
 from model_service.builders.registry import BUILDERS, get_builder
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
-from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessAdapter
+from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessFactory
 from model_service.providers.standalone.provider import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import (
-    SharedStorageAccessAdapter,
+    SharedStorageAccessFactory,
 )
 from model_service.scheduler.active_work import ActiveWorkRegistry
 from model_service.scheduler.execution_scheduler import ExecutionScheduler
@@ -242,7 +242,7 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
                 raise OSError("cleanup failure")
 
         with TemporaryDirectory() as directory:
-            adapter = EmpaiaInputAccessAdapter(lambda _c: Gateway(), Path(directory))
+            adapter = EmpaiaInputAccessFactory(lambda _c: Gateway(), Path(directory))
             request = invocation(
                 "empaia",
                 {"api_url": "https://example.invalid", "job_id": "job"},
@@ -297,7 +297,7 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
                 self.subTest(message=failure.safe_message),
                 TemporaryDirectory() as directory,
             ):
-                adapter = EmpaiaInputAccessAdapter(
+                adapter = EmpaiaInputAccessFactory(
                     lambda _c: Gateway(), Path(directory)
                 )
                 with self.assertRaises(BuilderFailure) as raised:
@@ -350,7 +350,7 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
             ),
         ]
         with TemporaryDirectory() as directory:
-            adapter = EmpaiaInputAccessAdapter(unexpected_gateway, Path(directory))
+            adapter = EmpaiaInputAccessFactory(unexpected_gateway, Path(directory))
             for state, context in cases:
                 with (
                     self.subTest(state=state),
@@ -370,7 +370,7 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
                 return BuilderResult({"artifact": SharedArtifact(str(output))})
 
             builder_spec = spec(outputs={"artifact": artifact_output()})
-            shared_storage = SharedStorageAccessAdapter([Path(directory)])
+            shared_storage = SharedStorageAccessFactory([Path(directory)])
             builder = BuilderApplication(
                 builder_spec,
                 FunctionBuilder(build),

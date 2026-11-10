@@ -148,7 +148,7 @@ def job_workspace(root: Path, api_url: str, job_id: str) -> Path:
     return root / hashlib.sha256(f"{api_url}\0{job_id}".encode()).hexdigest()
 
 
-class EmpaiaInputAccessAdapter(InputAccessFactory):
+class EmpaiaInputAccessFactory(InputAccessFactory):
     """Create per-attempt local access by resolving inputs through an EMPAIA gateway."""
 
     def __init__(

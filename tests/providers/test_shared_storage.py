@@ -8,7 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from model_service.providers.standalone.shared_storage import (
-    SharedStorageAccessAdapter,
+    SharedStorageAccessFactory,
 )
 from model_service.wire.failures import InvalidInvocation
 from model_service.wire.invocation import ExecutionContext, SharedPathInput
@@ -33,7 +33,7 @@ class SharedStorageTests(unittest.TestCase):
         self.outside.mkdir()
         (self.allowed / "project" / "slide.tiff").write_bytes(b"slide")
         (self.outside / "secret.tiff").write_bytes(b"secret")
-        self.adapter = SharedStorageAccessAdapter([self.allowed])
+        self.adapter = SharedStorageAccessFactory([self.allowed])
 
     def test_allowed_root_and_its_subdirectories_are_accepted(self) -> None:
         for root, path in (
@@ -70,7 +70,7 @@ class SharedStorageTests(unittest.TestCase):
 
     def test_empty_allowlist_rejects_every_root(self) -> None:
         with self.assertRaisesRegex(InvalidInvocation, "not allowed"):
-            SharedStorageAccessAdapter([]).create(
+            SharedStorageAccessFactory([]).create(
                 shared(self.allowed), ExecutionContext()
             )
 

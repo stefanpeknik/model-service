@@ -21,7 +21,7 @@ from model_service.providers.empaia.app_service.gateway import (
     EmpaiaJobMode,
 )
 from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
-from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessAdapter
+from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessFactory
 from model_service.providers.empaia.publishing.publishers import (
     Commit,
     PublisherRegistry,
@@ -140,7 +140,7 @@ def copy_inputs_application(
     return BuilderApplication(
         get_builder("heatmap"),
         CopyInputsBuilder(),
-        {"empaia": EmpaiaInputAccessAdapter(service.gateway, Path(directory))},
+        {"empaia": EmpaiaInputAccessFactory(service.gateway, Path(directory))},
         model_handles=deployments(MODEL),
     )
 

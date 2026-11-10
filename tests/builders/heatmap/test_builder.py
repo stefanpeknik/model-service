@@ -25,7 +25,7 @@ from model_service.builders.heatmap.processor import (
 from model_service.builders.registry import get_builder
 from model_service.inference.contracts import SpatialScoresModel
 from model_service.providers.standalone.shared_storage import (
-    SharedStorageAccessAdapter,
+    SharedStorageAccessFactory,
 )
 from model_service.wire.invocation import SharedPathInput
 from model_service.wire.result import SharedArtifact
@@ -278,7 +278,7 @@ class HeatmapBuilderTests(unittest.IsolatedAsyncioTestCase):
         application = BuilderApplication(
             get_builder("heatmap"),
             HeatmapBuilder(ReplicaSettings(num_threads=1, max_concurrent_tasks=2)),
-            {"shared_storage": SharedStorageAccessAdapter([self.root])},
+            {"shared_storage": SharedStorageAccessFactory([self.root])},
             model_handles=lambda _model_id: handle,  # type: ignore[arg-type, return-value]
         )
         result = await application.run(

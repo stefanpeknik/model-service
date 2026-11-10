@@ -42,7 +42,7 @@ if TYPE_CHECKING:
     from model_service.catalog import ModelCatalog
     from model_service.providers.provider import FacadeContribution
     from model_service.providers.standalone.shared_storage import (
-        SharedStorageAccessAdapter,
+        SharedStorageAccessFactory,
     )
     from model_service.scheduler.provider_adapter import (
         BeforeMutation,
@@ -55,7 +55,7 @@ if TYPE_CHECKING:
 class StandaloneProviderAdapter(ProviderAdapter):
     name = STANDALONE_PROVIDER
 
-    def __init__(self, shared_storage: SharedStorageAccessAdapter) -> None:
+    def __init__(self, shared_storage: SharedStorageAccessFactory) -> None:
         """Keep the shared-storage adapter that checks inputs at admission.
 
         Args:
@@ -183,13 +183,13 @@ class StandaloneProvider(Provider):
         """
         from model_service.providers.provider import FacadeContribution
         from model_service.providers.standalone.shared_storage import (
-            SharedStorageAccessAdapter,
+            SharedStorageAccessFactory,
         )
 
         del catalog
         return FacadeContribution(
             StandaloneProviderAdapter(
-                SharedStorageAccessAdapter(settings.shared_storage_roots)
+                SharedStorageAccessFactory(settings.shared_storage_roots)
             )
         )
 
@@ -205,11 +205,11 @@ class StandaloneProvider(Provider):
             The shared-storage adapter, keyed by `SHARED_STORAGE`.
         """
         from model_service.providers.standalone.shared_storage import (
-            SharedStorageAccessAdapter,
+            SharedStorageAccessFactory,
         )
 
         return {
-            SHARED_STORAGE: SharedStorageAccessAdapter(settings.shared_storage_roots)
+            SHARED_STORAGE: SharedStorageAccessFactory(settings.shared_storage_roots)
         }
 
 

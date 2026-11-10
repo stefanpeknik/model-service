@@ -18,9 +18,9 @@ from model_service.builder_deployment.protocol import RunRequest, run_http
 from model_service.builder_deployment.runner import BuilderApplication
 from model_service.builders.declarations import InputSpec
 from model_service.builders.output_files import atomic_artifact
-from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessAdapter
+from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessFactory
 from model_service.providers.standalone.shared_storage import (
-    SharedStorageAccessAdapter,
+    SharedStorageAccessFactory,
 )
 from model_service.scheduler.builder_dispatch import RemoteFailureError
 from model_service.wire.failures import (
@@ -495,7 +495,7 @@ class BuilderHTTPTests(unittest.IsolatedAsyncioTestCase):
             application = BuilderApplication(
                 spec(inputs={"slide": InputSpec()}, outputs={"score": inline_output()}),
                 FunctionBuilder(build),
-                {"empaia": EmpaiaInputAccessAdapter(gateway_factory, Path(directory))},
+                {"empaia": EmpaiaInputAccessFactory(gateway_factory, Path(directory))},
                 model_handles=DECLARED,
             )
             api = FastAPI()
@@ -556,7 +556,7 @@ class BuilderHTTPTests(unittest.IsolatedAsyncioTestCase):
                     ),
                 ),
                 FunctionBuilder(build),
-                {"shared_storage": SharedStorageAccessAdapter([Path(directory)])},
+                {"shared_storage": SharedStorageAccessFactory([Path(directory)])},
                 model_handles=DECLARED,
             )
             api = FastAPI()

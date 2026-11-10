@@ -104,13 +104,13 @@ class EmpaiaProvider(Provider):
             pydantic.ValidationError: If the `EMPAIA_*` settings are invalid.
         """
         from model_service.providers.empaia.jobs.inputs import (
-            EmpaiaInputAccessAdapter,
+            EmpaiaInputAccessFactory,
         )
 
         del settings
         empaia = EmpaiaSettings()
         return {
-            INPUT_ACCESS_KIND: EmpaiaInputAccessAdapter(
+            INPUT_ACCESS_KIND: EmpaiaInputAccessFactory(
                 http_gateway_factory(empaia), empaia.workspace_root
             )
         }

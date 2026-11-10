@@ -156,7 +156,7 @@ class SharedStorageAccess(InputAccess):
         return resolved
 
 
-class SharedStorageAccessAdapter(InputAccessFactory):
+class SharedStorageAccessFactory(InputAccessFactory):
     def __init__(self, allowed_roots: Iterable[Path]) -> None:
         """Keep the roots callers may name.
 

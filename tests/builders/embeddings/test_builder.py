@@ -26,7 +26,7 @@ from model_service.facade.wiring import model_resolver
 from model_service.inference.contracts import TileEmbeddingModel
 from model_service.providers.standalone.provider import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import (
-    SharedStorageAccessAdapter,
+    SharedStorageAccessFactory,
 )
 from model_service.scheduler.execution_scheduler import ExecutionScheduler
 from tests.support.builder_contract import BuilderContractTests
@@ -115,7 +115,7 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
                 )
             ]
         )
-        storage = SharedStorageAccessAdapter([self.root])
+        storage = SharedStorageAccessFactory([self.root])
         settings = ReplicaSettings(num_threads=1, max_concurrent_tasks=3)
         application = BuilderApplication(
             get_builder("tile-embeddings"),

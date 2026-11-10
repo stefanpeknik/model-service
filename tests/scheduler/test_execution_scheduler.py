@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from model_service.providers.standalone.provider import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import (
-    SharedStorageAccessAdapter,
+    SharedStorageAccessFactory,
 )
 from model_service.scheduler.active_work import ActiveWorkRegistry
 from model_service.scheduler.builder_dispatch import (
@@ -1395,7 +1395,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             (root / "roi.tiff").touch()
             clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
             repository = InMemoryExecutionRepository(clock=clock)
-            provider = StandaloneProviderAdapter(SharedStorageAccessAdapter([root]))
+            provider = StandaloneProviderAdapter(SharedStorageAccessFactory([root]))
             scheduler = ExecutionScheduler(
                 repository=repository,
                 dispatch=FakeDispatch({}),
@@ -1434,7 +1434,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             (root / "roi.tiff").touch()
             clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
             repository = InMemoryExecutionRepository(clock=clock)
-            provider = StandaloneProviderAdapter(SharedStorageAccessAdapter([root]))
+            provider = StandaloneProviderAdapter(SharedStorageAccessFactory([root]))
             scheduler = ExecutionScheduler(
                 repository=repository,
                 dispatch=FakeDispatch({}),
@@ -1460,7 +1460,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             (root / "roi.tiff").touch()
             clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
             repository = InMemoryExecutionRepository(clock=clock)
-            provider = StandaloneProviderAdapter(SharedStorageAccessAdapter([root]))
+            provider = StandaloneProviderAdapter(SharedStorageAccessFactory([root]))
             scheduler = ExecutionScheduler(
                 repository=repository,
                 dispatch=FakeDispatch({}),

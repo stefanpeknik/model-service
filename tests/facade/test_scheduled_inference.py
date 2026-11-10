@@ -22,7 +22,7 @@ from model_service.facade.wiring import model_resolver
 from model_service.inference.contracts import SpatialScoresModel, TileEmbeddingModel
 from model_service.providers.standalone.provider import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import (
-    SharedStorageAccessAdapter,
+    SharedStorageAccessFactory,
 )
 from model_service.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.scheduler.provider_adapter import SubmissionIdentity
@@ -87,7 +87,7 @@ class ScheduledInferenceTests(unittest.IsolatedAsyncioTestCase):
             repository=self.repository,
             dispatch=self.dispatch,
             providers={
-                "standalone": StandaloneProviderAdapter(SharedStorageAccessAdapter([]))
+                "standalone": StandaloneProviderAdapter(SharedStorageAccessFactory([]))
             },
             resolve_model=model_resolver(CATALOG),
             default_timeout=timedelta(hours=1),
