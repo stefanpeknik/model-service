@@ -1,6 +1,6 @@
 """What the API needs from the scheduler: the Scheduler interface and capacity explanations.
 
-The facade's routes and providers' routes depend on these; ExecutionScheduler
+The API's routes and providers' routes depend on these; ExecutionScheduler
 implements Scheduler.
 """
 

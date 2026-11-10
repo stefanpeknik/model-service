@@ -11,14 +11,14 @@ import httpx
 import lz4.frame
 from httpx import ASGITransport, AsyncClient
 
-from model_service.catalog import ModelCatalog
-from model_service.facade.http_app import create_app
-from model_service.facade.raw_inference_proxy import (
+from model_service.api.http_app import create_app
+from model_service.api.raw_inference_proxy import (
     HttpInferenceProxy,
     ModelInference,
     check_tile,
 )
-from model_service.facade.wiring import model_resolver
+from model_service.api.wiring import model_resolver
+from model_service.catalog import ModelCatalog
 from model_service.inference.contracts import SpatialScoresModel, TileEmbeddingModel
 from model_service.providers.standalone.provider import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import (

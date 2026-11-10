@@ -13,9 +13,9 @@ from httpx import (
     Response,
 )
 
+from model_service.api.capacity import ServeCapacity
+from model_service.api.http_app import create_app
 from model_service.catalog import ModelCatalog
-from model_service.facade.capacity import ServeCapacity
-from model_service.facade.http_app import create_app
 from model_service.providers.empaia.job_routes import create_router
 from model_service.scheduler.status import ExecutionStatus
 from tests.providers.test_empaia_routes import PROSTATE, ScriptedScheduler, view

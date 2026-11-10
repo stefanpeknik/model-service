@@ -18,14 +18,14 @@ from typing import TYPE_CHECKING, Annotated
 from fastapi import APIRouter, Header, Response, status
 from pydantic import Field
 
-from model_service.facade.auth import Access, Action
-from model_service.facade.http_errors import (
+from model_service.api.auth import Access, Action
+from model_service.api.http_errors import (
     ERRORS,
     ApiErrorCode,
     http_error,
     unavailable,
 )
-from model_service.facade.submission import submit
+from model_service.api.submission import submit
 from model_service.providers.empaia.app_service.gateway import PROVIDER_NAME
 from model_service.providers.empaia.jobs.adapter import EmpaiaSchedulePayload
 from model_service.scheduler.executions import (

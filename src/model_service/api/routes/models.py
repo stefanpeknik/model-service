@@ -12,15 +12,15 @@ from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
-from model_service.facade.auth import Access, Action
-from model_service.facade.http_errors import (
+from model_service.api.auth import Access, Action
+from model_service.api.http_errors import (
     ERRORS,
     ApiErrorCode,
     http_error,
     lookup_error,
 )
-from model_service.facade.raw_inference_proxy import inference_headers
-from model_service.facade.submission import require_idempotency_key, submit
+from model_service.api.raw_inference_proxy import inference_headers
+from model_service.api.submission import require_idempotency_key, submit
 from model_service.inference.contracts import (  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
     InferenceContract,
     ModelBinding,

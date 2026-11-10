@@ -1,10 +1,10 @@
-"""Register the deployed models' EMPAIA apps in a marketplace when the facade starts.
+"""Register the deployed models' EMPAIA apps in a marketplace when the API starts.
 
 It posts to the routes of the marketplace mock EMPAIA test installations run
 (`/v1/custom-mock/portal-apps`, then the app's global configuration, such as
 the case browser's viewer settings); a production marketplace lists apps through its
 portal's review instead. App IDs derive from the EAD namespace, so registering
-again replaces an app and every facade replica may do it.
+again replaces an app and every API replica may do it.
 """
 
 from __future__ import annotations

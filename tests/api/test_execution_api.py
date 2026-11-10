@@ -20,12 +20,12 @@ from httpx import (
     Response,
 )
 
+from model_service.api.health import DeploymentHealth
+from model_service.api.http_app import create_app
+from model_service.api.raw_inference_proxy import HttpInferenceProxy, ModelInference
+from model_service.api.synchronous_runs import SynchronousBuilderService
+from model_service.api.wiring import model_resolver
 from model_service.catalog import ModelCatalog
-from model_service.facade.health import DeploymentHealth
-from model_service.facade.http_app import create_app
-from model_service.facade.raw_inference_proxy import HttpInferenceProxy, ModelInference
-from model_service.facade.synchronous_runs import SynchronousBuilderService
-from model_service.facade.wiring import model_resolver
 from model_service.inference.contracts import SpatialScoresModel, TileEmbeddingModel
 from model_service.providers.standalone.provider import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import (

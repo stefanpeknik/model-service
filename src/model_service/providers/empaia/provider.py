@@ -1,4 +1,4 @@
-"""The EMPAIA provider, composed for the facade and for builder replicas.
+"""The EMPAIA provider, composed for the API and for builder replicas.
 
 It serves JES's remote execution routes, runs App Service jobs, and registers
 apps for the models whose files have an `empaia` block. Its settings come from
@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from model_service.providers.empaia.app_service.gateway import INPUT_ACCESS_KIND
 from model_service.providers.empaia.app_service.http import http_gateway_factory
 from model_service.providers.empaia.settings import EmpaiaSettings
-from model_service.providers.provider import FacadeContribution, Provider
+from model_service.providers.provider import ApiContribution, Provider
 
 
 if TYPE_CHECKING:
@@ -32,9 +32,9 @@ CATALOG_BLOCK = "empaia"
 class EmpaiaProvider(Provider):
     catalog_block = CATALOG_BLOCK
 
-    def facade(
+    def api(
         self, catalog: ModelCatalog, settings: SchedulerSettings
-    ) -> FacadeContribution:
+    ) -> ApiContribution:
         """Contribute the EMPAIA scheduler adapter, JES routes and app registration.
 
         Apps come from the models whose file has an `empaia` block. Registration runs
@@ -46,7 +46,7 @@ class EmpaiaProvider(Provider):
             settings: Unused; EMPAIA reads its own `EMPAIA_*` settings.
 
         Returns:
-            The facade contribution.
+            the API contribution.
 
         Raises:
             pydantic.ValidationError: If the `EMPAIA_*` settings are invalid.
@@ -77,7 +77,7 @@ class EmpaiaProvider(Provider):
             if marketplace is not None and apps:
                 await register_until_done(marketplace, apps)
 
-        return FacadeContribution(
+        return ApiContribution(
             adapter=EmpaiaProviderAdapter(
                 http_gateway_factory(empaia),
                 allowed_api_urls=empaia.api_urls,

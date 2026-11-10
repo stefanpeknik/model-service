@@ -1,6 +1,6 @@
-"""The API process: public HTTP routes and the process wiring.
+"""The API process: public HTTP routes, the process wiring and the scheduler it runs.
 
-- wiring.py: create_facade, builds the process (catalog, scheduler, providers).
+- wiring.py: create_api, builds the process (catalog, scheduler, providers).
 - http_app.py: create_app, assembles the FastAPI app from routes/.
 - routes/: one module per URL prefix; request_bodies.py holds their bodies.
 - http_errors.py: the public error envelope.

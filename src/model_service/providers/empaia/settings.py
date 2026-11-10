@@ -1,6 +1,6 @@
 """EMPAIA wiring for the processes that talk to App Service, from `EMPAIA_*` variables.
 
-The facade and the builder replicas read the same settings: the facade admits
+The API and the builder replicas read the same settings: the API admits
 jobs and publishes results, builders read job inputs.
 """
 
@@ -25,7 +25,7 @@ class MarketplaceClient:
 
 @dataclass(frozen=True, slots=True)
 class MarketplaceTarget:
-    """Where and as whom the facade registers apps."""
+    """Where and as whom the API registers apps."""
 
     url: str
     organization_id: str
@@ -44,7 +44,7 @@ class EmpaiaSettings(BaseSettings):
     # default turned that into a failed job with an orphaned pixelmap.
     app_service_timeout_seconds: float = Field(default=60, gt=0, allow_inf_nan=False)
 
-    # Marketplace that the facade registers the deployed models' apps in at
+    # Marketplace that the API registers the deployed models' apps in at
     # startup; none, no registration. `jes_target` is model-service's name in
     # JES_HTTP_TARGETS, part of each app's image.
     marketplace_url: str | None = None

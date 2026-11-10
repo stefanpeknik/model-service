@@ -1,6 +1,6 @@
 """Run one raw model request as an execution.
 
-The facade implements `InferenceTarget` over the model catalog and Ray Serve.
+The API implements `InferenceTarget` over the model catalog and Ray Serve.
 Admission and every attempt check the payload against the model's current
 input, so a queued tile is never reinterpreted after a model change.
 """

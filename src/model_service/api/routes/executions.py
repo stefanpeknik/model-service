@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, Annotated
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import Field
 
-from model_service.facade.auth import Access, Action
-from model_service.facade.http_errors import (
+from model_service.api.auth import Access, Action
+from model_service.api.http_errors import (
     ERRORS,
     ApiErrorCode,
     http_error,

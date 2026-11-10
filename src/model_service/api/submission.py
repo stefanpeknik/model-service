@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Annotated
 
 from fastapi import Header
 
-from model_service.facade.http_errors import (
+from model_service.api.http_errors import (
     ApiErrorCode,
     http_error,
     lookup_error,

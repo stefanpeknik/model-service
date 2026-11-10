@@ -11,14 +11,14 @@ from fastapi import FastAPI, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from model_service.facade.auth import Access
-from model_service.facade.health import (
+from model_service.api.auth import Access
+from model_service.api.health import (
     DeploymentHealthCheck,
     DeploymentState,
     DeploymentStatus,
 )
-from model_service.facade.http_errors import ApiErrorCode, http_error
-from model_service.facade.routes import builders, executions, models
+from model_service.api.http_errors import ApiErrorCode, http_error
+from model_service.api.routes import builders, executions, models
 from model_service.scheduler.api_interface import NoCapacityInfo
 from model_service.scheduler.executions import SchedulingUnavailableError
 
@@ -28,8 +28,8 @@ if TYPE_CHECKING:
 
     from starlette.types import Lifespan
 
+    from model_service.api.synchronous_runs import BuilderRunner
     from model_service.catalog import ModelCatalog
-    from model_service.facade.synchronous_runs import BuilderRunner
     from model_service.providers.provider import RouteFactory
     from model_service.scheduler.api_interface import Capacity, Scheduler
     from model_service.scheduler.raw_inference import InferenceTarget
@@ -89,7 +89,7 @@ def create_app(
 
     @app.get("/healthz")
     async def health() -> JSONResponse:
-        # Liveness: a facade whose worker stopped would hold jobs forever.
+        # Liveness: an API process whose worker stopped would hold jobs forever.
         if not scheduler.alive:
             return JSONResponse({"status": "worker stopped"}, status_code=503)
         return JSONResponse({"status": "ok"})

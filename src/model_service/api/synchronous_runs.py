@@ -10,8 +10,8 @@ from model_service.wire.invocation import ExecutionContext
 
 
 if TYPE_CHECKING:
+    from model_service.api.request_bodies import ImmediateBuilderRequest
     from model_service.catalog import ModelCatalog
-    from model_service.facade.request_bodies import ImmediateBuilderRequest
     from model_service.scheduler.builder_dispatch import BuilderDispatch
     from model_service.wire.result import BuilderResult
 

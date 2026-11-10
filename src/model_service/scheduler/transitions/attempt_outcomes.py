@@ -39,7 +39,7 @@ from model_service.scheduler.transitions.base import (
 from model_service.scheduler.transitions.recovery import RecoveryTransitions
 
 
-class SettlementTransitions(RecoveryTransitions):
+class AttemptOutcomeTransitions(RecoveryTransitions):
     """Settling an attempt's outcome: success, retry or failure."""
 
     def decide_settlement(

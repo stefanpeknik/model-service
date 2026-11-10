@@ -13,8 +13,8 @@ from unittest.mock import AsyncMock, patch
 import lz4.frame
 from httpx import ASGITransport, AsyncClient, MockTransport, Request, Response
 
+from model_service.api.wiring import build_api_process
 from model_service.catalog import CatalogError
-from model_service.facade.wiring import create_facade
 from model_service.scheduler.settings import SchedulerSettings
 from tests.support.memory_repository import InMemoryExecutionRepository
 from tests.test_catalog import embedding_document, spatial_document
@@ -47,7 +47,7 @@ class ExecutionRuntimeTests(RuntimeTestCase):
     async def test_construction_loads_catalog_without_contacting_the_database(
         self,
     ) -> None:
-        app = create_facade(self.settings())
+        app = build_api_process(self.settings())
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://model-service"
         ) as client:
@@ -63,10 +63,10 @@ class ExecutionRuntimeTests(RuntimeTestCase):
             json.dumps([spatial_document(), spatial_document()]), encoding="utf-8"
         )
         with self.assertRaises(CatalogError):
-            create_facade(self.settings())
+            build_api_process(self.settings())
         self.catalog_path.write_text("[]", encoding="utf-8")
         with self.assertRaises(KeyError):
-            create_facade(self.settings(BUILDER_IDS='["missing"]'))
+            build_api_process(self.settings(BUILDER_IDS='["missing"]'))
 
     async def test_lifespan_initializes_repository_and_closes_client(self) -> None:
         repository = InMemoryExecutionRepository()
@@ -78,12 +78,12 @@ class ExecutionRuntimeTests(RuntimeTestCase):
             patch.object(repository, "initialize", initialized, create=True),
             patch.object(repository, "maintain", side_effect=maintained.set),
             patch(
-                "model_service.facade.wiring.PostgresExecutionRepository",
+                "model_service.api.wiring.PostgresExecutionRepository",
                 return_value=repository,
             ),
-            patch("model_service.facade.wiring.httpx.AsyncClient", return_value=client),
+            patch("model_service.api.wiring.httpx.AsyncClient", return_value=client),
         ):
-            app = create_facade(self.settings())
+            app = build_api_process(self.settings())
             async with app.router.lifespan_context(app):
                 initialized.assert_awaited_once()
                 await asyncio.wait_for(maintained.wait(), timeout=1)
@@ -98,12 +98,12 @@ class ExecutionRuntimeTests(RuntimeTestCase):
         with (
             patch.object(repository, "initialize", initialized, create=True),
             patch(
-                "model_service.facade.wiring.PostgresExecutionRepository",
+                "model_service.api.wiring.PostgresExecutionRepository",
                 return_value=repository,
             ),
-            patch("model_service.facade.wiring.httpx.AsyncClient", return_value=client),
+            patch("model_service.api.wiring.httpx.AsyncClient", return_value=client),
         ):
-            app = create_facade(self.settings())
+            app = build_api_process(self.settings())
             with self.assertRaisesRegex(RuntimeError, "database unavailable"):
                 async with app.router.lifespan_context(app):
                     self.fail("startup unexpectedly succeeded")
@@ -121,10 +121,10 @@ class ExecutionRuntimeTests(RuntimeTestCase):
 
         async with AsyncClient(transport=MockTransport(serve)) as serve_client:
             with patch(
-                "model_service.facade.wiring.httpx.AsyncClient",
+                "model_service.api.wiring.httpx.AsyncClient",
                 return_value=serve_client,
             ):
-                app = create_facade(self.settings(BUILDER_IDS='["heatmap"]'))
+                app = build_api_process(self.settings(BUILDER_IDS='["heatmap"]'))
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://model-service"
             ) as client:
@@ -146,10 +146,10 @@ class ExecutionRuntimeTests(RuntimeTestCase):
         )
         async with AsyncClient(transport=MockTransport(serve)) as serve_client:
             with patch(
-                "model_service.facade.wiring.httpx.AsyncClient",
+                "model_service.api.wiring.httpx.AsyncClient",
                 return_value=serve_client,
             ):
-                app = create_facade(settings)
+                app = build_api_process(settings)
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://model-service"
             ) as client:

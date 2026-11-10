@@ -1,4 +1,4 @@
-"""Wire the facade process: catalog, scheduler, providers, dispatch and API."""
+"""Wire the API process: catalog, scheduler, providers, dispatch and API."""
 
 from __future__ import annotations
 
@@ -8,14 +8,14 @@ from typing import TYPE_CHECKING
 
 import httpx
 
+from model_service.api.capacity import ServeCapacity
+from model_service.api.health import DeploymentHealth
+from model_service.api.http_app import create_app as create_api
+from model_service.api.raw_inference_proxy import HttpInferenceProxy, ModelInference
+from model_service.api.synchronous_runs import SynchronousBuilderService
 from model_service.builder_deployment.client import HTTPBuilderDispatch
 from model_service.builders.registry import BUILDERS, get_builder
 from model_service.catalog import ModelCatalog
-from model_service.facade.capacity import ServeCapacity
-from model_service.facade.health import DeploymentHealth
-from model_service.facade.http_app import create_app as create_api
-from model_service.facade.raw_inference_proxy import HttpInferenceProxy, ModelInference
-from model_service.facade.synchronous_runs import SynchronousBuilderService
 from model_service.providers.registry import PROVIDERS
 from model_service.scheduler.execution_records import RetryPolicy
 from model_service.scheduler.execution_scheduler import ExecutionScheduler
@@ -54,8 +54,8 @@ def model_resolver(catalog: ModelCatalog) -> ModelResolver:
     return resolve
 
 
-def create_facade(settings: SchedulerSettings | None = None) -> FastAPI:
-    """Wire the production facade: catalog, repository, providers, scheduler and API.
+def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
+    """Wire the production API process: catalog, repository, providers, scheduler and API.
 
     The repository is initialized, provider background tasks start and the
     scheduler runs only inside the app lifespan.
@@ -100,7 +100,7 @@ def create_facade(settings: SchedulerSettings | None = None) -> FastAPI:
             maximum_backoff=config.maximum_backoff,
         ),
     )
-    contributions = [provider.facade(catalog, config) for provider in providers]
+    contributions = [provider.api(catalog, config) for provider in providers]
     client = httpx.AsyncClient()
     dispatch = HTTPBuilderDispatch(client, origin=config.ray_serve_origin)
     inference_proxy = HttpInferenceProxy(

@@ -171,7 +171,7 @@ def parse_listings(blocks: Mapping[str, object]) -> dict[str, EmpaiaListing]:
     """Validate the `empaia` blocks of the model files into listings.
 
     An invalid block is logged and its model left out of EMPAIA, so a mistake in
-    one listing does not stop the facade or the other models' apps.
+    one listing does not stop the API or the other models' apps.
 
     Args:
         blocks: Each model's `empaia` block, by model ID.

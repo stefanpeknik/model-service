@@ -46,7 +46,7 @@ spec:
           image: "{{ .Values.executionScheduler.image.repository }}:{{ $imageTag }}"
           imagePullPolicy: {{ .Values.executionScheduler.image.pullPolicy }}
           # Explicit, so code-refresh images built on older bases start the current module.
-          command: ["uvicorn", "model_service.facade.main:app", "--host", "0.0.0.0", "--port", "8080"]
+          command: ["uvicorn", "model_service.api.main:app", "--host", "0.0.0.0", "--port", "8080"]
           ports:
             - name: http
               containerPort: 8080

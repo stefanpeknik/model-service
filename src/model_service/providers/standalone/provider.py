@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from model_service.builder_deployment.settings import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
     from model_service.catalog import ModelCatalog
-    from model_service.providers.provider import FacadeContribution
+    from model_service.providers.provider import ApiContribution
     from model_service.providers.standalone.shared_storage import (
         SharedStorageAccessFactory,
     )
@@ -163,31 +163,31 @@ class StandaloneProviderAdapter(ProviderAdapter):
 
 
 class StandaloneProvider(Provider):
-    """Shared-storage jobs, through the public builder routes the facade serves."""
+    """Shared-storage jobs, through the public builder routes the API serves."""
 
     catalog_block = None
 
-    def facade(
+    def api(
         self, catalog: ModelCatalog, settings: SchedulerSettings
-    ) -> FacadeContribution:
+    ) -> ApiContribution:
         """Contribute the standalone scheduler adapter, with no routes or background work.
 
-        The facade's public builder routes submit these jobs.
+        the API's public builder routes submit these jobs.
 
         Args:
             catalog: Unused.
             settings: Supplies the allowed shared-storage roots.
 
         Returns:
-            The facade contribution.
+            the API contribution.
         """
-        from model_service.providers.provider import FacadeContribution
+        from model_service.providers.provider import ApiContribution
         from model_service.providers.standalone.shared_storage import (
             SharedStorageAccessFactory,
         )
 
         del catalog
-        return FacadeContribution(
+        return ApiContribution(
             StandaloneProviderAdapter(
                 SharedStorageAccessFactory(settings.shared_storage_roots)
             )

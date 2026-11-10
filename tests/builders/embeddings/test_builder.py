@@ -13,6 +13,9 @@ import httpx
 import numpy as np
 from fastapi import FastAPI
 
+from model_service.api.http_app import create_app
+from model_service.api.synchronous_runs import SynchronousBuilderService
+from model_service.api.wiring import model_resolver
 from model_service.builder_deployment.client import HTTPBuilderDispatch
 from model_service.builder_deployment.protocol import RunRequest, run_http
 from model_service.builder_deployment.runner import BuilderApplication
@@ -20,9 +23,6 @@ from model_service.builder_deployment.settings import ReplicaSettings
 from model_service.builders.embeddings.builder import EmbeddingBuilder
 from model_service.builders.registry import get_builder
 from model_service.catalog import ModelCatalog
-from model_service.facade.http_app import create_app
-from model_service.facade.synchronous_runs import SynchronousBuilderService
-from model_service.facade.wiring import model_resolver
 from model_service.inference.contracts import TileEmbeddingModel
 from model_service.providers.standalone.provider import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import (

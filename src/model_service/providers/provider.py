@@ -1,10 +1,10 @@
 """The provider contract: what a provider is and every method it writes.
 
-A provider is a `Provider` (here) listed in `providers/registry.py`. The facade
+A provider is a `Provider` (here) listed in `providers/registry.py`. the API
 and the builder ingress compose the providers there and name none of them.
 A provider writes:
 
-- `Provider.facade` and `Provider.input_access`: what it adds to each process,
+- `Provider.api` and `Provider.input_access`: what it adds to each process,
   plus `catalog_block`, the block of the model files it reads;
 - a `ProviderAdapter` (scheduler/provider_adapter.py): `identify`, `prepare`
   and `finish`, admitting a job and finishing it;
@@ -40,10 +40,10 @@ type RouteFactory = Callable[[Scheduler, Capacity], APIRouter]
 
 
 @dataclass(frozen=True, slots=True)
-class FacadeContribution:
+class ApiContribution:
     adapter: ProviderAdapter
     routes: RouteFactory | None = None
-    # Runs while the facade serves and is cancelled when it stops.
+    # Runs while the API serves and is cancelled when it stops.
     background: Callable[[], Coroutine[None, None, None]] | None = None
 
 
@@ -52,14 +52,14 @@ class Provider(ABC):
     catalog_block: str | None
 
     @abstractmethod
-    def facade(
+    def api(
         self, catalog: ModelCatalog, settings: SchedulerSettings
-    ) -> FacadeContribution:
-        """Build what this provider adds to the facade.
+    ) -> ApiContribution:
+        """Build what this provider adds to the API.
 
         Args:
             catalog: The deployed models, with each model file's provider blocks.
-            settings: The facade's scheduler settings.
+            settings: the API's scheduler settings.
 
         Returns:
             The provider's scheduler adapter, and its routes and background work if any.

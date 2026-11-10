@@ -6,7 +6,9 @@ atomic.
 """
 
 from model_service.scheduler.transitions.admission import AdmissionTransitions
-from model_service.scheduler.transitions.attempt_outcomes import SettlementTransitions
+from model_service.scheduler.transitions.attempt_outcomes import (
+    AttemptOutcomeTransitions,
+)
 from model_service.scheduler.transitions.base import (
     ClaimDecision,
     RenewalDecision,
@@ -19,7 +21,7 @@ from model_service.scheduler.transitions.leases import LeaseTransitions
 
 
 class ExecutionTransitions(
-    AdmissionTransitions, LeaseTransitions, SettlementTransitions
+    AdmissionTransitions, LeaseTransitions, AttemptOutcomeTransitions
 ):
     """Apply the shared state machine with separate processing and provider retry policies.
 

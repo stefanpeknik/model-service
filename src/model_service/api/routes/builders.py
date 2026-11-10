@@ -12,9 +12,8 @@ from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, Request, Response, status
 
-from model_service.builders.registry import BUILDERS
-from model_service.facade.auth import Access, Action
-from model_service.facade.http_errors import (
+from model_service.api.auth import Access, Action
+from model_service.api.http_errors import (
     ERRORS,
     ApiErrorCode,
     http_error,
@@ -22,11 +21,12 @@ from model_service.facade.http_errors import (
 )
 
 # FastAPI reads these annotations at runtime.
-from model_service.facade.request_bodies import (
+from model_service.api.request_bodies import (
     ImmediateBuilderRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations.
     ScheduledBuilderRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations.
 )
-from model_service.facade.submission import require_idempotency_key, submit
+from model_service.api.submission import require_idempotency_key, submit
+from model_service.builders.registry import BUILDERS
 from model_service.inference.contracts import (
     InferenceContract,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
@@ -54,7 +54,7 @@ from model_service.wire.result import (
 if TYPE_CHECKING:
     from collections.abc import Awaitable
 
-    from model_service.facade.synchronous_runs import BuilderRunner
+    from model_service.api.synchronous_runs import BuilderRunner
     from model_service.scheduler.api_interface import Scheduler
 
 

@@ -6,7 +6,7 @@ initialization and worker startup occur in the application lifespan.
 
 import logging
 
-from model_service.facade.wiring import create_facade
+from model_service.api.wiring import build_api_process
 
 
 # Uvicorn configures only its own loggers before importing this module; without
@@ -16,4 +16,4 @@ _package_logger.handlers = logging.getLogger("uvicorn").handlers
 _package_logger.setLevel(logging.INFO)
 _package_logger.propagate = False
 
-app = create_facade()
+app = build_api_process()

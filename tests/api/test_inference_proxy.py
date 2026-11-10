@@ -6,7 +6,7 @@ import unittest
 
 import httpx
 
-from model_service.facade.raw_inference_proxy import (
+from model_service.api.raw_inference_proxy import (
     HttpInferenceProxy,
     InferenceRequest,
 )

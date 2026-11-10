@@ -1,6 +1,6 @@
-"""The HTTP contract between the facade or scheduler and a builder replica.
+"""The HTTP contract between the API or scheduler and a builder replica.
 
-Its error format is internal; the public API's is facade/http_errors.py.
+Its error format is internal; the public API's is api/http_errors.py.
 """
 
 from __future__ import annotations

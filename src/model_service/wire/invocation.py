@@ -1,6 +1,6 @@
 """A builder invocation: what is run, on which inputs, with which access, by when.
 
-It crosses every process boundary (facade, scheduler database, Ray builder
+It crosses every process boundary (API, scheduler database, Ray builder
 replica), so the types are strict and JSON-serializable.
 """
 
