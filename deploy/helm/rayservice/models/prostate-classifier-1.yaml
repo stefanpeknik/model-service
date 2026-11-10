@@ -51,11 +51,10 @@ serve:
         batch_wait_timeout_s: 0.05
         intra_op_num_threads: 4
         trt_max_workspace_size: 8589934592  # 8 GiB
-        # TensorRT engines are cached per path: use a new path for a new checkpoint.
-        # This one predates the model's name; kept so the built engine is reused.
+        # Where ONNX Runtime keeps the built TensorRT engine, so restarts skip the build.
         trt_cache_path: /mnt/cache/trt_cache/binary-classifier-1/b256
         trt_builder_optimization_level: 3
-        # The checkpoint. A new training run changes it and `trt_cache_path` above.
+        # The checkpoint; a new training run changes this line.
         model:
           _target_: model_service.model_implementations.artifacts:mlflow
           artifact_uri: mlflow-artifacts:/65/aebc892f526047249b972f200bef4381/artifacts/checkpoints/epoch=0-step=6972/prostate_model_norm.onnx
