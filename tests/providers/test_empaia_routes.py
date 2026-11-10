@@ -9,7 +9,7 @@ from httpx import ASGITransport, AsyncClient
 from model_service.api.http_app import create_app
 from model_service.inference.contracts import SpatialScoresModel
 from model_service.model_catalog import ModelCatalog
-from model_service.providers.empaia.job_routes import create_router
+from model_service.providers.empaia.jobs.routes import create_router
 from model_service.scheduler.executions import (
     ExecutionError,
     ExecutionView,
@@ -18,7 +18,7 @@ from model_service.scheduler.executions import (
     UnknownExecutionError,
 )
 from model_service.scheduler.status import ExecutionStatus, Operation
-from model_service.wire.failures import UnknownModelError
+from model_service.shared.failures import UnknownModelError
 
 
 PROSTATE = SpatialScoresModel(

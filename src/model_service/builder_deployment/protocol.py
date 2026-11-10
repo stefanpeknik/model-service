@@ -17,13 +17,13 @@ from pydantic import Field, StrictBool, TypeAdapter
 from model_service.inference.contracts import (
     ModelBinding,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
-from model_service.wire.failures import (
+from model_service.shared.failures import (
     BuilderFailure,
     ContractViolation,
     InvalidInvocation,
 )
-from model_service.wire.invocation import ExecutionContext, Invocation
-from model_service.wire.result import (
+from model_service.shared.invocation import ExecutionContext, Invocation
+from model_service.shared.result import (
     BuilderResult,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
 

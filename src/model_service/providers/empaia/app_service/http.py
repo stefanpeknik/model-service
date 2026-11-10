@@ -51,7 +51,7 @@ if TYPE_CHECKING:
     )
     from model_service.providers.empaia.app_service.types import RectangleMaskWriter
     from model_service.providers.empaia.settings import EmpaiaSettings
-    from model_service.wire.json_values import JsonValue
+    from model_service.shared.json_values import JsonValue
 
 
 class HttpEmpaiaGateway(EmpaiaGateway):

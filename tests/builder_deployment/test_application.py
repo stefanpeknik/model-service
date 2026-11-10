@@ -23,20 +23,20 @@ from model_service.providers.standalone.shared_storage import (
     SharedStorageAccessFactory,
 )
 from model_service.scheduler.builder_dispatch import RemoteFailureError
-from model_service.wire.failures import (
+from model_service.shared.failures import (
     BuilderFailure,
     ContractViolation,
     FailureCode,
     IncompatibleModelError,
     InvalidInvocation,
 )
-from model_service.wire.invocation import (
+from model_service.shared.invocation import (
     INVOCATION,
     ExecutionContext,
     ProviderInput,
     SharedPathInput,
 )
-from model_service.wire.result import (
+from model_service.shared.result import (
     RESULT,
     BuilderResult,
     InlineOutput,

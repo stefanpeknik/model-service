@@ -17,8 +17,8 @@ from model_service.providers.empaia.app_service.types import (
     SlideLevel,
 )
 from model_service.providers.empaia.publishing.publishers import OutputPublisher
-from model_service.wire.result import SharedArtifact
-from model_service.wire.score_grid import read_score_grid
+from model_service.shared.result import SharedArtifact
+from model_service.shared.score_grid import read_score_grid
 
 
 if TYPE_CHECKING:
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
         SlideMetadata,
     )
     from model_service.providers.empaia.publishing.publishers import Commit
-    from model_service.wire.result import BuilderOutput
+    from model_service.shared.result import BuilderOutput
 
 
 class ScoreGridPublisher(OutputPublisher):

@@ -22,8 +22,8 @@ from model_service.inference.contracts import (
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from model_service.wire.invocation import InputAccessContext, Invocation
-from model_service.wire.result import (
+from model_service.shared.invocation import InputAccessContext, Invocation
+from model_service.shared.result import (
     BuilderOutput,
     BuilderResult,
     InlineOutput,

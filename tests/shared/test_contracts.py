@@ -11,8 +11,8 @@ from model_service.inference.contracts import (
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from model_service.wire.invocation import INVOCATION, InputKind
-from model_service.wire.result import RESULT, OutputKind
+from model_service.shared.invocation import INVOCATION, InputKind
+from model_service.shared.result import RESULT, OutputKind
 
 
 INVOCATION_BODY = {

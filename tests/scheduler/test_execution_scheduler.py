@@ -9,7 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any
 
-from model_service.providers.adapter import (
+from model_service.providers.job_lifecycle import (
     PreparedInvocation,
     ProviderCancellation,
     ProviderFailure,
@@ -51,12 +51,12 @@ from model_service.scheduler.store.repository import (
     ExecutionRepositoryUnavailableError,
 )
 from model_service.scheduler.worker import ExecutionWorker
-from model_service.wire.invocation import (
+from model_service.shared.invocation import (
     ExecutionContext,
     InputAccessContext,
     Invocation,
 )
-from model_service.wire.result import BuilderResult, SharedArtifact
+from model_service.shared.result import BuilderResult, SharedArtifact
 from tests.support.memory_repository import (
     FakeDispatch,
     InMemoryExecutionRepository,
@@ -68,12 +68,12 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from model_service.inference.contracts import ModelBinding
-    from model_service.providers.adapter import (
+    from model_service.providers.job_lifecycle import (
         BeforeMutation,
         ProviderFinishOutcome,
     )
     from model_service.scheduler.executions import ModelResolver
-    from model_service.wire.json_values import JsonValue
+    from model_service.shared.json_values import JsonValue
 
 
 class StandaloneProvider:

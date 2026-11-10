@@ -14,7 +14,7 @@ from model_service.inference.contracts import (
     TileEmbeddingModel,
 )
 from model_service.model_catalog import CatalogError, ModelCatalog
-from model_service.wire.failures import UnknownModelError
+from model_service.shared.failures import UnknownModelError
 
 
 def spatial_document(model_id: str = "prostate-classifier-1") -> dict[str, object]:

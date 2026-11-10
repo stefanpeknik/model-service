@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException
 
-from model_service.wire.failures import UnknownBuilderError, UnknownModelError
+from model_service.shared.failures import UnknownBuilderError, UnknownModelError
 
 
 if TYPE_CHECKING:

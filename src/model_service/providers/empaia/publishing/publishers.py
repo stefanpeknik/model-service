@@ -20,7 +20,7 @@ from model_service.providers.empaia.app_service.gateway import (
     EmpaiaGatewayError,
     PrimitiveType,
 )
-from model_service.wire.result import InlineOutput, SharedArtifact
+from model_service.shared.result import InlineOutput, SharedArtifact
 
 
 if TYPE_CHECKING:
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from model_service.builders.declarations import OutputSpec
     from model_service.inference.contracts import ModelBinding
     from model_service.providers.empaia.app_service.gateway import EmpaiaGateway
-    from model_service.wire.result import BuilderOutput
+    from model_service.shared.result import BuilderOutput
 
 
 type PublisherKey = tuple[str, str | None]
@@ -196,7 +196,7 @@ def default_publishers() -> PublisherRegistry:
         The registry.
     """
     from model_service.providers.empaia.publishing.pixelmap import ScoreGridPublisher
-    from model_service.wire.score_grid import MEDIA_TYPE as SCORE_GRID
+    from model_service.shared.score_grid import MEDIA_TYPE as SCORE_GRID
 
     publishers: dict[PublisherKey, OutputPublisher] = {
         (output_type, None): PrimitivePublisher(output_type)

@@ -24,13 +24,13 @@ from model_service.scheduler.builder_dispatch import (
     RemoteFailureError,
     UnknownOutcomeError,
 )
-from model_service.wire.result import RESULT
+from model_service.shared.result import RESULT
 
 
 if TYPE_CHECKING:
     from model_service.inference.contracts import ModelBinding
-    from model_service.wire.invocation import ExecutionContext, Invocation
-    from model_service.wire.result import BuilderResult
+    from model_service.shared.invocation import ExecutionContext, Invocation
+    from model_service.shared.result import BuilderResult
 
 
 _ERROR_RESPONSE = TypeAdapter(ErrorResponse)

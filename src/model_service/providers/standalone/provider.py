@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 from pydantic import ValidationError
 
 from model_service.builders.registry import get_builder
-from model_service.providers.adapter import (
+from model_service.providers.job_lifecycle import (
     PreparedInvocation,
     ProviderAdapter,
     SubmissionIdentity,
@@ -25,9 +25,9 @@ from model_service.scheduler.executions import (
     InvalidScheduleRequestError,
     ScheduleRequest,
 )
-from model_service.wire.caller_request import STANDALONE_PROVIDER, BuilderRequest
-from model_service.wire.failures import InvalidInvocation
-from model_service.wire.invocation import (
+from model_service.shared.caller_request import STANDALONE_PROVIDER, BuilderRequest
+from model_service.shared.failures import InvalidInvocation
+from model_service.shared.invocation import (
     SHARED_STORAGE,
     ExecutionContext,
     SharedPathInput,
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from model_service.builders.base import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
     from model_service.model_catalog import ModelCatalog
-    from model_service.providers.adapter import (
+    from model_service.providers.job_lifecycle import (
         BeforeMutation,
         ProviderFinishOutcome,
     )
@@ -49,7 +49,7 @@ if TYPE_CHECKING:
         SharedStorageAccessFactory,
     )
     from model_service.scheduler.settings import SchedulerSettings
-    from model_service.wire.json_values import JsonValue
+    from model_service.shared.json_values import JsonValue
 
 
 class StandaloneProviderAdapter(ProviderAdapter):

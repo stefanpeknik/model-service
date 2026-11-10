@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from model_service.wire.score_grid import ScoreGrid, write_score_grid
+from model_service.shared.score_grid import ScoreGrid, write_score_grid
 
 
 if TYPE_CHECKING:

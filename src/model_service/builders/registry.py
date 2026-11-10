@@ -12,12 +12,12 @@ from typing import TYPE_CHECKING
 
 from model_service.builders.embeddings.spec import SPEC as TILE_EMBEDDINGS
 from model_service.builders.heatmap.spec import SPEC as HEATMAP
-from model_service.wire.failures import UnknownBuilderError
+from model_service.shared.failures import UnknownBuilderError
 
 
 if TYPE_CHECKING:
     from model_service.builders.declarations import BuilderOutputs, BuilderSpec
-    from model_service.wire.result import BuilderResult
+    from model_service.shared.result import BuilderResult
 
 
 BUILDERS: dict[str, BuilderSpec] = {

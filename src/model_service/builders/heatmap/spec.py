@@ -16,7 +16,7 @@ from model_service.builders.declarations import (
     StrideFraction,
 )
 from model_service.inference.contracts import InferenceContract
-from model_service.wire.result import (
+from model_service.shared.result import (
     SharedArtifact,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
 
@@ -38,7 +38,7 @@ class HeatmapConfiguration(BaseModel):
 class HeatmapOutputs(BuilderOutputs):
     heatmap: Annotated[
         SharedArtifact,
-        # The score grid format, see `wire/score_grid.py`.
+        # The score grid format, see `shared/score_grid.py`.
         Artifact(media_type="application/x-npz", default_path="heatmap.npz"),
     ]
 

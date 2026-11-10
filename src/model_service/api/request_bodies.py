@@ -9,14 +9,14 @@ from typing import TYPE_CHECKING, Annotated
 
 from pydantic import Field
 
-from model_service.wire.caller_request import BuilderRequest
-from model_service.wire.invocation import (
+from model_service.shared.caller_request import BuilderRequest
+from model_service.shared.invocation import (
     Deadline,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
 
 
 if TYPE_CHECKING:
-    from model_service.wire.json_values import JsonValue
+    from model_service.shared.json_values import JsonValue
 
 
 class ImmediateBuilderRequest(BuilderRequest):

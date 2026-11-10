@@ -26,7 +26,7 @@ from model_service.builder_deployment.settings import DeploymentSettings
 from model_service.builders.base import ReplicaSettings
 from model_service.builders.registry import get_builder
 from model_service.providers.registry import PROVIDERS
-from model_service.wire.result import BuilderResult
+from model_service.shared.result import BuilderResult
 
 
 if TYPE_CHECKING:

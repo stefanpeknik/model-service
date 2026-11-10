@@ -11,7 +11,7 @@ import logging
 from contextlib import suppress
 from typing import TYPE_CHECKING
 
-from model_service.providers.adapter import (
+from model_service.providers.job_lifecycle import (
     ProviderCancellation,
     ProviderFailure,
     ProviderFinishFailureError,
@@ -44,8 +44,8 @@ from model_service.scheduler.executions import (
 )
 from model_service.scheduler.status import ExecutionErrorCode, Operation
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
-from model_service.wire.invocation import ExecutionContext
-from model_service.wire.result import BuilderResult
+from model_service.shared.invocation import ExecutionContext
+from model_service.shared.result import BuilderResult
 
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from datetime import timedelta
 
-    from model_service.providers.adapter import ProviderAdapter
+    from model_service.providers.job_lifecycle import ProviderAdapter
     from model_service.scheduler.active_work import ActiveWorkRegistry
     from model_service.scheduler.builder_dispatch import BuilderDispatch
     from model_service.scheduler.execution_records import Settlement

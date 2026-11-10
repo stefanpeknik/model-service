@@ -26,13 +26,13 @@ from model_service.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.scheduler.executions import ScheduleRequest
 from model_service.scheduler.status import ExecutionStatus
 from model_service.scheduler.worker import ExecutionWorker
-from model_service.wire.failures import BuilderFailure, FailureCode, InvalidInvocation
-from model_service.wire.invocation import (
+from model_service.shared.failures import BuilderFailure, FailureCode, InvalidInvocation
+from model_service.shared.invocation import (
     ExecutionContext,
     InputAccessContext,
     ProviderInput,
 )
-from model_service.wire.result import BuilderResult, SharedArtifact
+from model_service.shared.result import BuilderResult, SharedArtifact
 from tests.support.builder_fixtures import (
     DECLARED,
     SPATIAL_MODEL,
@@ -47,7 +47,7 @@ from tests.support.memory_repository import InMemoryExecutionRepository
 if TYPE_CHECKING:
     from model_service.builders.base import BuilderContext
     from model_service.inference.contracts import ModelBinding
-    from model_service.wire.invocation import Invocation
+    from model_service.shared.invocation import Invocation
 
 
 async def empty(_context: BuilderContext) -> BuilderResult:

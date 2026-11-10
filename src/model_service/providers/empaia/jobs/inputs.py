@@ -25,8 +25,8 @@ from model_service.providers.empaia.app_service.gateway import (
     EmpaiaInputState,
     EmpaiaJobContext,
 )
-from model_service.wire.failures import BuilderFailure, FailureCode, InvalidInvocation
-from model_service.wire.invocation import ExecutionContext, ProviderInput
+from model_service.shared.failures import BuilderFailure, FailureCode, InvalidInvocation
+from model_service.shared.invocation import ExecutionContext, ProviderInput
 
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ if TYPE_CHECKING:
         RectangleMaskWriter,
         SlideMetadata,
     )
-    from model_service.wire.invocation import Invocation
+    from model_service.shared.invocation import Invocation
 
 
 class EmpaiaInputAccess(InputAccess):

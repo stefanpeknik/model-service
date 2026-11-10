@@ -16,13 +16,13 @@ from model_service.scheduler.builder_dispatch import (
     RemoteFailureError,
     UnknownOutcomeError,
 )
-from model_service.wire.invocation import (
+from model_service.shared.invocation import (
     ExecutionContext,
     InputAccessContext,
     Invocation,
     SharedPathInput,
 )
-from model_service.wire.result import BuilderResult, InlineOutput
+from model_service.shared.result import BuilderResult, InlineOutput
 
 
 if TYPE_CHECKING:

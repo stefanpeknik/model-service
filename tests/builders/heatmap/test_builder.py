@@ -27,9 +27,9 @@ from model_service.inference.contracts import SpatialScoresModel
 from model_service.providers.standalone.shared_storage import (
     SharedStorageAccessFactory,
 )
-from model_service.wire.invocation import SharedPathInput
-from model_service.wire.result import SharedArtifact
-from model_service.wire.score_grid import read_score_grid
+from model_service.shared.invocation import SharedPathInput
+from model_service.shared.result import SharedArtifact
+from model_service.shared.score_grid import read_score_grid
 from tests.support.builder_contract import BuilderContractTests
 from tests.support.builder_fixtures import invocation, write_slide
 
@@ -366,7 +366,7 @@ class HeatmapBuilderTests(unittest.IsolatedAsyncioTestCase):
 class UnreadableInputTests(unittest.TestCase):
     def test_a_file_that_is_not_a_slide_is_an_invalid_input(self) -> None:
         from model_service.builders.slides.tile_reader import open_slide
-        from model_service.wire.failures import InvalidInvocation
+        from model_service.shared.failures import InvalidInvocation
 
         with TemporaryDirectory() as directory:
             path = Path(directory) / "notes.txt"

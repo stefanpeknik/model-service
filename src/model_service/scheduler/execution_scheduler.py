@@ -39,7 +39,7 @@ from model_service.scheduler.worker import ExecutionWorker
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Mapping
 
-    from model_service.providers.adapter import (
+    from model_service.providers.job_lifecycle import (
         ProviderAdapter,
         SubmissionIdentity,
     )

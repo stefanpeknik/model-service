@@ -20,7 +20,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from model_service.providers.adapter import SubmissionIdentity
+from model_service.providers.job_lifecycle import SubmissionIdentity
 from model_service.scheduler.execution_records import (
     ExecutionRecord,
     RetryPolicy,

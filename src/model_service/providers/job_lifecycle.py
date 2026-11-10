@@ -22,9 +22,9 @@ if TYPE_CHECKING:
         ProviderName,
         ScheduleRequest,
     )
-    from model_service.wire.invocation import Invocation
-    from model_service.wire.json_values import JsonValue
-    from model_service.wire.result import BuilderResult
+    from model_service.shared.invocation import Invocation
+    from model_service.shared.json_values import JsonValue
+    from model_service.shared.result import BuilderResult
 
 
 type ProviderFinishOutcome = ProviderSuccess | ProviderFailure | ProviderCancellation

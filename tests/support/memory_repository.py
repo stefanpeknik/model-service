@@ -50,14 +50,14 @@ from model_service.scheduler.transitions import (
     ExecutionTransitions,
     SettlementAccepted,
 )
-from model_service.wire.invocation import ExecutionContext, Invocation
-from model_service.wire.result import BuilderResult
+from model_service.shared.invocation import ExecutionContext, Invocation
+from model_service.shared.result import BuilderResult
 
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Mapping
 
-    from model_service.providers.adapter import SubmissionIdentity
+    from model_service.providers.job_lifecycle import SubmissionIdentity
 
 
 _TERMINAL = frozenset(

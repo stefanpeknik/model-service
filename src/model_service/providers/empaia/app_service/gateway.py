@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from rationai.empaia.typing import SlideInfo
     from rationai.empaia.utils.scalar_output import PixelmapTileSet
 
-    from model_service.wire.json_values import JsonValue
+    from model_service.shared.json_values import JsonValue
 
 
 type MutationGuard = Callable[[], Awaitable[None]]

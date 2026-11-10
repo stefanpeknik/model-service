@@ -23,17 +23,6 @@ import jwt
 from pydantic import Field, ValidationError
 
 from model_service.builders.registry import get_builder, parse_result
-from model_service.providers.adapter import (
-    PreparedInvocation,
-    Priority,
-    ProviderAdapter,
-    ProviderCancellation,
-    ProviderFailure,
-    ProviderFinishFailureError,
-    ProviderFinishOutcome,
-    ProviderSuccess,
-    SubmissionIdentity,
-)
 from model_service.providers.empaia.app_service.gateway import (
     INPUT_ACCESS_KIND,
     PROVIDER_NAME,
@@ -52,23 +41,38 @@ from model_service.providers.empaia.jobs.mapping import (
     raise_preparation_error,
 )
 from model_service.providers.empaia.publishing.publishers import default_publishers
+from model_service.providers.job_lifecycle import (
+    PreparedInvocation,
+    Priority,
+    ProviderAdapter,
+    ProviderCancellation,
+    ProviderFailure,
+    ProviderFinishFailureError,
+    ProviderFinishOutcome,
+    ProviderSuccess,
+    SubmissionIdentity,
+)
 from model_service.scheduler.executions import (
     InvalidScheduleRequestError,
     ScheduleRequest,
     SchedulingUnavailableError,
 )
-from model_service.wire.invocation import InputAccessContext, Invocation, ProviderInput
-from model_service.wire.json_values import is_json_value
+from model_service.shared.invocation import (
+    InputAccessContext,
+    Invocation,
+    ProviderInput,
+)
+from model_service.shared.json_values import is_json_value
 
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Mapping
     from pathlib import Path
 
-    from model_service.providers.adapter import BeforeMutation
     from model_service.providers.empaia.ead.builder_io import BuilderIo
     from model_service.providers.empaia.publishing.publishers import PublisherRegistry
-    from model_service.wire.json_values import JsonValue
+    from model_service.providers.job_lifecycle import BeforeMutation
+    from model_service.shared.json_values import JsonValue
 
 
 class EmpaiaErrorCode(StrEnum):

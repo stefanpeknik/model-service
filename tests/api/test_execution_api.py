@@ -45,7 +45,7 @@ from model_service.scheduler.executions import (
 )
 from model_service.scheduler.status import ExecutionStatus, Operation
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
-from model_service.wire.result import BuilderResult, InlineOutput, SharedArtifact
+from model_service.shared.result import BuilderResult, InlineOutput, SharedArtifact
 from tests.support.memory_repository import InMemoryExecutionRepository
 
 
@@ -57,7 +57,7 @@ if TYPE_CHECKING:
 
     from model_service.inference.contracts import ModelBinding
     from model_service.scheduler.execution_records import ExecutionRecord
-    from model_service.wire.invocation import ExecutionContext, Invocation
+    from model_service.shared.invocation import ExecutionContext, Invocation
 
     type Handler = Callable[
         [str, Invocation, ModelBinding, ExecutionContext], Awaitable[BuilderResult]

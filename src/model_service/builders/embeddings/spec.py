@@ -16,7 +16,7 @@ from model_service.builders.declarations import (
     StrideFraction,
 )
 from model_service.inference.contracts import InferenceContract
-from model_service.wire.result import (
+from model_service.shared.result import (
     SharedArtifact,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
 

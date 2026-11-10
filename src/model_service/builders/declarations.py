@@ -19,8 +19,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from model_service.inference.contracts import (
     InferenceContract,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
-from model_service.wire.failures import IncompatibleModelError, InvalidInvocation
-from model_service.wire.result import (
+from model_service.shared.failures import IncompatibleModelError, InvalidInvocation
+from model_service.shared.result import (
     BuilderResult,
     InlineOutput,
     OutputKind,
@@ -32,8 +32,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from model_service.inference.contracts import ModelBinding
-    from model_service.wire.invocation import Invocation
-    from model_service.wire.json_values import JsonValue
+    from model_service.shared.invocation import Invocation
+    from model_service.shared.json_values import JsonValue
 
 
 @dataclass(frozen=True, slots=True)

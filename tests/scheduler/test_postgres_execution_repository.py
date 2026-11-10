@@ -23,7 +23,7 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from psycopg.errors import CheckViolation
 from psycopg.types.json import Jsonb
 
-from model_service.providers.adapter import SubmissionIdentity
+from model_service.providers.job_lifecycle import SubmissionIdentity
 from model_service.scheduler.execution_records import (
     Admission,
     InferenceSucceeded,
@@ -45,13 +45,13 @@ from model_service.scheduler.store.postgres import PostgresExecutionRepository
 from model_service.scheduler.store.protected_context import ProtectedContextCipher
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
 from model_service.scheduler.store.rows import ExecutionRow
-from model_service.wire.invocation import (
+from model_service.shared.invocation import (
     INVOCATION,
     InputAccessContext,
     Invocation,
     SharedPathInput,
 )
-from model_service.wire.result import (
+from model_service.shared.result import (
     RESULT,
     BuilderResult,
     InlineOutput,

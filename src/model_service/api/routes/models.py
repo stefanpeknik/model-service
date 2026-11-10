@@ -31,8 +31,8 @@ from model_service.scheduler.raw_inference_jobs import (
     ModelUnavailableError,
     ResultTooLargeError,
 )
-from model_service.wire.failures import UnknownModelError
-from model_service.wire.json_values import (
+from model_service.shared.failures import UnknownModelError
+from model_service.shared.json_values import (
     JsonValue,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
 

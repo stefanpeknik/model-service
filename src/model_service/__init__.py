@@ -7,7 +7,7 @@
 - inference/: what a model of each contract promises (contracts.py) and the
   clients that call it (model_clients.py).
 - providers/: where inputs come from and results go (standalone, EMPAIA).
-- wire/: types that cross process boundaries.
+- shared/: types shared across processes (invocation, result, failures, score grid).
 - model_catalog.py: the deployed models, read from the model YAML files.
 - models/: the model implementations Ray Serve runs.
 """

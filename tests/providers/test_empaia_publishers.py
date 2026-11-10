@@ -10,10 +10,6 @@ from zipfile import BadZipFile
 from model_service.builders.declarations import OutputSpec
 from model_service.builders.registry import get_builder
 from model_service.inference.contracts import SpatialScoresModel
-from model_service.providers.adapter import (
-    ProviderFinishFailureError,
-    ProviderSuccess,
-)
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.ead.apps import (
     AppMode,
@@ -21,20 +17,24 @@ from model_service.providers.empaia.ead.apps import (
     app_definitions,
 )
 from model_service.providers.empaia.ead.builder_io import BUILDER_IO
-from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
+from model_service.providers.empaia.jobs.lifecycle import EmpaiaProviderAdapter
 from model_service.providers.empaia.publishing.pixelmap import _clip
 from model_service.providers.empaia.publishing.publishers import (
     PrimitivePublisher,
     PublisherRegistry,
     default_publishers,
 )
-from model_service.wire.result import (
+from model_service.providers.job_lifecycle import (
+    ProviderFinishFailureError,
+    ProviderSuccess,
+)
+from model_service.shared.result import (
     BuilderResult,
     InlineOutput,
     OutputKind,
     SharedArtifact,
 )
-from model_service.wire.score_grid import MEDIA_TYPE
+from model_service.shared.score_grid import MEDIA_TYPE
 from tests.support.builder_fixtures import outputs_model
 
 
@@ -245,7 +245,7 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "model_service.providers.empaia.jobs.adapter.get_builder",
+                "model_service.providers.empaia.jobs.lifecycle.get_builder",
                 return_value=with_score,
             ),
             patch(

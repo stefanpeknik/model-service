@@ -17,16 +17,16 @@ from model_service.scheduler.status import (
     ExecutionStatus,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
     Operation,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
-from model_service.wire.failures import (
+from model_service.shared.failures import (
     IncompatibleModelError,
     UnknownBuilderError,
     UnknownModelError,
 )
-from model_service.wire.invocation import Deadline, Invocation
-from model_service.wire.json_values import (
+from model_service.shared.invocation import Deadline, Invocation
+from model_service.shared.json_values import (
     JsonValue,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
-from model_service.wire.result import BuilderResult
+from model_service.shared.result import BuilderResult
 
 
 __all__ = ["IncompatibleModelError", "UnknownBuilderError", "UnknownModelError"]

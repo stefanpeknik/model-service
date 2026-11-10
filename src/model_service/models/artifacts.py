@@ -1,6 +1,6 @@
 """Download model artifacts for model deployment construction.
 
-This model loader is separate from model_service.providers.adapter, whose adapters connect
+This model loader is separate from model_service.providers.job_lifecycle, whose adapters connect
 workflows to caller data and external job lifecycles.
 """
 

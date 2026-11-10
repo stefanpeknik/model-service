@@ -10,12 +10,12 @@ from fastapi import HTTPException
 
 from model_service.builder_deployment.protocol import ErrorCode, RunRequest, run_http
 from model_service.inference.contracts import SpatialScoresModel
-from model_service.wire.failures import (
+from model_service.shared.failures import (
     BuilderFailure,
     ContractViolation,
     InvalidInvocation,
 )
-from model_service.wire.invocation import (
+from model_service.shared.invocation import (
     ExecutionContext,
     InputAccessContext,
     Invocation,

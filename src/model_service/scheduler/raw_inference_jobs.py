@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
-from model_service.providers.adapter import SubmissionIdentity
+from model_service.providers.job_lifecycle import SubmissionIdentity
 from model_service.scheduler.execution_records import (
     InferenceSucceeded,
     ProcessingFailed,

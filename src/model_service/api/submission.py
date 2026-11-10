@@ -20,7 +20,7 @@ from model_service.scheduler.executions import (
     SchedulingUnavailableError,
 )
 from model_service.scheduler.raw_inference_jobs import IncompatibleInputError
-from model_service.wire.failures import (
+from model_service.shared.failures import (
     IncompatibleModelError,
     UnknownBuilderError,
     UnknownModelError,

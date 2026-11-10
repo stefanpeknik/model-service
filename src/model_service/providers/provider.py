@@ -6,7 +6,7 @@ A provider writes:
 
 - `Provider.api` and `Provider.input_access`: what it adds to each process,
   plus `catalog_block`, the block of the model files it reads;
-- a `ProviderAdapter` (providers/adapter.py): `identify`, `prepare`
+- a `ProviderAdapter` (providers/job_lifecycle.py): `identify`, `prepare`
   and `finish`, admitting a job and finishing it;
 - an `InputAccessFactory` (builders/input_access.py) whose `create` returns an
   `InputAccess`: `input_path`, `output_path`, `is_visible_artifact`, `aclose`.
@@ -30,10 +30,10 @@ if TYPE_CHECKING:
     from model_service.builders.base import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
     from model_service.model_catalog import ModelCatalog
-    from model_service.providers.adapter import ProviderAdapter
+    from model_service.providers.job_lifecycle import ProviderAdapter
     from model_service.scheduler.protocols import Capacity, Scheduler
     from model_service.scheduler.settings import SchedulerSettings
-    from model_service.wire.invocation import InputAccessKind
+    from model_service.shared.invocation import InputAccessKind
 
 
 type RouteFactory = Callable[[Scheduler, Capacity], APIRouter]

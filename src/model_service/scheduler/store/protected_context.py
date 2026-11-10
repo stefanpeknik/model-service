@@ -19,7 +19,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from model_service.wire.json_values import JsonValue
+    from model_service.shared.json_values import JsonValue
 
 
 _VERSION = b"\x01"

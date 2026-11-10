@@ -36,17 +36,17 @@ from model_service.scheduler.builder_dispatch import (
     UnknownOutcomeError,
 )
 from model_service.scheduler.executions import ScheduleRequest, ScheduleResult
-from model_service.wire.caller_request import STANDALONE_PROVIDER as STANDALONE
-from model_service.wire.failures import (
+from model_service.shared.caller_request import STANDALONE_PROVIDER as STANDALONE
+from model_service.shared.failures import (
     IncompatibleModelError,
     InvalidInvocation,
     UnknownBuilderError,
     UnknownModelError,
 )
-from model_service.wire.json_values import (
+from model_service.shared.json_values import (
     JsonValue,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
-from model_service.wire.result import (
+from model_service.shared.result import (
     BuilderResult,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
 

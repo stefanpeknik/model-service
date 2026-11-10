@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from model_service.inference.contracts import ModelBinding
-    from model_service.wire.invocation import ExecutionContext, Invocation
+    from model_service.shared.invocation import ExecutionContext, Invocation
 
 
 class InputAccess(ABC):

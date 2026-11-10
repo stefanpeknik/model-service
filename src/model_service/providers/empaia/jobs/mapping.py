@@ -11,13 +11,13 @@ from model_service.scheduler.executions import (
     InvalidScheduleRequestError,
     SchedulingUnavailableError,
 )
-from model_service.wire.failures import InvalidInvocation
+from model_service.shared.failures import InvalidInvocation
 
 
 if TYPE_CHECKING:
     from model_service.builders.declarations import BuilderSpec
     from model_service.providers.empaia.app_service.gateway import EmpaiaGateway
-    from model_service.wire.json_values import JsonValue
+    from model_service.shared.json_values import JsonValue
 
 
 logger = logging.getLogger(__name__)

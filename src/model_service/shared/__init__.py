@@ -1,4 +1,4 @@
-"""Types that cross process boundaries; every process may import them.
+"""Types shared across processes; every process may import them.
 
 - invocation.py: a builder invocation (inputs, access, configuration, deadline).
 - caller_request.py: the request a caller sends, which becomes an invocation.

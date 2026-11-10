@@ -7,7 +7,7 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
-from model_service.wire.failures import BuilderFailure, FailureCode
+from model_service.shared.failures import BuilderFailure, FailureCode
 
 
 if TYPE_CHECKING:

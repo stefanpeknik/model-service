@@ -13,7 +13,7 @@ from model_service.builders.heatmap.processor import (
     SlideHeatmapProcessor,
 )
 from model_service.inference.contracts import SpatialScoresModel
-from model_service.wire.score_grid import ScoreGrid, read_score_grid
+from model_service.shared.score_grid import ScoreGrid, read_score_grid
 from tests.support.builder_fixtures import write_slide
 
 

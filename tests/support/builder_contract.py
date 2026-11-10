@@ -21,9 +21,9 @@ from model_service.inference.contracts import InferenceContract
 from model_service.providers.standalone.shared_storage import (
     SharedStorageAccessFactory,
 )
-from model_service.wire.failures import BuilderFailure, FailureCode, InvalidInvocation
-from model_service.wire.invocation import SharedPathInput
-from model_service.wire.result import SharedArtifact
+from model_service.shared.failures import BuilderFailure, FailureCode, InvalidInvocation
+from model_service.shared.invocation import SharedPathInput
+from model_service.shared.result import SharedArtifact
 from tests.support.builder_fixtures import (
     FakeDeployment,
     invocation,
@@ -36,8 +36,8 @@ if TYPE_CHECKING:
     import unittest
 
     from model_service.inference.contracts import ModelBinding
-    from model_service.wire.invocation import BuilderInput
-    from model_service.wire.result import BuilderResult
+    from model_service.shared.invocation import BuilderInput
+    from model_service.shared.result import BuilderResult
 
     _Base = unittest.IsolatedAsyncioTestCase
 else:

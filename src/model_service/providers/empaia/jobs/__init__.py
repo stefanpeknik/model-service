@@ -1,1 +1,1 @@
-"""An EMPAIA job run as a builder: admission and finish (adapter), job-to-builder mapping, input files."""
+"""An EMPAIA job run as a builder: routes, lifecycle, mapping and input files."""

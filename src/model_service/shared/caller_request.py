@@ -6,7 +6,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from model_service.wire.invocation import (
+from model_service.shared.invocation import (
     BuilderInput,
     Deadline,
     InputAccessContext,
