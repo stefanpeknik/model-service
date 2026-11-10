@@ -10,27 +10,27 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import ValidationError
 
 from model_service.builders.registry import get_builder
+from model_service.facade.request_bodies import BuilderRequest
 from model_service.providers.provider import Provider
 from model_service.scheduler.executions import (
     InvalidScheduleRequestError,
     ProviderName,
     ScheduleRequest,
 )
-from model_service.scheduler.provider_adapter import ProviderAdapter
-from model_service.scheduler.records import PreparedInvocation, SubmissionIdentity
+from model_service.scheduler.provider_adapter import (
+    PreparedInvocation,
+    ProviderAdapter,
+    SubmissionIdentity,
+)
 from model_service.wire.failures import InvalidInvocation
 from model_service.wire.invocation import (
     SHARED_STORAGE,
-    BuilderInput,
-    Deadline,
     ExecutionContext,
-    InputAccessContext,
-    Invocation,
     SharedPathInput,
 )
 
@@ -52,37 +52,6 @@ if TYPE_CHECKING:
 
 
 NAME: ProviderName = "standalone"
-
-
-class BuilderRequest(BaseModel):
-    """Inputs and their access, and an optional output path.
-
-    Processing settings are not part of the request; each attempt uses the
-    builder's current defaults.
-    """
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    inputs: Annotated[dict[str, BuilderInput], Field(strict=True)]
-    input_access: InputAccessContext
-    output_path: Annotated[str, Field(strict=True, min_length=1)] | None = None
-
-    def invocation(self, deadline_at: Deadline) -> Invocation:
-        """Build the invocation of this request; the attempt resolves the configuration.
-
-        Args:
-            deadline_at: When the execution must finish.
-
-        Returns:
-            The invocation, with no resolved configuration.
-        """
-        return Invocation(
-            inputs=self.inputs,
-            resolved_configuration=None,
-            input_access=self.input_access,
-            deadline_at=deadline_at,
-            output_path=self.output_path,
-        )
 
 
 class StandaloneProviderAdapter(ProviderAdapter):

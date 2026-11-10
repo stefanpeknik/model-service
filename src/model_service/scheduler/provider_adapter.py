@@ -1,7 +1,8 @@
-"""Specify provider preparation and completion around a shared builder execution.
+"""What a provider implements for the scheduler: admission and finish of its jobs.
 
-Providers translate caller-specific identity, data access, and external job lifecycle
-into the scheduler model. Reading builder inputs belongs to access adapters.
+Providers translate caller-specific identity, data access and external job
+lifecycle into the scheduler's model. Reading builder inputs belongs to
+builders/input_access.py.
 """
 
 from __future__ import annotations
@@ -9,6 +10,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from enum import IntEnum
 from typing import TYPE_CHECKING
 
 
@@ -20,9 +22,44 @@ if TYPE_CHECKING:
         ProviderName,
         ScheduleRequest,
     )
-    from model_service.scheduler.records import PreparedInvocation, SubmissionIdentity
+    from model_service.wire.invocation import Invocation
     from model_service.wire.json import JsonValue
     from model_service.wire.result import BuilderResult
+
+
+type ProviderFinishOutcome = ProviderSuccess | ProviderFailure | ProviderCancellation
+type BeforeMutation = Callable[[], Awaitable[None]]
+
+
+@dataclass(frozen=True, slots=True)
+class SubmissionIdentity:
+    """Scope a replay key to its provider and distinguish identical requests from conflicting ones."""
+
+    provider: ProviderName
+    key: str
+    fingerprint: str
+
+
+class Priority(IntEnum):
+    """Order in which due work is claimed; higher first, within each model's capacity.
+
+    Internal for now: providers set it, the public API does not take it.
+    """
+
+    LOW = 0
+    NORMAL = 1
+    HIGH = 2
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedInvocation:
+    """Carry a validated invocation, private provider state, and any provider-imposed deadline limits."""
+
+    invocation: Invocation
+    protected_context: dict[str, JsonValue]
+    deadline_cap: datetime | None = None
+    terminal_report_deadline_at: datetime | None = None
+    priority: int = Priority.NORMAL
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,10 +81,6 @@ class ProviderFailure:
 @dataclass(frozen=True, slots=True)
 class ProviderCancellation:
     """Ask provider finish to report the execution's cancellation."""
-
-
-type ProviderFinishOutcome = ProviderSuccess | ProviderFailure | ProviderCancellation
-type BeforeMutation = Callable[[], Awaitable[None]]
 
 
 class ProviderFinishFailureError(RuntimeError):

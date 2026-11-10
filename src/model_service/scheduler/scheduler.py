@@ -26,12 +26,7 @@ from model_service.scheduler.executions import (
     ScheduleResult,
     SchedulingUnavailableError,
 )
-from model_service.scheduler.records import (
-    Admission,
-    ExecutionRecord,
-    SubmissionIdentity,
-    WorkKind,
-)
+from model_service.scheduler.records import Admission, ExecutionRecord, WorkKind
 from model_service.scheduler.status import ExecutionStatus, Operation
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
 from model_service.scheduler.worker import ExecutionWorker
@@ -42,7 +37,10 @@ if TYPE_CHECKING:
 
     from model_service.scheduler.dispatch import BuilderDispatch
     from model_service.scheduler.executions import ModelResolver, ProviderName
-    from model_service.scheduler.provider_adapter import ProviderAdapter
+    from model_service.scheduler.provider_adapter import (
+        ProviderAdapter,
+        SubmissionIdentity,
+    )
     from model_service.scheduler.raw_inference import InferenceTarget
     from model_service.scheduler.store.repository import ExecutionRepository
 

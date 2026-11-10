@@ -8,11 +8,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import timedelta
-from enum import IntEnum, StrEnum
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from model_service.scheduler.executions import (
     ProviderName,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
+)
+from model_service.scheduler.provider_adapter import (
+    Priority,
+    SubmissionIdentity,
 )
 from model_service.scheduler.status import Operation
 
@@ -27,7 +31,6 @@ if TYPE_CHECKING:
         StoredResult,
     )
     from model_service.scheduler.status import ExecutionStatus
-    from model_service.wire.invocation import Invocation
     from model_service.wire.json import JsonValue
     from model_service.wire.result import BuilderResult
 
@@ -92,37 +95,6 @@ class RetryPolicy:
             delay *= 2
             remaining -= 1
         return delay
-
-
-@dataclass(frozen=True, slots=True)
-class SubmissionIdentity:
-    """Scope a replay key to its provider and distinguish identical requests from conflicting ones."""
-
-    provider: ProviderName
-    key: str
-    fingerprint: str
-
-
-class Priority(IntEnum):
-    """Order in which due work is claimed; higher first, within each model's capacity.
-
-    Internal for now: providers set it, the public API does not take it.
-    """
-
-    LOW = 0
-    NORMAL = 1
-    HIGH = 2
-
-
-@dataclass(frozen=True, slots=True)
-class PreparedInvocation:
-    """Carry a validated invocation, private provider state, and any provider-imposed deadline limits."""
-
-    invocation: Invocation
-    protected_context: dict[str, JsonValue]
-    deadline_cap: datetime | None = None
-    terminal_report_deadline_at: datetime | None = None
-    priority: int = Priority.NORMAL
 
 
 @dataclass(frozen=True, slots=True)

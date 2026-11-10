@@ -19,11 +19,11 @@ from model_service.scheduler.executions import (
     ExecutionError,
     InferenceResult,
 )
+from model_service.scheduler.provider_adapter import SubmissionIdentity
 from model_service.scheduler.records import (
     InferenceSucceeded,
     ProcessingFailed,
     ProcessingRejected,
-    SubmissionIdentity,
 )
 from model_service.scheduler.status import ExecutionErrorCode
 

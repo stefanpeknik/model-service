@@ -13,15 +13,14 @@ from model_service.scheduler.executions import (
     ResultUnavailableError,
     UnknownExecutionError,
 )
+from model_service.scheduler.provider_adapter import Priority, SubmissionIdentity
 from model_service.scheduler.records import (
     Admission,
     InferenceSucceeded,
-    Priority,
     ProcessingFailed,
     ProcessingRejected,
     ProcessingSucceeded,
     StaleWorkClaimError,
-    SubmissionIdentity,
     WorkKind,
 )
 from model_service.scheduler.status import ExecutionStatus, Operation

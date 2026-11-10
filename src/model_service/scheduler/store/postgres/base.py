@@ -24,12 +24,8 @@ from model_service.scheduler.executions import (
     ExecutionError,
     UnknownExecutionError,
 )
-from model_service.scheduler.records import (
-    ExecutionRecord,
-    RetryPolicy,
-    SubmissionIdentity,
-    WorkClaim,
-)
+from model_service.scheduler.provider_adapter import SubmissionIdentity
+from model_service.scheduler.records import ExecutionRecord, RetryPolicy, WorkClaim
 from model_service.scheduler.status import Operation
 from model_service.scheduler.store.migrate import initialize_execution_schema
 from model_service.scheduler.store.payloads import PayloadMissingError, StoredPayload

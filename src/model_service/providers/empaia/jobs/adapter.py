@@ -47,16 +47,14 @@ from model_service.scheduler.executions import (
     SchedulingUnavailableError,
 )
 from model_service.scheduler.provider_adapter import (
+    PreparedInvocation,
+    Priority,
     ProviderAdapter,
     ProviderCancellation,
     ProviderFailure,
     ProviderFinishFailureError,
     ProviderFinishOutcome,
     ProviderSuccess,
-)
-from model_service.scheduler.records import (
-    PreparedInvocation,
-    Priority,
     SubmissionIdentity,
 )
 from model_service.wire.invocation import InputAccessContext, Invocation, ProviderInput

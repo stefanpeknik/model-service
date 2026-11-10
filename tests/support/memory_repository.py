@@ -37,7 +37,6 @@ from model_service.scheduler.records import (
     RenewDirective,
     RetryPolicy,
     Settlement,
-    SubmissionIdentity,
     WorkClaim,
     WorkKind,
 )
@@ -57,6 +56,8 @@ from model_service.wire.result import BuilderResult
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Mapping
+
+    from model_service.scheduler.provider_adapter import SubmissionIdentity
 
 
 _TERMINAL = frozenset(

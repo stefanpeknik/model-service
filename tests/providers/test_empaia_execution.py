@@ -33,10 +33,11 @@ from model_service.scheduler.executions import (
     SchedulingUnavailableError,
 )
 from model_service.scheduler.provider_adapter import (
+    Priority,
     ProviderFinishFailureError,
     ProviderSuccess,
 )
-from model_service.scheduler.records import Priority, RetryPolicy
+from model_service.scheduler.records import RetryPolicy
 from model_service.scheduler.scheduler import ExecutionScheduler
 from model_service.scheduler.worker import ExecutionWorker
 from model_service.wire.invocation import ExecutionContext, Invocation

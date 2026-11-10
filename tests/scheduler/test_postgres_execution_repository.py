@@ -28,6 +28,7 @@ from model_service.scheduler.executions import (
     ScheduleConflictError,
     UnknownExecutionError,
 )
+from model_service.scheduler.provider_adapter import SubmissionIdentity
 from model_service.scheduler.records import (
     Admission,
     InferenceSucceeded,
@@ -36,7 +37,6 @@ from model_service.scheduler.records import (
     RenewDirective,
     RetryPolicy,
     StaleWorkClaimError,
-    SubmissionIdentity,
     WorkKind,
 )
 from model_service.scheduler.store.migrate import MIGRATIONS_DIRECTORY

@@ -11,12 +11,7 @@ from sqlalchemy.dialects.postgresql import insert
 from model_service.scheduler.executions import (
     ScheduleConflictError,
 )
-from model_service.scheduler.records import (
-    Admission,
-    AdmissionResult,
-    ExecutionRecord,
-    SubmissionIdentity,
-)
+from model_service.scheduler.records import Admission, AdmissionResult, ExecutionRecord
 from model_service.scheduler.store.rows import ExecutionRow
 
 
@@ -25,6 +20,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from model_service.scheduler.provider_adapter import SubmissionIdentity
     from model_service.scheduler.store.payloads import StoredPayload
 
 
