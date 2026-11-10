@@ -16,7 +16,7 @@ sequenceDiagram
   participant B as builder replica
   participant AS as EMPAIA App Service
 
-  Note over R,AS: at API start, empaia.registration posts one app per<br/>builder and model to the marketplace (idempotent)
+  Note over R,AS: at API start, empaia.registration posts one app per builder and<br/>model, carrying all its modes, to the marketplace (idempotent)
   WD->>JES: start job for app (STANDALONE or PREPROCESSING)
   JES->>R: POST /v1/empaia/builders/{b}/models/{m} (job token)
   R->>A: identify + prepare
