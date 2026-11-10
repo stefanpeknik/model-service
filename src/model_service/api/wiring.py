@@ -15,7 +15,7 @@ from model_service.api.raw_inference_proxy import HttpInferenceProxy, ModelInfer
 from model_service.api.synchronous_runs import SynchronousBuilderService
 from model_service.builder_deployment.client import HTTPBuilderDispatch
 from model_service.builders.registry import BUILDERS, get_builder
-from model_service.catalog import ModelCatalog
+from model_service.model_catalog import ModelCatalog
 from model_service.providers.registry import PROVIDERS
 from model_service.scheduler.execution_records import RetryPolicy
 from model_service.scheduler.execution_scheduler import ExecutionScheduler

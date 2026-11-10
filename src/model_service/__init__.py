@@ -8,6 +8,6 @@
   clients that call it (model_clients.py).
 - providers/: where inputs come from and results go (standalone, EMPAIA).
 - wire/: types that cross process boundaries.
-- catalog.py: the deployed models, read from the model YAML files.
+- model_catalog.py: the deployed models, read from the model YAML files.
 - models/: the model implementations Ray Serve runs.
 """

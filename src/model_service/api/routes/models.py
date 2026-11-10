@@ -38,7 +38,7 @@ from model_service.wire.json_values import (
 
 
 if TYPE_CHECKING:
-    from model_service.catalog import ModelCatalog
+    from model_service.model_catalog import ModelCatalog
     from model_service.scheduler.api_interface import Scheduler
     from model_service.scheduler.raw_inference import InferenceTarget
 
@@ -60,7 +60,7 @@ def model_view(model: ModelBinding) -> ModelView:
     Returns:
         The model's ID, contract, contract parameters and compatible builders.
     """
-    from model_service.catalog import ModelCatalog
+    from model_service.model_catalog import ModelCatalog
 
     return ModelView(
         id=model.id,

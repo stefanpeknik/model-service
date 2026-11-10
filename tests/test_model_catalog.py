@@ -8,12 +8,12 @@ from copy import deepcopy
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from model_service.catalog import CatalogError, ModelCatalog
 from model_service.inference.contracts import (
     InferenceContract,
     SpatialScoresModel,
     TileEmbeddingModel,
 )
+from model_service.model_catalog import CatalogError, ModelCatalog
 from model_service.wire.failures import UnknownModelError
 
 

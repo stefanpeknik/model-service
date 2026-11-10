@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from starlette.types import Lifespan
 
     from model_service.api.synchronous_runs import SynchronousBuilderRunner
-    from model_service.catalog import ModelCatalog
+    from model_service.model_catalog import ModelCatalog
     from model_service.providers.provider import RouteFactory
     from model_service.scheduler.api_interface import Capacity, Scheduler
     from model_service.scheduler.raw_inference import InferenceTarget

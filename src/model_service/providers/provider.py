@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
     from model_service.builders.base import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
-    from model_service.catalog import ModelCatalog
+    from model_service.model_catalog import ModelCatalog
     from model_service.scheduler.api_interface import Capacity, Scheduler
     from model_service.scheduler.provider_adapter import ProviderAdapter
     from model_service.scheduler.settings import SchedulerSettings
