@@ -56,7 +56,6 @@ class ScoreGridPublisher(OutputPublisher):
         self._tile_size = tile_size
 
     def accepts(self, model: ModelBinding) -> bool:
-        # The SDK uploads single-channel pixelmaps only.
         """Accept single-channel spatial-score models; the SDK uploads single-channel pixelmaps only.
 
         Args:
