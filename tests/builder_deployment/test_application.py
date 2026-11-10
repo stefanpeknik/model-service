@@ -13,9 +13,9 @@ from typing import TYPE_CHECKING, Any, cast
 import httpx
 from fastapi import FastAPI
 
-from model_service.builder_service.client import HTTPBuilderDispatch
-from model_service.builder_service.protocol import RunRequest, run_http
-from model_service.builder_service.runner import BuilderApplication
+from model_service.builder_deployment.client import HTTPBuilderDispatch
+from model_service.builder_deployment.protocol import RunRequest, run_http
+from model_service.builder_deployment.runner import BuilderApplication
 from model_service.builders.declarations import InputSpec
 from model_service.builders.output_files import atomic_artifact
 from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessAdapter

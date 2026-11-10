@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 from pydantic import ValidationError
 
-from model_service.builder_service.protocol import RUN_REQUEST
+from model_service.builder_deployment.protocol import RUN_REQUEST
 from model_service.inference.contracts import (
     MODEL_BINDING,
     SpatialScoresModel,

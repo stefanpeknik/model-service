@@ -13,7 +13,7 @@ from fastapi import FastAPI, status
 from fastapi.exceptions import RequestValidationError
 from ray import serve
 
-from model_service.builder_service.protocol import (
+from model_service.builder_deployment.protocol import (
     ErrorCode,
     ErrorResponse,
     RunRequest,
@@ -21,8 +21,11 @@ from model_service.builder_service.protocol import (
     invalid_request,
     run_http,
 )
-from model_service.builder_service.runner import BuilderApplication
-from model_service.builder_service.settings import DeploymentSettings, ReplicaSettings
+from model_service.builder_deployment.runner import BuilderApplication
+from model_service.builder_deployment.settings import (
+    DeploymentSettings,
+    ReplicaSettings,
+)
 from model_service.builders.registry import get_builder
 from model_service.providers.registry import PROVIDERS
 from model_service.wire.result import BuilderResult

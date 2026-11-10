@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import httpx
 
-from model_service.builder_service.client import HTTPBuilderDispatch
+from model_service.builder_deployment.client import HTTPBuilderDispatch
 from model_service.builders.registry import BUILDERS, get_builder
 from model_service.catalog import ModelCatalog
 from model_service.facade.capacity import ServeCapacity

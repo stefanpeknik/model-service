@@ -13,10 +13,10 @@ import httpx
 import numpy as np
 from fastapi import FastAPI
 
-from model_service.builder_service.client import HTTPBuilderDispatch
-from model_service.builder_service.protocol import RunRequest, run_http
-from model_service.builder_service.runner import BuilderApplication
-from model_service.builder_service.settings import ReplicaSettings
+from model_service.builder_deployment.client import HTTPBuilderDispatch
+from model_service.builder_deployment.protocol import RunRequest, run_http
+from model_service.builder_deployment.runner import BuilderApplication
+from model_service.builder_deployment.settings import ReplicaSettings
 from model_service.builders.embeddings.builder import EmbeddingBuilder
 from model_service.builders.registry import get_builder
 from model_service.catalog import ModelCatalog

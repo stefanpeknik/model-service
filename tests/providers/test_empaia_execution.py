@@ -10,7 +10,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
-from model_service.builder_service.runner import BuilderApplication
+from model_service.builder_deployment.runner import BuilderApplication
 from model_service.builders.heatmap.spec import HeatmapOutputs
 from model_service.builders.registry import get_builder
 from model_service.inference.contracts import ModelBinding, SpatialScoresModel

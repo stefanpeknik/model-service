@@ -12,7 +12,7 @@ from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
-from model_service.builder_service.runner import BuilderApplication
+from model_service.builder_deployment.runner import BuilderApplication
 from model_service.builders.input_access import close_resource
 from model_service.builders.registry import BUILDERS, get_builder
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError

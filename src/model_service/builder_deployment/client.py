@@ -13,7 +13,7 @@ from urllib.parse import quote
 import httpx
 from pydantic import TypeAdapter, ValidationError
 
-from model_service.builder_service.protocol import (
+from model_service.builder_deployment.protocol import (
     RUN_REQUEST,
     ErrorResponse,
     RunRequest,

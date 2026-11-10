@@ -15,8 +15,8 @@ from unittest.mock import AsyncMock, patch
 
 import numpy as np
 
-from model_service.builder_service.runner import BuilderApplication
-from model_service.builder_service.settings import ReplicaSettings
+from model_service.builder_deployment.runner import BuilderApplication
+from model_service.builder_deployment.settings import ReplicaSettings
 from model_service.builders.heatmap.builder import HeatmapBuilder
 from model_service.builders.heatmap.processor import (
     HeatmapRequest,
