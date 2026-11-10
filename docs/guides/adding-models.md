@@ -56,8 +56,8 @@ over many slides and let it queue:
   (GPU workers scale from zero), survives API restarts, and is polled with
   `client.executions.get(id)` or cancelled. Scheduled work has no start-time
   option; it runs as soon as capacity allows.
-- Raw per-tile inference: `POST /v1/models/<id>/run` with the tile the model's
-  HTTP route expects.
+- Raw per-tile inference: `POST /v1/models/<id>/run` with one LZ4-compressed
+  `tile_size`×`tile_size`×3 uint8 tile; the API rejects any other body.
   Inside the cluster you can skip the API and post the same body to the Ray
   Serve proxy at `/<id>/`, as before model-service had an API; you lose the
   API's auth, capacity limits and tile check.
