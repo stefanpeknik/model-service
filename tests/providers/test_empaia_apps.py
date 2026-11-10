@@ -14,7 +14,7 @@ import yaml
 from jsonschema import ValidationError
 from pydantic import ValidationError as SettingsError
 
-from model_service.builders.registry import get_builder
+from model_service.builders.registry import BUILDERS, get_builder
 from model_service.catalog import ModelCatalog
 from model_service.providers.empaia.credentials import ClientCredentials
 from model_service.providers.empaia.ead.apps import (
@@ -26,7 +26,7 @@ from model_service.providers.empaia.ead.apps import (
     generate_ead,
     parse_listings,
 )
-from model_service.providers.empaia.ead.builder_io import BUILDER_IO
+from model_service.providers.empaia.ead.builder_io import BUILDER_IO, NOT_OFFERED
 from model_service.providers.empaia.provider import CATALOG_BLOCK
 from model_service.providers.empaia.publishing.publishers import default_publishers
 from model_service.providers.empaia.registration import (
@@ -297,6 +297,12 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
             EmpaiaSettings(marketplace_url="https://marketplace.example")
         with self.assertRaises(SettingsError):
             EmpaiaSettings(idp_url="https://idp.example")
+
+
+class BuilderCoverageTests(unittest.TestCase):
+    def test_every_builder_is_offered_or_explicitly_not(self) -> None:
+        self.assertEqual(BUILDER_IO.keys() & NOT_OFFERED.keys(), set())
+        self.assertEqual(BUILDER_IO.keys() | NOT_OFFERED.keys(), BUILDERS.keys())
 
 
 if __name__ == "__main__":
