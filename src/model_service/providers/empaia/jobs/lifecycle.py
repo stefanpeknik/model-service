@@ -41,7 +41,7 @@ from model_service.providers.empaia.jobs.mapping import (
     raise_preparation_error,
 )
 from model_service.providers.empaia.publishing.publishers import default_publishers
-from model_service.providers.job_lifecycle import (
+from model_service.providers.provider import (
     PreparedInvocation,
     Priority,
     ProviderAdapter,
@@ -71,7 +71,7 @@ if TYPE_CHECKING:
 
     from model_service.providers.empaia.ead.builder_io import BuilderIo
     from model_service.providers.empaia.publishing.publishers import PublisherRegistry
-    from model_service.providers.job_lifecycle import BeforeMutation
+    from model_service.providers.provider import BeforeMutation
     from model_service.shared.json_values import JsonValue
 
 

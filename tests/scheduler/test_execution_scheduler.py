@@ -9,7 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any
 
-from model_service.providers.job_lifecycle import (
+from model_service.providers.provider import (
     PreparedInvocation,
     ProviderCancellation,
     ProviderFailure,
@@ -68,7 +68,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from model_service.inference.contracts import ModelBinding
-    from model_service.providers.job_lifecycle import (
+    from model_service.providers.provider import (
         BeforeMutation,
         ProviderFinishOutcome,
     )

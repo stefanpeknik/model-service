@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from model_service.providers.job_lifecycle import SubmissionIdentity
+    from model_service.providers.provider import SubmissionIdentity
     from model_service.scheduler.store.payloads import StoredPayload
 
 

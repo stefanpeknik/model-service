@@ -11,7 +11,7 @@ from datetime import timedelta
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from model_service.providers.job_lifecycle import (
+from model_service.providers.provider import (
     Priority,
     SubmissionIdentity,
 )

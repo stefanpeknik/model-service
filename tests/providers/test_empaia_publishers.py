@@ -24,7 +24,7 @@ from model_service.providers.empaia.publishing.publishers import (
     PublisherRegistry,
     default_publishers,
 )
-from model_service.providers.job_lifecycle import (
+from model_service.providers.provider import (
     ProviderFinishFailureError,
     ProviderSuccess,
 )

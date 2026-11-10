@@ -57,7 +57,7 @@ from model_service.shared.result import BuilderResult
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Mapping
 
-    from model_service.providers.job_lifecycle import SubmissionIdentity
+    from model_service.providers.provider import SubmissionIdentity
 
 
 _TERMINAL = frozenset(

@@ -6,7 +6,7 @@ from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from model_service.providers.job_lifecycle import Priority, SubmissionIdentity
+from model_service.providers.provider import Priority, SubmissionIdentity
 from model_service.scheduler.execution_records import (
     Admission,
     InferenceSucceeded,

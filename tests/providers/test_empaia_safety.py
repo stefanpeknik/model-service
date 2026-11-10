@@ -12,7 +12,7 @@ from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayErro
 from model_service.providers.empaia.jobs.inputs import job_workspace
 from model_service.providers.empaia.jobs.lifecycle import EmpaiaProviderAdapter
 from model_service.providers.empaia.publishing.publishers import PublisherRegistry
-from model_service.providers.job_lifecycle import (
+from model_service.providers.provider import (
     ProviderFailure,
     ProviderFinishFailureError,
     ProviderSuccess,

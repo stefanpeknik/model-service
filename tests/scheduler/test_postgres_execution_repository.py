@@ -23,7 +23,7 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from psycopg.errors import CheckViolation
 from psycopg.types.json import Jsonb
 
-from model_service.providers.job_lifecycle import SubmissionIdentity
+from model_service.providers.provider import SubmissionIdentity
 from model_service.scheduler.execution_records import (
     Admission,
     InferenceSucceeded,

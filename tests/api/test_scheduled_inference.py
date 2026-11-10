@@ -20,7 +20,7 @@ from model_service.api.raw_inference_proxy import (
 from model_service.api.wiring import model_resolver
 from model_service.inference.contracts import SpatialScoresModel, TileEmbeddingModel
 from model_service.model_catalog import ModelCatalog
-from model_service.providers.job_lifecycle import SubmissionIdentity
+from model_service.providers.provider import SubmissionIdentity
 from model_service.providers.standalone.provider import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import (
     SharedStorageAccessFactory,

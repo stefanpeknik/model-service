@@ -11,7 +11,7 @@ import logging
 from contextlib import suppress
 from typing import TYPE_CHECKING
 
-from model_service.providers.job_lifecycle import (
+from model_service.providers.provider import (
     ProviderCancellation,
     ProviderFailure,
     ProviderFinishFailureError,
@@ -55,7 +55,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from datetime import timedelta
 
-    from model_service.providers.job_lifecycle import ProviderAdapter
+    from model_service.providers.provider import ProviderAdapter
     from model_service.scheduler.active_work import ActiveWorkRegistry
     from model_service.scheduler.builder_dispatch import BuilderDispatch
     from model_service.scheduler.execution_records import Settlement

@@ -26,7 +26,7 @@ from model_service.providers.empaia.publishing.publishers import (
     Commit,
     PublisherRegistry,
 )
-from model_service.providers.job_lifecycle import (
+from model_service.providers.provider import (
     Priority,
     ProviderFinishFailureError,
     ProviderSuccess,

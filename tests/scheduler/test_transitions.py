@@ -6,7 +6,7 @@ import unittest
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
-from model_service.providers.job_lifecycle import SubmissionIdentity
+from model_service.providers.provider import SubmissionIdentity
 from model_service.scheduler.execution_records import Admission, RetryPolicy, WorkKind
 from model_service.scheduler.status import ExecutionErrorCode, ExecutionStatus
 from model_service.scheduler.transitions import ExecutionTransitions
