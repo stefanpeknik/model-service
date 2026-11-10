@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING, Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from model_service.builders.registry import BUILDERS
 from model_service.inference.model_declarations import (
     MODEL_BINDING,
     MODEL_CLASSES,
@@ -241,15 +240,3 @@ class ModelCatalog:
             The number of models in the catalog.
         """
         return len(self._models)
-
-    @staticmethod
-    def compatible_builders(model: ModelBinding) -> list[str]:
-        """List the registered builders that accept the model's contract.
-
-        Args:
-            model: The model binding.
-
-        Returns:
-            IDs of the compatible builders.
-        """
-        return [spec.id for spec in BUILDERS.values() if spec.accepts == model.contract]

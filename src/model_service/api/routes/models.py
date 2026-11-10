@@ -21,6 +21,7 @@ from model_service.api.http_errors import (
 )
 from model_service.api.raw_inference_proxy import inference_headers
 from model_service.api.submission import require_idempotency_key, submit
+from model_service.builders.registry import compatible_builders
 from model_service.inference.model_declarations import (  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
     InferenceContract,
     ModelBinding,
@@ -60,13 +61,11 @@ def model_view(model: ModelBinding) -> ModelView:
     Returns:
         The model's ID, contract, contract parameters and compatible builders.
     """
-    from model_service.inference.catalog import ModelCatalog
-
     return ModelView(
         id=model.id,
         contract=model.contract,
         parameters=model.model_dump(mode="json", exclude={"id", "contract"}),
-        builders=ModelCatalog.compatible_builders(model),
+        builders=compatible_builders(model),
     )
 
 

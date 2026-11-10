@@ -8,6 +8,7 @@ from copy import deepcopy
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from model_service.builders.registry import compatible_builders
 from model_service.inference.catalog import CatalogError, ModelCatalog
 from model_service.inference.model_declarations import (
     InferenceContract,
@@ -93,11 +94,11 @@ class ModelCatalogTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            ModelCatalog.compatible_builders(catalog.get("prostate-classifier-1")),
+            compatible_builders(catalog.get("prostate-classifier-1")),
             ["heatmap"],
         )
         self.assertEqual(
-            ModelCatalog.compatible_builders(catalog.get("virchow2")),
+            compatible_builders(catalog.get("virchow2")),
             ["tile-embeddings"],
         )
         self.assertEqual(

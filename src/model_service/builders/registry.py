@@ -17,6 +17,7 @@ from model_service.shared.failures import UnknownBuilderError
 
 if TYPE_CHECKING:
     from model_service.builders.declarations import BuilderOutputs, BuilderSpec
+    from model_service.inference.model_declarations import ModelBinding
     from model_service.shared.result import BuilderResult
 
 
@@ -59,3 +60,15 @@ def parse_result(builder_id: str, result: BuilderResult) -> BuilderOutputs:
             outputs, e.g. an output was renamed since it was stored.
     """
     return get_builder(builder_id).output_model.model_validate(result.outputs)
+
+
+def compatible_builders(model: ModelBinding) -> list[str]:
+    """List the registered builders that accept a model's contract.
+
+    Args:
+        model: The model binding.
+
+    Returns:
+        IDs of the compatible builders.
+    """
+    return [spec.id for spec in BUILDERS.values() if spec.accepts == model.contract]
