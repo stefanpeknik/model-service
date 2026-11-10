@@ -36,13 +36,13 @@ from model_service.scheduler.builder_dispatch import (
     RemoteFailureError,
     UnknownOutcomeError,
 )
+from model_service.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.scheduler.executions import (
     ExecutionView,
     ScheduleRequest,
     ScheduleResult,
     SchedulingUnavailableError,
 )
-from model_service.scheduler.scheduler import ExecutionScheduler
 from model_service.scheduler.status import ExecutionStatus, Operation
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
 from model_service.wire.result import BuilderResult, InlineOutput, SharedArtifact

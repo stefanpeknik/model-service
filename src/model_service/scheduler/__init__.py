@@ -2,7 +2,7 @@
 
 - executions.py: what callers see: views, schedule requests, errors.
 - status.py: execution statuses, kinds and error codes.
-- scheduler.py: ExecutionScheduler, admission and the worker's lifetime.
+- execution_scheduler.py: ExecutionScheduler, admission and the worker's lifetime.
 - worker.py: claims work, runs attempts, renews leases, settles outcomes.
 - transitions/: the state rules every repository applies: admission, leases,
   settlement (the retry-or-fail decision when an attempt ends) and recovery.

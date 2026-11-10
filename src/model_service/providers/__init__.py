@@ -1,9 +1,6 @@
 """Where builder inputs come from and results go: standalone shared storage and EMPAIA.
 
-contract.py lists everything a provider implements or receives.
-
-- provider.py: Provider, what a provider contributes to each process.
-- contract.py: the provider contract, in one place.
+- provider.py: the provider contract: Provider and every method a provider writes.
 - registry.py: the providers this deployment composes.
 - standalone/: the standalone provider and its shared-storage file access.
 - empaia/: the EMPAIA provider.

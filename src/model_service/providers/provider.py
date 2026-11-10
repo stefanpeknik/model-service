@@ -1,11 +1,18 @@
-"""What each provider adds to the facade and to builder replicas.
+"""The provider contract: what a provider is and every method it writes.
 
-The facade and the builder ingress compose the providers in
-`providers/registry.py` and
-name none of them. A provider contributes its scheduler adapter, its routes and
-background work to the facade, reads its block of the model files, and gives
-builder replicas the access adapters for the inputs it hands out. Each
-provider imports what only one process needs inside the method for it.
+A provider is a `Provider` (here) listed in `providers/registry.py`. The facade
+and the builder ingress compose the providers there and name none of them.
+A provider writes:
+
+- `Provider.facade` and `Provider.input_access`: what it adds to each process,
+  plus `catalog_block`, the block of the model files it reads;
+- a `ProviderAdapter` (scheduler/provider_adapter.py): `identify`, `prepare`
+  and `finish`, admitting a job and finishing it;
+- an `InputAccessFactory` (builders/input_access.py) whose `create` returns an
+  `InputAccess`: `input_path`, `output_path`, `is_visible_artifact`, `aclose`.
+
+Those interfaces live with the packages that call them. Each provider imports
+what only one process needs inside the method for it.
 """
 
 from __future__ import annotations

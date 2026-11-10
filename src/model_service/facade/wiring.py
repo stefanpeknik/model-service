@@ -17,8 +17,8 @@ from model_service.facade.http_app import create_app as create_api
 from model_service.facade.raw_inference_proxy import HttpInferenceProxy, ModelInference
 from model_service.facade.synchronous_runs import SynchronousBuilderService
 from model_service.providers.registry import PROVIDERS
+from model_service.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.scheduler.records import RetryPolicy
-from model_service.scheduler.scheduler import ExecutionScheduler
 from model_service.scheduler.settings import SchedulerSettings
 from model_service.scheduler.store.payloads import PayloadStore
 from model_service.scheduler.store.postgres import PostgresExecutionRepository

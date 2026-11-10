@@ -28,7 +28,7 @@ from model_service.providers.standalone.provider import StandaloneProviderAdapte
 from model_service.providers.standalone.shared_storage import (
     SharedStorageAccessAdapter,
 )
-from model_service.scheduler.scheduler import ExecutionScheduler
+from model_service.scheduler.execution_scheduler import ExecutionScheduler
 from tests.support.builder_contract import BuilderContractTests
 from tests.support.builder_fixtures import write_slide
 from tests.support.memory_repository import InMemoryExecutionRepository
