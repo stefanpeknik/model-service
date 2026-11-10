@@ -9,8 +9,10 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any
 
-from model_service.providers.shared_storage import SharedStorageAccessAdapter
-from model_service.providers.standalone import StandaloneProviderAdapter
+from model_service.providers.standalone.provider import StandaloneProviderAdapter
+from model_service.providers.standalone.shared_storage import (
+    SharedStorageAccessAdapter,
+)
 from model_service.scheduler.active_work import ActiveWorkRegistry
 from model_service.scheduler.dispatch import (
     ConfirmedRejectionError,

@@ -19,7 +19,9 @@ from model_service.builder_service.runner import BuilderApplication
 from model_service.builders.declarations import InputSpec
 from model_service.builders.output_files import atomic_artifact
 from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessAdapter
-from model_service.providers.shared_storage import SharedStorageAccessAdapter
+from model_service.providers.standalone.shared_storage import (
+    SharedStorageAccessAdapter,
+)
 from model_service.scheduler.dispatch import RemoteFailureError
 from model_service.wire.failures import (
     BuilderFailure,

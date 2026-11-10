@@ -20,8 +20,10 @@ from model_service.facade.raw_inference_proxy import (
 )
 from model_service.facade.wiring import model_resolver
 from model_service.inference.contracts import SpatialScoresModel, TileEmbeddingModel
-from model_service.providers.shared_storage import SharedStorageAccessAdapter
-from model_service.providers.standalone import StandaloneProviderAdapter
+from model_service.providers.standalone.provider import StandaloneProviderAdapter
+from model_service.providers.standalone.shared_storage import (
+    SharedStorageAccessAdapter,
+)
 from model_service.scheduler.provider_adapter import SubmissionIdentity
 from model_service.scheduler.raw_inference import IncompatibleInputError
 from model_service.scheduler.records import Admission, RetryPolicy

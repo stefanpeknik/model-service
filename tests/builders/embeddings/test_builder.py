@@ -24,8 +24,10 @@ from model_service.facade.http_app import create_app
 from model_service.facade.synchronous_runs import SynchronousBuilderService
 from model_service.facade.wiring import model_resolver
 from model_service.inference.contracts import TileEmbeddingModel
-from model_service.providers.shared_storage import SharedStorageAccessAdapter
-from model_service.providers.standalone import StandaloneProviderAdapter
+from model_service.providers.standalone.provider import StandaloneProviderAdapter
+from model_service.providers.standalone.shared_storage import (
+    SharedStorageAccessAdapter,
+)
 from model_service.scheduler.scheduler import ExecutionScheduler
 from tests.support.builder_contract import BuilderContractTests
 from tests.support.builder_fixtures import write_slide

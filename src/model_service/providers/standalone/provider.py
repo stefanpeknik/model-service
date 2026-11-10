@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING
 from pydantic import ValidationError
 
 from model_service.builders.registry import get_builder
-from model_service.facade.request_bodies import BuilderRequest
 from model_service.providers.provider import Provider
 from model_service.scheduler.executions import (
     InvalidScheduleRequestError,
@@ -27,6 +26,7 @@ from model_service.scheduler.provider_adapter import (
     ProviderAdapter,
     SubmissionIdentity,
 )
+from model_service.wire.builder_request import BuilderRequest
 from model_service.wire.failures import InvalidInvocation
 from model_service.wire.invocation import (
     SHARED_STORAGE,
@@ -42,7 +42,9 @@ if TYPE_CHECKING:
     from model_service.builders.input_access import InputAccessFactory
     from model_service.catalog import ModelCatalog
     from model_service.providers.provider import FacadeContribution
-    from model_service.providers.shared_storage import SharedStorageAccessAdapter
+    from model_service.providers.standalone.shared_storage import (
+        SharedStorageAccessAdapter,
+    )
     from model_service.scheduler.provider_adapter import (
         BeforeMutation,
         ProviderFinishOutcome,
@@ -184,7 +186,9 @@ class StandaloneProvider(Provider):
             The facade contribution.
         """
         from model_service.providers.provider import FacadeContribution
-        from model_service.providers.shared_storage import SharedStorageAccessAdapter
+        from model_service.providers.standalone.shared_storage import (
+            SharedStorageAccessAdapter,
+        )
 
         del catalog
         return FacadeContribution(
@@ -204,7 +208,9 @@ class StandaloneProvider(Provider):
         Returns:
             The shared-storage adapter, keyed by `SHARED_STORAGE`.
         """
-        from model_service.providers.shared_storage import SharedStorageAccessAdapter
+        from model_service.providers.standalone.shared_storage import (
+            SharedStorageAccessAdapter,
+        )
 
         return {
             SHARED_STORAGE: SharedStorageAccessAdapter(settings.shared_storage_roots)

@@ -25,7 +25,9 @@ from model_service.builders.heatmap.processor import (
 from model_service.builders.heatmap.score_grid import read_score_grid
 from model_service.builders.registry import get_builder
 from model_service.inference.contracts import SpatialScoresModel
-from model_service.providers.shared_storage import SharedStorageAccessAdapter
+from model_service.providers.standalone.shared_storage import (
+    SharedStorageAccessAdapter,
+)
 from model_service.wire.invocation import SharedPathInput
 from model_service.wire.result import SharedArtifact
 from tests.support.builder_contract import BuilderContractTests
