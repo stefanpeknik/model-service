@@ -35,7 +35,7 @@ from model_service.scheduler.worker import ExecutionWorker
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Mapping
 
-    from model_service.scheduler.dispatch import BuilderDispatch
+    from model_service.scheduler.builder_dispatch import BuilderDispatch
     from model_service.scheduler.executions import ModelResolver, ProviderName
     from model_service.scheduler.provider_adapter import (
         ProviderAdapter,

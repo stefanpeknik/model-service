@@ -10,8 +10,9 @@
 - raw_inference.py: a raw model request run as an execution.
 - provider_adapter.py: the interface a provider implements to admit and finish jobs.
 - api_interface.py: what the API needs from the scheduler; settings.py: process settings.
-- dispatch.py: the interface for sending a builder run, and how a send can end.
-- store/: persistence: postgres/ (admission, claims, settlement, maintenance),
+- builder_dispatch.py: the interface for sending a builder run, and how a send can end.
+- store/: persistence: postgres/ (admission_sql, claim_sql, settlement_sql,
+  maintenance_sql),
   rows.py, payloads.py, migrate.py and migrations/.
 """
 

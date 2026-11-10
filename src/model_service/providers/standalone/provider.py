@@ -18,7 +18,6 @@ from model_service.builders.registry import get_builder
 from model_service.providers.provider import Provider
 from model_service.scheduler.executions import (
     InvalidScheduleRequestError,
-    ProviderName,
     ScheduleRequest,
 )
 from model_service.scheduler.provider_adapter import (
@@ -26,7 +25,7 @@ from model_service.scheduler.provider_adapter import (
     ProviderAdapter,
     SubmissionIdentity,
 )
-from model_service.wire.builder_request import BuilderRequest
+from model_service.wire.builder_request import STANDALONE_PROVIDER, BuilderRequest
 from model_service.wire.failures import InvalidInvocation
 from model_service.wire.invocation import (
     SHARED_STORAGE,
@@ -53,11 +52,8 @@ if TYPE_CHECKING:
     from model_service.wire.json_values import JsonValue
 
 
-NAME: ProviderName = "standalone"
-
-
 class StandaloneProviderAdapter(ProviderAdapter):
-    name = NAME
+    name = STANDALONE_PROVIDER
 
     def __init__(self, shared_storage: SharedStorageAccessAdapter) -> None:
         """Keep the shared-storage adapter that checks inputs at admission.

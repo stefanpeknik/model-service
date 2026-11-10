@@ -11,7 +11,7 @@ import httpx
 
 from model_service.builder_service.client import HTTPBuilderDispatch
 from model_service.inference.contracts import SpatialScoresModel
-from model_service.scheduler.dispatch import (
+from model_service.scheduler.builder_dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,
     UnknownOutcomeError,

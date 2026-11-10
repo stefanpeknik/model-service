@@ -11,14 +11,14 @@ import numpy as np
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 
-from model_service.builders.heatmap.score_grid import (
+from model_service.providers.empaia.app_service.http import HttpEmpaiaGateway
+from model_service.providers.empaia.publishing.pixelmap import ScoreGridPublisher
+from model_service.wire.result import SharedArtifact
+from model_service.wire.score_grid import (
     MEDIA_TYPE,
     ScoreGrid,
     write_score_grid,
 )
-from model_service.providers.empaia.app_service.http import HttpEmpaiaGateway
-from model_service.providers.empaia.publishing.pixelmap import ScoreGridPublisher
-from model_service.wire.result import SharedArtifact
 from testing.empaia_app_service import app
 
 

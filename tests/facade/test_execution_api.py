@@ -31,7 +31,7 @@ from model_service.providers.standalone.provider import StandaloneProviderAdapte
 from model_service.providers.standalone.shared_storage import (
     SharedStorageAccessAdapter,
 )
-from model_service.scheduler.dispatch import (
+from model_service.scheduler.builder_dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,
     UnknownOutcomeError,

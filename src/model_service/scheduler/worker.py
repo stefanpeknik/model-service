@@ -12,7 +12,7 @@ from contextlib import suppress
 from typing import TYPE_CHECKING
 
 from model_service.scheduler import raw_inference
-from model_service.scheduler.dispatch import (
+from model_service.scheduler.builder_dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,
     UnknownOutcomeError,
@@ -56,7 +56,7 @@ if TYPE_CHECKING:
     from datetime import timedelta
 
     from model_service.scheduler.active_work import ActiveWorkRegistry
-    from model_service.scheduler.dispatch import BuilderDispatch
+    from model_service.scheduler.builder_dispatch import BuilderDispatch
     from model_service.scheduler.executions import ModelResolver, ProviderName
     from model_service.scheduler.provider_adapter import ProviderAdapter
     from model_service.scheduler.raw_inference import InferenceTarget

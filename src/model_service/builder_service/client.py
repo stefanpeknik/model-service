@@ -18,7 +18,7 @@ from model_service.builder_service.protocol import (
     ErrorResponse,
     RunRequest,
 )
-from model_service.scheduler.dispatch import (
+from model_service.scheduler.builder_dispatch import (
     BuilderDispatch,
     ConfirmedRejectionError,
     RemoteFailureError,

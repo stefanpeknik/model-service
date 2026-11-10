@@ -38,8 +38,8 @@ if TYPE_CHECKING:
     import numpy as np
 
     from model_service.builders.base import BuilderContext
-    from model_service.inference.clients import HandleLookup
     from model_service.inference.contracts import ModelBinding
+    from model_service.inference.model_clients import HandleLookup
 
 
 SPATIAL_MODEL = SpatialScoresModel(

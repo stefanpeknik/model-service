@@ -22,7 +22,6 @@ from model_service.builders.heatmap.processor import (
     HeatmapRequest,
     SlideHeatmapProcessor,
 )
-from model_service.builders.heatmap.score_grid import read_score_grid
 from model_service.builders.registry import get_builder
 from model_service.inference.contracts import SpatialScoresModel
 from model_service.providers.standalone.shared_storage import (
@@ -30,6 +29,7 @@ from model_service.providers.standalone.shared_storage import (
 )
 from model_service.wire.invocation import SharedPathInput
 from model_service.wire.result import SharedArtifact
+from model_service.wire.score_grid import read_score_grid
 from tests.support.builder_contract import BuilderContractTests
 from tests.support.builder_fixtures import invocation, write_slide
 

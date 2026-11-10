@@ -7,16 +7,16 @@ from typing import Any
 
 import numpy as np
 
-from model_service.inference.clients import (
-    CLIENTS,
-    SpatialScoresClient,
-    TileEmbeddingClient,
-    client_for,
-)
 from model_service.inference.contracts import (
     InferenceContract,
     SpatialScoresModel,
     TileEmbeddingModel,
+)
+from model_service.inference.model_clients import (
+    CLIENTS,
+    SpatialScoresClient,
+    TileEmbeddingClient,
+    client_for,
 )
 from model_service.wire.failures import BuilderFailure, FailureCode
 from tests.support.builder_fixtures import FakeDeployment, running_config

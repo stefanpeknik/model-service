@@ -11,7 +11,7 @@ from model_service.builders.embeddings.spec import (
     EmbeddingInputs,
     EmbeddingOutputs,
 )
-from model_service.inference.clients import TileEmbeddingClient
+from model_service.inference.model_clients import TileEmbeddingClient
 
 
 if TYPE_CHECKING:

@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from model_service.builders.declarations import BuilderInputs, BuilderOutputs
 from model_service.builders.output_files import atomic_artifact
-from model_service.inference.clients import ModelClient
+from model_service.inference.model_clients import ModelClient
 from model_service.wire.result import SharedArtifact
 
 

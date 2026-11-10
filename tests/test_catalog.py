@@ -217,7 +217,7 @@ class ModelImplementationTests(unittest.TestCase):
 
         import yaml
 
-        from model_service.inference.clients import CLIENTS
+        from model_service.inference.model_clients import CLIENTS
 
         self.assertTrue(MODEL_FILES)
         for path in MODEL_FILES:

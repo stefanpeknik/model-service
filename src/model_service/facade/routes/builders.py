@@ -30,13 +30,13 @@ from model_service.facade.submission import require_idempotency_key, submit
 from model_service.inference.contracts import (
     InferenceContract,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
-from model_service.providers.standalone.provider import NAME as STANDALONE
-from model_service.scheduler.dispatch import (
+from model_service.scheduler.builder_dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,
     UnknownOutcomeError,
 )
 from model_service.scheduler.executions import ScheduleRequest, ScheduleResult
+from model_service.wire.builder_request import STANDALONE_PROVIDER as STANDALONE
 from model_service.wire.failures import (
     IncompatibleModelError,
     InvalidInvocation,

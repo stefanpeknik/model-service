@@ -33,7 +33,7 @@ from model_service.scheduler.store.postgres.base import (
     _stored_request,
     logger,
 )
-from model_service.scheduler.store.postgres.maintenance import MaintenanceOperations
+from model_service.scheduler.store.postgres.maintenance_sql import MaintenanceOperations
 
 
 class ClaimOperations(MaintenanceOperations):

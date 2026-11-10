@@ -195,8 +195,8 @@ def default_publishers() -> PublisherRegistry:
     Returns:
         The registry.
     """
-    from model_service.builders.heatmap.score_grid import MEDIA_TYPE as SCORE_GRID
     from model_service.providers.empaia.publishing.pixelmap import ScoreGridPublisher
+    from model_service.wire.score_grid import MEDIA_TYPE as SCORE_GRID
 
     publishers: dict[PublisherKey, OutputPublisher] = {
         (output_type, None): PrimitivePublisher(output_type)

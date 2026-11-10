@@ -38,7 +38,7 @@ class HeatmapConfiguration(BaseModel):
 class HeatmapOutputs(BuilderOutputs):
     heatmap: Annotated[
         SharedArtifact,
-        # The score grid format, see `heatmap/score_grid.py`.
+        # The score grid format, see `wire/score_grid.py`.
         Artifact(media_type="application/x-npz", default_path="heatmap.npz"),
     ]
 

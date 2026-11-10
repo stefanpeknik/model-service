@@ -22,7 +22,7 @@ from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessAdapter
 from model_service.providers.standalone.shared_storage import (
     SharedStorageAccessAdapter,
 )
-from model_service.scheduler.dispatch import RemoteFailureError
+from model_service.scheduler.builder_dispatch import RemoteFailureError
 from model_service.wire.failures import (
     BuilderFailure,
     ContractViolation,

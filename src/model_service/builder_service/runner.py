@@ -21,7 +21,7 @@ from pydantic import ValidationError
 from model_service.builders.base import BuilderContext
 from model_service.builders.declarations import BuilderInputs, BuilderOutputs
 from model_service.cleanup import close_resource
-from model_service.inference.clients import client_for, ray_handle
+from model_service.inference.model_clients import client_for, ray_handle
 from model_service.wire.failures import (
     BuilderFailure,
     ContractViolation,
@@ -39,8 +39,8 @@ if TYPE_CHECKING:
     from model_service.builders.base import Builder
     from model_service.builders.declarations import BuilderSpec
     from model_service.builders.input_access import InputAccess, InputAccessFactory
-    from model_service.inference.clients import HandleLookup
     from model_service.inference.contracts import ModelBinding
+    from model_service.inference.model_clients import HandleLookup
     from model_service.wire.invocation import InputAccessKind, Invocation
 
 

@@ -10,7 +10,6 @@ import asyncio
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from model_service.builders.heatmap.score_grid import read_score_grid
 from model_service.inference.contracts import SpatialScoresModel
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.app_service.types import (
@@ -19,6 +18,7 @@ from model_service.providers.empaia.app_service.types import (
 )
 from model_service.providers.empaia.publishing.publishers import OutputPublisher
 from model_service.wire.result import SharedArtifact
+from model_service.wire.score_grid import read_score_grid
 
 
 if TYPE_CHECKING:

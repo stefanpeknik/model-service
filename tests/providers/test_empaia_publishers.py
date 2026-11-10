@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, patch
 from zipfile import BadZipFile
 
 from model_service.builders.declarations import OutputSpec
-from model_service.builders.heatmap.score_grid import MEDIA_TYPE
 from model_service.builders.registry import get_builder
 from model_service.inference.contracts import SpatialScoresModel
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
@@ -35,6 +34,7 @@ from model_service.wire.result import (
     OutputKind,
     SharedArtifact,
 )
+from model_service.wire.score_grid import MEDIA_TYPE
 from tests.support.builder_fixtures import outputs_model
 
 

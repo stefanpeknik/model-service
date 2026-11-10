@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from model_service.builders.heatmap.score_grid import ScoreGrid, write_score_grid
+from model_service.wire.score_grid import ScoreGrid, write_score_grid
 
 
 if TYPE_CHECKING:
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     import numpy as np
     from numpy.typing import NDArray
 
-    from model_service.inference.clients import SpatialScoresClient
+    from model_service.inference.model_clients import SpatialScoresClient
 
 
 logger = logging.getLogger(__name__)
