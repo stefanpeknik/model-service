@@ -58,6 +58,9 @@ over many slides and let it queue:
   option; it runs as soon as capacity allows.
 - Raw per-tile inference: `POST /v1/models/<id>/run` with the tile the model's
   HTTP route expects.
+  Inside the cluster you can skip the API and post the same body to the Ray
+  Serve proxy at `/<id>/`, as before model-service had an API; you lose the
+  API's auth, capacity limits and tile check.
 
 ## A new kind of model: an inference implementation
 

@@ -1,6 +1,12 @@
 """What a model of each inference contract declares about itself.
 
 The catalog builds one of these per model file; builders and model clients rely on it.
+
+A new kind of model (a new contract) edits three places: a member of
+`InferenceContract` and its `_ModelBinding` subclass here (added to
+`MODEL_CLASSES` and `ModelBinding`), and its client in
+inference/model_clients.py (added to `CLIENTS`); tests/inference fails if a
+contract has no client. A new model of an existing contract needs none of this.
 """
 
 from __future__ import annotations
