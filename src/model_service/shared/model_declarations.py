@@ -6,7 +6,9 @@ A new kind of model (a new contract) edits three places: a member of
 `InferenceContract` and its `_ModelBinding` subclass here (added to
 `MODEL_CLASSES` and `ModelBinding`), and its client in
 inference/model_clients.py (added to `CLIENTS`); tests/inference fails if a
-contract has no client. A new model of an existing contract needs none of this.
+contract has no client. The raw route's `check_tile` (api/raw_inference_proxy.py)
+accepts only an RGB uint8 tile; a contract with other raw input changes it too.
+A new model of an existing contract needs none of this.
 """
 
 from __future__ import annotations

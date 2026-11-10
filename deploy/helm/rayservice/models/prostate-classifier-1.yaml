@@ -55,7 +55,7 @@ serve:
         # This one predates the model's name; kept so the built engine is reused.
         trt_cache_path: /mnt/cache/trt_cache/binary-classifier-1/b256
         trt_builder_optimization_level: 3
-        # The checkpoint; usually the only line a new training run changes.
+        # The checkpoint. A new training run changes it and `trt_cache_path` above.
         model:
           _target_: model_service.model_implementations.artifacts:mlflow
           artifact_uri: mlflow-artifacts:/65/aebc892f526047249b972f200bef4381/artifacts/checkpoints/epoch=0-step=6972/prostate_model_norm.onnx
