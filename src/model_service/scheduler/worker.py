@@ -11,7 +11,14 @@ import logging
 from contextlib import suppress
 from typing import TYPE_CHECKING
 
-from model_service.scheduler import raw_inference
+from model_service.providers.adapter import (
+    ProviderCancellation,
+    ProviderFailure,
+    ProviderFinishFailureError,
+    ProviderFinishOutcome,
+    ProviderSuccess,
+)
+from model_service.scheduler import raw_inference_jobs
 from model_service.scheduler.builder_dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,
@@ -35,13 +42,6 @@ from model_service.scheduler.executions import (
     UnknownBuilderError,
     UnknownModelError,
 )
-from model_service.scheduler.provider_adapter import (
-    ProviderCancellation,
-    ProviderFailure,
-    ProviderFinishFailureError,
-    ProviderFinishOutcome,
-    ProviderSuccess,
-)
 from model_service.scheduler.status import ExecutionErrorCode, Operation
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
 from model_service.wire.invocation import ExecutionContext
@@ -55,12 +55,12 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from datetime import timedelta
 
+    from model_service.providers.adapter import ProviderAdapter
     from model_service.scheduler.active_work import ActiveWorkRegistry
     from model_service.scheduler.builder_dispatch import BuilderDispatch
     from model_service.scheduler.execution_records import Settlement
     from model_service.scheduler.executions import ModelResolver, ProviderName
-    from model_service.scheduler.provider_adapter import ProviderAdapter
-    from model_service.scheduler.raw_inference import InferenceTarget
+    from model_service.scheduler.raw_inference_jobs import InferenceTarget
     from model_service.scheduler.store.repository import ExecutionRepository
 
 
@@ -465,7 +465,7 @@ class ExecutionWorker:
                 ),
                 retryable=False,
             )
-        except raw_inference.IncompatibleInputError as error:
+        except raw_inference_jobs.IncompatibleInputError as error:
             return ProcessingFailed(
                 error=ExecutionError(ExecutionErrorCode.INCOMPATIBLE_INPUT, str(error)),
                 retryable=False,
@@ -474,7 +474,7 @@ class ExecutionWorker:
             response = await self._inference.call(
                 claim.model_id, claim.payload, claim.invocation.headers
             )
-        except raw_inference.ModelUnavailableError:
+        except raw_inference_jobs.ModelUnavailableError:
             return ProcessingFailed(
                 error=ExecutionError(
                     ExecutionErrorCode.MODEL_UNAVAILABLE,
@@ -482,7 +482,7 @@ class ExecutionWorker:
                 ),
                 retryable=True,
             )
-        except raw_inference.ResultTooLargeError:
+        except raw_inference_jobs.ResultTooLargeError:
             return ProcessingFailed(
                 error=ExecutionError(
                     ExecutionErrorCode.RESULT_TOO_LARGE,
@@ -490,7 +490,7 @@ class ExecutionWorker:
                 ),
                 retryable=False,
             )
-        return raw_inference.settlement(response)
+        return raw_inference_jobs.settlement(response)
 
     async def _run_builder(self, claim: WorkClaim) -> Settlement:
         """Resolve the model's current binding and dispatch the builder.

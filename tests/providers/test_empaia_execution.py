@@ -14,6 +14,11 @@ from model_service.builder_deployment.runner import BuilderApplication
 from model_service.builders.heatmap.spec import HeatmapOutputs
 from model_service.builders.registry import get_builder
 from model_service.inference.contracts import ModelBinding, SpatialScoresModel
+from model_service.providers.adapter import (
+    Priority,
+    ProviderFinishFailureError,
+    ProviderSuccess,
+)
 from model_service.providers.empaia.app_service.gateway import (
     EmpaiaGatewayError,
     EmpaiaInputState,
@@ -33,11 +38,6 @@ from model_service.scheduler.executions import (
     InvalidScheduleRequestError,
     ScheduleRequest,
     SchedulingUnavailableError,
-)
-from model_service.scheduler.provider_adapter import (
-    Priority,
-    ProviderFinishFailureError,
-    ProviderSuccess,
 )
 from model_service.scheduler.worker import ExecutionWorker
 from model_service.wire.invocation import ExecutionContext, Invocation

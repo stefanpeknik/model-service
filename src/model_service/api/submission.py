@@ -19,7 +19,7 @@ from model_service.scheduler.executions import (
     ScheduleConflictError,
     SchedulingUnavailableError,
 )
-from model_service.scheduler.raw_inference import IncompatibleInputError
+from model_service.scheduler.raw_inference_jobs import IncompatibleInputError
 from model_service.wire.failures import (
     IncompatibleModelError,
     UnknownBuilderError,
@@ -30,8 +30,8 @@ from model_service.wire.failures import (
 if TYPE_CHECKING:
     from fastapi import Response
 
-    from model_service.scheduler.api_interface import Scheduler
     from model_service.scheduler.executions import ScheduleRequest, ScheduleResult
+    from model_service.scheduler.protocols import Scheduler
 
 
 logger = logging.getLogger(__name__)

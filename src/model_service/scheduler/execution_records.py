@@ -11,12 +11,12 @@ from datetime import timedelta
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from model_service.scheduler.executions import (
-    ProviderName,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
-)
-from model_service.scheduler.provider_adapter import (
+from model_service.providers.adapter import (
     Priority,
     SubmissionIdentity,
+)
+from model_service.scheduler.executions import (
+    ProviderName,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
 from model_service.scheduler.status import Operation
 

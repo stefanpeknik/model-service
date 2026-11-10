@@ -8,6 +8,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock
 
+from model_service.providers.adapter import (
+    ProviderFailure,
+    ProviderFinishFailureError,
+    ProviderSuccess,
+)
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
 from model_service.providers.empaia.jobs.inputs import job_workspace
@@ -16,11 +21,6 @@ from model_service.scheduler.executions import (
     ExecutionError,
     InvalidScheduleRequestError,
     ScheduleRequest,
-)
-from model_service.scheduler.provider_adapter import (
-    ProviderFailure,
-    ProviderFinishFailureError,
-    ProviderSuccess,
 )
 from model_service.wire.result import BuilderResult, SharedArtifact
 

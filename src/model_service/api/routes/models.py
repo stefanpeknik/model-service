@@ -26,7 +26,7 @@ from model_service.inference.contracts import (  # noqa: TC001 - Pydantic or Fas
     ModelBinding,
 )
 from model_service.scheduler.executions import InferenceScheduleRequest, ScheduleResult
-from model_service.scheduler.raw_inference import (
+from model_service.scheduler.raw_inference_jobs import (
     IncompatibleInputError,
     ModelUnavailableError,
     ResultTooLargeError,
@@ -39,8 +39,8 @@ from model_service.wire.json_values import (
 
 if TYPE_CHECKING:
     from model_service.model_catalog import ModelCatalog
-    from model_service.scheduler.api_interface import Scheduler
-    from model_service.scheduler.raw_inference import InferenceTarget
+    from model_service.scheduler.protocols import Scheduler
+    from model_service.scheduler.raw_inference_jobs import InferenceTarget
 
 
 @dataclass(frozen=True, slots=True)

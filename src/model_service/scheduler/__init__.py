@@ -7,9 +7,8 @@
 - transitions/: the state rules every repository applies: admission, leases,
   attempt outcomes (the retry-or-fail decision when an attempt ends) and recovery.
 - execution_records.py: internal records, leases, retry policy and outcomes.
-- raw_inference.py: a raw model request run as an execution.
-- provider_adapter.py: the interface a provider implements to admit and finish jobs.
-- api_interface.py: what the API needs from the scheduler; settings.py: process settings.
+- raw_inference_jobs.py: a raw model request run as an execution.
+- protocols.py: what the API needs from the scheduler (Scheduler, Capacity); settings.py: process settings.
 - builder_dispatch.py: the interface for sending a builder run, and how a send can end.
 - store/: persistence: postgres/ (admission_sql, claim_sql, attempt_outcome_sql,
   maintenance_sql),

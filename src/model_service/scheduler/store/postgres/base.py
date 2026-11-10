@@ -20,6 +20,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from model_service.providers.adapter import SubmissionIdentity
 from model_service.scheduler.execution_records import (
     ExecutionRecord,
     RetryPolicy,
@@ -29,7 +30,6 @@ from model_service.scheduler.executions import (
     ExecutionError,
     UnknownExecutionError,
 )
-from model_service.scheduler.provider_adapter import SubmissionIdentity
 from model_service.scheduler.status import Operation
 from model_service.scheduler.store.migrate import initialize_execution_schema
 from model_service.scheduler.store.payloads import PayloadMissingError, StoredPayload

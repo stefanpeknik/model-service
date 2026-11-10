@@ -24,7 +24,7 @@ from model_service.scheduler.executions import (
 
 
 if TYPE_CHECKING:
-    from model_service.scheduler.api_interface import Capacity, Scheduler
+    from model_service.scheduler.protocols import Capacity, Scheduler
 
 
 MAX_LOOKUP_IDS = 1000

@@ -19,8 +19,8 @@ from model_service.api.health import (
 )
 from model_service.api.http_errors import ApiErrorCode, http_error
 from model_service.api.routes import builders, executions, models
-from model_service.scheduler.api_interface import NoCapacityInfo
 from model_service.scheduler.executions import SchedulingUnavailableError
+from model_service.scheduler.protocols import NoCapacityInfo
 
 
 if TYPE_CHECKING:
@@ -31,8 +31,8 @@ if TYPE_CHECKING:
     from model_service.api.synchronous_runs import SynchronousBuilderRunner
     from model_service.model_catalog import ModelCatalog
     from model_service.providers.provider import RouteFactory
-    from model_service.scheduler.api_interface import Capacity, Scheduler
-    from model_service.scheduler.raw_inference import InferenceTarget
+    from model_service.scheduler.protocols import Capacity, Scheduler
+    from model_service.scheduler.raw_inference_jobs import InferenceTarget
 
 
 def create_app(

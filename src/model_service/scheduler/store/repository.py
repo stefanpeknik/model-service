@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from collections.abc import Collection
     from datetime import timedelta
 
+    from model_service.providers.adapter import SubmissionIdentity
     from model_service.scheduler.execution_records import (
         Admission,
         AdmissionResult,
@@ -22,7 +23,6 @@ if TYPE_CHECKING:
         Settlement,
         WorkClaim,
     )
-    from model_service.scheduler.provider_adapter import SubmissionIdentity
     from model_service.scheduler.status import Operation
 
 

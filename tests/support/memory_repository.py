@@ -57,7 +57,7 @@ from model_service.wire.result import BuilderResult
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Mapping
 
-    from model_service.scheduler.provider_adapter import SubmissionIdentity
+    from model_service.providers.adapter import SubmissionIdentity
 
 
 _TERMINAL = frozenset(

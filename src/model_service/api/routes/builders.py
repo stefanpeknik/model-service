@@ -55,7 +55,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable
 
     from model_service.api.synchronous_runs import SynchronousBuilderRunner
-    from model_service.scheduler.api_interface import Scheduler
+    from model_service.scheduler.protocols import Scheduler
 
 
 @dataclass(frozen=True, slots=True)

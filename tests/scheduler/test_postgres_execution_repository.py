@@ -23,6 +23,7 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from psycopg.errors import CheckViolation
 from psycopg.types.json import Jsonb
 
+from model_service.providers.adapter import SubmissionIdentity
 from model_service.scheduler.execution_records import (
     Admission,
     InferenceSucceeded,
@@ -38,7 +39,6 @@ from model_service.scheduler.executions import (
     ScheduleConflictError,
     UnknownExecutionError,
 )
-from model_service.scheduler.provider_adapter import SubmissionIdentity
 from model_service.scheduler.store.migrate import MIGRATIONS_DIRECTORY
 from model_service.scheduler.store.payloads import PayloadStore
 from model_service.scheduler.store.postgres import PostgresExecutionRepository

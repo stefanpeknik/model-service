@@ -9,6 +9,14 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any
 
+from model_service.providers.adapter import (
+    PreparedInvocation,
+    ProviderCancellation,
+    ProviderFailure,
+    ProviderFinishFailureError,
+    ProviderSuccess,
+    SubmissionIdentity,
+)
 from model_service.providers.standalone.provider import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import (
     SharedStorageAccessFactory,
@@ -38,14 +46,6 @@ from model_service.scheduler.executions import (
     UnknownBuilderError,
     UnknownModelError,
 )
-from model_service.scheduler.provider_adapter import (
-    PreparedInvocation,
-    ProviderCancellation,
-    ProviderFailure,
-    ProviderFinishFailureError,
-    ProviderSuccess,
-    SubmissionIdentity,
-)
 from model_service.scheduler.status import ExecutionStatus
 from model_service.scheduler.store.repository import (
     ExecutionRepositoryUnavailableError,
@@ -68,11 +68,11 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from model_service.inference.contracts import ModelBinding
-    from model_service.scheduler.executions import ModelResolver
-    from model_service.scheduler.provider_adapter import (
+    from model_service.providers.adapter import (
         BeforeMutation,
         ProviderFinishOutcome,
     )
+    from model_service.scheduler.executions import ModelResolver
     from model_service.wire.json_values import JsonValue
 
 

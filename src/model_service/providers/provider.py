@@ -6,12 +6,12 @@ A provider writes:
 
 - `Provider.api` and `Provider.input_access`: what it adds to each process,
   plus `catalog_block`, the block of the model files it reads;
-- a `ProviderAdapter` (scheduler/provider_adapter.py): `identify`, `prepare`
+- a `ProviderAdapter` (providers/adapter.py): `identify`, `prepare`
   and `finish`, admitting a job and finishing it;
 - an `InputAccessFactory` (builders/input_access.py) whose `create` returns an
   `InputAccess`: `input_path`, `output_path`, `is_visible_artifact`, `aclose`.
 
-Those interfaces live with the packages that call them. Each provider imports
+The input-access interface lives with the builders that use it. Each provider imports
 what only one process needs inside the method for it.
 """
 
@@ -30,8 +30,8 @@ if TYPE_CHECKING:
     from model_service.builders.base import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
     from model_service.model_catalog import ModelCatalog
-    from model_service.scheduler.api_interface import Capacity, Scheduler
-    from model_service.scheduler.provider_adapter import ProviderAdapter
+    from model_service.providers.adapter import ProviderAdapter
+    from model_service.scheduler.protocols import Capacity, Scheduler
     from model_service.scheduler.settings import SchedulerSettings
     from model_service.wire.invocation import InputAccessKind
 
