@@ -3,7 +3,7 @@
 ## A model that fits an existing implementation: YAML only
 
 Most new models are another trained artifact for an implementation that already
-exists in `src/model_service/models/`: another binary classifier ONNX, another segmentation model,
+exists in `src/model_service/model_implementations/`: another binary classifier ONNX, another segmentation model,
 another tile encoder. These need no Python and no image rebuild.
 
 1. Copy the closest file in `deploy/helm/rayservice/models/` (for example
@@ -27,6 +27,37 @@ up at `helm upgrade` rather than at the first request.
 Declare truthful values: the contract says how to call the model, not whether its
 predictions mean what you expect. `mpp` in particular must be the resolution the
 model was trained at.
+
+## Iterating on a model
+
+While the model is still changing, the Python implementation is written once
+and each new training run only changes YAML:
+
+1. Point `user_config.model.artifact_uri` in
+   `deploy/helm/rayservice/models/<id>.yaml` at the new MLflow artifact.
+2. Change `trt_cache_path` too (for example add the run id). TensorRT engines
+   are cached per path, so a new checkpoint at an old path can reuse the old
+   engine.
+3. Update `tile_size`, `mpp` and the other geometry fields if the new run
+   changed them; the API checks them against the running model.
+4. `helm upgrade`. Ray Serve calls `reconfigure`, which loads the new artifact.
+
+A change to the Python implementation needs a new image:
+`deploy/images/Dockerfile.gpu` copies `src/model_service/` into it. Tag it,
+push it and set the image in the values file.
+
+To try the model, call it directly for a quick answer, or schedule a builder
+over many slides and let it queue:
+
+- `client.builders.run("heatmap", BuilderRequest(model_id="<id>", ...))` waits
+  for the result.
+- `client.builders.schedule(...)` stores the execution in PostgreSQL and
+  returns at once. It waits in the queue until the model has a free replica
+  (GPU workers scale from zero), survives API restarts, and is polled with
+  `client.executions.get(id)` or cancelled. Scheduled work has no start-time
+  option; it runs as soon as capacity allows.
+- Raw per-tile inference: `POST /v1/models/<id>/run` with the tile the model's
+  HTTP route expects.
 
 ## A new kind of model: an inference implementation
 
@@ -83,14 +114,14 @@ The deployment guide explains how the runtime reads this artifact back during st
 
 Do not start from an empty file. Copy the closest implementation and adapt only model-specific pieces.
 
-- **Binary classification (baseline)**: [`src/model_service/models/binary_classifier.py`](https://github.com/RationAI/model-service/blob/main/models/binary_classifier.py)
-- **Semantic segmentation**: [`src/model_service/models/semantic_segmentation.py`](https://github.com/RationAI/model-service/blob/main/models/semantic_segmentation.py)
-- **Virchow2 embedding/classification**: [`src/model_service/models/virchow2.py`](https://github.com/RationAI/model-service/blob/main/models/virchow2.py)
+- **Binary classification (baseline)**: [`src/model_service/model_implementations/binary_classifier.py`](https://github.com/RationAI/model-service/blob/main/src/model_service/model_implementations/binary_classifier.py)
+- **Semantic segmentation**: [`src/model_service/model_implementations/semantic_segmentation.py`](https://github.com/RationAI/model-service/blob/main/src/model_service/model_implementations/semantic_segmentation.py)
+- **Virchow2 embedding/classification**: [`src/model_service/model_implementations/virchow2.py`](https://github.com/RationAI/model-service/blob/main/src/model_service/model_implementations/virchow2.py)
 Matching model files live in `deploy/helm/rayservice/models/`; the YAML itself is covered in the [Deployment Guide](deployment-guide.md).
 
 ## Python Entrypoint
 
-Create a new file in `src/model_service/models/` (for example `src/model_service/models/my_model.py`). The sections below explain what each method does and what belongs inside it.
+Create a new file in `src/model_service/model_implementations/` (for example `src/model_service/model_implementations/my_model.py`). The sections below explain what each method does and what belongs inside it.
 
 ### `__init__`: one-time lightweight setup
 
@@ -183,9 +214,9 @@ async def get_config(self) -> dict[str, Any]:
   }
 ```
 
-The contract's model client (`src/model_service/builders/model_clients.py`) calls it with `await model.get_config.remote()` before each run and fails with `model_contract_mismatch` if the values differ from the model's catalog declaration; keep it cheap and avoid any I/O.
+The contract's model client (`src/model_service/inference/model_clients.py`) calls it with `await model.get_config.remote()` before each run and fails with `model_contract_mismatch` if the values differ from the model's catalog declaration; keep it cheap and avoid any I/O.
 
-A `tile-embedding` model (used by the `tile-embeddings` builder) instead provides `get_config()` returning `tile_size` and `summaries`, and `async def embed(self, tile)`: one CHW uint8 tile in, float32 `(dim,)` (one summary) or `(len(summaries), dim)` out, with the model's own preprocessing and pooling inside. See `src/model_service/models/virchow2.py`. Builders call both by handle; the raw HTTP route should wrap the same code. `tests/facade/test_model_catalog.py` fails if a model file's implementation lacks the methods of its contract.
+A `tile-embedding` model (used by the `tile-embeddings` builder) instead provides `get_config()` returning `tile_size` and `summaries`, and `async def embed(self, tile)`: one CHW uint8 tile in, float32 `(dim,)` (one summary) or `(len(summaries), dim)` out, with the model's own preprocessing and pooling inside. See `src/model_service/model_implementations/virchow2.py`. Builders call both by handle; the raw HTTP route should wrap the same code. `tests/inference/test_catalog.py` fails if a model file's implementation lacks the methods of its contract.
 
 ### `root`: HTTP request parsing and serialization
 

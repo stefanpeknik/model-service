@@ -89,7 +89,7 @@ kubectl logs -n rationai-jobs-ns -l ray.io/node-type=worker --tail=500
 ### Fix
 
 - Ensure `import_path` matches your file:
-  - Example: `model_service.models.binary_classifier:app` means there is `src/model_service/models/binary_classifier.py` defining `app = ...`.
+  - Example: `model_service.model_implementations.binary_classifier:app` means there is `src/model_service/model_implementations/binary_classifier.py` defining `app = ...`.
 - Add missing dependencies to `runtime_env.pip`.
 
 In this repository, dependencies are typically installed per deployment:

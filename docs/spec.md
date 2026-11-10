@@ -19,7 +19,7 @@ open ones (05–08) with the smallest mechanism that meets them. Tickets live in
 - Adding a model that fits an existing builder needs Python edits. The
   per-model workflow wrappers (`prostate-heatmap`, `episeg-segmentation`,
   `gigapath-embeddings`, `virchow2-embeddings`) hardcode model names, even though
-  `src/model_service/models/` and the original heatmap builder were already generic.
+  `src/model_service/model_implementations/` and the original heatmap builder were already generic.
 - The scheduler processes one execution at a time per process, and limits
   capacity per workflow rather than per model.
 - Several correctness and safety gaps exist: caller-chosen storage roots,
@@ -85,7 +85,7 @@ Onboarding a compatible model: add one YAML file, list it in `values.yaml`
 ### Builders
 
 Builders are Python, one package each under `src/model_service/builders/`,
-listed in `registry.py`. A builder's `declaration.py` declares the contract it
+listed in `registry.py`. A builder's `spec.py` declares the contract it
 accepts, its inputs as a `BuilderInputs` model, a Pydantic configuration with
 defaults, and its outputs as a `BuilderOutputs` model; the input and output
 declarations are derived from the two models. The application verifies the
@@ -94,7 +94,7 @@ inputs to local files and runs the builder with the typed client, inputs and
 configuration. A builder returns its outputs model; the application checks it
 and turns it into the generic `BuilderResult` that is sent and stored, and
 `registry.parse_result` reads a stored result back as the builder's model.
-[Adding a builder](guides/adding-builders.md) walks through a new one. One Ray application per builder (`builders.serve:app`, route
+[Adding a builder](guides/adding-builders.md) walks through a new one. One Ray application per builder (`builder_deployment.serve:app`, route
 `/builders/<id>`), with the builder ID in `user_config`.
 
 | Builder | Accepts | Inputs | Output | Defaults |
@@ -138,7 +138,7 @@ Incompatible pair: 422 `incompatible_model`. Model temporarily down: durable
 requests queue; synchronous requests get 503.
 
 Authentication and authorization are interfaces with allow-everyone defaults
-(`src/model_service/facade/auth.py`); no implementation is chosen yet. Every
+(`src/model_service/http_common/auth.py`); no implementation is chosen yet. Every
 route except the health checks asks an `Authenticator` for the caller's
 `Principal` (401 `unauthenticated` when it refuses) and an `Authorizer` whether
 that principal may perform the route's `Action`, given the execution ID in the
@@ -319,7 +319,7 @@ every pixel, such as EPISeg, does not fit yet and has no app. The builder no lon
 used it, and it took longer to write than the inference.
 
 EMPAIA outputs. Each builder output declares its media type (its `Artifact`
-in the builder's outputs model in its `declaration.py`); EMPAIA's `io.py` gives its EMPAIA
+in the builder's outputs model in its `spec.py`); EMPAIA's `io.py` gives its EMPAIA
 type, so builders know nothing of EMPAIA. Then
 `src/model_service/providers/empaia/publishers.py` maps each (type, media
 type) pair to a publisher: the four primitive types (inline values, checked

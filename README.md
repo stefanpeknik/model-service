@@ -2,15 +2,55 @@
 
 RationAI's service for running pathology models on Ray Serve: raw per-tile
 inference, and **builders** that run a chosen model over a whole slide, either
-synchronously or as durable executions you can poll and cancel.
+synchronously or as durable executions you can poll, cancel, or leave queued
+until a GPU frees up.
+
+## In short
+
+- **What it does:** turns a trained model (an ONNX file in MLflow) into a
+  service that scores whole slides, for RationAI's own tools and for
+  researchers working in EMPAIA.
+- **Adding a model:** a model that fits an existing implementation is one YAML
+  file and a `helm upgrade`; no Python. See [Add a model](#add-a-model).
+- **EMPAIA:** model-service registers itself as an EMPAIA app and runs EMPAIA
+  jobs. On the EMPAIA test instance a prostate heatmap job finishes in 49 s
+  warm, 101 s with a cold GPU, and shows in the case browser
+  ([run record](docs/operations/empaia-score-grid-2026-10-31.md)).
+- **Status (2026-11):** running on the RationAI test namespace beside the
+  EMPAIA test instance; not yet in production.
+- **What this thesis added** to the original model-service:
+  [thesis scope](docs/thesis-scope.md).
+
+## Status and evidence
+
+Dated records of live runs, newest first (all in
+[docs/operations/](docs/operations/)):
+
+- [2026-11-01](docs/operations/empaia-provider-composition-2026-11-01.md):
+  self-registration in EMPAIA, one app with both modes, heatmap in the case browser.
+- [2026-10-31](docs/operations/empaia-score-grid-2026-10-31.md): prostate heatmap
+  published to EMPAIA with timings.
+- [2026-10-25](docs/operations/empaia-test-instance-2026-10-25.md): first job
+  started from the EMPAIA test instance.
+- [2026-10-14](docs/operations/core-acceptance-2026-10-14.md): core API and
+  scheduler acceptance.
+
+Known gap: a standalone (region-of-interest) result completes but the EMPAIA
+case browser does not show it yet; raised with its maintainers.
+
+## Layout
 
 ```text
 src/model_service/
-  facade/        the public API pod: routes/, model catalog, raw inference proxy
-  scheduler/     durable executions on PostgreSQL (runs inside the facade pod)
-  providers/     where builders read input and publish output: standalone, EMPAIA
-  builders/      heatmap and tile-embeddings builders (Ray Serve)
-  models/        inference implementations (Ray Serve)
+  api/                    the public API process: routes/, raw inference proxy, synchronous runs
+  http_common/            auth, error mapping, scheduling calls (API and provider routes)
+  scheduler/              durable executions on PostgreSQL (runs inside the API process)
+  builders/               builder contract and the builders: heatmap/, embeddings/
+  builder_deployment/     the Ray Serve app that hosts builders
+  inference/              model catalog and one client per inference contract
+  providers/              where builders read input and publish output: standalone, empaia/
+  shared/                 types more than one process uses
+  model_implementations/  inference code served by Ray Serve
 deploy/
   helm/rayservice/models/<id>.yaml   one file per trained model
   images/                            Dockerfiles; Dockerfile.code-refresh only
@@ -44,7 +84,7 @@ model adds an inference contract and its model client. See
 from rationai import Client
 from rationai.types import BuilderRequest, InputAccess, SharedPathInput
 
-with Client(base_url="http://<facade>:8080") as client:
+with Client(base_url="http://<model-service>:8080") as client:
     print([(m.id, m.builders) for m in client.models.list()])
     scheduled = client.builders.schedule(
         "heatmap",

@@ -9,10 +9,10 @@ contract, and any model of that contract can run with it.
 deploy/helm/rayservice/models/<model>.yaml    inference.contract: spatial-scores
         │ catalog (facade)                    serve: the Ray application
         ▼
-builders/model_clients.py                     SpatialScoresClient: get_config + predict,
+inference/model_clients.py                     SpatialScoresClient: get_config + predict,
         │ client per contract                 checked answers, failure codes
         ▼
-builders/<builder>/declaration.py             accepts=SPATIAL_SCORES, inputs, configuration,
+builders/<builder>/spec.py             accepts=SPATIAL_SCORES, inputs, configuration,
 builders/<builder>/builder.py                 outputs; run(context) → outputs
         │ registry.py lists it
         ▼
@@ -30,7 +30,7 @@ Take a builder that traces annotations from a `spatial-scores` model.
 
 ### 1. Declare it
 
-`src/model_service/builders/annotations/declaration.py` holds everything the
+`src/model_service/builders/annotations/spec.py` holds everything the
 facade needs: which contract the builder accepts, its inputs, its configuration
 and its outputs. It imports only Pydantic and `builders.spec`, because the
 facade loads it without the slide libraries.
@@ -129,7 +129,7 @@ a failure code. Anything else becomes a retryable internal error.
 - Add an entry under `builders:` in `deploy/helm/rayservice/values.yaml`, keyed
   by the builder ID, with its Ray deployment options and `userConfig`
   (`num_threads`, `max_concurrent_tasks`). The chart makes it a Ray application
-  at `/builders/<id>` running `builders.serve:app`, and tells the facade it
+  at `/builders/<id>` running `builder_deployment.serve:app`, and tells the facade it
   exists.
 
 The builder then gets the public routes (`/v1/builders/<id>/models/<m>/run`
@@ -181,7 +181,7 @@ scores.
 
    A model file's `inference` block must then match it (see
    [Adding models](adding-models.md)).
-2. **Write its client** in `src/model_service/builders/model_clients.py`, a
+2. **Write its client** in `src/model_service/inference/model_clients.py`, a
    `ModelClient` subclass. It sets `contract`, and `methods`: the deployment
    methods a model of the contract must have. It also implements:
    - `_matches(running)`: does the `get_config()` result equal the
@@ -191,9 +191,9 @@ scores.
      the answer breaks the contract.
 
    Add the client to `CLIENTS`.
-3. **Implement it in models.** A model implementation in `src/model_service/models/`
+3. **Implement it in models.** A model implementation in `src/model_service/model_implementations/`
    provides those methods, and its YAML names the contract.
-   `tests/facade/test_model_catalog.py` fails if a model file's implementation
+   `tests/inference/test_catalog.py` fails if a model file's implementation
    lacks a method its contract's client calls.
 
 Then add builders that accept the new contract, as above.

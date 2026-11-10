@@ -11,7 +11,7 @@ It does not orchestrate whole-slide processing.
 _Avoid_: Model operation, low-level model call
 
 **Inference implementation**:
-Code in `src/model_service/models/` that serves one kind of model-ready input and output. It can
+Code in `src/model_service/model_implementations/` that serves one kind of model-ready input and output. It can
 serve any trained model that fits it.
 _Avoid_: Model, when meaning the code rather than a deployment
 
@@ -157,7 +157,7 @@ _Avoid_: Local path
 
 **Builder configuration**:
 A builder's processing settings (stride, background skipping) with defaults
-in the builder's `declaration.py`. Standalone requests do not set them; EMPAIA jobs may.
+in the builder's `spec.py`. Standalone requests do not set them; EMPAIA jobs may.
 _Avoid_: Execution spec, model parameters
 
 **Model target MPP**:

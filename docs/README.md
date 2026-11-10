@@ -3,6 +3,8 @@
 | Read | For |
 | --- | --- |
 | [How model-service is put together](architecture/core.md) | Packages, request flow, contracts, capacity |
+| [What this thesis added](thesis-scope.md) | Baseline vs now, preserved model code, traffic flow |
+| [EMPAIA integration](architecture/empaia.md) | How an EMPAIA job flows through model-service, modes, SDK use |
 | [Specification](spec.md) | What the core must do and how it was accepted |
 | [Adding models](guides/adding-models.md) | YAML-only onboarding, or a new inference implementation |
 | [Adding a builder or an inference contract](guides/adding-builders.md) | A new slide-level output, or a new kind of model, wired from declaration to Helm |

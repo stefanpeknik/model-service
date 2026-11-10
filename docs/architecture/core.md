@@ -7,7 +7,7 @@ behind one public API that can also run builders durably.
              callers: RationAI SDK, EMPAIA (via JES), notebooks
                                   │ HTTP
 ┌─────────────────────────────────▼──────────────────────────────────┐
-│ facade (model_service/facade/, one Deployment, outside Ray)        │
+│ API process (model_service/api/, one Deployment, outside Ray)      │
 │  /v1/models   /v1/models/{m}/run|schedule (raw tiles)              │
 │  /v1/builders   /v1/builders/{b}/models/{m}/run|schedule           │
 │  /v1/executions/{id}[/cancel|/result]   /v1/executions/lookup      │
@@ -18,9 +18,9 @@ behind one public API that can also run builders durably.
    builder call │ POST /builders/{b}/               │ raw tiles: POST /{m}/
 ┌───────────────▼───────────────────────────────────▼────────────────┐
 │ Ray Serve (RayService)                                             │
-│  builder-heatmap, builder-tile-embeddings (builders/serve.py)      │
+│  builder-heatmap, builder-tile-embeddings (builder_deployment/)    │
 │        │ Ray handle or HTTP, per model contract                    │
-│  model deployments: prostate-classifier-1, virchow2, … (models/)   │
+│  model deployments: prostate-classifier-1, virchow2, …           │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -28,12 +28,16 @@ behind one public API that can also run builders durably.
 
 | Package | Owns |
 | --- | --- |
-| `src/model_service/models/` | Inference implementations (binary classifier, segmentation, Virchow2, Prov-GigaPath). Each serves any trained model that fits it; the trained model is chosen in YAML. |
+| `src/model_service/model_implementations/` | Inference implementations (binary classifier, segmentation, Virchow2, Prov-GigaPath). Each serves any trained model that fits it; the trained model is chosen in YAML. |
 | `deploy/helm/rayservice/models/` | One file per model deployment: an `inference` declaration plus the Ray Serve application. The same file feeds the RayService and the facade's catalog. |
-| `src/model_service/builders/` | The builder runtime (validation, model verification, deadline, input access, atomic artifacts, cleanup), one model client per inference contract (`model_clients.py`), shared slide reading (`slides/`) and one package per builder (`heatmap/`, `embeddings/`: `declaration.py`, `builder.py`, processing), listed in `registry.py`. One Ray ingress, `src/model_service/builders/serve.py`, hosts any builder. See [Adding a builder](../guides/adding-builders.md). |
-| `src/model_service/facade/` | The facade: public API, model catalog, synchronous runs, raw inference proxy, process wiring. |
+| `src/model_service/builders/` | The builder contract and runtime pieces (input access, atomic output files), shared slide reading (`slides/`) and one package per builder (`heatmap/`, `embeddings/`: `spec.py`, `builder.py`, `processor.py`), listed in `registry.py`. See [Adding a builder](../guides/adding-builders.md). |
+| `src/model_service/builder_deployment/` | The one Ray Serve ingress (`serve.py`) that hosts any builder, and the runner that validates, verifies the model, enforces the deadline and cleans up. |
+| `src/model_service/inference/` | The model catalog and one model client per inference contract (`model_clients.py`). |
+| `src/model_service/api/` | The facade (API process): public routes, synchronous runs, raw inference proxy, process wiring. |
+| `src/model_service/http_common/` | Auth, HTTP error mapping and scheduling calls shared by the API routes and provider routes. |
+| `src/model_service/shared/` | Types more than one process uses: invocation, result, failures, score grid. |
 | `src/model_service/scheduler/` | Durable executions: admission, leases with fencing, retries, deadlines, cancellation, provider finish. PostgreSQL with Yoyo migrations. |
-| `src/model_service/providers/` | Providers: standalone (shared storage) and EMPAIA (AppService input and publication). `providers/composition.py` lists them; the facade and the builder ingress compose what each contributes and name none of them. |
+| `src/model_service/providers/` | Providers: standalone (shared storage) and EMPAIA (AppService input and publication). `providers/registry.py` lists them; the facade and the builder ingress compose what each contributes and name none of them. |
 
 ### Interfaces
 
@@ -49,7 +53,7 @@ because the core scheduler must not import the facade, and
 ### Providers
 
 A provider is a package that plugs into the facade and the builder replicas
-through one object (`Provider` in `providers/composition.py`):
+through one object (`Provider` in `providers/registry.py`):
 
 - `facade(catalog, settings)` gives the scheduler adapter that admits and
   finishes its jobs, any routes of its own (EMPAIA's `/v1/empaia`), and work
