@@ -11,13 +11,6 @@ import logging
 from contextlib import suppress
 from typing import TYPE_CHECKING
 
-from model_service.providers.provider import (
-    ProviderCancellation,
-    ProviderFailure,
-    ProviderFinishFailureError,
-    ProviderFinishOutcome,
-    ProviderSuccess,
-)
 from model_service.scheduler import raw_inference_jobs
 from model_service.scheduler.builder_dispatch import (
     ConfirmedRejectionError,
@@ -39,6 +32,11 @@ from model_service.scheduler.public import (
     ExecutionError,
     IncompatibleModelError,
     InferenceInvocation,
+    ProviderCancellation,
+    ProviderFailure,
+    ProviderFinishFailureError,
+    ProviderFinishOutcome,
+    ProviderSuccess,
     UnknownBuilderError,
     UnknownModelError,
 )

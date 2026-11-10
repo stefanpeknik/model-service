@@ -1,6 +1,7 @@
 """Durable executions: admission, leases, retries, deadlines and provider finish.
 
-- public.py: what callers see: views, schedule requests, errors.
+- public.py: what callers and providers see: views, schedule requests,
+  admission and outcome types (SubmissionIdentity, ProviderSuccess, ...), errors.
 - status.py: execution statuses, kinds and error codes.
 - execution_scheduler.py: ExecutionScheduler, admission and the worker's lifetime.
 - worker.py: claims work, runs attempts, renews leases, settles outcomes.

@@ -15,7 +15,7 @@ from jsonschema import ValidationError
 from pydantic import ValidationError as SettingsError
 
 from model_service.builders.registry import BUILDERS, get_builder
-from model_service.model_catalog import ModelCatalog
+from model_service.inference.catalog import ModelCatalog
 from model_service.providers.empaia.credentials import ClientCredentials
 from model_service.providers.empaia.ead.apps import (
     VIEWER_CONFIG_KEY,

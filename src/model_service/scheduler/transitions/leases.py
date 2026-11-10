@@ -25,10 +25,10 @@ from model_service.scheduler.transitions.base import (
     ClaimDecision,
     RenewalDecision,
 )
-from model_service.scheduler.transitions.expiry import RecoveryTransitions
+from model_service.scheduler.transitions.expiry import ExpiryTransitions
 
 
-class LeaseTransitions(RecoveryTransitions):
+class LeaseTransitions(ExpiryTransitions):
     """Claiming work and deciding lease renewal."""
 
     @staticmethod

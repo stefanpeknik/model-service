@@ -14,7 +14,6 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
-from model_service.providers.provider import SubmissionIdentity
 from model_service.scheduler.internal_state import (
     InferenceSucceeded,
     ProcessingFailed,
@@ -24,6 +23,7 @@ from model_service.scheduler.public import (
     INFERENCE_PROVIDER,
     ExecutionError,
     InferenceResult,
+    SubmissionIdentity,
 )
 from model_service.scheduler.status import ExecutionErrorCode
 

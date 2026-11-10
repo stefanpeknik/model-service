@@ -15,15 +15,12 @@ from typing import TYPE_CHECKING
 from pydantic import ValidationError
 
 from model_service.builders.registry import get_builder
-from model_service.providers.provider import (
-    PreparedInvocation,
-    Provider,
-    ProviderAdapter,
-    SubmissionIdentity,
-)
+from model_service.providers.provider import Provider, ProviderAdapter
 from model_service.scheduler.public import (
     InvalidScheduleRequestError,
+    PreparedInvocation,
     ScheduleRequest,
+    SubmissionIdentity,
 )
 from model_service.shared.caller_request import STANDALONE_PROVIDER, BuilderRequest
 from model_service.shared.failures import InvalidInvocation
@@ -39,15 +36,12 @@ if TYPE_CHECKING:
 
     from model_service.builders.base import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
-    from model_service.model_catalog import ModelCatalog
-    from model_service.providers.provider import (
-        ApiContribution,
-        BeforeMutation,
-        ProviderFinishOutcome,
-    )
+    from model_service.inference.catalog import ModelCatalog
+    from model_service.providers.provider import ApiContribution
     from model_service.providers.standalone.shared_storage import (
         SharedStorageAccessFactory,
     )
+    from model_service.scheduler.public import BeforeMutation, ProviderFinishOutcome
     from model_service.scheduler.settings import SchedulerSettings
     from model_service.shared.json_values import JsonValue
 

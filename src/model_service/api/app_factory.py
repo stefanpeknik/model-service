@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from starlette.types import Lifespan
 
     from model_service.api.synchronous_runs import SynchronousBuilderRunner
-    from model_service.model_catalog import ModelCatalog
+    from model_service.inference.catalog import ModelCatalog
     from model_service.providers.provider import RouteFactory
     from model_service.scheduler.protocols import Capacity, Scheduler
     from model_service.scheduler.raw_inference_jobs import InferenceTarget
@@ -48,7 +48,7 @@ from model_service.api.raw_inference_proxy import HttpInferenceProxy, ModelInfer
 from model_service.api.synchronous_runs import SynchronousBuilderService
 from model_service.builder_deployment.client import HTTPBuilderDispatch
 from model_service.builders.registry import BUILDERS, get_builder
-from model_service.model_catalog import ModelCatalog
+from model_service.inference.catalog import ModelCatalog
 from model_service.providers.registry import PROVIDERS
 from model_service.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.scheduler.internal_state import RetryPolicy

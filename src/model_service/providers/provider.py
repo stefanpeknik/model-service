@@ -1,129 +1,48 @@
 """The provider contract: what a provider is and every method it writes.
 
-A provider is a `Provider` (here) listed in `providers/registry.py`. the API
-and the builder ingress compose the providers there and name none of them.
-A provider writes:
+A provider is a `Provider` (here) listed in `providers/registry.py`. The API
+process and the builder deployment compose the providers there and name none
+of them. A provider writes:
 
 - `Provider.api` and `Provider.input_access`: what it adds to each process,
   plus `catalog_block`, the block of the model files it reads;
-- a `ProviderAdapter` (here): `identify`, `prepare`
-  and `finish`, admitting a job and finishing it;
+- a `ProviderAdapter` (here): `identify`, `prepare` and `finish`, admitting a
+  job and finishing it, with the types they take and return in
+  scheduler/public.py;
 - an `InputAccessFactory` (builders/input_access.py) whose `create` returns an
   `InputAccess`: `input_path`, `output_path`, `is_visible_artifact`, `aclose`.
 
-The input-access interface lives with the builders that use it. Each provider imports
-what only one process needs inside the method for it.
+Each provider imports what only one process needs inside the method for it.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from enum import IntEnum
 from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Coroutine, Mapping
+    from collections.abc import Callable, Coroutine, Mapping
     from datetime import datetime
 
     from fastapi import APIRouter
 
     from model_service.builders.base import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
-    from model_service.model_catalog import ModelCatalog
+    from model_service.inference.catalog import ModelCatalog
     from model_service.scheduler.protocols import Capacity, Scheduler
     from model_service.scheduler.public import (
-        ExecutionError,
+        BeforeMutation,
+        PreparedInvocation,
+        ProviderFinishOutcome,
         ProviderName,
         ScheduleRequest,
+        SubmissionIdentity,
     )
     from model_service.scheduler.settings import SchedulerSettings
-    from model_service.shared.invocation import InputAccessKind, Invocation
+    from model_service.shared.invocation import InputAccessKind
     from model_service.shared.json_values import JsonValue
-    from model_service.shared.result import BuilderResult
-
-
-type ProviderFinishOutcome = ProviderSuccess | ProviderFailure | ProviderCancellation
-type BeforeMutation = Callable[[], Awaitable[None]]
-
-
-@dataclass(frozen=True, slots=True)
-class SubmissionIdentity:
-    """Scope a replay key to its provider and distinguish identical requests from conflicting ones."""
-
-    provider: ProviderName
-    key: str
-    fingerprint: str
-
-
-class Priority(IntEnum):
-    """Order in which due work is claimed; higher first, within each model's capacity.
-
-    Internal for now: providers set it, the public API does not take it.
-    """
-
-    LOW = 0
-    NORMAL = 1
-    HIGH = 2
-
-
-@dataclass(frozen=True, slots=True)
-class PreparedInvocation:
-    """Carry a validated invocation, private provider state, and any provider-imposed deadline limits."""
-
-    invocation: Invocation
-    protected_context: dict[str, JsonValue]
-    deadline_cap: datetime | None = None
-    terminal_report_deadline_at: datetime | None = None
-    priority: int = Priority.NORMAL
-
-
-@dataclass(frozen=True, slots=True)
-class ProviderSuccess:
-    """Give provider finish the durable builder result to publish."""
-
-    result: BuilderResult
-    # The builder that produced it, whose declarations say what each output is.
-    builder_id: str
-
-
-@dataclass(frozen=True, slots=True)
-class ProviderFailure:
-    """Give provider finish the safe terminal processing error to report."""
-
-    error: ExecutionError
-
-
-@dataclass(frozen=True, slots=True)
-class ProviderCancellation:
-    """Ask provider finish to report the execution's cancellation."""
-
-
-class ProviderFinishFailureError(RuntimeError):
-    """Carry a safe publication error, retry permission, and whether a remote mutation may have happened."""
-
-    def __init__(
-        self,
-        *,
-        code: str,
-        safe_message: str,
-        retryable: bool,
-        outcome_unknown: bool = False,
-    ) -> None:
-        """Capture finish failure metadata without exposing the underlying provider exception to callers.
-
-        Args:
-            code: Stable error code to record.
-            safe_message: Message safe to show to callers.
-            retryable: Whether the worker may retry the finish.
-            outcome_unknown: Whether a remote mutation may have happened before the failure.
-        """
-        super().__init__(safe_message)
-        self.code = code
-        self.safe_message = safe_message
-        self.retryable = retryable
-        self.outcome_unknown = outcome_unknown
 
 
 class ProviderAdapter(ABC):

@@ -26,15 +26,13 @@ from model_service.providers.empaia.publishing.publishers import (
     Commit,
     PublisherRegistry,
 )
-from model_service.providers.provider import (
-    Priority,
-    ProviderFinishFailureError,
-    ProviderSuccess,
-)
 from model_service.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.scheduler.internal_state import RetryPolicy
 from model_service.scheduler.public import (
     InvalidScheduleRequestError,
+    Priority,
+    ProviderFinishFailureError,
+    ProviderSuccess,
     ScheduleRequest,
     SchedulingUnavailableError,
 )

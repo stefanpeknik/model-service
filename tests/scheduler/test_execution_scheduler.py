@@ -9,14 +9,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any
 
-from model_service.providers.provider import (
-    PreparedInvocation,
-    ProviderCancellation,
-    ProviderFailure,
-    ProviderFinishFailureError,
-    ProviderSuccess,
-    SubmissionIdentity,
-)
 from model_service.providers.standalone.provider import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import (
     SharedStorageAccessFactory,
@@ -39,9 +31,15 @@ from model_service.scheduler.internal_state import (
 from model_service.scheduler.public import (
     IncompatibleModelError,
     InvalidScheduleRequestError,
+    PreparedInvocation,
+    ProviderCancellation,
+    ProviderFailure,
+    ProviderFinishFailureError,
+    ProviderSuccess,
     ScheduleConflictError,
     ScheduleRequest,
     SchedulingUnavailableError,
+    SubmissionIdentity,
     UnknownBuilderError,
     UnknownModelError,
 )
@@ -68,11 +66,11 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from model_service.inference.model_declarations import ModelBinding
-    from model_service.providers.provider import (
+    from model_service.scheduler.public import (
         BeforeMutation,
+        ModelResolver,
         ProviderFinishOutcome,
     )
-    from model_service.scheduler.public import ModelResolver
     from model_service.shared.json_values import JsonValue
 
 

@@ -8,12 +8,12 @@ from copy import deepcopy
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from model_service.inference.catalog import CatalogError, ModelCatalog
 from model_service.inference.model_declarations import (
     InferenceContract,
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from model_service.model_catalog import CatalogError, ModelCatalog
 from model_service.shared.failures import UnknownModelError
 
 
@@ -205,7 +205,7 @@ if __name__ == "__main__":
 
 
 MODEL_FILES = sorted(
-    Path(__file__).parents[1].joinpath("deploy/helm/rayservice/models").rglob("*.yaml")
+    Path(__file__).parents[2].joinpath("deploy/helm/rayservice/models").rglob("*.yaml")
 )
 
 

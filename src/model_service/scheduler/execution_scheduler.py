@@ -39,12 +39,13 @@ from model_service.scheduler.worker import ExecutionWorker
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Mapping
 
-    from model_service.providers.provider import (
-        ProviderAdapter,
+    from model_service.providers.provider import ProviderAdapter
+    from model_service.scheduler.builder_dispatch import BuilderDispatch
+    from model_service.scheduler.public import (
+        ModelResolver,
+        ProviderName,
         SubmissionIdentity,
     )
-    from model_service.scheduler.builder_dispatch import BuilderDispatch
-    from model_service.scheduler.public import ModelResolver, ProviderName
     from model_service.scheduler.raw_inference_jobs import InferenceTarget
     from model_service.scheduler.store.repository import ExecutionRepository
 

@@ -12,14 +12,12 @@ from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayErro
 from model_service.providers.empaia.jobs.inputs import job_workspace
 from model_service.providers.empaia.jobs.lifecycle import EmpaiaProviderAdapter
 from model_service.providers.empaia.publishing.publishers import PublisherRegistry
-from model_service.providers.provider import (
-    ProviderFailure,
-    ProviderFinishFailureError,
-    ProviderSuccess,
-)
 from model_service.scheduler.public import (
     ExecutionError,
     InvalidScheduleRequestError,
+    ProviderFailure,
+    ProviderFinishFailureError,
+    ProviderSuccess,
     ScheduleRequest,
 )
 from model_service.shared.result import BuilderResult, SharedArtifact

@@ -4,10 +4,10 @@
 - scheduler/: durable executions on PostgreSQL, run inside the API process.
 - builders/: the whole-slide builders and how to declare one.
 - builder_deployment/: the Ray Serve deployment that hosts a builder, and its HTTP client.
-- inference/: what a model of each contract promises (model_declarations.py) and the
-  clients that call it (model_clients.py).
+- inference/: the deployed models (catalog.py, read from the model YAML), what
+  each contract promises (model_declarations.py) and the clients that call and
+  check them (model_clients.py).
 - providers/: where inputs come from and results go (standalone, EMPAIA).
 - shared/: types shared across processes (invocation, result, failures, score grid).
-- model_catalog.py: the deployed models, read from the model YAML files.
 - models/: the model implementations Ray Serve runs.
 """

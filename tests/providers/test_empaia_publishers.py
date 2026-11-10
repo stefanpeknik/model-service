@@ -24,10 +24,7 @@ from model_service.providers.empaia.publishing.publishers import (
     PublisherRegistry,
     default_publishers,
 )
-from model_service.providers.provider import (
-    ProviderFinishFailureError,
-    ProviderSuccess,
-)
+from model_service.scheduler.public import ProviderFinishFailureError, ProviderSuccess
 from model_service.shared.result import (
     BuilderResult,
     InlineOutput,

@@ -24,7 +24,7 @@ from model_service.scheduler.transitions.base import (
 )
 
 
-class RecoveryTransitions(TransitionsBase):
+class ExpiryTransitions(TransitionsBase):
     """Expired leases and passed deadlines."""
 
     def recover_expired(

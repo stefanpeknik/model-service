@@ -14,10 +14,10 @@ import lz4.frame
 from httpx import ASGITransport, AsyncClient, MockTransport, Request, Response
 
 from model_service.api.app_factory import build_api_process
-from model_service.model_catalog import CatalogError
+from model_service.inference.catalog import CatalogError
 from model_service.scheduler.settings import SchedulerSettings
+from tests.inference.test_catalog import embedding_document, spatial_document
 from tests.support.memory_repository import InMemoryExecutionRepository
-from tests.test_model_catalog import embedding_document, spatial_document
 
 
 class RuntimeTestCase(unittest.IsolatedAsyncioTestCase):

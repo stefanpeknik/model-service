@@ -1,14 +1,15 @@
-"""Public scheduler requests, execution views and safe failure types.
+"""What callers and providers see: requests, views, admission and outcome types, errors.
 
-Lease fields and protected provider context live in records.py and never appear
+Lease fields and protected provider context live in internal_state.py and never appear
 in an ExecutionView; statuses and error codes are in status.py.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Annotated
+from enum import IntEnum
+from typing import TYPE_CHECKING, Annotated
 
 from pydantic import Field, TypeAdapter
 
@@ -27,6 +28,10 @@ from model_service.shared.json_values import (
     JsonValue,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
 from model_service.shared.result import BuilderResult
+
+
+if TYPE_CHECKING:
+    from datetime import datetime
 
 
 __all__ = ["IncompatibleModelError", "UnknownBuilderError", "UnknownModelError"]
@@ -134,3 +139,87 @@ class UnknownExecutionError(KeyError):
 
 class ResultUnavailableError(RuntimeError):
     """The execution has no stored inference response to download."""
+
+
+type ProviderFinishOutcome = ProviderSuccess | ProviderFailure | ProviderCancellation
+
+
+type BeforeMutation = Callable[[], Awaitable[None]]
+
+
+@dataclass(frozen=True, slots=True)
+class SubmissionIdentity:
+    """Scope a replay key to its provider and distinguish identical requests from conflicting ones."""
+
+    provider: ProviderName
+    key: str
+    fingerprint: str
+
+
+class Priority(IntEnum):
+    """Order in which due work is claimed; higher first, within each model's capacity.
+
+    Internal for now: providers set it, the public API does not take it.
+    """
+
+    LOW = 0
+    NORMAL = 1
+    HIGH = 2
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedInvocation:
+    """Carry a validated invocation, private provider state, and any provider-imposed deadline limits."""
+
+    invocation: Invocation
+    protected_context: dict[str, JsonValue]
+    deadline_cap: datetime | None = None
+    terminal_report_deadline_at: datetime | None = None
+    priority: int = Priority.NORMAL
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderSuccess:
+    """Give provider finish the durable builder result to publish."""
+
+    result: BuilderResult
+    # The builder that produced it, whose declarations say what each output is.
+    builder_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderFailure:
+    """Give provider finish the safe terminal processing error to report."""
+
+    error: ExecutionError
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderCancellation:
+    """Ask provider finish to report the execution's cancellation."""
+
+
+class ProviderFinishFailureError(RuntimeError):
+    """Carry a safe publication error, retry permission, and whether a remote mutation may have happened."""
+
+    def __init__(
+        self,
+        *,
+        code: str,
+        safe_message: str,
+        retryable: bool,
+        outcome_unknown: bool = False,
+    ) -> None:
+        """Capture finish failure metadata without exposing the underlying provider exception to callers.
+
+        Args:
+            code: Stable error code to record.
+            safe_message: Message safe to show to callers.
+            retryable: Whether the worker may retry the finish.
+            outcome_unknown: Whether a remote mutation may have happened before the failure.
+        """
+        super().__init__(safe_message)
+        self.code = code
+        self.safe_message = safe_message
+        self.retryable = retryable
+        self.outcome_unknown = outcome_unknown
