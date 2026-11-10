@@ -31,7 +31,7 @@ if TYPE_CHECKING:
         StoredResult,
     )
     from model_service.scheduler.status import ExecutionStatus
-    from model_service.wire.json import JsonValue
+    from model_service.wire.json_values import JsonValue
     from model_service.wire.result import BuilderResult
 
 

@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from model_service.providers.empaia.credentials import OutgoingCredentials
-    from model_service.providers.empaia.ead import AppDefinition
+    from model_service.providers.empaia.ead.apps import AppDefinition
 
 
 logger = logging.getLogger(__name__)

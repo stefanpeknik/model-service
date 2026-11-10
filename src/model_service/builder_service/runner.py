@@ -29,7 +29,7 @@ from model_service.wire.failures import (
     InvalidInvocation,
 )
 from model_service.wire.invocation import ExecutionContext
-from model_service.wire.json import is_json_value
+from model_service.wire.json_values import is_json_value
 from model_service.wire.result import BuilderResult, InlineOutput, SharedArtifact
 
 

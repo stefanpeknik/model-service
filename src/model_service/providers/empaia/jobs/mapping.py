@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING, Never
 
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
-from model_service.providers.empaia.ead import VIEWER_CONFIG_KEY
+from model_service.providers.empaia.ead.apps import VIEWER_CONFIG_KEY
 from model_service.scheduler.executions import (
     InvalidScheduleRequestError,
     SchedulingUnavailableError,
@@ -17,7 +17,7 @@ from model_service.wire.failures import InvalidInvocation
 if TYPE_CHECKING:
     from model_service.builders.declarations import BuilderSpec
     from model_service.providers.empaia.app_service.gateway import EmpaiaGateway
-    from model_service.wire.json import JsonValue
+    from model_service.wire.json_values import JsonValue
 
 
 logger = logging.getLogger(__name__)

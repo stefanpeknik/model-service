@@ -23,7 +23,7 @@ if TYPE_CHECKING:
         ScheduleRequest,
     )
     from model_service.wire.invocation import Invocation
-    from model_service.wire.json import JsonValue
+    from model_service.wire.json_values import JsonValue
     from model_service.wire.result import BuilderResult
 
 

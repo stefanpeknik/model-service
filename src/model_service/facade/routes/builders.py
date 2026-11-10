@@ -43,7 +43,7 @@ from model_service.wire.failures import (
     UnknownBuilderError,
     UnknownModelError,
 )
-from model_service.wire.json import (
+from model_service.wire.json_values import (
     JsonValue,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
 from model_service.wire.result import (
@@ -55,7 +55,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable
 
     from model_service.facade.synchronous_runs import BuilderRunner
-    from model_service.scheduler.interface import Scheduler
+    from model_service.scheduler.api_interface import Scheduler
 
 
 @dataclass(frozen=True, slots=True)

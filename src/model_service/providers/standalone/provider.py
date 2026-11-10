@@ -50,7 +50,7 @@ if TYPE_CHECKING:
         ProviderFinishOutcome,
     )
     from model_service.scheduler.settings import SchedulerSettings
-    from model_service.wire.json import JsonValue
+    from model_service.wire.json_values import JsonValue
 
 
 NAME: ProviderName = "standalone"

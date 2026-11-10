@@ -33,7 +33,7 @@ from model_service.providers.empaia.app_service.gateway import (
     EmpaiaJobContext,
     EmpaiaJobMode,
 )
-from model_service.providers.empaia.ead_builder_io import BUILDER_IO
+from model_service.providers.empaia.ead.builder_io import BUILDER_IO
 from model_service.providers.empaia.jobs.inputs import job_workspace
 from model_service.providers.empaia.jobs.mapping import (
     builder_configuration,
@@ -58,17 +58,17 @@ from model_service.scheduler.provider_adapter import (
     SubmissionIdentity,
 )
 from model_service.wire.invocation import InputAccessContext, Invocation, ProviderInput
-from model_service.wire.json import is_json_value
+from model_service.wire.json_values import is_json_value
 
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Mapping
     from pathlib import Path
 
-    from model_service.providers.empaia.ead_builder_io import BuilderIo
+    from model_service.providers.empaia.ead.builder_io import BuilderIo
     from model_service.providers.empaia.publishing.publishers import PublisherRegistry
     from model_service.scheduler.provider_adapter import BeforeMutation
-    from model_service.wire.json import JsonValue
+    from model_service.wire.json_values import JsonValue
 
 
 class EmpaiaErrorCode(StrEnum):

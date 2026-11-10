@@ -11,7 +11,7 @@ from pydantic import (
     TypeAdapter,
 )
 
-from model_service.wire.json import (
+from model_service.wire.json_values import (
     JsonValue,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
     NonEmptyString,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )

@@ -54,7 +54,7 @@ if TYPE_CHECKING:
         EmpaiaGateway,
         MutationGuard,
     )
-    from model_service.wire.json import JsonValue
+    from model_service.wire.json_values import JsonValue
     from model_service.wire.result import BuilderOutput
 
 

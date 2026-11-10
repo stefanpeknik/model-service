@@ -73,7 +73,7 @@ if TYPE_CHECKING:
         BeforeMutation,
         ProviderFinishOutcome,
     )
-    from model_service.wire.json import JsonValue
+    from model_service.wire.json_values import JsonValue
 
 
 class StandaloneProvider:

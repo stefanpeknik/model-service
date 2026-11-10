@@ -1,7 +1,7 @@
 """The available builders, one declaration per builder package.
 
 Adding a builder adds its package's `spec.SPEC` here; offering it in EMPAIA also
-takes an entry in `providers/empaia/ead_builder_io.py`. See
+takes an entry in `providers/empaia/ead/builder_io.py`. See
 `docs/guides/adding-builders.md`.
 """
 

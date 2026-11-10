@@ -23,7 +23,7 @@ from model_service.wire.failures import (
     UnknownModelError,
 )
 from model_service.wire.invocation import Deadline, Invocation
-from model_service.wire.json import (
+from model_service.wire.json_values import (
     JsonValue,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
 from model_service.wire.result import BuilderResult

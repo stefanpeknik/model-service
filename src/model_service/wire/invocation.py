@@ -20,7 +20,7 @@ from pydantic import (
 )
 from pydantic.dataclasses import dataclass as validated_dataclass
 
-from model_service.wire.json import (
+from model_service.wire.json_values import (
     JsonObject,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
     NonEmptyString,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )

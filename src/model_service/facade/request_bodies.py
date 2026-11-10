@@ -16,7 +16,7 @@ from model_service.wire.invocation import (
 
 
 if TYPE_CHECKING:
-    from model_service.wire.json import JsonValue
+    from model_service.wire.json_values import JsonValue
 
 
 class ImmediateBuilderRequest(BuilderRequest):

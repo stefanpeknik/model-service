@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
     from model_service.inference.contracts import ModelBinding
     from model_service.wire.invocation import Invocation
-    from model_service.wire.json import JsonValue
+    from model_service.wire.json_values import JsonValue
 
 
 @dataclass(frozen=True, slots=True)

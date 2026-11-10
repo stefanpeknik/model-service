@@ -17,7 +17,7 @@ from pydantic import ValidationError as SettingsError
 from model_service.builders.registry import get_builder
 from model_service.catalog import ModelCatalog
 from model_service.providers.empaia.credentials import ClientCredentials
-from model_service.providers.empaia.ead import (
+from model_service.providers.empaia.ead.apps import (
     VIEWER_CONFIG_KEY,
     AppMode,
     EmpaiaListing,
@@ -26,7 +26,7 @@ from model_service.providers.empaia.ead import (
     generate_ead,
     parse_listings,
 )
-from model_service.providers.empaia.ead_builder_io import BUILDER_IO
+from model_service.providers.empaia.ead.builder_io import BUILDER_IO
 from model_service.providers.empaia.provider import CATALOG_BLOCK
 from model_service.providers.empaia.publishing.publishers import default_publishers
 from model_service.providers.empaia.registration import (
@@ -127,7 +127,9 @@ class AppDefinitionTests(unittest.TestCase):
             "description": "Finds.",
             "modes": ["preprocessing"],
         }
-        with self.assertLogs("model_service.providers.empaia.ead", "ERROR") as logs:
+        with self.assertLogs(
+            "model_service.providers.empaia.ead.apps", "ERROR"
+        ) as logs:
             parsed = parse_listings(
                 {
                     "good": valid,

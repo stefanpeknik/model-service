@@ -32,14 +32,14 @@ from model_service.scheduler.raw_inference import (
     ResultTooLargeError,
 )
 from model_service.wire.failures import UnknownModelError
-from model_service.wire.json import (
+from model_service.wire.json_values import (
     JsonValue,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
 
 
 if TYPE_CHECKING:
     from model_service.catalog import ModelCatalog
-    from model_service.scheduler.interface import Scheduler
+    from model_service.scheduler.api_interface import Scheduler
     from model_service.scheduler.raw_inference import InferenceTarget
 
 

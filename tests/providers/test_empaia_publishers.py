@@ -12,8 +12,12 @@ from model_service.builders.heatmap.score_grid import MEDIA_TYPE
 from model_service.builders.registry import get_builder
 from model_service.inference.contracts import SpatialScoresModel
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
-from model_service.providers.empaia.ead import AppMode, EmpaiaListing, app_definitions
-from model_service.providers.empaia.ead_builder_io import BUILDER_IO
+from model_service.providers.empaia.ead.apps import (
+    AppMode,
+    EmpaiaListing,
+    app_definitions,
+)
+from model_service.providers.empaia.ead.builder_io import BUILDER_IO
 from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
 from model_service.providers.empaia.publishing.pixelmap import _clip
 from model_service.providers.empaia.publishing.publishers import (
@@ -118,7 +122,7 @@ class AppPublishabilityTests(unittest.TestCase):
         single = app_definitions(
             [model(1)], {"prostate-classifier-1": LISTING}, PUBLISHERS
         )
-        with self.assertLogs("model_service.providers.empaia.ead", "INFO") as logs:
+        with self.assertLogs("model_service.providers.empaia.ead.apps", "INFO") as logs:
             multi = app_definitions(
                 [model(3)], {"prostate-classifier-1": LISTING}, PUBLISHERS
             )
@@ -140,7 +144,7 @@ class AppPublishabilityTests(unittest.TestCase):
             ),
         )
 
-        with self.assertLogs("model_service.providers.empaia.ead", "INFO"):
+        with self.assertLogs("model_service.providers.empaia.ead.apps", "INFO"):
             apps = app_definitions(
                 [model(1)],
                 {"prostate-classifier-1": LISTING},
