@@ -1,4 +1,4 @@
-"""Check SDK-backed gateway failures through controlled loopback AppService requests."""
+"""Check how the HTTP gateway classifies App Service failures, through loopback requests."""
 
 from __future__ import annotations
 
