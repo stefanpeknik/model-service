@@ -35,9 +35,13 @@ and each new training run only changes YAML:
 
 1. Point `user_config.model.artifact_uri` in
    `deploy/helm/rayservice/models/<id>.yaml` at the new MLflow artifact.
-2. Update `tile_size`, `mpp` and the other geometry fields if the new run
+2. Change `trt_cache_path` too, for example by adding the run id. ONNX Runtime
+   names a cached TensorRT engine after the model's file name and tensor names,
+   not its weights, so a retrained checkpoint at the old path is silently served
+   by the old engine.
+3. Update `tile_size`, `mpp` and the other geometry fields if the new run
    changed them; the API checks them against the running model.
-3. `helm upgrade`. Ray Serve calls `reconfigure`, which loads the new artifact.
+4. `helm upgrade`. Ray Serve calls `reconfigure`, which loads the new artifact.
 
 A change to the Python implementation needs a new image:
 `deploy/images/Dockerfile.gpu` copies `src/model_service/` into it. Tag it,
@@ -58,6 +62,9 @@ over many slides and let it queue:
   more GPUs than the model file allows.
 - Raw per-tile inference: `POST /v1/models/<id>/run` with one LZ4-compressed
   `tile_size`×`tile_size`×3 uint8 tile; the API rejects any other body.
+  The API handles about 100 raw tiles/s per 1-CPU replica, so it suits trying a
+  model, not scoring slides. For many tiles write a builder, which calls the
+  model by Ray handle inside the cluster.
   Inside the cluster you can skip the API and post the same body to the Ray
   Serve proxy at `/<id>/`, as before model-service had an API; you lose the
   API's auth, capacity limits and tile check.
