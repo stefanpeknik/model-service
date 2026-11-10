@@ -1,4 +1,4 @@
-"""What a builder author implements and receives: `Builder` and `BuilderContext`.
+"""What a builder author implements and receives: `Builder`, `BuilderContext`, settings.
 
 See `docs/guides/adding-builders.md`.
 """
@@ -8,6 +8,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -21,7 +22,6 @@ from model_service.wire.result import SharedArtifact
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
     from datetime import datetime
-    from pathlib import Path
 
     from model_service.builders.input_access import InputAccess
 
@@ -33,6 +33,12 @@ class BuilderSettings(BaseModel):
 
     num_threads: int = Field(default=2, gt=0)
     max_concurrent_tasks: int = Field(default=4, gt=0)
+
+
+class ReplicaSettings(BuilderSettings):
+    """A builder's settings plus what the replica's providers need."""
+
+    shared_storage_roots: tuple[Path, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

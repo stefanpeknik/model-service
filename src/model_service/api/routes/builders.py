@@ -54,7 +54,7 @@ from model_service.wire.result import (
 if TYPE_CHECKING:
     from collections.abc import Awaitable
 
-    from model_service.api.synchronous_runs import BuilderRunner
+    from model_service.api.synchronous_runs import SynchronousBuilderRunner
     from model_service.scheduler.api_interface import Scheduler
 
 
@@ -80,7 +80,9 @@ class BuilderView:
 
 
 def create_router(
-    scheduler: Scheduler, builder_runner: BuilderRunner | None, access: Access
+    scheduler: Scheduler,
+    builder_runner: SynchronousBuilderRunner | None,
+    access: Access,
 ) -> APIRouter:
     """Build the `/v1/builders` router: the catalog, synchronous runs and scheduling.
 

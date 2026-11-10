@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from model_service.wire.result import BuilderResult
 
 
-class BuilderRunner(ABC):
+class SynchronousBuilderRunner(ABC):
     @abstractmethod
     async def run(
         self, builder_id: str, model_id: str, request: ImmediateBuilderRequest
@@ -43,7 +43,7 @@ class BuilderRunner(ABC):
         ...
 
 
-class SynchronousBuilderService(BuilderRunner):
+class SynchronousBuilderService(SynchronousBuilderRunner):
     def __init__(self, catalog: ModelCatalog, dispatch: BuilderDispatch) -> None:
         """Keep the catalog and builder dispatch.
 

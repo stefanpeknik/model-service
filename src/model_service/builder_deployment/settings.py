@@ -1,16 +1,8 @@
-"""Per-replica limits and wiring, supplied by the builder's Ray `user_config`."""
-
-from pathlib import Path
+"""The builder deployment's Ray `user_config`: which builder, and its replica settings."""
 
 from pydantic import Field
 
-from model_service.builders.base import BuilderSettings
-
-
-class ReplicaSettings(BuilderSettings):
-    """A builder's settings plus what the replica's providers need."""
-
-    shared_storage_roots: tuple[Path, ...] = ()
+from model_service.builders.base import ReplicaSettings
 
 
 class DeploymentSettings(ReplicaSettings):

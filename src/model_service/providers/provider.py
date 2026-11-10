@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
     from fastapi import APIRouter
 
-    from model_service.builder_deployment.settings import ReplicaSettings
+    from model_service.builders.base import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
     from model_service.catalog import ModelCatalog
     from model_service.scheduler.api_interface import Capacity, Scheduler

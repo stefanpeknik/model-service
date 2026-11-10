@@ -6,6 +6,6 @@
 - http_errors.py: the public error envelope.
 - submission.py: admission shared by routes, providers' too (idempotency key, refusals).
 - raw_inference_proxy.py: forwards raw tiles to models.
-- synchronous_runs.py: runs a builder while the caller waits (BuilderRunner).
+- synchronous_runs.py: runs a builder while the caller waits (SynchronousBuilderRunner).
 - capacity.py, health.py: Ray Serve state for executions and readiness.
 """

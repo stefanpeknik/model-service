@@ -18,7 +18,7 @@ from model_service.providers.provider import ApiContribution, Provider
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from model_service.builder_deployment.settings import ReplicaSettings
+    from model_service.builders.base import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
     from model_service.catalog import ModelCatalog
     from model_service.providers.empaia.registration import Marketplace

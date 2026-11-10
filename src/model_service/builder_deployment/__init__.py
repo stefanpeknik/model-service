@@ -5,5 +5,5 @@
 - protocol.py: the request and error format of its HTTP API.
 - client.py: HTTPBuilderDispatch, how the API and scheduler call a replica
   (implements scheduler/builder_dispatch.py).
-- settings.py: replica settings (a builder's BuilderSettings plus storage roots).
+- settings.py: DeploymentSettings, the deployment's user_config.
 """

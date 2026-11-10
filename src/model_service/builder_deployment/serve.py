@@ -22,10 +22,8 @@ from model_service.builder_deployment.protocol import (
     run_http,
 )
 from model_service.builder_deployment.runner import BuilderApplication
-from model_service.builder_deployment.settings import (
-    DeploymentSettings,
-    ReplicaSettings,
-)
+from model_service.builder_deployment.settings import DeploymentSettings
+from model_service.builders.base import ReplicaSettings
 from model_service.builders.registry import get_builder
 from model_service.providers.registry import PROVIDERS
 from model_service.wire.result import BuilderResult
