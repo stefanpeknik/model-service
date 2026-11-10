@@ -1,4 +1,7 @@
-"""`/v1/executions`: status, lookup, stored inference results and cancellation."""
+"""`/v1/executions`: status, lookup, stored inference results and cancellation.
+
+Submitting work is `/v1/builders/.../schedule` in builders.py.
+"""
 
 from __future__ import annotations
 
