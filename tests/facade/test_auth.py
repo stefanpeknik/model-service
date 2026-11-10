@@ -17,7 +17,7 @@ from model_service.facade.auth import (
 )
 from model_service.facade.http_app import create_app
 from model_service.inference.contracts import SpatialScoresModel
-from model_service.providers.empaia.routes import create_router
+from model_service.providers.empaia.jes_routes import create_router
 from model_service.scheduler.executions import ExecutionView
 from model_service.scheduler.status import ExecutionStatus, Operation
 

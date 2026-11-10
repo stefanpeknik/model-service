@@ -3,7 +3,7 @@
 An EAD (EMPAIA App Description) declares an app's inputs, outputs and modes.
 
 - provider.py: EmpaiaProvider, what EMPAIA adds to the facade and replicas.
-- routes.py: the endpoint JES posts jobs to.
+- jes_routes.py: the endpoint JES posts jobs to (where an EMPAIA job enters).
 - jobs/: an EMPAIA job run as a builder: adapter.py admits it and publishes its
   results, mapping.py maps it onto a builder, inputs.py fetches its input files.
 - publishing/: publishers.py turns builder outputs into EMPAIA outputs;
