@@ -126,6 +126,13 @@ class ModelCatalogTests(unittest.TestCase):
         with self.assertRaises(CatalogError):
             ModelCatalog.from_documents([document])
 
+    def test_an_invalid_model_file_is_named_in_the_error(self) -> None:
+        broken = spatial_document()
+        broken["serve"] = {**broken["serve"], "route_prefix": 7}
+
+        with self.assertRaisesRegex(CatalogError, repr(broken["serve"]["name"])):
+            ModelCatalog.from_documents([spatial_document(), broken])
+
     def test_unknown_model_is_a_lookup_error(self) -> None:
         catalog = ModelCatalog.from_documents([spatial_document()])
 

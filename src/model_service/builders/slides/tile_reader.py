@@ -154,7 +154,8 @@ class TileReader:
         tile = self.slide.read_tile(
             x=x, y=y, extent_x=tile_size, extent_y=tile_size, level=self.level
         )
-        return tile.transpose(2, 0, 1)
+        # Contiguous here, in the read thread, so Ray need not copy it on the event loop.
+        return np.ascontiguousarray(tile.transpose(2, 0, 1))
 
     def _has_tissue(self, tissue: TissueMask, x: int, y: int, tile_size: int) -> bool:
         """Check whether the tile's window in the tissue mask has tissue.

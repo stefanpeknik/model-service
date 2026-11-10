@@ -160,10 +160,14 @@ class ModelCatalog:
         """
         if not isinstance(documents, list):
             raise CatalogError("model catalog must be a list")
-        try:
-            parsed = [ModelDocument.model_validate(item) for item in documents]
-        except ValidationError as error:
-            raise CatalogError(f"model catalog is invalid: {error}") from error
+        parsed = []
+        for index, item in enumerate(documents):
+            try:
+                parsed.append(ModelDocument.model_validate(item))
+            except ValidationError as error:
+                raise CatalogError(
+                    f"model file {_document_name(item, index)} is invalid: {error}"
+                ) from error
         blocks: dict[str, dict[str, object]] = {key: {} for key in provider_blocks}
         for document in parsed:
             for key, value in (document.model_extra or {}).items():
@@ -240,3 +244,18 @@ class ModelCatalog:
             The number of models in the catalog.
         """
         return len(self._models)
+
+
+def _document_name(item: object, index: int) -> str:
+    """Name a model document for an error: its `serve.name` if readable, else its position.
+
+    Args:
+        item: The raw document.
+        index: Its position in the catalog list.
+
+    Returns:
+        A quoted model name, or `#<index>`.
+    """
+    serve = item.get("serve") if isinstance(item, dict) else None
+    name = serve.get("name") if isinstance(serve, dict) else None
+    return repr(name) if isinstance(name, str) else f"#{index}"
