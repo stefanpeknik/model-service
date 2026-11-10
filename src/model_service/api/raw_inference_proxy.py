@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from model_service.inference.catalog import ModelCatalog
-    from model_service.inference.model_declarations import ModelBinding
+    from model_service.shared.model_declarations import ModelBinding
 
 
 _REQUEST_HEADERS = frozenset({"x-output-dtype", "x-pool-tokens"})

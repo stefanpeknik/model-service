@@ -1,0 +1,44 @@
+"""The builder deployment's HTTP format: the run request and the error envelope, used by both ends."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from enum import StrEnum
+from typing import Annotated
+
+from pydantic import Field, StrictBool, TypeAdapter
+
+from model_service.shared.invocation import ExecutionContext, Invocation
+from model_service.shared.model_declarations import (
+    ModelBinding,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
+)
+
+
+@dataclass(frozen=True, slots=True)
+class RunRequest:
+    """The stored invocation plus the model resolved for this attempt."""
+
+    invocation: Invocation
+    model: ModelBinding
+    execution_context: ExecutionContext = field(default_factory=ExecutionContext)
+
+
+RUN_REQUEST: TypeAdapter[RunRequest] = TypeAdapter(RunRequest)
+
+
+class ErrorCode(StrEnum):
+    INVALID_INVOCATION = "invalid_builder_invocation"
+    UNAVAILABLE = "builder_unavailable"
+    CONTRACT_VIOLATION = "builder_contract_violation"
+
+
+@dataclass(frozen=True, slots=True)
+class ErrorDetail:
+    code: Annotated[str, Field(strict=True, min_length=1)]
+    message: Annotated[str, Field(strict=True, min_length=1)]
+    retryable: StrictBool
+
+
+@dataclass(frozen=True, slots=True)
+class ErrorResponse:
+    detail: ErrorDetail

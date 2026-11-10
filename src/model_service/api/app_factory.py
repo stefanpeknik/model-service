@@ -46,11 +46,11 @@ from model_service.api.capacity import ServeCapacity
 from model_service.api.health import DeploymentHealth
 from model_service.api.raw_inference_proxy import HttpInferenceProxy, ModelInference
 from model_service.api.synchronous_runs import SynchronousBuilderService
-from model_service.builder_deployment.client import HTTPBuilderDispatch
 from model_service.builders.registry import BUILDERS, get_builder
 from model_service.inference.catalog import ModelCatalog
 from model_service.providers.registry import PROVIDERS
 from model_service.scheduler.execution_scheduler import ExecutionScheduler
+from model_service.scheduler.http_builder_dispatch import HTTPBuilderDispatch
 from model_service.scheduler.internal_state import RetryPolicy
 from model_service.scheduler.settings import SchedulerSettings
 from model_service.scheduler.store.payloads import PayloadStore
@@ -61,8 +61,8 @@ from model_service.scheduler.store.protected_context import ProtectedContextCiph
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
-    from model_service.inference.model_declarations import ModelBinding
     from model_service.scheduler.public import ModelResolver
+    from model_service.shared.model_declarations import ModelBinding
 
 
 def model_resolver(catalog: ModelCatalog) -> ModelResolver:

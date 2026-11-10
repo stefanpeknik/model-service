@@ -12,7 +12,8 @@
 - internal_state.py: internal records, leases, retry policy and outcomes.
 - raw_inference_jobs.py: a raw model request run as an execution.
 - protocols.py: what the API needs from the scheduler (Scheduler, Capacity); settings.py: process settings.
-- builder_dispatch.py: the interface for sending a builder run, and how a send can end.
+- builder_dispatch.py: the interface for sending a builder run, and how a send can end;
+  http_builder_dispatch.py implements it over the builder deployment's HTTP API.
 - store/: persistence: postgres/ (admission_sql, claim_sql, attempt_outcome_sql,
   maintenance_sql),
   rows.py, payloads.py, migrate.py and migrations/.

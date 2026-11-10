@@ -27,8 +27,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from model_service.builders.declarations import OutputSpec
-    from model_service.inference.model_declarations import ModelBinding
     from model_service.providers.empaia.app_service.gateway import EmpaiaGateway
+    from model_service.shared.model_declarations import ModelBinding
     from model_service.shared.result import BuilderOutput
 
 

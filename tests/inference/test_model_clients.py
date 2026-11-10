@@ -13,12 +13,12 @@ from model_service.inference.model_clients import (
     TileEmbeddingClient,
     client_for,
 )
-from model_service.inference.model_declarations import (
+from model_service.shared.failures import BuilderFailure, FailureCode
+from model_service.shared.model_declarations import (
     InferenceContract,
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from model_service.shared.failures import BuilderFailure, FailureCode
 from tests.support.builder_fixtures import FakeDeployment, running_config
 
 

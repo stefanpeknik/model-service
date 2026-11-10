@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING
 from model_service.builder_deployment.runner import BuilderApplication
 from model_service.builders.heatmap.spec import HeatmapOutputs
 from model_service.builders.registry import get_builder
-from model_service.inference.model_declarations import ModelBinding, SpatialScoresModel
 from model_service.providers.empaia.app_service.gateway import (
     EmpaiaGatewayError,
     EmpaiaInputState,
@@ -39,6 +38,7 @@ from model_service.scheduler.public import (
 from model_service.scheduler.running_work import ActiveWorkRegistry
 from model_service.scheduler.worker import ExecutionWorker
 from model_service.shared.invocation import ExecutionContext, Invocation
+from model_service.shared.model_declarations import ModelBinding, SpatialScoresModel
 from model_service.shared.result import BuilderResult, SharedArtifact
 from tests.support.builder_fixtures import deployments
 from tests.support.memory_repository import InMemoryExecutionRepository

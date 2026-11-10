@@ -10,12 +10,12 @@ from tempfile import TemporaryDirectory
 
 from model_service.builders.registry import compatible_builders
 from model_service.inference.catalog import CatalogError, ModelCatalog
-from model_service.inference.model_declarations import (
+from model_service.shared.failures import UnknownModelError
+from model_service.shared.model_declarations import (
     InferenceContract,
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from model_service.shared.failures import UnknownModelError
 
 
 def spatial_document(model_id: str = "prostate-classifier-1") -> dict[str, object]:
@@ -34,7 +34,9 @@ def spatial_document(model_id: str = "prostate-classifier-1") -> dict[str, objec
                         "n_channels": 1,
                         "mpp": 0.468,
                         "max_batch_size": 64,
-                        "model": {"_target_": "model_service.model_implementations.artifacts:mlflow"},
+                        "model": {
+                            "_target_": "model_service.model_implementations.artifacts:mlflow"
+                        },
                     },
                 }
             ],

@@ -27,9 +27,6 @@ from model_service.api.request_bodies import (
 )
 from model_service.api.submission import require_idempotency_key, submit
 from model_service.builders.registry import BUILDERS
-from model_service.inference.model_declarations import (
-    InferenceContract,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
-)
 from model_service.scheduler.builder_dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,
@@ -45,6 +42,9 @@ from model_service.shared.failures import (
 )
 from model_service.shared.json_values import (
     JsonValue,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
+)
+from model_service.shared.model_declarations import (
+    InferenceContract,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
 from model_service.shared.result import (
     BuilderResult,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.

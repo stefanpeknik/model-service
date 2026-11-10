@@ -18,10 +18,6 @@ from model_service.api.raw_inference_proxy import (
     check_tile,
 )
 from model_service.inference.catalog import ModelCatalog
-from model_service.inference.model_declarations import (
-    SpatialScoresModel,
-    TileEmbeddingModel,
-)
 from model_service.providers.standalone.provider import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import (
     SharedStorageAccessFactory,
@@ -31,6 +27,10 @@ from model_service.scheduler.internal_state import Admission, RetryPolicy
 from model_service.scheduler.public import SubmissionIdentity
 from model_service.scheduler.raw_inference_jobs import IncompatibleInputError
 from model_service.shared.invocation import InputAccessContext, Invocation
+from model_service.shared.model_declarations import (
+    SpatialScoresModel,
+    TileEmbeddingModel,
+)
 from model_service.shared.result import BuilderResult
 from tests.support.memory_repository import FakeDispatch, InMemoryExecutionRepository
 

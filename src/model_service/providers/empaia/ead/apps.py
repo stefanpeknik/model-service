@@ -39,9 +39,9 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
     from model_service.builders.declarations import BuilderSpec
-    from model_service.inference.model_declarations import ModelBinding
     from model_service.providers.empaia.ead.builder_io import BuilderIo
     from model_service.providers.empaia.publishing.publishers import PublisherRegistry
+    from model_service.shared.model_declarations import ModelBinding
 
 
 EAD_SCHEMA_URL = "https://gitlab.com/empaia/integration/definitions/-/raw/main/ead/ead-schema.v3.json"

@@ -17,7 +17,7 @@ from model_service.shared.failures import UnknownBuilderError
 
 if TYPE_CHECKING:
     from model_service.builders.declarations import BuilderOutputs, BuilderSpec
-    from model_service.inference.model_declarations import ModelBinding
+    from model_service.shared.model_declarations import ModelBinding
     from model_service.shared.result import BuilderResult
 
 

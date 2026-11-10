@@ -1,28 +1,25 @@
-"""The HTTP contract between the API or scheduler and a builder replica.
+"""Answer a builder run request and map exceptions to the deployment's HTTP errors.
 
-Its error format is internal; the public API's is api/http_errors.py.
+The format is shared/builder_http.py; the public API's is api/http_errors.py.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from enum import StrEnum
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import Field, StrictBool, TypeAdapter
 
-from model_service.inference.model_declarations import (
-    ModelBinding,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
+from model_service.shared.builder_http import (
+    ErrorCode,
+    RunRequest,
 )
 from model_service.shared.failures import (
     BuilderFailure,
     ContractViolation,
     InvalidInvocation,
 )
-from model_service.shared.invocation import ExecutionContext, Invocation
 from model_service.shared.result import (
     BuilderResult,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
@@ -30,36 +27,6 @@ from model_service.shared.result import (
 
 if TYPE_CHECKING:
     from model_service.builder_deployment.runner import BuilderApplication
-
-
-@dataclass(frozen=True, slots=True)
-class RunRequest:
-    """The stored invocation plus the model resolved for this attempt."""
-
-    invocation: Invocation
-    model: ModelBinding
-    execution_context: ExecutionContext = field(default_factory=ExecutionContext)
-
-
-RUN_REQUEST: TypeAdapter[RunRequest] = TypeAdapter(RunRequest)
-
-
-class ErrorCode(StrEnum):
-    INVALID_INVOCATION = "invalid_builder_invocation"
-    UNAVAILABLE = "builder_unavailable"
-    CONTRACT_VIOLATION = "builder_contract_violation"
-
-
-@dataclass(frozen=True, slots=True)
-class ErrorDetail:
-    code: Annotated[str, Field(strict=True, min_length=1)]
-    message: Annotated[str, Field(strict=True, min_length=1)]
-    retryable: StrictBool
-
-
-@dataclass(frozen=True, slots=True)
-class ErrorResponse:
-    detail: ErrorDetail
 
 
 def error(

@@ -46,8 +46,8 @@ from tests.support.memory_repository import InMemoryExecutionRepository
 
 if TYPE_CHECKING:
     from model_service.builders.base import BuilderContext
-    from model_service.inference.model_declarations import ModelBinding
     from model_service.shared.invocation import Invocation
+    from model_service.shared.model_declarations import ModelBinding
 
 
 async def empty(_context: BuilderContext) -> BuilderResult:

@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, Never, cast
 
 from fastapi import HTTPException
 
-from model_service.builder_deployment.protocol import ErrorCode, RunRequest, run_http
-from model_service.inference.model_declarations import SpatialScoresModel
+from model_service.builder_deployment.http_handler import run_http
+from model_service.shared.builder_http import ErrorCode, RunRequest
 from model_service.shared.failures import (
     BuilderFailure,
     ContractViolation,
@@ -20,11 +20,12 @@ from model_service.shared.invocation import (
     InputAccessContext,
     Invocation,
 )
+from model_service.shared.model_declarations import SpatialScoresModel
 
 
 if TYPE_CHECKING:
     from model_service.builder_deployment.runner import BuilderApplication
-    from model_service.inference.model_declarations import ModelBinding
+    from model_service.shared.model_declarations import ModelBinding
 
 
 class FailingApplication:

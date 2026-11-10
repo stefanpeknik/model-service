@@ -65,13 +65,13 @@ from tests.support.memory_repository import (
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from model_service.inference.model_declarations import ModelBinding
     from model_service.scheduler.public import (
         BeforeMutation,
         ModelResolver,
         ProviderFinishOutcome,
     )
     from model_service.shared.json_values import JsonValue
+    from model_service.shared.model_declarations import ModelBinding
 
 
 class StandaloneProvider:

@@ -13,8 +13,7 @@ from typing import TYPE_CHECKING, Any, cast
 import httpx
 from fastapi import FastAPI
 
-from model_service.builder_deployment.client import HTTPBuilderDispatch
-from model_service.builder_deployment.protocol import RunRequest, run_http
+from model_service.builder_deployment.http_handler import run_http
 from model_service.builder_deployment.runner import BuilderApplication
 from model_service.builders.declarations import InputSpec
 from model_service.builders.output_files import atomic_artifact
@@ -23,6 +22,10 @@ from model_service.providers.standalone.shared_storage import (
     SharedStorageAccessFactory,
 )
 from model_service.scheduler.builder_dispatch import RemoteFailureError
+from model_service.scheduler.http_builder_dispatch import HTTPBuilderDispatch
+from model_service.shared.builder_http import (
+    RunRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations.
+)
 from model_service.shared.failures import (
     BuilderFailure,
     ContractViolation,

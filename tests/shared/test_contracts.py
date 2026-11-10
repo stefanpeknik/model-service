@@ -5,13 +5,13 @@ from datetime import UTC, datetime
 
 from pydantic import ValidationError
 
-from model_service.builder_deployment.protocol import RUN_REQUEST
-from model_service.inference.model_declarations import (
+from model_service.shared.builder_http import RUN_REQUEST
+from model_service.shared.invocation import INVOCATION, InputKind
+from model_service.shared.model_declarations import (
     MODEL_BINDING,
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from model_service.shared.invocation import INVOCATION, InputKind
 from model_service.shared.result import RESULT, OutputKind
 
 

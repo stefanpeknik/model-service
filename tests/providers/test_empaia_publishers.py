@@ -9,7 +9,6 @@ from zipfile import BadZipFile
 
 from model_service.builders.declarations import OutputSpec
 from model_service.builders.registry import get_builder
-from model_service.inference.model_declarations import SpatialScoresModel
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.ead.apps import (
     AppMode,
@@ -25,6 +24,7 @@ from model_service.providers.empaia.publishing.publishers import (
     default_publishers,
 )
 from model_service.scheduler.public import ProviderFinishFailureError, ProviderSuccess
+from model_service.shared.model_declarations import SpatialScoresModel
 from model_service.shared.result import (
     BuilderResult,
     InlineOutput,

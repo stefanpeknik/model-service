@@ -18,12 +18,6 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from model_service.builders.registry import get_builder
-from model_service.inference.model_declarations import (
-    InferenceContract,
-    ModelBinding,
-    SpatialScoresModel,
-    TileEmbeddingModel,
-)
 from model_service.scheduler.internal_state import (
     Admission,
     AdmissionResult,
@@ -51,6 +45,12 @@ from model_service.scheduler.transitions import (
     SettlementAccepted,
 )
 from model_service.shared.invocation import ExecutionContext, Invocation
+from model_service.shared.model_declarations import (
+    InferenceContract,
+    ModelBinding,
+    SpatialScoresModel,
+    TileEmbeddingModel,
+)
 from model_service.shared.result import BuilderResult
 
 

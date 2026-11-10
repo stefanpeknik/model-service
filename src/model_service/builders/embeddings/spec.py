@@ -15,7 +15,7 @@ from model_service.builders.declarations import (
     Slide,
     StrideFraction,
 )
-from model_service.inference.model_declarations import InferenceContract
+from model_service.shared.model_declarations import InferenceContract
 from model_service.shared.result import (
     SharedArtifact,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )

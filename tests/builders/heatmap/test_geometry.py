@@ -12,7 +12,7 @@ from model_service.builders.heatmap.processor import (
     HeatmapRequest,
     SlideHeatmapProcessor,
 )
-from model_service.inference.model_declarations import SpatialScoresModel
+from model_service.shared.model_declarations import SpatialScoresModel
 from model_service.shared.score_grid import ScoreGrid, read_score_grid
 from tests.support.builder_fixtures import write_slide
 

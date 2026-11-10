@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from datetime import timedelta
 
-    from model_service.inference.model_declarations import ModelBinding
     from model_service.shared.invocation import ExecutionContext, Invocation
+    from model_service.shared.model_declarations import ModelBinding
     from model_service.shared.result import BuilderResult
 
 

@@ -15,19 +15,22 @@ from fastapi import FastAPI
 
 from model_service.api.app_factory import create_app, model_resolver
 from model_service.api.synchronous_runs import SynchronousBuilderService
-from model_service.builder_deployment.client import HTTPBuilderDispatch
-from model_service.builder_deployment.protocol import RunRequest, run_http
+from model_service.builder_deployment.http_handler import run_http
 from model_service.builder_deployment.runner import BuilderApplication
 from model_service.builders.base import ReplicaSettings
 from model_service.builders.embeddings.builder import EmbeddingBuilder
 from model_service.builders.registry import get_builder
 from model_service.inference.catalog import ModelCatalog
-from model_service.inference.model_declarations import TileEmbeddingModel
 from model_service.providers.standalone.provider import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import (
     SharedStorageAccessFactory,
 )
 from model_service.scheduler.execution_scheduler import ExecutionScheduler
+from model_service.scheduler.http_builder_dispatch import HTTPBuilderDispatch
+from model_service.shared.builder_http import (
+    RunRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations.
+)
+from model_service.shared.model_declarations import TileEmbeddingModel
 from tests.support.builder_contract import BuilderContractTests
 from tests.support.builder_fixtures import write_slide
 from tests.support.memory_repository import InMemoryExecutionRepository

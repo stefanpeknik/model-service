@@ -17,12 +17,12 @@ from model_service.builders.declarations import (
     InputSpec,
     OutputSpec,
 )
-from model_service.inference.model_declarations import (
+from model_service.shared.invocation import InputAccessContext, Invocation
+from model_service.shared.model_declarations import (
     InferenceContract,
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from model_service.shared.invocation import InputAccessContext, Invocation
 from model_service.shared.result import (
     BuilderOutput,
     BuilderResult,
@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 
     from model_service.builders.base import BuilderContext
     from model_service.inference.model_clients import HandleLookup
-    from model_service.inference.model_declarations import ModelBinding
+    from model_service.shared.model_declarations import ModelBinding
 
 
 SPATIAL_MODEL = SpatialScoresModel(

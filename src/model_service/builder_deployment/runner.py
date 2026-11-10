@@ -40,8 +40,8 @@ if TYPE_CHECKING:
     from model_service.builders.declarations import BuilderSpec
     from model_service.builders.input_access import InputAccess, InputAccessFactory
     from model_service.inference.model_clients import HandleLookup
-    from model_service.inference.model_declarations import ModelBinding
     from model_service.shared.invocation import InputAccessKind, Invocation
+    from model_service.shared.model_declarations import ModelBinding
 
 
 logger = logging.getLogger(__name__)

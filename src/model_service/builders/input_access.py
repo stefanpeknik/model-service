@@ -18,8 +18,8 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
     from pathlib import Path
 
-    from model_service.inference.model_declarations import ModelBinding
     from model_service.shared.invocation import ExecutionContext, Invocation
+    from model_service.shared.model_declarations import ModelBinding
 
 
 class InputAccess(ABC):

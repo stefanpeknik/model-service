@@ -33,7 +33,6 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
-    from model_service.inference.model_declarations import ModelBinding
     from model_service.providers.empaia.app_service.gateway import (
         EmpaiaGateway,
         EmpaiaGatewayFactory,
@@ -45,6 +44,7 @@ if TYPE_CHECKING:
         SlideMetadata,
     )
     from model_service.shared.invocation import Invocation
+    from model_service.shared.model_declarations import ModelBinding
 
 
 class EmpaiaInputAccess(InputAccess):

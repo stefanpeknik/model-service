@@ -1,9 +1,10 @@
-"""The Ray Serve deployment that hosts one builder, and the client that calls it.
+"""The Ray Serve deployment that hosts one builder: what runs inside the replica.
 
 - serve.py: the Ray Serve ingress (Helm imports serve:app).
 - runner.py: runs one invocation: checks, deadline, cleanup.
-- protocol.py: the request and error format of its HTTP API.
-- client.py: HTTPBuilderDispatch, how the API and scheduler call a replica
-  (implements scheduler/builder_dispatch.py).
+- http_handler.py: answers a run request and maps exceptions to HTTP errors.
 - settings.py: DeploymentSettings, the deployment's user_config.
+
+Its HTTP format is shared/builder_http.py; the client that calls it is
+scheduler/http_builder_dispatch.py.
 """
