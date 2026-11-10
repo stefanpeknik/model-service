@@ -20,7 +20,7 @@ from model_service.api.http_errors import (
     lookup_error,
 )
 from model_service.api.raw_inference_proxy import inference_headers
-from model_service.api.submission import require_idempotency_key, submit
+from model_service.api.scheduling_http import require_idempotency_key, submit
 from model_service.builders.registry import compatible_builders
 from model_service.scheduler.public import InferenceScheduleRequest, ScheduleResult
 from model_service.scheduler.raw_inference_jobs import (

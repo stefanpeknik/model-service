@@ -25,7 +25,7 @@ from model_service.api.http_errors import (
     http_error,
     unavailable,
 )
-from model_service.api.submission import submit
+from model_service.api.scheduling_http import submit
 from model_service.providers.empaia.app_service.gateway import PROVIDER_NAME
 from model_service.providers.empaia.jobs.lifecycle import EmpaiaSchedulePayload
 from model_service.scheduler.public import (

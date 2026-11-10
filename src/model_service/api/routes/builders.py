@@ -25,7 +25,7 @@ from model_service.api.request_bodies import (
     ImmediateBuilderRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations.
     ScheduledBuilderRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations.
 )
-from model_service.api.submission import require_idempotency_key, submit
+from model_service.api.scheduling_http import require_idempotency_key, submit
 from model_service.builders.registry import BUILDERS
 from model_service.scheduler.builder_dispatch import (
     ConfirmedRejectionError,

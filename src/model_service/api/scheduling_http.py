@@ -1,4 +1,4 @@
-"""Admission shared by public and provider routes: the idempotency key and scheduling refusals."""
+"""HTTP plumbing for scheduling routes: the Idempotency-Key header, and scheduler refusals as HTTP errors (public and provider routes)."""
 
 from __future__ import annotations
 

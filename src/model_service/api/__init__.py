@@ -5,7 +5,8 @@
   build_api_process wires the catalog, scheduler and providers into it.
 - routes/: one module per URL prefix; request_bodies.py holds their bodies.
 - http_errors.py: the public error envelope.
-- submission.py: admission shared by routes, providers' too (idempotency key, refusals).
+- scheduling_http.py: HTTP plumbing for scheduling routes, providers' too
+  (Idempotency-Key header, scheduler refusals as HTTP errors).
 - raw_inference_proxy.py: forwards raw tiles to models.
 - synchronous_runs.py: runs a builder while the caller waits (SynchronousBuilderRunner).
 - capacity.py, health.py: Ray Serve state for executions and readiness.
