@@ -25,7 +25,7 @@ from model_service.scheduler.provider_adapter import (
     ProviderAdapter,
     SubmissionIdentity,
 )
-from model_service.wire.builder_request import STANDALONE_PROVIDER, BuilderRequest
+from model_service.wire.caller_request import STANDALONE_PROVIDER, BuilderRequest
 from model_service.wire.failures import InvalidInvocation
 from model_service.wire.invocation import (
     SHARED_STORAGE,

@@ -36,7 +36,7 @@ from model_service.scheduler.builder_dispatch import (
     UnknownOutcomeError,
 )
 from model_service.scheduler.executions import ScheduleRequest, ScheduleResult
-from model_service.wire.builder_request import STANDALONE_PROVIDER as STANDALONE
+from model_service.wire.caller_request import STANDALONE_PROVIDER as STANDALONE
 from model_service.wire.failures import (
     IncompatibleModelError,
     InvalidInvocation,

@@ -15,8 +15,11 @@ from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
-from model_service.builders.input_access import InputAccess, InputAccessFactory
-from model_service.cleanup import close_resource
+from model_service.builders.input_access import (
+    InputAccess,
+    InputAccessFactory,
+    close_resource,
+)
 from model_service.providers.empaia.app_service.gateway import (
     EmpaiaGatewayError,
     EmpaiaInputState,

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Annotated
 
 from pydantic import Field
 
-from model_service.wire.builder_request import BuilderRequest
+from model_service.wire.caller_request import BuilderRequest
 from model_service.wire.invocation import (
     Deadline,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )

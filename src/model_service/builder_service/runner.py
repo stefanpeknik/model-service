@@ -20,7 +20,7 @@ from pydantic import ValidationError
 
 from model_service.builders.base import BuilderContext
 from model_service.builders.declarations import BuilderInputs, BuilderOutputs
-from model_service.cleanup import close_resource
+from model_service.builders.input_access import close_resource
 from model_service.inference.model_clients import client_for, ray_handle
 from model_service.wire.failures import (
     BuilderFailure,

@@ -9,6 +9,5 @@
 - providers/: where inputs come from and results go (standalone, EMPAIA).
 - wire/: types that cross process boundaries.
 - catalog.py: the deployed models, read from the model YAML files.
-- cleanup.py: closing a resource within a timeout, shared by processes.
 - models/: the model implementations Ray Serve runs.
 """
