@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, patch
 import lz4.frame
 from httpx import ASGITransport, AsyncClient, MockTransport, Request, Response
 
-from model_service.api.wiring import build_api_process
+from model_service.api.app_factory import build_api_process
 from model_service.model_catalog import CatalogError
 from model_service.scheduler.settings import SchedulerSettings
 from tests.support.memory_repository import InMemoryExecutionRepository
@@ -78,10 +78,10 @@ class ExecutionRuntimeTests(RuntimeTestCase):
             patch.object(repository, "initialize", initialized, create=True),
             patch.object(repository, "maintain", side_effect=maintained.set),
             patch(
-                "model_service.api.wiring.PostgresExecutionRepository",
+                "model_service.api.app_factory.PostgresExecutionRepository",
                 return_value=repository,
             ),
-            patch("model_service.api.wiring.httpx.AsyncClient", return_value=client),
+            patch("model_service.api.app_factory.httpx.AsyncClient", return_value=client),
         ):
             app = build_api_process(self.settings())
             async with app.router.lifespan_context(app):
@@ -98,10 +98,10 @@ class ExecutionRuntimeTests(RuntimeTestCase):
         with (
             patch.object(repository, "initialize", initialized, create=True),
             patch(
-                "model_service.api.wiring.PostgresExecutionRepository",
+                "model_service.api.app_factory.PostgresExecutionRepository",
                 return_value=repository,
             ),
-            patch("model_service.api.wiring.httpx.AsyncClient", return_value=client),
+            patch("model_service.api.app_factory.httpx.AsyncClient", return_value=client),
         ):
             app = build_api_process(self.settings())
             with self.assertRaisesRegex(RuntimeError, "database unavailable"):
@@ -121,7 +121,7 @@ class ExecutionRuntimeTests(RuntimeTestCase):
 
         async with AsyncClient(transport=MockTransport(serve)) as serve_client:
             with patch(
-                "model_service.api.wiring.httpx.AsyncClient",
+                "model_service.api.app_factory.httpx.AsyncClient",
                 return_value=serve_client,
             ):
                 app = build_api_process(self.settings(BUILDER_IDS='["heatmap"]'))
@@ -146,7 +146,7 @@ class ExecutionRuntimeTests(RuntimeTestCase):
         )
         async with AsyncClient(transport=MockTransport(serve)) as serve_client:
             with patch(
-                "model_service.api.wiring.httpx.AsyncClient",
+                "model_service.api.app_factory.httpx.AsyncClient",
                 return_value=serve_client,
             ):
                 app = build_api_process(settings)

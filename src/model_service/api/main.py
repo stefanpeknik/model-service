@@ -6,7 +6,7 @@ initialization and worker startup occur in the application lifespan.
 
 import logging
 
-from model_service.api.wiring import build_api_process
+from model_service.api.app_factory import build_api_process
 
 
 # Uvicorn configures only its own loggers before importing this module; without
