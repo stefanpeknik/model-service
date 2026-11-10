@@ -9,5 +9,6 @@
   check them (model_clients.py).
 - providers/: where inputs come from and results go (standalone, EMPAIA).
 - shared/: types shared across processes (invocation, result, failures, score grid).
-- models/: the model implementations Ray Serve runs.
+- model_implementations/: the Ray Serve code that serves trained models; each
+  trained model is one file in deploy/helm/rayservice/models/ naming its implementation.
 """
