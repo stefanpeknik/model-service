@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import Depends, Request
 
-from model_service.api.http_errors import ApiErrorCode, http_error
+from model_service.http_common.errors import ApiErrorCode, http_error
 
 
 if TYPE_CHECKING:

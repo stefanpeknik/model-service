@@ -8,7 +8,7 @@ from fastapi import Request
 from httpx import ASGITransport, AsyncClient
 
 from model_service.api.app_factory import create_app
-from model_service.api.auth import (
+from model_service.http_common.auth import (
     Access,
     Action,
     AuthenticationError,

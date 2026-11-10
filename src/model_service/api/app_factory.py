@@ -12,14 +12,14 @@ from fastapi import FastAPI, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from model_service.api.auth import Access
 from model_service.api.health import (
     DeploymentHealthCheck,
     DeploymentState,
     DeploymentStatus,
 )
-from model_service.api.http_errors import ApiErrorCode, http_error
 from model_service.api.routes import builders, executions, models
+from model_service.http_common.auth import Access
+from model_service.http_common.errors import ApiErrorCode, http_error
 from model_service.scheduler.protocols import NoCapacityInfo
 from model_service.scheduler.public import SchedulingUnavailableError
 

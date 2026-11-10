@@ -12,16 +12,16 @@ from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
-from model_service.api.auth import Access, Action
-from model_service.api.http_errors import (
+from model_service.api.raw_inference_proxy import inference_headers
+from model_service.builders.registry import compatible_builders
+from model_service.http_common.auth import Access, Action
+from model_service.http_common.errors import (
     ERRORS,
     ApiErrorCode,
     http_error,
     lookup_error,
 )
-from model_service.api.raw_inference_proxy import inference_headers
-from model_service.api.scheduling_http import require_idempotency_key, submit
-from model_service.builders.registry import compatible_builders
+from model_service.http_common.scheduling import require_idempotency_key, submit
 from model_service.scheduler.public import InferenceScheduleRequest, ScheduleResult
 from model_service.scheduler.raw_inference_jobs import (
     IncompatibleInputError,

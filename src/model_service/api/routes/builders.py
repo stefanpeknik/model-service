@@ -12,21 +12,20 @@ from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, Request, Response, status
 
-from model_service.api.auth import Access, Action
-from model_service.api.http_errors import (
-    ERRORS,
-    ApiErrorCode,
-    http_error,
-    lookup_error,
-)
-
 # FastAPI reads these annotations at runtime.
 from model_service.api.request_bodies import (
     ImmediateBuilderRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations.
     ScheduledBuilderRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations.
 )
-from model_service.api.scheduling_http import require_idempotency_key, submit
 from model_service.builders.registry import BUILDERS
+from model_service.http_common.auth import Access, Action
+from model_service.http_common.errors import (
+    ERRORS,
+    ApiErrorCode,
+    http_error,
+    lookup_error,
+)
+from model_service.http_common.scheduling import require_idempotency_key, submit
 from model_service.scheduler.builder_dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,
