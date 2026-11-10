@@ -6,7 +6,7 @@ import unittest
 
 from httpx import ASGITransport, AsyncClient
 
-from model_service.api.http_app import create_app
+from model_service.api.app_factory import create_app
 from model_service.inference.model_declarations import SpatialScoresModel
 from model_service.model_catalog import ModelCatalog
 from model_service.providers.empaia.jobs.routes import create_router

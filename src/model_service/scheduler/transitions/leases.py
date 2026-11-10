@@ -25,7 +25,7 @@ from model_service.scheduler.transitions.base import (
     ClaimDecision,
     RenewalDecision,
 )
-from model_service.scheduler.transitions.recovery import RecoveryTransitions
+from model_service.scheduler.transitions.expiry import RecoveryTransitions
 
 
 class LeaseTransitions(RecoveryTransitions):

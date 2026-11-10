@@ -6,7 +6,8 @@
 - worker.py: claims work, runs attempts, renews leases, settles outcomes.
 - running_work.py: the attempts running in this process, for prompt cancellation.
 - transitions/: the state rules every repository applies: admission, leases,
-  attempt outcomes (the retry-or-fail decision when an attempt ends) and recovery.
+  attempt outcomes (the retry-or-fail decision when an attempt ends) and expiry
+  (expired leases, passed deadlines).
 - internal_state.py: internal records, leases, retry policy and outcomes.
 - raw_inference_jobs.py: a raw model request run as an execution.
 - protocols.py: what the API needs from the scheduler (Scheduler, Capacity); settings.py: process settings.

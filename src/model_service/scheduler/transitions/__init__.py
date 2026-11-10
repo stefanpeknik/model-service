@@ -26,7 +26,7 @@ class ExecutionTransitions(
     """Apply the shared state machine with separate processing and provider retry policies.
 
     Its rules are grouped by module: admission, leases, attempt_outcomes and
-    recovery.
+    expiry.
     """
 
 

@@ -20,9 +20,8 @@ from httpx import (
     Response,
 )
 
-from model_service.api.app_factory import model_resolver
+from model_service.api.app_factory import create_app, model_resolver
 from model_service.api.health import DeploymentHealth
-from model_service.api.http_app import create_app
 from model_service.api.raw_inference_proxy import HttpInferenceProxy, ModelInference
 from model_service.api.synchronous_runs import SynchronousBuilderService
 from model_service.inference.model_declarations import (

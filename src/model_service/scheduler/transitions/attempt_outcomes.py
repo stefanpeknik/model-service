@@ -36,7 +36,7 @@ from model_service.scheduler.transitions.base import (
     SettlementRejection,
     _has_provider_phase,
 )
-from model_service.scheduler.transitions.recovery import RecoveryTransitions
+from model_service.scheduler.transitions.expiry import RecoveryTransitions
 
 
 class AttemptOutcomeTransitions(RecoveryTransitions):

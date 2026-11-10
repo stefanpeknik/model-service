@@ -13,8 +13,8 @@ from httpx import (
     Response,
 )
 
+from model_service.api.app_factory import create_app
 from model_service.api.capacity import ServeCapacity
-from model_service.api.http_app import create_app
 from model_service.model_catalog import ModelCatalog
 from model_service.providers.empaia.jobs.routes import create_router
 from model_service.scheduler.status import ExecutionStatus
