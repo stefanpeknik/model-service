@@ -35,12 +35,9 @@ and each new training run only changes YAML:
 
 1. Point `user_config.model.artifact_uri` in
    `deploy/helm/rayservice/models/<id>.yaml` at the new MLflow artifact.
-2. Change `trt_cache_path` too (for example add the run id). TensorRT engines
-   are cached per path, so a new checkpoint at an old path can reuse the old
-   engine.
-3. Update `tile_size`, `mpp` and the other geometry fields if the new run
+2. Update `tile_size`, `mpp` and the other geometry fields if the new run
    changed them; the API checks them against the running model.
-4. `helm upgrade`. Ray Serve calls `reconfigure`, which loads the new artifact.
+3. `helm upgrade`. Ray Serve calls `reconfigure`, which loads the new artifact.
 
 A change to the Python implementation needs a new image:
 `deploy/images/Dockerfile.gpu` copies `src/model_service/` into it. Tag it,
