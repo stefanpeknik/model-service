@@ -5,6 +5,10 @@ issues (#9)"): Ray Serve inference implementations for a binary classifier,
 semantic segmentation, Virchow2 and Prov-GigaPath, a heatmap builder script and
 Helm charts. Callers reached each model through the Ray HTTP proxy.
 
+What the department can do now that it could not before: queue many slides
+to run overnight as GPUs free up, offer models to researchers as EMPAIA apps,
+and add a trained model with one YAML file.
+
 248 commits later the source and tests have grown by about 29,700 lines across
 184 files (`git diff --shortstat 3d37a6e HEAD -- src tests`).
 

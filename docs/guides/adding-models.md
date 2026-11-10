@@ -53,6 +53,9 @@ over many slides and let it queue:
   (GPU workers scale from zero), survives API restarts, and is polled with
   `client.executions.get(id)` or cancelled. Scheduled work has no start-time
   option; it runs as soon as capacity allows.
+  For many slides, call `schedule` once per slide; there is no batch call.
+  Each model runs at most its configured replicas, so queued work never takes
+  more GPUs than the model file allows.
 - Raw per-tile inference: `POST /v1/models/<id>/run` with one LZ4-compressed
   `tile_size`×`tile_size`×3 uint8 tile; the API rejects any other body.
   Inside the cluster you can skip the API and post the same body to the Ray
