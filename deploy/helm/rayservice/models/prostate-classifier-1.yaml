@@ -52,6 +52,7 @@ serve:
         intra_op_num_threads: 4
         trt_max_workspace_size: 8589934592  # 8 GiB
         # TensorRT engines are cached per path: use a new path for a new checkpoint.
+        # This one predates the model's name; kept so the built engine is reused.
         trt_cache_path: /mnt/cache/trt_cache/binary-classifier-1/b256
         trt_builder_optimization_level: 3
         # The checkpoint; usually the only line a new training run changes.

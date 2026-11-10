@@ -14,7 +14,7 @@ until a GPU frees up.
   file and a `helm upgrade`; no Python. See [Add a model](#add-a-model).
 - **EMPAIA:** model-service registers itself as an EMPAIA app and runs EMPAIA
   jobs. On the EMPAIA test instance a prostate heatmap job finishes in 49 s
-  warm, 101 s with a cold GPU, and shows in the case browser
+  warm, 101 s with a cold GPU, and the preprocessing result shows in the case browser
   ([run record](docs/operations/empaia-score-grid-2026-10-31.md)).
 - **Status (2026-11):** running on the RationAI test namespace beside the
   EMPAIA test instance; not yet in production.
