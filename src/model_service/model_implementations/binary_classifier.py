@@ -54,9 +54,12 @@ class BinaryClassifier:
         self.n_channels = config["n_channels"]
         self.mpp = config["mpp"]
 
-        # ONNX Runtime keys a cached engine by file and tensor names, not weights,
-        # so each checkpoint gets its own directory or the old engine is reused.
-        checkpoint = json.dumps(config["model"], sort_keys=True).encode()
+        # ONNX Runtime keys a cached engine by file and tensor names, not weights
+        # or shape profile, so each checkpoint and profile gets its own directory.
+        checkpoint = json.dumps(
+            [config["model"], config["tile_size"], config["max_batch_size"]],
+            sort_keys=True,
+        ).encode()
         cache_path = os.path.join(
             config["trt_cache_path"], hashlib.sha256(checkpoint).hexdigest()[:12]
         )
