@@ -11,22 +11,17 @@ import asyncio
 import hashlib
 import json
 import logging
-import math
 import shutil
-from contextlib import asynccontextmanager
 from copy import deepcopy
-from datetime import UTC, datetime, timedelta
-from enum import StrEnum
-from typing import TYPE_CHECKING, Annotated
+from datetime import datetime, timedelta
+from typing import TYPE_CHECKING
 
-import jwt
-from pydantic import Field, ValidationError
+from pydantic import ValidationError
 
 from model_service.builders.registry import get_builder, parse_result
 from model_service.providers.empaia.app_service.gateway import (
     INPUT_ACCESS_KIND,
     PROVIDER_NAME,
-    EmpaiaGateway,
     EmpaiaGatewayError,
     EmpaiaGatewayFactory,
     EmpaiaInputState,
@@ -34,11 +29,22 @@ from model_service.providers.empaia.app_service.gateway import (
     EmpaiaJobMode,
 )
 from model_service.providers.empaia.ead.builder_io import BUILDER_IO
+from model_service.providers.empaia.jobs.gateways import (
+    EmpaiaErrorCode,
+    finish_gateway,
+    preparation_gateway,
+)
 from model_service.providers.empaia.jobs.inputs import job_workspace
 from model_service.providers.empaia.jobs.mapping import (
     builder_configuration,
     job_inputs,
     raise_preparation_error,
+)
+from model_service.providers.empaia.jobs.payload import (
+    allowed,
+    credential_expiry,
+    job_context,
+    schedule_payload,
 )
 from model_service.providers.empaia.publishing.publishers import default_publishers
 from model_service.providers.provider import ProviderAdapter
@@ -64,25 +70,13 @@ from model_service.shared.json_values import is_json_value
 
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Mapping
+    from collections.abc import Mapping
     from pathlib import Path
 
     from model_service.providers.empaia.ead.builder_io import BuilderIo
     from model_service.providers.empaia.publishing.publishers import PublisherRegistry
     from model_service.scheduler.public import BeforeMutation
     from model_service.shared.json_values import JsonValue
-
-
-class EmpaiaErrorCode(StrEnum):
-    """Name the safe failure for unsuccessful EMPAIA publication or terminal reporting."""
-
-    FINISH_FAILED = "empaia_finish_failed"
-
-
-class EmpaiaSchedulePayload(EmpaiaJobContext):
-    """Require an installation ID alongside the job origin, ID, and private credential."""
-
-    installation_id: Annotated[str, Field(min_length=1)]
 
 
 logger = logging.getLogger(__name__)
@@ -133,7 +127,7 @@ class EmpaiaProviderAdapter(ProviderAdapter):
         Raises:
             InvalidScheduleRequestError: If the body is not a valid EMPAIA payload.
         """
-        context = _schedule_payload(request.body)
+        context = schedule_payload(request.body)
         canonical = json.dumps(
             {
                 "builder_id": request.builder_id,
@@ -181,13 +175,13 @@ class EmpaiaProviderAdapter(ProviderAdapter):
             SchedulingUnavailableError: If the gateway cannot be created or closed, or
                 the App Service is temporarily unavailable.
         """
-        context = _schedule_payload(request.body)
-        if not _allowed(context.api_url, self._allowed_api_urls):
+        context = schedule_payload(request.body)
+        if not allowed(context.api_url, self._allowed_api_urls):
             raise InvalidScheduleRequestError(
                 "EMPAIA api_url is not an allowed AppService"
             )
-        credential_expires_at = _credential_expiry(context.credential)
-        async with _preparation_gateway(
+        credential_expires_at = credential_expiry(context.credential)
+        async with preparation_gateway(
             self._gateway_factory,
             context,
         ) as gateway:
@@ -263,11 +257,11 @@ class EmpaiaProviderAdapter(ProviderAdapter):
                 undeclared or cannot be published, or a write fails; its outcome is
                 unknown once any output was written or when the gateway says so.
         """
-        context = _job_context(protected_context)
+        context = job_context(protected_context)
         if not isinstance(outcome, ProviderSuccess):
             # A failure or cancellation report needs nothing from the workspace.
             await self._remove_workspace(context)
-        async with _finish_gateway(
+        async with finish_gateway(
             self._gateway_factory,
             context,
         ) as gateway:
@@ -335,222 +329,3 @@ class EmpaiaProviderAdapter(ProviderAdapter):
             return
         directory = job_workspace(self._workspace_root, context.api_url, context.job_id)
         await asyncio.to_thread(shutil.rmtree, directory, True)
-
-
-@asynccontextmanager
-async def _preparation_gateway(
-    factory: EmpaiaGatewayFactory,
-    context: EmpaiaJobContext,
-) -> AsyncIterator[EmpaiaGateway]:
-    """Own a preparation gateway and translate acquisition/cleanup failures.
-
-    A failure in the body closes the gateway, logging cleanup errors, and is
-    re-raised unchanged.
-
-    Args:
-        factory: Creates the gateway.
-        context: The job's connection settings.
-
-    Yields:
-        The gateway.
-
-    Raises:
-        SchedulingUnavailableError: If creating or closing the gateway fails
-            retryably or unexpectedly.
-        InvalidScheduleRequestError: If creating or closing the gateway fails
-            with a non-retryable gateway error.
-    """
-    try:
-        gateway = factory(context)
-    except EmpaiaGatewayError as error:
-        raise_preparation_error(error)
-    except Exception as error:
-        raise SchedulingUnavailableError(
-            "EMPAIA integration is temporarily unavailable"
-        ) from error
-    try:
-        yield gateway
-    except BaseException:
-        await _close_preserving_outcome(gateway)
-        raise
-    try:
-        await gateway.close()
-    except EmpaiaGatewayError as error:
-        raise_preparation_error(error)
-    except Exception as error:
-        raise SchedulingUnavailableError(
-            "EMPAIA integration is temporarily unavailable"
-        ) from error
-
-
-@asynccontextmanager
-async def _finish_gateway(
-    factory: EmpaiaGatewayFactory,
-    context: EmpaiaJobContext,
-) -> AsyncIterator[EmpaiaGateway]:
-    """Own a finish gateway and translate acquisition failures.
-
-    A failure in the body closes the gateway and is re-raised unchanged; cleanup
-    errors are only logged, so the external completion outcome is kept.
-
-    Args:
-        factory: Creates the gateway.
-        context: The job's connection settings.
-
-    Yields:
-        The gateway.
-
-    Raises:
-        ProviderFinishFailureError: If creating the gateway fails; retryable when
-            the failure is not a gateway error.
-    """
-    try:
-        gateway = factory(context)
-    except EmpaiaGatewayError as error:
-        raise _finish_failure(error) from error
-    except Exception as error:
-        raise ProviderFinishFailureError(
-            code=EmpaiaErrorCode.FINISH_FAILED,
-            safe_message="EMPAIA integration is temporarily unavailable",
-            retryable=True,
-        ) from error
-    try:
-        yield gateway
-    except BaseException:
-        await _close_preserving_outcome(gateway)
-        raise
-    try:
-        await gateway.close()
-    except Exception as error:
-        logger.warning("EMPAIA gateway cleanup failed: %s", type(error).__name__)
-
-
-async def _close_preserving_outcome(gateway: EmpaiaGateway) -> None:
-    """Close a gateway and log cleanup errors without replacing an already established outcome.
-
-    Args:
-        gateway: The gateway to close.
-    """
-    try:
-        await gateway.close()
-    except Exception as error:
-        logger.warning("EMPAIA gateway cleanup failed: %s", type(error).__name__)
-
-
-def _finish_failure(error: EmpaiaGatewayError) -> ProviderFinishFailureError:
-    """Translate safe gateway retry and uncertainty metadata into a provider finish failure.
-
-    Args:
-        error: The gateway error.
-
-    Returns:
-        The finish failure, with the same message, retry flag and outcome.
-    """
-    return ProviderFinishFailureError(
-        code=EmpaiaErrorCode.FINISH_FAILED,
-        safe_message=error.safe_message,
-        retryable=error.retryable,
-        outcome_unknown=error.outcome_unknown,
-    )
-
-
-def _allowed(api_url: str, allowed: tuple[str, ...]) -> bool:
-    """Check whether an API URL equals or lies below an allowed prefix.
-
-    Trailing slashes are ignored, and a prefix matches whole path segments only.
-
-    Args:
-        api_url: The job's App Service URL.
-        allowed: The allowed prefixes, without trailing slashes.
-
-    Returns:
-        True if the URL is allowed.
-    """
-    url = api_url.rstrip("/")
-    return any(url == prefix or url.startswith(prefix + "/") for prefix in allowed)
-
-
-def _schedule_payload(values: dict[str, JsonValue]) -> EmpaiaSchedulePayload:
-    """Validate provider admission fields, hiding credential-bearing validation input from public errors.
-
-    Args:
-        values: The schedule request body.
-
-    Returns:
-        The schedule payload.
-
-    Raises:
-        InvalidScheduleRequestError: If the body is not a valid payload.
-    """
-    try:
-        return EmpaiaSchedulePayload.model_validate(values)
-    except ValidationError as error:
-        raise InvalidScheduleRequestError(
-            "EMPAIA schedule payload is invalid"
-        ) from error
-
-
-def _job_context(values: dict[str, JsonValue]) -> EmpaiaJobContext:
-    """Validate a stored protected job context.
-
-    Args:
-        values: The stored protected context.
-
-    Returns:
-        The job context.
-
-    Raises:
-        InvalidScheduleRequestError: If the context is malformed; the message
-            holds no context values.
-    """
-    try:
-        return EmpaiaJobContext.model_validate(values)
-    except ValidationError as error:
-        raise InvalidScheduleRequestError(
-            "EMPAIA protected job context is invalid"
-        ) from error
-
-
-def _credential_expiry(credential: str) -> datetime:
-    """Read the numeric `exp` claim of the credential to cap deadlines.
-
-    This parses the JWT payload without verifying its signature.
-
-    Args:
-        credential: The job's token.
-
-    Returns:
-        The expiry, in UTC.
-
-    Raises:
-        InvalidScheduleRequestError: If the credential is not a JWT or its `exp`
-            is missing, not a finite number, or out of range.
-    """
-    try:
-        claims = jwt.decode(
-            credential,
-            options={
-                "verify_signature": False,
-                "verify_exp": False,
-                "require": ["exp"],
-            },
-        )
-        expires_at = claims["exp"]
-        if (
-            not isinstance(expires_at, int | float)
-            or isinstance(expires_at, bool)
-            or not math.isfinite(expires_at)
-        ):
-            raise TypeError
-        return datetime.fromtimestamp(expires_at, tz=UTC)
-    except (
-        jwt.InvalidTokenError,
-        KeyError,
-        TypeError,
-        ValueError,
-        OverflowError,
-        OSError,
-    ) as error:
-        raise InvalidScheduleRequestError(
-            "EMPAIA credential does not contain a valid expiry"
-        ) from error
