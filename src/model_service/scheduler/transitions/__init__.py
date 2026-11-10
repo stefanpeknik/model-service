@@ -9,7 +9,7 @@ from model_service.scheduler.transitions.admission import AdmissionTransitions
 from model_service.scheduler.transitions.attempt_outcomes import (
     AttemptOutcomeTransitions,
 )
-from model_service.scheduler.transitions.base import (
+from model_service.scheduler.transitions.common import (
     ClaimDecision,
     RenewalDecision,
     SettlementAccepted,

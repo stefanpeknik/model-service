@@ -19,8 +19,8 @@ from model_service.providers.empaia.app_service.gateway import (
     EmpaiaJobContext,
     EmpaiaJobMode,
 )
+from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
 from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessFactory
-from model_service.providers.empaia.jobs.lifecycle import EmpaiaProviderAdapter
 from model_service.providers.empaia.publishing.publishers import (
     Commit,
     PublisherRegistry,

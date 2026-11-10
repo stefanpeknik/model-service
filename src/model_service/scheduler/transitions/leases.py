@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from datetime import datetime, timedelta
 
 
-from model_service.scheduler.transitions.base import (
+from model_service.scheduler.transitions.common import (
     ClaimDecision,
     RenewalDecision,
     TransitionsBase,

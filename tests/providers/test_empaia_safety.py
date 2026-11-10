@@ -9,8 +9,8 @@ from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock
 
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
+from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
 from model_service.providers.empaia.jobs.inputs import job_workspace
-from model_service.providers.empaia.jobs.lifecycle import EmpaiaProviderAdapter
 from model_service.providers.empaia.publishing.publishers import PublisherRegistry
 from model_service.scheduler.public import (
     ExecutionError,

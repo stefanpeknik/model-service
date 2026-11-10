@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from datetime import datetime
 
 
-from model_service.scheduler.transitions.base import (
+from model_service.scheduler.transitions.common import (
     TransitionsBase,
     _has_provider_phase,
 )

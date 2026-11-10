@@ -16,7 +16,7 @@ from model_service.providers.empaia.ead.apps import (
     app_definitions,
 )
 from model_service.providers.empaia.ead.builder_io import BUILDER_IO
-from model_service.providers.empaia.jobs.lifecycle import EmpaiaProviderAdapter
+from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
 from model_service.providers.empaia.publishing.pixelmap import _clip
 from model_service.providers.empaia.publishing.publishers import (
     PrimitivePublisher,
@@ -242,7 +242,7 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "model_service.providers.empaia.jobs.lifecycle.get_builder",
+                "model_service.providers.empaia.jobs.adapter.get_builder",
                 return_value=with_score,
             ),
             patch(

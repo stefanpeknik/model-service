@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from model_service.scheduler.internal_state import Settlement
 
 
-from model_service.scheduler.transitions.base import (
+from model_service.scheduler.transitions.common import (
     SettlementAccepted,
     SettlementDecision,
     SettlementRejected,
