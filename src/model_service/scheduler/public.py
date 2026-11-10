@@ -12,7 +12,7 @@ from typing import Annotated
 
 from pydantic import Field, TypeAdapter
 
-from model_service.inference.contracts import ModelBinding
+from model_service.inference.model_declarations import ModelBinding
 from model_service.scheduler.status import (
     ExecutionStatus,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
     Operation,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.

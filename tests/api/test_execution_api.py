@@ -25,7 +25,10 @@ from model_service.api.health import DeploymentHealth
 from model_service.api.http_app import create_app
 from model_service.api.raw_inference_proxy import HttpInferenceProxy, ModelInference
 from model_service.api.synchronous_runs import SynchronousBuilderService
-from model_service.inference.contracts import SpatialScoresModel, TileEmbeddingModel
+from model_service.inference.model_declarations import (
+    SpatialScoresModel,
+    TileEmbeddingModel,
+)
 from model_service.model_catalog import ModelCatalog
 from model_service.providers.standalone.provider import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import (
@@ -37,7 +40,7 @@ from model_service.scheduler.builder_dispatch import (
     UnknownOutcomeError,
 )
 from model_service.scheduler.execution_scheduler import ExecutionScheduler
-from model_service.scheduler.executions import (
+from model_service.scheduler.public import (
     ExecutionView,
     ScheduleRequest,
     ScheduleResult,
@@ -55,8 +58,8 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
     from starlette.types import Message, Scope
 
-    from model_service.inference.contracts import ModelBinding
-    from model_service.scheduler.execution_records import ExecutionRecord
+    from model_service.inference.model_declarations import ModelBinding
+    from model_service.scheduler.internal_state import ExecutionRecord
     from model_service.shared.invocation import ExecutionContext, Invocation
 
     type Handler = Callable[

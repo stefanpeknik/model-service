@@ -9,7 +9,7 @@ from zipfile import BadZipFile
 
 from model_service.builders.declarations import OutputSpec
 from model_service.builders.registry import get_builder
-from model_service.inference.contracts import SpatialScoresModel
+from model_service.inference.model_declarations import SpatialScoresModel
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.ead.apps import (
     AppMode,

@@ -24,7 +24,7 @@ from model_service.scheduler.builder_dispatch import (
     RemoteFailureError,
     UnknownOutcomeError,
 )
-from model_service.scheduler.execution_records import (
+from model_service.scheduler.internal_state import (
     ProcessingFailed,
     ProcessingRejected,
     ProcessingSucceeded,
@@ -35,7 +35,7 @@ from model_service.scheduler.execution_records import (
     WorkClaim,
     WorkKind,
 )
-from model_service.scheduler.executions import (
+from model_service.scheduler.public import (
     ExecutionError,
     IncompatibleModelError,
     InferenceInvocation,
@@ -56,11 +56,11 @@ if TYPE_CHECKING:
     from datetime import timedelta
 
     from model_service.providers.provider import ProviderAdapter
-    from model_service.scheduler.active_work import ActiveWorkRegistry
     from model_service.scheduler.builder_dispatch import BuilderDispatch
-    from model_service.scheduler.execution_records import Settlement
-    from model_service.scheduler.executions import ModelResolver, ProviderName
+    from model_service.scheduler.internal_state import Settlement
+    from model_service.scheduler.public import ModelResolver, ProviderName
     from model_service.scheduler.raw_inference_jobs import InferenceTarget
+    from model_service.scheduler.running_work import ActiveWorkRegistry
     from model_service.scheduler.store.repository import ExecutionRepository
 
 

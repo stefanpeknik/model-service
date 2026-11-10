@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from pydantic import ValidationError
 
 from model_service.builder_deployment.protocol import RUN_REQUEST
-from model_service.inference.contracts import (
+from model_service.inference.model_declarations import (
     MODEL_BINDING,
     SpatialScoresModel,
     TileEmbeddingModel,

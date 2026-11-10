@@ -18,15 +18,18 @@ from model_service.api.raw_inference_proxy import (
     ModelInference,
     check_tile,
 )
-from model_service.inference.contracts import SpatialScoresModel, TileEmbeddingModel
+from model_service.inference.model_declarations import (
+    SpatialScoresModel,
+    TileEmbeddingModel,
+)
 from model_service.model_catalog import ModelCatalog
 from model_service.providers.provider import SubmissionIdentity
 from model_service.providers.standalone.provider import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import (
     SharedStorageAccessFactory,
 )
-from model_service.scheduler.execution_records import Admission, RetryPolicy
 from model_service.scheduler.execution_scheduler import ExecutionScheduler
+from model_service.scheduler.internal_state import Admission, RetryPolicy
 from model_service.scheduler.raw_inference_jobs import IncompatibleInputError
 from model_service.shared.invocation import InputAccessContext, Invocation
 from model_service.shared.result import BuilderResult

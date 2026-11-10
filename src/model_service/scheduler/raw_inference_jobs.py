@@ -15,12 +15,12 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from model_service.providers.provider import SubmissionIdentity
-from model_service.scheduler.execution_records import (
+from model_service.scheduler.internal_state import (
     InferenceSucceeded,
     ProcessingFailed,
     ProcessingRejected,
 )
-from model_service.scheduler.executions import (
+from model_service.scheduler.public import (
     INFERENCE_PROVIDER,
     ExecutionError,
     InferenceResult,
@@ -31,8 +31,8 @@ from model_service.scheduler.status import ExecutionErrorCode
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from model_service.scheduler.execution_records import Settlement
-    from model_service.scheduler.executions import InferenceScheduleRequest
+    from model_service.scheduler.internal_state import Settlement
+    from model_service.scheduler.public import InferenceScheduleRequest
 
 
 @dataclass(frozen=True, slots=True)

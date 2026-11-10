@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
     import httpx
 
-    from model_service.scheduler.executions import ExecutionView
+    from model_service.scheduler.public import ExecutionView
 
 
 class ServeCapacity(Capacity):

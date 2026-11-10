@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 from model_service.builder_deployment.client import HTTPBuilderDispatch
-from model_service.inference.contracts import SpatialScoresModel
+from model_service.inference.model_declarations import SpatialScoresModel
 from model_service.scheduler.builder_dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,

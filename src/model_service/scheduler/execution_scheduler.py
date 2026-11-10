@@ -14,13 +14,12 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from model_service.scheduler import raw_inference_jobs
-from model_service.scheduler.active_work import ActiveWorkRegistry
-from model_service.scheduler.execution_records import (
+from model_service.scheduler.internal_state import (
     Admission,
     ExecutionRecord,
     WorkKind,
 )
-from model_service.scheduler.executions import (
+from model_service.scheduler.public import (
     ExecutionView,
     InferenceInvocation,
     InferenceResult,
@@ -31,6 +30,7 @@ from model_service.scheduler.executions import (
     ScheduleResult,
     SchedulingUnavailableError,
 )
+from model_service.scheduler.running_work import ActiveWorkRegistry
 from model_service.scheduler.status import ExecutionStatus, Operation
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
 from model_service.scheduler.worker import ExecutionWorker
@@ -44,7 +44,7 @@ if TYPE_CHECKING:
         SubmissionIdentity,
     )
     from model_service.scheduler.builder_dispatch import BuilderDispatch
-    from model_service.scheduler.executions import ModelResolver, ProviderName
+    from model_service.scheduler.public import ModelResolver, ProviderName
     from model_service.scheduler.raw_inference_jobs import InferenceTarget
     from model_service.scheduler.store.repository import ExecutionRepository
 

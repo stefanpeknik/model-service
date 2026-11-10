@@ -17,7 +17,7 @@ import numpy as np
 from model_service.builder_deployment.runner import BuilderApplication
 from model_service.builders.base import ReplicaSettings
 from model_service.builders.registry import get_builder
-from model_service.inference.contracts import InferenceContract
+from model_service.inference.model_declarations import InferenceContract
 from model_service.providers.standalone.shared_storage import (
     SharedStorageAccessFactory,
 )
@@ -35,7 +35,7 @@ from tests.support.builder_fixtures import (
 if TYPE_CHECKING:
     import unittest
 
-    from model_service.inference.contracts import ModelBinding
+    from model_service.inference.model_declarations import ModelBinding
     from model_service.shared.invocation import BuilderInput
     from model_service.shared.result import BuilderResult
 

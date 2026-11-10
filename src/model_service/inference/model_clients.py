@@ -13,7 +13,7 @@ failure handling:
 - an answer of the wrong shape, type or with non-finite values:
   `invalid_model_output`, not retried.
 
-A new contract adds a model declaration in `contracts.py` and a client here,
+A new contract adds a model declaration in `model_declarations.py` and a client here,
 listed in `CLIENTS`; see `docs/guides/adding-builders.md`.
 """
 
@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import ValidationError
 
-from model_service.inference.contracts import (
+from model_service.inference.model_declarations import (
     InferenceContract,
     SpatialScoresModel,
     TileEmbeddingModel,
@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
     from ray.serve.handle import DeploymentHandle
 
-    from model_service.inference.contracts import ModelBinding
+    from model_service.inference.model_declarations import ModelBinding
 
     type HandleLookup = Callable[[str], DeploymentHandle[Any]]
 

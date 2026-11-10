@@ -26,7 +26,7 @@ from model_service.scheduler.raw_inference_jobs import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from model_service.inference.contracts import ModelBinding
+    from model_service.inference.model_declarations import ModelBinding
     from model_service.model_catalog import ModelCatalog
 
 

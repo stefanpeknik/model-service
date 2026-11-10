@@ -8,7 +8,7 @@ from copy import deepcopy
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from model_service.inference.contracts import (
+from model_service.inference.model_declarations import (
     InferenceContract,
     SpatialScoresModel,
     TileEmbeddingModel,

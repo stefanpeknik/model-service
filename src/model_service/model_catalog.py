@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Annotated
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from model_service.builders.registry import BUILDERS
-from model_service.inference.contracts import (
+from model_service.inference.model_declarations import (
     MODEL_BINDING,
     MODEL_CLASSES,
     InferenceContract,
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from collections.abc import Collection, Iterator, Mapping
     from pathlib import Path
 
-    from model_service.inference.contracts import ModelBinding
+    from model_service.inference.model_declarations import ModelBinding
 
 
 class InferenceDeclaration(BaseModel):

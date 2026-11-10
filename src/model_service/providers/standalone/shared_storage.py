@@ -21,7 +21,7 @@ from model_service.shared.invocation import SharedPathInput
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
-    from model_service.inference.contracts import ModelBinding
+    from model_service.inference.model_declarations import ModelBinding
     from model_service.shared.invocation import (
         BuilderInput,
         ExecutionContext,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from datetime import UTC, datetime, timedelta
 
-from model_service.scheduler.execution_records import RetryPolicy
+from model_service.scheduler.internal_state import RetryPolicy
 from tests.support.memory_repository import InMemoryExecutionRepository
 from tests.support.repository_contract import (
     INFERENCE_LIMIT,

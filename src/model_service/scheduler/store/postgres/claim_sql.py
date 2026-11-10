@@ -8,13 +8,13 @@ from uuid import uuid4
 
 from sqlalchemy import and_, func, or_, select
 
-from model_service.scheduler.execution_records import (
+from model_service.scheduler.internal_state import (
     ExecutionRecord,
     RenewDirective,
     WorkClaim,
     WorkKind,
 )
-from model_service.scheduler.executions import (
+from model_service.scheduler.public import (
     ResultUnavailableError,
 )
 from model_service.scheduler.status import ExecutionStatus, Operation

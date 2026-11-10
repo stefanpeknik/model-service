@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from model_service.scheduler.execution_records import (
+from model_service.scheduler.internal_state import (
     ExecutionRecord,
     InferenceSucceeded,
     ProcessingFailed,
@@ -16,7 +16,7 @@ from model_service.scheduler.execution_records import (
     StaleWorkClaimError,
     WorkKind,
 )
-from model_service.scheduler.executions import ExecutionError
+from model_service.scheduler.public import ExecutionError
 from model_service.scheduler.status import (
     ExecutionErrorCode,
     ExecutionStatus,
@@ -26,7 +26,7 @@ from model_service.scheduler.status import (
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from model_service.scheduler.execution_records import Settlement
+    from model_service.scheduler.internal_state import Settlement
 
 
 from model_service.scheduler.transitions.base import (

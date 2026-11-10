@@ -19,8 +19,8 @@ from model_service.api.health import (
 )
 from model_service.api.http_errors import ApiErrorCode, http_error
 from model_service.api.routes import builders, executions, models
-from model_service.scheduler.executions import SchedulingUnavailableError
 from model_service.scheduler.protocols import NoCapacityInfo
+from model_service.scheduler.public import SchedulingUnavailableError
 
 
 if TYPE_CHECKING:

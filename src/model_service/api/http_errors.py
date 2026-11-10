@@ -12,7 +12,7 @@ from model_service.shared.failures import UnknownBuilderError, UnknownModelError
 
 
 if TYPE_CHECKING:
-    from model_service.scheduler.executions import SchedulingUnavailableError
+    from model_service.scheduler.public import SchedulingUnavailableError
 
 
 class ApiErrorCode(StrEnum):

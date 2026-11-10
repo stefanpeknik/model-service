@@ -21,9 +21,9 @@ from model_service.providers.standalone.provider import StandaloneProviderAdapte
 from model_service.providers.standalone.shared_storage import (
     SharedStorageAccessFactory,
 )
-from model_service.scheduler.active_work import ActiveWorkRegistry
 from model_service.scheduler.execution_scheduler import ExecutionScheduler
-from model_service.scheduler.executions import ScheduleRequest
+from model_service.scheduler.public import ScheduleRequest
+from model_service.scheduler.running_work import ActiveWorkRegistry
 from model_service.scheduler.status import ExecutionStatus
 from model_service.scheduler.worker import ExecutionWorker
 from model_service.shared.failures import BuilderFailure, FailureCode, InvalidInvocation
@@ -46,7 +46,7 @@ from tests.support.memory_repository import InMemoryExecutionRepository
 
 if TYPE_CHECKING:
     from model_service.builders.base import BuilderContext
-    from model_service.inference.contracts import ModelBinding
+    from model_service.inference.model_declarations import ModelBinding
     from model_service.shared.invocation import Invocation
 
 

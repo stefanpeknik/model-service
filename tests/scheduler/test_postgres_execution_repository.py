@@ -24,7 +24,7 @@ from psycopg.errors import CheckViolation
 from psycopg.types.json import Jsonb
 
 from model_service.providers.provider import SubmissionIdentity
-from model_service.scheduler.execution_records import (
+from model_service.scheduler.internal_state import (
     Admission,
     InferenceSucceeded,
     ProcessingSucceeded,
@@ -34,7 +34,7 @@ from model_service.scheduler.execution_records import (
     StaleWorkClaimError,
     WorkKind,
 )
-from model_service.scheduler.executions import (
+from model_service.scheduler.public import (
     InferenceResult,
     ScheduleConflictError,
     UnknownExecutionError,

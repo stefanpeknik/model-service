@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
-    from model_service.inference.contracts import ModelBinding
+    from model_service.inference.model_declarations import ModelBinding
     from model_service.providers.empaia.app_service.gateway import (
         EmpaiaGateway,
         EmpaiaGatewayFactory,

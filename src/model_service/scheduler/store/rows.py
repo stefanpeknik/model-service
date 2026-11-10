@@ -29,8 +29,8 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
 
-from model_service.scheduler.execution_records import WorkKind
-from model_service.scheduler.executions import (
+from model_service.scheduler.internal_state import WorkKind
+from model_service.scheduler.public import (
     STORED_INVOCATION,
     STORED_RESULT,
     StoredInvocation,

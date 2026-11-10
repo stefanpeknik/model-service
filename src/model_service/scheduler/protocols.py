@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Protocol
 
 
 if TYPE_CHECKING:
-    from model_service.scheduler.executions import (
+    from model_service.scheduler.public import (
         ExecutionView,
         InferenceResult,
         InferenceScheduleRequest,

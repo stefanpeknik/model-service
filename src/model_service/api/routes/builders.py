@@ -27,7 +27,7 @@ from model_service.api.request_bodies import (
 )
 from model_service.api.submission import require_idempotency_key, submit
 from model_service.builders.registry import BUILDERS
-from model_service.inference.contracts import (
+from model_service.inference.model_declarations import (
     InferenceContract,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
 from model_service.scheduler.builder_dispatch import (
@@ -35,7 +35,7 @@ from model_service.scheduler.builder_dispatch import (
     RemoteFailureError,
     UnknownOutcomeError,
 )
-from model_service.scheduler.executions import ScheduleRequest, ScheduleResult
+from model_service.scheduler.public import ScheduleRequest, ScheduleResult
 from model_service.shared.caller_request import STANDALONE_PROVIDER as STANDALONE
 from model_service.shared.failures import (
     IncompatibleModelError,

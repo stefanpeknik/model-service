@@ -15,7 +15,7 @@ from model_service.providers.provider import (
     Priority,
     SubmissionIdentity,
 )
-from model_service.scheduler.executions import (
+from model_service.scheduler.public import (
     ProviderName,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
 from model_service.scheduler.status import Operation
@@ -24,7 +24,7 @@ from model_service.scheduler.status import Operation
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from model_service.scheduler.executions import (
+    from model_service.scheduler.public import (
         ExecutionError,
         InferenceResult,
         StoredInvocation,

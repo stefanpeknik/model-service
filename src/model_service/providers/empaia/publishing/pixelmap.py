@@ -10,7 +10,7 @@ import asyncio
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from model_service.inference.contracts import SpatialScoresModel
+from model_service.inference.model_declarations import SpatialScoresModel
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.app_service.types import (
     RectangleMaskWriter,
@@ -22,7 +22,7 @@ from model_service.shared.score_grid import read_score_grid
 
 
 if TYPE_CHECKING:
-    from model_service.inference.contracts import ModelBinding
+    from model_service.inference.model_declarations import ModelBinding
     from model_service.providers.empaia.app_service.gateway import EmpaiaGateway
     from model_service.providers.empaia.app_service.types import (
         Rectangle,

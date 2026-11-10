@@ -81,7 +81,9 @@ class ExecutionRuntimeTests(RuntimeTestCase):
                 "model_service.api.app_factory.PostgresExecutionRepository",
                 return_value=repository,
             ),
-            patch("model_service.api.app_factory.httpx.AsyncClient", return_value=client),
+            patch(
+                "model_service.api.app_factory.httpx.AsyncClient", return_value=client
+            ),
         ):
             app = build_api_process(self.settings())
             async with app.router.lifespan_context(app):
@@ -101,7 +103,9 @@ class ExecutionRuntimeTests(RuntimeTestCase):
                 "model_service.api.app_factory.PostgresExecutionRepository",
                 return_value=repository,
             ),
-            patch("model_service.api.app_factory.httpx.AsyncClient", return_value=client),
+            patch(
+                "model_service.api.app_factory.httpx.AsyncClient", return_value=client
+            ),
         ):
             app = build_api_process(self.settings())
             with self.assertRaisesRegex(RuntimeError, "database unavailable"):

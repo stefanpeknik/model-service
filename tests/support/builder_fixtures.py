@@ -17,7 +17,7 @@ from model_service.builders.declarations import (
     InputSpec,
     OutputSpec,
 )
-from model_service.inference.contracts import (
+from model_service.inference.model_declarations import (
     InferenceContract,
     SpatialScoresModel,
     TileEmbeddingModel,
@@ -38,8 +38,8 @@ if TYPE_CHECKING:
     import numpy as np
 
     from model_service.builders.base import BuilderContext
-    from model_service.inference.contracts import ModelBinding
     from model_service.inference.model_clients import HandleLookup
+    from model_service.inference.model_declarations import ModelBinding
 
 
 SPATIAL_MODEL = SpatialScoresModel(

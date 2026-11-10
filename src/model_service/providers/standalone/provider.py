@@ -21,7 +21,7 @@ from model_service.providers.provider import (
     ProviderAdapter,
     SubmissionIdentity,
 )
-from model_service.scheduler.executions import (
+from model_service.scheduler.public import (
     InvalidScheduleRequestError,
     ScheduleRequest,
 )

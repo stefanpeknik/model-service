@@ -15,7 +15,7 @@ from model_service.api.http_errors import (
     http_error,
     unavailable,
 )
-from model_service.scheduler.executions import (
+from model_service.scheduler.public import (
     ExecutionView,
     ResultUnavailableError,
     SchedulingUnavailableError,

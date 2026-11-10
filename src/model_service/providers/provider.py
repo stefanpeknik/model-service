@@ -32,12 +32,12 @@ if TYPE_CHECKING:
     from model_service.builders.base import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
     from model_service.model_catalog import ModelCatalog
-    from model_service.scheduler.executions import (
+    from model_service.scheduler.protocols import Capacity, Scheduler
+    from model_service.scheduler.public import (
         ExecutionError,
         ProviderName,
         ScheduleRequest,
     )
-    from model_service.scheduler.protocols import Capacity, Scheduler
     from model_service.scheduler.settings import SchedulerSettings
     from model_service.shared.invocation import InputAccessKind, Invocation
     from model_service.shared.json_values import JsonValue

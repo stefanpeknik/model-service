@@ -28,7 +28,7 @@ from model_service.shared.result import RESULT
 
 
 if TYPE_CHECKING:
-    from model_service.inference.contracts import ModelBinding
+    from model_service.inference.model_declarations import ModelBinding
     from model_service.shared.invocation import ExecutionContext, Invocation
     from model_service.shared.result import BuilderResult
 

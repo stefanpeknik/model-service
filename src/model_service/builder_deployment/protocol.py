@@ -14,7 +14,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import Field, StrictBool, TypeAdapter
 
-from model_service.inference.contracts import (
+from model_service.inference.model_declarations import (
     ModelBinding,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
 )
 from model_service.shared.failures import (

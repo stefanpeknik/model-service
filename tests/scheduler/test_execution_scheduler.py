@@ -21,13 +21,13 @@ from model_service.providers.standalone.provider import StandaloneProviderAdapte
 from model_service.providers.standalone.shared_storage import (
     SharedStorageAccessFactory,
 )
-from model_service.scheduler.active_work import ActiveWorkRegistry
 from model_service.scheduler.builder_dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,
     UnknownOutcomeError,
 )
-from model_service.scheduler.execution_records import (
+from model_service.scheduler.execution_scheduler import ExecutionScheduler
+from model_service.scheduler.internal_state import (
     Admission,
     ProcessingSucceeded,
     ProviderFinishSucceeded,
@@ -36,8 +36,7 @@ from model_service.scheduler.execution_records import (
     StaleWorkClaimError,
     WorkKind,
 )
-from model_service.scheduler.execution_scheduler import ExecutionScheduler
-from model_service.scheduler.executions import (
+from model_service.scheduler.public import (
     IncompatibleModelError,
     InvalidScheduleRequestError,
     ScheduleConflictError,
@@ -46,6 +45,7 @@ from model_service.scheduler.executions import (
     UnknownBuilderError,
     UnknownModelError,
 )
+from model_service.scheduler.running_work import ActiveWorkRegistry
 from model_service.scheduler.status import ExecutionStatus
 from model_service.scheduler.store.repository import (
     ExecutionRepositoryUnavailableError,
@@ -67,12 +67,12 @@ from tests.support.memory_repository import (
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from model_service.inference.contracts import ModelBinding
+    from model_service.inference.model_declarations import ModelBinding
     from model_service.providers.provider import (
         BeforeMutation,
         ProviderFinishOutcome,
     )
-    from model_service.scheduler.executions import ModelResolver
+    from model_service.scheduler.public import ModelResolver
     from model_service.shared.json_values import JsonValue
 
 

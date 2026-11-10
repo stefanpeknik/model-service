@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from datetime import timedelta
 
     from model_service.providers.provider import SubmissionIdentity
-    from model_service.scheduler.execution_records import (
+    from model_service.scheduler.internal_state import (
         Admission,
         AdmissionResult,
         ExecutionRecord,

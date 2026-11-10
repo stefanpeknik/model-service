@@ -21,12 +21,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from model_service.providers.provider import SubmissionIdentity
-from model_service.scheduler.execution_records import (
+from model_service.scheduler.internal_state import (
     ExecutionRecord,
     RetryPolicy,
     WorkClaim,
 )
-from model_service.scheduler.executions import (
+from model_service.scheduler.public import (
     ExecutionError,
     UnknownExecutionError,
 )

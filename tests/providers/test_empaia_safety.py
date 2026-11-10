@@ -17,7 +17,7 @@ from model_service.providers.provider import (
     ProviderFinishFailureError,
     ProviderSuccess,
 )
-from model_service.scheduler.executions import (
+from model_service.scheduler.public import (
     ExecutionError,
     InvalidScheduleRequestError,
     ScheduleRequest,

@@ -13,7 +13,7 @@ from model_service.api.http_errors import (
     lookup_error,
     unavailable,
 )
-from model_service.scheduler.executions import (
+from model_service.scheduler.public import (
     InferenceScheduleRequest,
     InvalidScheduleRequestError,
     ScheduleConflictError,
@@ -30,8 +30,8 @@ from model_service.shared.failures import (
 if TYPE_CHECKING:
     from fastapi import Response
 
-    from model_service.scheduler.executions import ScheduleRequest, ScheduleResult
     from model_service.scheduler.protocols import Scheduler
+    from model_service.scheduler.public import ScheduleRequest, ScheduleResult
 
 
 logger = logging.getLogger(__name__)

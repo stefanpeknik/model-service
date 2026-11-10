@@ -18,13 +18,13 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from model_service.builders.registry import get_builder
-from model_service.inference.contracts import (
+from model_service.inference.model_declarations import (
     InferenceContract,
     ModelBinding,
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from model_service.scheduler.execution_records import (
+from model_service.scheduler.internal_state import (
     Admission,
     AdmissionResult,
     ExecutionRecord,
@@ -35,7 +35,7 @@ from model_service.scheduler.execution_records import (
     WorkClaim,
     WorkKind,
 )
-from model_service.scheduler.executions import (
+from model_service.scheduler.public import (
     ResultUnavailableError,
     ScheduleConflictError,
     UnknownExecutionError,

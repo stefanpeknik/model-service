@@ -28,7 +28,7 @@ from model_service.api.http_errors import (
 from model_service.api.submission import submit
 from model_service.providers.empaia.app_service.gateway import PROVIDER_NAME
 from model_service.providers.empaia.jobs.lifecycle import EmpaiaSchedulePayload
-from model_service.scheduler.executions import (
+from model_service.scheduler.public import (
     ScheduleRequest,
     SchedulingUnavailableError,
     UnknownExecutionError,
@@ -37,8 +37,8 @@ from model_service.scheduler.status import ExecutionStatus
 
 
 if TYPE_CHECKING:
-    from model_service.scheduler.executions import ExecutionView
     from model_service.scheduler.protocols import Capacity, Scheduler
+    from model_service.scheduler.public import ExecutionView
 
 
 @dataclass(frozen=True, slots=True)
