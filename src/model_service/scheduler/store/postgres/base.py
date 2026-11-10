@@ -16,7 +16,7 @@ from uuid import UUID
 
 from psycopg import AsyncConnection
 from psycopg import Error as PsycopgError
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -24,13 +24,14 @@ from model_service.scheduler.internal_state import (
     ExecutionRecord,
     RetryPolicy,
     WorkClaim,
+    WorkKind,
 )
 from model_service.scheduler.public import (
     ExecutionError,
     SubmissionIdentity,
     UnknownExecutionError,
 )
-from model_service.scheduler.status import Operation
+from model_service.scheduler.status import ExecutionStatus, Operation
 from model_service.scheduler.store.migrate import initialize_execution_schema
 from model_service.scheduler.store.payloads import PayloadMissingError, StoredPayload
 from model_service.scheduler.store.repository import (
@@ -412,6 +413,80 @@ class PostgresBase:
             operation=row.operation,
             priority=row.priority,
         )
+
+    async def _recover_expired_leases(
+        self, session: AsyncSession, now: datetime
+    ) -> None:
+        """Lock available expired claims with SKIP LOCKED and persist their recovery decisions.
+
+        Args:
+            session: Session of the caller's transaction.
+            now: Current database time.
+        """
+        rows = await session.scalars(
+            select(ExecutionRow)
+            .where(
+                ExecutionRow.fencing_token.is_not(None),
+                ExecutionRow.lease_expires_at <= now,
+            )
+            .with_for_update(skip_locked=True)
+        )
+        for row in rows:
+            recovered = self._transitions.recover_expired(self._record(row), now)
+            await self._persist_state(session, row, recovered)
+
+    async def _expire_deadlines(self, session: AsyncSession, now: datetime) -> None:
+        """Lock overdue active executions and terminal reports, skipping busy rows, and apply deadline transitions.
+
+        Args:
+            session: Session of the caller's transaction.
+            now: Current database time.
+        """
+        rows = await session.scalars(
+            select(ExecutionRow)
+            .where(
+                # Implied by the conditions below; lets the planner use the
+                # partial deadline indexes instead of scanning finished rows.
+                ExecutionRow.work_kind.is_not(None),
+                or_(
+                    ExecutionRow.deadline_at <= now,
+                    ExecutionRow.terminal_report_deadline_at <= now,
+                ),
+                or_(
+                    and_(
+                        ExecutionRow.status.not_in(
+                            (
+                                ExecutionStatus.SUCCEEDED,
+                                ExecutionStatus.FAILED,
+                                ExecutionStatus.CANCELLED,
+                            )
+                        ),
+                        ExecutionRow.deadline_at <= now,
+                    ),
+                    and_(
+                        ExecutionRow.status.in_(
+                            (ExecutionStatus.FAILED, ExecutionStatus.CANCELLED)
+                        ),
+                        ExecutionRow.work_kind.in_(
+                            (
+                                WorkKind.PROVIDER_FAILURE_REPORT,
+                                WorkKind.PROVIDER_CANCELLATION_REPORT,
+                            )
+                        ),
+                        func.coalesce(
+                            ExecutionRow.terminal_report_deadline_at,
+                            ExecutionRow.deadline_at,
+                        )
+                        <= now,
+                    ),
+                ),
+            )
+            .with_for_update(skip_locked=True)
+        )
+        for row in rows:
+            await self._persist_state(
+                session, row, self._transitions.deadline(self._record(row), now)
+            )
 
 
 def _is_uuid(value: str) -> bool:

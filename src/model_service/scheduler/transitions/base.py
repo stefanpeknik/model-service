@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING, Never
@@ -85,8 +86,38 @@ class SettlementRejected:
 type SettlementDecision = SettlementAccepted | SettlementRejected
 
 
-class TransitionsBase:
-    """Retry policies and the helpers every group of transitions shares."""
+class TransitionsBase(ABC):
+    """Retry policies and the helpers every group of transitions shares.
+
+    Expiry (expiry.py) implements recover_expired and deadline; leases and
+    attempt outcomes call them through this base.
+    """
+
+    @abstractmethod
+    def recover_expired(
+        self, execution: ExecutionRecord, now: datetime
+    ) -> ExecutionRecord:
+        """Recover abandoned work through retry or terminal failure.
+
+        Args:
+            execution: The execution whose lease expired.
+            now: Database time.
+
+        Returns:
+            The recovered execution.
+        """
+
+    @abstractmethod
+    def deadline(self, execution: ExecutionRecord, now: datetime) -> ExecutionRecord:
+        """Fail overdue active work or stop overdue terminal reporting.
+
+        Args:
+            execution: The execution to check.
+            now: Database time.
+
+        Returns:
+            The execution, failed or stopped if its deadline passed.
+        """
 
     def __init__(
         self,

@@ -34,12 +34,12 @@ from model_service.scheduler.transitions.base import (
     SettlementDecision,
     SettlementRejected,
     SettlementRejection,
+    TransitionsBase,
     _has_provider_phase,
 )
-from model_service.scheduler.transitions.expiry import ExpiryTransitions
 
 
-class AttemptOutcomeTransitions(ExpiryTransitions):
+class AttemptOutcomeTransitions(TransitionsBase):
     """Settling an attempt's outcome: success, retry or failure."""
 
     def decide_settlement(

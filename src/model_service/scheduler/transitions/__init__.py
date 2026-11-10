@@ -17,11 +17,15 @@ from model_service.scheduler.transitions.base import (
     SettlementRejected,
     SettlementRejection,
 )
+from model_service.scheduler.transitions.expiry import ExpiryTransitions
 from model_service.scheduler.transitions.leases import LeaseTransitions
 
 
 class ExecutionTransitions(
-    AdmissionTransitions, LeaseTransitions, AttemptOutcomeTransitions
+    AdmissionTransitions,
+    LeaseTransitions,
+    AttemptOutcomeTransitions,
+    ExpiryTransitions,
 ):
     """Apply the shared state machine with separate processing and provider retry policies.
 

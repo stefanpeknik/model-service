@@ -30,14 +30,14 @@ if TYPE_CHECKING:
 
 
 from model_service.scheduler.store.postgres.base import (
+    PostgresBase,
     _stored_request,
     logger,
 )
-from model_service.scheduler.store.postgres.maintenance_sql import MaintenanceOperations
 
 
-class ClaimOperations(MaintenanceOperations):
-    """Claims recover expired leases and passed deadlines first, as maintenance does."""
+class ClaimOperations(PostgresBase):
+    """Claiming due work and renewing its lease; claims recover expired leases first."""
 
     async def claim_due(
         self,

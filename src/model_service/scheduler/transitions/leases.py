@@ -24,11 +24,11 @@ if TYPE_CHECKING:
 from model_service.scheduler.transitions.base import (
     ClaimDecision,
     RenewalDecision,
+    TransitionsBase,
 )
-from model_service.scheduler.transitions.expiry import ExpiryTransitions
 
 
-class LeaseTransitions(ExpiryTransitions):
+class LeaseTransitions(TransitionsBase):
     """Claiming work and deciding lease renewal."""
 
     @staticmethod
