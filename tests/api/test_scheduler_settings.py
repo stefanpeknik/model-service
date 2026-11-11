@@ -8,9 +8,12 @@ from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 
-from pydantic import ValidationError
-
 from model_service.scheduler.settings import SchedulerSettings
+
+
+def load(environment: dict[str, str]) -> SchedulerSettings:
+    with patch.dict(os.environ, environment, clear=True):
+        return SchedulerSettings()
 
 
 class SchedulerSettingsTests(unittest.TestCase):
@@ -22,7 +25,7 @@ class SchedulerSettingsTests(unittest.TestCase):
         }
 
     def test_environment_lists_paths_and_seconds_are_parsed(self) -> None:
-        settings = SchedulerSettings.from_environment(
+        settings = load(
             {
                 **self.environment,
                 "MODEL_CATALOG_PATH": "/etc/catalog.json",
@@ -47,19 +50,10 @@ class SchedulerSettingsTests(unittest.TestCase):
     def test_unset_optional_settings_deny_shared_storage_and_deploy_all_builders(
         self,
     ) -> None:
-        settings = SchedulerSettings.from_environment(self.environment)
+        settings = load(self.environment)
 
         self.assertEqual(settings.shared_storage_roots, ())
         self.assertIsNone(settings.builder_ids)
-
-    def test_explicit_mapping_never_falls_back_to_process_environment(self) -> None:
-        with patch.dict(os.environ, self.environment, clear=True):
-            self.assertEqual(
-                SchedulerSettings.from_environment().database_url,
-                "postgresql://unused",
-            )
-            with self.assertRaises(ValidationError):
-                SchedulerSettings.from_environment({})
 
     def test_invalid_values_are_rejected(self) -> None:
         for overrides in (
@@ -74,7 +68,7 @@ class SchedulerSettingsTests(unittest.TestCase):
             {"DEFAULT_DEADLINE_SECONDS": "86401"},
         ):
             with self.subTest(overrides=overrides), self.assertRaises(ValueError):
-                SchedulerSettings.from_environment({**self.environment, **overrides})
+                load({**self.environment, **overrides})
 
 
 if __name__ == "__main__":

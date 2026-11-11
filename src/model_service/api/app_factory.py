@@ -176,7 +176,7 @@ def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
         UnknownBuilderError: If `BUILDER_IDS` names a builder that is not registered.
         ValueError: If the provider context key is not a valid base64 key.
     """
-    config = settings or SchedulerSettings.from_environment()
+    config = settings or SchedulerSettings()
     providers = PROVIDERS
     catalog = ModelCatalog.from_file(
         config.model_catalog_path,

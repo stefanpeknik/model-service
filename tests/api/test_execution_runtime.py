@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import os
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -30,16 +31,16 @@ class RuntimeTestCase(unittest.IsolatedAsyncioTestCase):
         )
 
     def settings(self, **environment: str) -> SchedulerSettings:
-        return SchedulerSettings.from_environment(
-            {
-                "DATABASE_URL": "postgresql://unused",
-                "PROVIDER_CONTEXT_KEY": base64.urlsafe_b64encode(b"x" * 32).decode(),
-                "RAY_SERVE_ORIGIN": "http://builder-serve",
-                "MODEL_CATALOG_PATH": str(self.catalog_path),
-                "SHARED_STORAGE_ROOTS": json.dumps([str(self.directory)]),
-                **environment,
-            }
-        )
+        values = {
+            "DATABASE_URL": "postgresql://unused",
+            "PROVIDER_CONTEXT_KEY": base64.urlsafe_b64encode(b"x" * 32).decode(),
+            "RAY_SERVE_ORIGIN": "http://builder-serve",
+            "MODEL_CATALOG_PATH": str(self.catalog_path),
+            "SHARED_STORAGE_ROOTS": json.dumps([str(self.directory)]),
+            **environment,
+        }
+        with patch.dict(os.environ, values, clear=True):
+            return SchedulerSettings()
 
 
 class ExecutionRuntimeTests(RuntimeTestCase):

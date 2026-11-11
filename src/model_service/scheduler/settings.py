@@ -7,44 +7,22 @@ from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import Annotated, Self
 
 from pydantic import (
     BeforeValidator,
     Field,
     FiniteFloat,
     StringConstraints,
-    TypeAdapter,
     model_validator,
 )
-from pydantic_settings import BaseSettings, EnvSettingsSource, SettingsConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-if TYPE_CHECKING:
-    from collections.abc import Mapping
-
-    from pydantic_settings import PydanticBaseSettingsSource
-
-
-_SECONDS = TypeAdapter(FiniteFloat)
-
-
-def _duration_from_seconds(value: object) -> timedelta | float:
-    """Accept typed durations or finite numeric seconds for duration validation.
-
-    Args:
-        value: A `timedelta` or a number of seconds.
-
-    Returns:
-        The `timedelta` unchanged, or the seconds as a float.
-
-    Raises:
-        ValidationError: If the value is not a finite number.
-    """
-    return value if isinstance(value, timedelta) else _SECONDS.validate_python(value)
-
-
-_SecondsDuration = Annotated[timedelta, BeforeValidator(_duration_from_seconds)]
+# Environment values are strings; pydantic parses only numbers as seconds.
+_SecondsDuration = Annotated[
+    timedelta, BeforeValidator(lambda v: float(v) if isinstance(v, str) else v)
+]
 _RequiredString = Annotated[str, StringConstraints(min_length=1)]
 
 
@@ -113,55 +91,6 @@ class SchedulerSettings(BaseSettings):
     max_concurrent_executions: int = Field(
         default=4, gt=0, validation_alias="MAX_CONCURRENT_EXECUTIONS"
     )
-
-    @classmethod
-    def settings_customise_sources(
-        cls,
-        settings_cls: type[BaseSettings],
-        init_settings: PydanticBaseSettingsSource,
-        env_settings: PydanticBaseSettingsSource,
-        dotenv_settings: PydanticBaseSettingsSource,
-        file_secret_settings: PydanticBaseSettingsSource,
-    ) -> tuple[PydanticBaseSettingsSource, ...]:
-        """Read settings only from constructor arguments.
-
-        Direct construction stays isolated from the environment; `from_environment`
-        selects the environment source.
-
-        Args:
-            settings_cls: The settings class.
-            init_settings: Constructor arguments.
-            env_settings: Environment variables; unused.
-            dotenv_settings: The dotenv file; unused.
-            file_secret_settings: Secret files; unused.
-
-        Returns:
-            Only the constructor source.
-        """
-        return (init_settings,)
-
-    @classmethod
-    def from_environment(
-        cls,
-        environment: Mapping[str, str] | None = None,
-    ) -> SchedulerSettings:
-        """Parse settings from environment variables.
-
-        Numeric bounds are validated.
-
-        Args:
-            environment: Variables to read instead of the process environment.
-
-        Returns:
-            The settings.
-
-        Raises:
-            ValidationError: If a required setting is missing or a value is invalid.
-        """
-        source = EnvSettingsSource(cls)
-        if environment is not None:
-            source.env_vars = dict(environment)
-        return cls(**source())
 
     @model_validator(mode="after")
     def _validate_policy_bounds(self) -> Self:
