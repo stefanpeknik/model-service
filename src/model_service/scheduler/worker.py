@@ -52,7 +52,7 @@ if TYPE_CHECKING:
     from datetime import timedelta
 
     from model_service.providers.provider import ProviderAdapter
-    from model_service.scheduler.builder_dispatch import BuilderDispatch
+    from model_service.scheduler.builder_dispatch import HTTPBuilderDispatch
     from model_service.scheduler.internal_state import Settlement
     from model_service.scheduler.public import ModelResolver, ProviderName
     from model_service.scheduler.running_work import ActiveWorkRegistry
@@ -67,7 +67,7 @@ class ExecutionWorker:
         *,
         repository: ExecutionRepository,
         providers: Mapping[ProviderName, ProviderAdapter],
-        dispatch: BuilderDispatch,
+        dispatch: HTTPBuilderDispatch,
         resolve_model: ModelResolver,
         owner: str,
         lease_duration: timedelta,

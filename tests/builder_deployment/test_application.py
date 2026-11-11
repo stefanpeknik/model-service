@@ -19,8 +19,10 @@ from model_service.builders.base import _atomic_artifact as atomic_artifact
 from model_service.builders.declarations import InputSpec
 from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessFactory
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
-from model_service.scheduler.builder_dispatch import RemoteFailureError
-from model_service.scheduler.http_builder_dispatch import HTTPBuilderDispatch
+from model_service.scheduler.builder_dispatch import (
+    HTTPBuilderDispatch,
+    RemoteFailureError,
+)
 from model_service.shared.builder_http import RunRequest
 from model_service.shared.failures import (
     BuilderFailure,

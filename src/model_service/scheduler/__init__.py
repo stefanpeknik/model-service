@@ -11,8 +11,7 @@
   (expired leases, passed deadlines).
 - internal_state.py: internal records, leases, retry policy and outcomes.
 - protocols.py: what the API needs from the scheduler (Scheduler); settings.py: process settings.
-- builder_dispatch.py: the interface for sending a builder run, and how a send can end;
-  http_builder_dispatch.py implements it over the builder deployment's HTTP API.
+- builder_dispatch.py: sending a builder run to its replica over HTTP, and how a send can end.
 - store/: persistence: postgres/, rows.py, migrate.py and migrations/.
 """
 

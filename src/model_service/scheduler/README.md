@@ -9,7 +9,7 @@ moves it through processing and provider finish.
 | --- | --- |
 | `execution_scheduler.py` | Admission (validates builder, model and provider), views, cancellation, worker lifetime |
 | `worker.py`, `running_work.py` | Claim loop, lease renewal, dispatch, settlement |
-| `builder_dispatch.py`, `http_builder_dispatch.py` | Calling a builder replica, over HTTP |
+| `builder_dispatch.py` | Calling a builder replica over HTTP |
 | `transitions/` | Every state change: admit, claim, renew, settle, cancel, lease recovery, deadlines |
 | `public.py`, `internal_state.py`, `status.py` | Public request/view types, internal records, statuses |
 | `protocols.py` | The `Scheduler` interface the API uses |

@@ -6,5 +6,5 @@
 - settings.py: DeploymentSettings, the deployment's user_config.
 
 Its HTTP format is shared/builder_http.py; the client that calls it is
-scheduler/http_builder_dispatch.py.
+scheduler/builder_dispatch.py.
 """

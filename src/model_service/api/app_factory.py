@@ -43,8 +43,8 @@ from model_service.api.synchronous_runs import SynchronousBuilderService
 from model_service.builders.registry import BUILDERS, get_builder
 from model_service.inference.catalog import ModelCatalog
 from model_service.providers.registry import PROVIDERS
+from model_service.scheduler.builder_dispatch import HTTPBuilderDispatch
 from model_service.scheduler.execution_scheduler import ExecutionScheduler
-from model_service.scheduler.http_builder_dispatch import HTTPBuilderDispatch
 from model_service.scheduler.internal_state import RetryPolicy
 from model_service.scheduler.settings import SchedulerSettings
 from model_service.scheduler.store.postgres import PostgresExecutionRepository

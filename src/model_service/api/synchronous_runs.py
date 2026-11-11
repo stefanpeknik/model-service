@@ -11,12 +11,12 @@ from model_service.shared.invocation import ExecutionContext
 if TYPE_CHECKING:
     from model_service.api.routes.builders import ImmediateBuilderRequest
     from model_service.inference.catalog import ModelCatalog
-    from model_service.scheduler.builder_dispatch import BuilderDispatch
+    from model_service.scheduler.builder_dispatch import HTTPBuilderDispatch
     from model_service.shared.result import BuilderResult
 
 
 class SynchronousBuilderService:
-    def __init__(self, catalog: ModelCatalog, dispatch: BuilderDispatch) -> None:
+    def __init__(self, catalog: ModelCatalog, dispatch: HTTPBuilderDispatch) -> None:
         self._catalog = catalog
         self._dispatch = dispatch
 

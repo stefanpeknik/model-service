@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Mapping
 
     from model_service.providers.provider import ProviderAdapter
-    from model_service.scheduler.builder_dispatch import BuilderDispatch
+    from model_service.scheduler.builder_dispatch import HTTPBuilderDispatch
     from model_service.scheduler.public import (
         ModelResolver,
         ProviderName,
@@ -51,7 +51,7 @@ class ExecutionScheduler:
         self,
         *,
         repository: ExecutionRepository,
-        dispatch: BuilderDispatch,
+        dispatch: HTTPBuilderDispatch,
         providers: Mapping[ProviderName, ProviderAdapter],
         resolve_model: ModelResolver,
         default_timeout: timedelta,

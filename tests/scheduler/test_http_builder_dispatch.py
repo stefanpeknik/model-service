@@ -11,10 +11,10 @@ import httpx
 
 from model_service.scheduler.builder_dispatch import (
     ConfirmedRejectionError,
+    HTTPBuilderDispatch,
     RemoteFailureError,
     UnknownOutcomeError,
 )
-from model_service.scheduler.http_builder_dispatch import HTTPBuilderDispatch
 from model_service.shared.invocation import (
     ExecutionContext,
     InputAccessContext,
