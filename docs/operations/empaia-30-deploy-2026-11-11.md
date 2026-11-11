@@ -34,6 +34,9 @@ the same morning.
 - At the deadline (16:23 UTC) the execution failed with
   `execution_deadline_exceeded`, and provider finish reported the failure to
   EMPAIA in one attempt.
+  The case browser lists job `5e00f866` (ProstHM) with status `error`, the
+  message "execution deadline was exceeded", its runtime (21570 s), its one
+  input region, and no output.
 
 So the standalone display fix in the case browser is still unconfirmed, and
 `empaia-30` has not yet run a job end to end.
