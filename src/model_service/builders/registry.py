@@ -16,9 +16,8 @@ from model_service.shared.failures import UnknownBuilderError
 
 
 if TYPE_CHECKING:
-    from model_service.builders.declarations import BuilderOutputs, BuilderSpec
+    from model_service.builders.declarations import BuilderSpec
     from model_service.shared.model_declarations import ModelBinding
-    from model_service.shared.result import BuilderResult
 
 
 BUILDERS: dict[str, BuilderSpec] = {
@@ -42,24 +41,6 @@ def get_builder(builder_id: str) -> BuilderSpec:
         return BUILDERS[builder_id]
     except KeyError as error:
         raise UnknownBuilderError(builder_id) from error
-
-
-def parse_result(builder_id: str, result: BuilderResult) -> BuilderOutputs:
-    """Read a stored or received result as its builder's outputs model.
-
-    Args:
-        builder_id: The builder that produced the result.
-        result: The generic result, as sent and stored.
-
-    Returns:
-        The result as the builder's `BuilderOutputs` subclass.
-
-    Raises:
-        UnknownBuilderError: No builder has this id.
-        ValidationError: The result does not match the builder's current
-            outputs, e.g. an output was renamed since it was stored.
-    """
-    return get_builder(builder_id).output_model.model_validate(result.outputs)
 
 
 def compatible_builders(model: ModelBinding) -> list[str]:

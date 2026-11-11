@@ -5,23 +5,24 @@ See `docs/guides/adding-builders.md`.
 
 from __future__ import annotations
 
+import os
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from model_service.builders.declarations import BuilderInputs, BuilderOutputs
-from model_service.builders.output_files import atomic_artifact
 from model_service.inference.model_clients import ModelClient
+from model_service.shared.failures import InvalidInvocation
 from model_service.shared.result import SharedArtifact
 
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
-    from datetime import datetime
 
     from model_service.builders.input_access import InputAccess
 
@@ -57,7 +58,6 @@ class BuilderContext[K: ModelClient[Any], I: BuilderInputs, C: BaseModel]:
     model: K
     inputs: I
     configuration: C
-    deadline_at: datetime
     output_paths: Mapping[str, str]
 
     def output_path(self, output: str) -> Path:
@@ -78,41 +78,58 @@ class BuilderContext[K: ModelClient[Any], I: BuilderInputs, C: BaseModel]:
         return self.access.output_path(self.output_paths[output])
 
     @contextmanager
-    def write_artifact(self, output: str) -> Iterator[PendingArtifact]:
+    def write_artifact(self, output: str) -> Iterator[tuple[Path, SharedArtifact]]:
         """Write an artifact output atomically.
 
-        The builder writes `pending.path`, a temporary file next to the
+        The builder writes the yielded path, a temporary file next to the
         destination; on success it replaces the destination, and on failure it
-        is removed, so a failed run leaves no partial artifact. After the block,
-        `pending.artifact` is the output to return.
+        is removed, so a failed run leaves no partial artifact. The yielded
+        artifact is the output to return.
 
         Args:
             output: Output name from the builder's declaration.
 
         Yields:
-            The pending artifact.
+            The temporary path, and the finished artifact.
 
         Raises:
             InvalidInvocation: The destination is one of the inputs.
             RuntimeError: The block did not write a regular file.
         """
         destination = self.output_path(output)
-        with atomic_artifact(destination, inputs=self.inputs.paths()) as temporary:
-            yield PendingArtifact(path=temporary, destination=destination)
+        with _atomic_artifact(destination, inputs=self.inputs.paths()) as temporary:
+            yield temporary, SharedArtifact(path=str(destination))
 
 
-@dataclass(frozen=True, slots=True)
-class PendingArtifact:
-    """An artifact being written by `BuilderContext.write_artifact`."""
+@contextmanager
+def _atomic_artifact(destination: Path, *, inputs: tuple[Path, ...]) -> Iterator[Path]:
+    """Yield a sibling temporary path and replace the destination only on success.
 
-    # Where the builder writes; closed before the block ends.
-    path: Path
-    destination: Path
+    Args:
+        destination: Final output path resolved by invocation-scoped storage access.
+        inputs: Resolved input paths which publication must not replace.
 
-    @property
-    def artifact(self) -> SharedArtifact:
-        """The finished artifact, to return in the builder's outputs."""
-        return SharedArtifact(path=str(self.destination))
+    Yields:
+        Path: Unique temporary path; the caller must close its writer before exit.
+
+    Raises:
+        InvalidInvocation: The destination aliases an input path.
+        RuntimeError: Successful computation did not produce a regular file.
+        OSError: Creating directories, publishing, or removing the temporary file fails.
+    """
+    if any(destination.resolve() == source.resolve() for source in inputs):
+        raise InvalidInvocation("output must not replace an input")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(
+        f".{destination.stem}.{uuid4().hex}{destination.suffix}"
+    )
+    try:
+        yield temporary
+        if not temporary.is_file():
+            raise RuntimeError("builder did not produce a regular artifact file")
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 class Builder[
@@ -127,13 +144,15 @@ class Builder[
     declared inputs, configuration and outputs models.
     """
 
+    def __init__(self, settings: BuilderSettings) -> None:
+        self._settings = settings
+
     @abstractmethod
     async def run(self, context: BuilderContext[K, I, C]) -> R:
         """Produce the builder's outputs for one invocation.
 
         Args:
-            context: Verified model client, resolved inputs, configuration and
-                deadline.
+            context: Verified model client, resolved inputs and configuration.
 
         Returns:
             The builder's outputs model, one field per declared output.

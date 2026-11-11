@@ -81,19 +81,16 @@ client type is the contract's client from `model_clients.py`.
 class AnnotationsBuilder(
     Builder[SpatialScoresClient, AnnotationsInputs, AnnotationsConfiguration, AnnotationsOutputs]
 ):
-    def __init__(self, settings: WorkerSettings) -> None:
-        self._settings = settings
-
     async def run(self, context) -> AnnotationsOutputs:
-        with context.write_artifact("annotations") as annotations:
+        with context.write_artifact("annotations") as (path, annotations):
             await trace_annotations(
                 context.inputs.slide,
                 context.inputs.region_of_interest,
-                annotations.path,
+                path,
                 client=context.model,
                 threshold=context.configuration.threshold,
             )
-        return AnnotationsOutputs(annotations=annotations.artifact)
+        return AnnotationsOutputs(annotations=annotations)
 ```
 
 By the time `run` is called, the application has already:

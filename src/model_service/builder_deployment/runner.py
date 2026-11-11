@@ -127,7 +127,6 @@ class BuilderApplication:
                             configuration=self._spec.resolve_configuration(
                                 invocation.resolved_configuration
                             ),
-                            deadline_at=invocation.deadline_at,
                             output_paths=self._output_paths(invocation),
                         )
                     )
@@ -162,18 +161,7 @@ class BuilderApplication:
     def _resolve_inputs(
         self, invocation: Invocation, access: InputAccess
     ) -> BuilderInputs:
-        """Resolve the supplied inputs to local files, as the builder's inputs model.
-
-        Args:
-            invocation: Invocation naming the supplied inputs.
-            access: Access resolving each input to a local file.
-
-        Returns:
-            The builder's `BuilderInputs` subclass; omitted optional inputs are None.
-
-        Raises:
-            InvalidInvocation: The inputs do not fit the builder's inputs model.
-        """
+        """Resolve the supplied inputs to local files, as the builder's inputs model."""
         try:
             return self._spec.input_model(
                 **{name: access.input_path(name) for name in invocation.inputs}
@@ -186,15 +174,7 @@ class BuilderApplication:
             ) from error
 
     def _output_paths(self, invocation: Invocation) -> dict[str, str]:
-        """Map each artifact output to the path the builder writes it to.
-
-        Args:
-            invocation: Invocation whose `output_path` may override the default path
-                of the single artifact output.
-
-        Returns:
-            Output name to relative path, for outputs that have one.
-        """
+        """Map each artifact output to the relative path the builder writes it to."""
         paths = {
             name: output.default_path
             for name, output in self._spec.outputs.items()
@@ -211,19 +191,7 @@ class BuilderApplication:
         execution_context: ExecutionContext,
         model: ModelBinding,
     ) -> InputAccess:
-        """Create the input access through the adapter the invocation names.
-
-        Args:
-            invocation: Invocation whose `input_access.kind` selects the adapter.
-            execution_context: Attempt identity and protected provider state.
-            model: Model binding passed on to the adapter.
-
-        Returns:
-            The created input access.
-
-        Raises:
-            InvalidInvocation: No adapter is registered for the access kind.
-        """
+        """Create the input access through the adapter the invocation names."""
         adapter = self._access_adapters.get(invocation.input_access.kind)
         if adapter is None:
             raise InvalidInvocation("unsupported input access kind")

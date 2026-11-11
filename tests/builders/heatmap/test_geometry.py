@@ -8,10 +8,7 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 
-from model_service.builders.heatmap.processor import (
-    HeatmapRequest,
-    SlideHeatmapProcessor,
-)
+from model_service.builders.heatmap.processor import build_heatmap
 from model_service.shared.model_declarations import SpatialScoresModel
 from model_service.shared.score_grid import ScoreGrid, read_score_grid
 from tests.support.builder_fixtures import write_slide
@@ -81,17 +78,15 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
                 selected[REGION] = 255
             write_slide(mask_path, selected)
         output = directory / "heatmap.npz"
-        await SlideHeatmapProcessor(
-            predictor,  # type: ignore[arg-type]
+        await build_heatmap(
+            directory / "slide.tiff",
+            mask_path,
+            output,
+            client=predictor,  # type: ignore[arg-type]
+            stride_fraction=stride_fraction,
+            skip_background=False,
             num_threads=1,
             max_concurrent_tasks=2,
-        ).build(
-            HeatmapRequest(
-                slide_path=directory / "slide.tiff",
-                mask_path=mask_path,
-                output_path=output,
-                stride_fraction=stride_fraction,
-            ),
         )
         grid = read_score_grid(output)
         self.assertEqual((grid.level, grid.level_size), (0, (width, height)))

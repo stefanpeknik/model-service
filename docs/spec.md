@@ -93,7 +93,7 @@ running model through its contract's client (`model_clients.py`), resolves the
 inputs to local files and runs the builder with the typed client, inputs and
 configuration. A builder returns its outputs model; the application checks it
 and turns it into the generic `BuilderResult` that is sent and stored, and
-`registry.parse_result` reads a stored result back as the builder's model.
+The EMPAIA adapter reads a stored result back as the builder's outputs model.
 [Adding a builder](guides/adding-builders.md) walks through a new one. One Ray application per builder (`builder_deployment.serve:app`, route
 `/builders/<id>`), with the builder ID in `user_config`.
 

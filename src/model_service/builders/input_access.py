@@ -102,9 +102,6 @@ async def close_resource(
         close: Async callback that releases the acquired resource.
         timeout_seconds: Maximum wait for cleanup, polling, or a classified operation.
 
-    Returns:
-        None: No return value.
-
     Raises:
         RuntimeError: Cleanup ends by cancelling its own task.
         TimeoutError: Cleanup exceeds timeout_seconds without a pending caller
@@ -142,26 +139,12 @@ _pending_cleanup: set[asyncio.Future[None]] = set()
 
 
 def _consume_exception(task: asyncio.Future[None]) -> None:
-    """Retrieve a finished cleanup task's exception unless the task was cancelled.
-
-    Args:
-        task: Local computation or cleanup task to cancel, await, or release.
-
-    Returns:
-        None: No return value.
-    """
+    """Retrieve a finished cleanup task's exception unless the task was cancelled."""
     if not task.cancelled():
         task.exception()
 
 
 def _release_cleanup(task: asyncio.Future[None]) -> None:
-    """Drop a finished retained cleanup task and consume its exception.
-
-    Args:
-        task: Local computation or cleanup task to cancel, await, or release.
-
-    Returns:
-        None: No return value.
-    """
+    """Drop a finished retained cleanup task and consume its exception."""
     _pending_cleanup.discard(task)
     _consume_exception(task)

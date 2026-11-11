@@ -95,7 +95,6 @@ async def run_http(
 async def invalid_request(
     _request: Request, _error: RequestValidationError
 ) -> JSONResponse:
-    # Do not echo the request: it may contain provider credentials.
     """Answer a malformed request without echoing it, since it may hold credentials.
 
     Args:

@@ -7,6 +7,7 @@ import gc
 import sys
 import unittest
 from contextlib import contextmanager
+from functools import partial
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import ModuleType, SimpleNamespace
@@ -18,10 +19,7 @@ import numpy as np
 from model_service.builder_deployment.runner import BuilderApplication
 from model_service.builders.base import ReplicaSettings
 from model_service.builders.heatmap.builder import HeatmapBuilder
-from model_service.builders.heatmap.processor import (
-    HeatmapRequest,
-    SlideHeatmapProcessor,
-)
+from model_service.builders.heatmap.processor import build_heatmap
 from model_service.builders.registry import get_builder
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from model_service.shared.invocation import SharedPathInput
@@ -135,16 +133,18 @@ class HeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
         }
         with TemporaryDirectory() as directory, patch.dict(sys.modules, fake_modules):
             output = Path(directory) / "heatmap.npz"
-            request = HeatmapRequest(
-                slide_path=Path(directory) / "slide.svs",
-                mask_path=None,
-                output_path=output,
+            build = partial(
+                build_heatmap,
+                Path(directory) / "slide.svs",
+                None,
+                output,
+                client=predictor,
                 stride_fraction=0.01,
+                skip_background=False,
+                num_threads=1,
+                max_concurrent_tasks=2,
             )
-            processor = SlideHeatmapProcessor(
-                predictor, num_threads=1, max_concurrent_tasks=2
-            )
-            await processor.build(request)
+            await build()
             np.testing.assert_array_equal(recorded["batch"], [[[[0.75]]]])
             grid = read_score_grid(output)
             np.testing.assert_array_equal(grid.values, 0.25)
@@ -157,12 +157,12 @@ class HeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
 
             predictor.predict.return_value = np.array([[0.1, 0.2], [0.3, 0.4]])
             predictor.declaration = spatial(output_tile_size=2)
-            await processor.build(request)
+            await build()
             np.testing.assert_allclose(recorded["batch"], [[[[0.1, 0.2], [0.3, 0.4]]]])
 
             predictor.predict.return_value = [0.75]
             with self.assertRaises(ValueError):
-                await processor.build(request)
+                await build()
             self.assertTrue(recorded["cleaned"])
             predictor.declaration = spatial()
 
@@ -190,7 +190,7 @@ class HeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
             predictor.predict.side_effect = failing_prediction
             recorded["check_cleanup"] = lambda: self.assertTrue(cancelled.is_set())
             with self.assertRaisesRegex(RuntimeError, "prediction failed"):
-                await processor.build(request)
+                await build()
             self.assertTrue(cancelled.is_set())
             self.assertTrue(recorded["cleaned"])
 
@@ -213,7 +213,7 @@ class HeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
             loop.set_exception_handler(lambda _loop, context: unhandled.append(context))
             try:
                 with self.assertRaisesRegex(RuntimeError, "simultaneous failure"):
-                    await processor.build(request)
+                    await build()
                 gc.collect()
                 await asyncio.sleep(0)
                 self.assertEqual(unhandled, [])
@@ -223,14 +223,6 @@ class HeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(recorded["grid_options"]["stride"], (1, 1))
         self.assertEqual(recorded["mask_options"]["stride"], 1)
         np.testing.assert_array_equal(recorded["coords"], [[0, 0]])
-
-    def test_processor_rejects_nonpositive_limits(self) -> None:
-        predictor = SimpleNamespace(predict=AsyncMock())
-        for limits in ((0, 1), (1, 0)):
-            with self.subTest(limits=limits), self.assertRaises(ValueError):
-                SlideHeatmapProcessor(
-                    predictor, num_threads=limits[0], max_concurrent_tasks=limits[1]
-                )
 
 
 def fake_handle(config: dict[str, object], score: object = 0.75) -> SimpleNamespace:

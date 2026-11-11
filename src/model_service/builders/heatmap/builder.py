@@ -4,11 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from model_service.builders.base import Builder, BuilderSettings
-from model_service.builders.heatmap.processor import (
-    HeatmapRequest,
-    SlideHeatmapProcessor,
-)
+from model_service.builders.base import Builder
+from model_service.builders.heatmap.processor import build_heatmap
 from model_service.builders.heatmap.spec import (
     HeatmapConfiguration,
     HeatmapInputs,
@@ -24,14 +21,6 @@ if TYPE_CHECKING:
 class HeatmapBuilder(
     Builder[SpatialScoresClient, HeatmapInputs, HeatmapConfiguration, HeatmapOutputs]
 ):
-    def __init__(self, settings: BuilderSettings) -> None:
-        """Configure the builder for a replica.
-
-        Args:
-            settings: Replica settings for thread and concurrency limits.
-        """
-        self._settings = settings
-
     async def run(
         self,
         context: BuilderContext[
@@ -52,19 +41,15 @@ class HeatmapBuilder(
             InvalidInvocation: The slide or region of interest is unreadable, or the
                 output would replace an input.
         """
-        processor = SlideHeatmapProcessor(
-            context.model,
-            num_threads=self._settings.num_threads,
-            max_concurrent_tasks=self._settings.max_concurrent_tasks,
-        )
-        with context.write_artifact("heatmap") as heatmap:
-            await processor.build(
-                HeatmapRequest(
-                    slide_path=context.inputs.slide,
-                    mask_path=context.inputs.region_of_interest,
-                    output_path=heatmap.path,
-                    stride_fraction=context.configuration.stride_fraction,
-                    skip_background=context.configuration.skip_background,
-                )
+        with context.write_artifact("heatmap") as (path, heatmap):
+            await build_heatmap(
+                context.inputs.slide,
+                context.inputs.region_of_interest,
+                path,
+                client=context.model,
+                stride_fraction=context.configuration.stride_fraction,
+                skip_background=context.configuration.skip_background,
+                num_threads=self._settings.num_threads,
+                max_concurrent_tasks=self._settings.max_concurrent_tasks,
             )
-        return HeatmapOutputs(heatmap=heatmap.artifact)
+        return HeatmapOutputs(heatmap=heatmap)

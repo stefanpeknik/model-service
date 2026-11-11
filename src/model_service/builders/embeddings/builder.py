@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from model_service.builders.base import Builder, BuilderSettings
+from model_service.builders.base import Builder
 from model_service.builders.embeddings.processor import build_embeddings
 from model_service.builders.embeddings.spec import (
     EmbeddingConfiguration,
@@ -23,14 +23,6 @@ class EmbeddingBuilder(
         TileEmbeddingClient, EmbeddingInputs, EmbeddingConfiguration, EmbeddingOutputs
     ]
 ):
-    def __init__(self, settings: BuilderSettings) -> None:
-        """Configure the builder for a replica.
-
-        Args:
-            settings: Replica settings for thread and concurrency limits.
-        """
-        self._settings = settings
-
     async def run(
         self,
         context: BuilderContext[
@@ -51,14 +43,14 @@ class EmbeddingBuilder(
             InvalidInvocation: The slide or region of interest is unreadable, or the
                 output would replace an input.
         """
-        with context.write_artifact("embeddings") as embeddings:
+        with context.write_artifact("embeddings") as (path, embeddings):
             await build_embeddings(
                 context.inputs.slide,
                 context.inputs.region_of_interest,
-                embeddings.path,
+                path,
                 client=context.model,
                 stride_fraction=context.configuration.stride_fraction,
                 num_threads=self._settings.num_threads,
                 max_concurrent_tasks=self._settings.max_concurrent_tasks,
             )
-        return EmbeddingOutputs(embeddings=embeddings.artifact)
+        return EmbeddingOutputs(embeddings=embeddings)

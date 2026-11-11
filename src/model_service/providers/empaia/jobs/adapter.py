@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
-from model_service.builders.registry import get_builder, parse_result
+from model_service.builders.registry import get_builder
 from model_service.providers.empaia.app_service.gateway import (
     INPUT_ACCESS_KIND,
     PROVIDER_NAME,
@@ -270,13 +270,16 @@ class EmpaiaProviderAdapter(ProviderAdapter):
             mutation_completed = False
             try:
                 if isinstance(outcome, ProviderSuccess):
+                    builder = get_builder(outcome.builder_id)
                     try:
-                        outputs = parse_result(outcome.builder_id, outcome.result)
+                        outputs = builder.output_model.model_validate(
+                            outcome.result.outputs
+                        )
                     except ValidationError as error:
                         raise EmpaiaGatewayError.invalid(
                             "EMPAIA job result does not match its builder's outputs"
                         ) from error
-                    declared = get_builder(outcome.builder_id).outputs
+                    declared = builder.outputs
                     io = self._io.get(outcome.builder_id)
                     if io is None:
                         raise EmpaiaGatewayError.invalid(
