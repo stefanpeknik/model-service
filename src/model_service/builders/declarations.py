@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from model_service.shared.failures import IncompatibleModelError, InvalidInvocation
 from model_service.shared.model_declarations import (
-    InferenceContract,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
+    InferenceContract,
 )
 from model_service.shared.result import (
     BuilderResult,

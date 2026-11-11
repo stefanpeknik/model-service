@@ -11,7 +11,7 @@ from pydantic import Field
 
 from model_service.shared.caller_request import BuilderRequest
 from model_service.shared.invocation import (
-    Deadline,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
+    Deadline,
 )
 
 

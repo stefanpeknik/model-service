@@ -21,7 +21,7 @@ from model_service.shared.failures import (
     InvalidInvocation,
 )
 from model_service.shared.result import (
-    BuilderResult,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
+    BuilderResult,
 )
 
 

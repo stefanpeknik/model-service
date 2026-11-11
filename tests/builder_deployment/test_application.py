@@ -24,7 +24,7 @@ from model_service.providers.standalone.shared_storage import (
 from model_service.scheduler.builder_dispatch import RemoteFailureError
 from model_service.scheduler.http_builder_dispatch import HTTPBuilderDispatch
 from model_service.shared.builder_http import (
-    RunRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations.
+    RunRequest,
 )
 from model_service.shared.failures import (
     BuilderFailure,
@@ -491,7 +491,7 @@ class BuilderHTTPTests(unittest.IsolatedAsyncioTestCase):
             return Gateway()
 
         async def build(context: BuilderContext) -> BuilderResult:
-            context.inputs.slide  # type: ignore[attr-defined]  # noqa: B018
+            _ = context.inputs.slide  # type: ignore[attr-defined]
             return BuilderResult({"score": InlineOutput(1)})
 
         with TemporaryDirectory() as directory:

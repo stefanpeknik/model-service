@@ -30,9 +30,9 @@ from model_service.scheduler.raw_inference_jobs import (
 )
 from model_service.shared.failures import UnknownModelError
 from model_service.shared.json_values import (
-    JsonValue,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
+    JsonValue,
 )
-from model_service.shared.model_declarations import (  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
+from model_service.shared.model_declarations import (
     InferenceContract,
     ModelBinding,
 )

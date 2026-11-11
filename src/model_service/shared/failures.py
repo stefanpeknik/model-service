@@ -15,7 +15,7 @@ class FailureCode(StrEnum):
     INVALID_MODEL_OUTPUT = "invalid_model_output"
 
 
-class InvalidInvocation(ValueError):  # noqa: N818
+class InvalidInvocation(ValueError):
     """Inputs, access, configuration or deadline violate the builder's contract."""
 
 
@@ -31,11 +31,11 @@ class IncompatibleModelError(InvalidInvocation):
     """The model's inference contract is not the one the builder accepts."""
 
 
-class ContractViolation(RuntimeError):  # noqa: N818
+class ContractViolation(RuntimeError):
     """A builder returned outputs that differ from its declaration."""
 
 
-class BuilderFailure(RuntimeError):  # noqa: N818
+class BuilderFailure(RuntimeError):
     """A caller-safe failure with a stable code and a retry decision."""
 
     def __init__(self, *, code: str, safe_message: str, retryable: bool) -> None:

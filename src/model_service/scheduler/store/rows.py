@@ -6,7 +6,7 @@ inside persistence; the scheduler and worker receive domain records.
 
 from __future__ import annotations
 
-from datetime import datetime  # noqa: TC003 - SQLAlchemy resolves mapped annotations.
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (

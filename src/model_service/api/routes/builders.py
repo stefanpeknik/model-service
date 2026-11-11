@@ -14,8 +14,8 @@ from fastapi import APIRouter, Depends, Request, Response, status
 
 # FastAPI reads these annotations at runtime.
 from model_service.api.request_bodies import (
-    ImmediateBuilderRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations.
-    ScheduledBuilderRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations.
+    ImmediateBuilderRequest,
+    ScheduledBuilderRequest,
 )
 from model_service.builders.registry import BUILDERS
 from model_service.http_common.auth import Access, Action
@@ -40,13 +40,13 @@ from model_service.shared.failures import (
     UnknownModelError,
 )
 from model_service.shared.json_values import (
-    JsonValue,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
+    JsonValue,
 )
 from model_service.shared.model_declarations import (
-    InferenceContract,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
+    InferenceContract,
 )
 from model_service.shared.result import (
-    BuilderResult,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
+    BuilderResult,
 )
 
 

@@ -10,7 +10,7 @@ from pydantic import Field, StrictBool, TypeAdapter
 
 from model_service.shared.invocation import ExecutionContext, Invocation
 from model_service.shared.model_declarations import (
-    ModelBinding,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
+    ModelBinding,
 )
 
 

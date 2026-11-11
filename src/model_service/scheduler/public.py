@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING, Annotated
 from pydantic import Field, TypeAdapter
 
 from model_service.scheduler.status import (
-    ExecutionStatus,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
-    Operation,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
+    ExecutionStatus,
+    Operation,
 )
 from model_service.shared.failures import (
     IncompatibleModelError,
@@ -24,7 +24,7 @@ from model_service.shared.failures import (
 )
 from model_service.shared.invocation import Deadline, Invocation
 from model_service.shared.json_values import (
-    JsonValue,  # noqa: TC001 - Pydantic or FastAPI reads it at runtime.
+    JsonValue,
 )
 from model_service.shared.model_declarations import ModelBinding
 from model_service.shared.result import BuilderResult

@@ -28,7 +28,7 @@ from model_service.providers.standalone.shared_storage import (
 from model_service.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.scheduler.http_builder_dispatch import HTTPBuilderDispatch
 from model_service.shared.builder_http import (
-    RunRequest,  # noqa: TC001 - FastAPI resolves endpoint annotations.
+    RunRequest,
 )
 from model_service.shared.model_declarations import TileEmbeddingModel
 from tests.support.builder_contract import BuilderContractTests
