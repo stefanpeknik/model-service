@@ -130,6 +130,17 @@ class PostgresBase:
         async with self._transaction() as session:
             await session.execute(select(ExecutionRow.id).limit(1))
 
+    async def maintain(self) -> None:
+        """Expire deadlines and recover abandoned claims.
+
+        Raises:
+            ExecutionRepositoryUnavailableError: The database is unavailable.
+        """
+        async with self._transaction() as session:
+            now = await self._database_now(session)
+            await self._expire_deadlines(session, now)
+            await self._recover_expired_leases(session, now)
+
     async def _persist_state(
         self,
         session: AsyncSession,

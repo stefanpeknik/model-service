@@ -2,7 +2,7 @@
 
 - public.py: what callers and providers see: views, schedule requests,
   admission and outcome types (SubmissionIdentity, ProviderSuccess, ...), errors.
-- status.py: execution statuses, kinds and error codes.
+- status.py: execution statuses and error codes.
 - execution_scheduler.py: ExecutionScheduler, admission and the worker's lifetime.
 - worker.py: claims work, runs attempts, renews leases, settles outcomes.
 - running_work.py: the attempts running in this process, for prompt cancellation.
@@ -13,9 +13,7 @@
 - protocols.py: what the API needs from the scheduler (Scheduler); settings.py: process settings.
 - builder_dispatch.py: the interface for sending a builder run, and how a send can end;
   http_builder_dispatch.py implements it over the builder deployment's HTTP API.
-- store/: persistence: postgres/ (admission_sql, claim_sql, attempt_outcome_sql,
-  maintenance_sql),
-  rows.py, migrate.py and migrations/.
+- store/: persistence: postgres/, rows.py, migrate.py and migrations/.
 """
 
 from model_service.scheduler.public import (

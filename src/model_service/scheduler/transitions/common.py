@@ -57,11 +57,7 @@ class SettlementAccepted:
     execution: ExecutionRecord
 
     def accepted_execution(self) -> ExecutionRecord:
-        """Return the record after the settlement, once it is persisted.
-
-        Returns:
-            The record after the accepted settlement.
-        """
+        """Return the record after the settlement, once it is persisted."""
         return self.execution
 
 
@@ -123,12 +119,6 @@ class TransitionsBase(ABC):
         processing_policy: RetryPolicy,
         finish_policy: RetryPolicy,
     ) -> None:
-        """Retain the policies used to bound attempts and calculate retry delays.
-
-        Args:
-            processing_policy: Retry policy for builder processing.
-            finish_policy: Retry policy for provider publication and terminal reports.
-        """
         self._processing_policy = processing_policy
         self._finish_policy = finish_policy
 

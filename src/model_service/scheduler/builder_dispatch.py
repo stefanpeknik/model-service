@@ -23,17 +23,7 @@ class BuilderDispatch(ABC):
         model: ModelBinding,
         execution_context: ExecutionContext,
     ) -> BuilderResult:
-        """Run a builder for one invocation attempt.
-
-        Args:
-            builder_id: Registered builder id.
-            invocation: Invocation to run.
-            model: Model binding resolved for this attempt.
-            execution_context: Attempt identity and protected provider state.
-
-        Returns:
-            The builder's result.
-        """
+        """Run a builder for one invocation attempt and return its result."""
         ...
 
 

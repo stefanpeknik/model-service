@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 from pathlib import Path
 from urllib.parse import urlencode
 
 from psycopg import Connection, Error, sql
 from psycopg.conninfo import conninfo_to_dict
-from pydantic import Field
-from pydantic_settings import BaseSettings
 from yoyo import get_backend, read_migrations
 from yoyo.exceptions import BadMigration, LockTimeout, MigrationConflict
 
@@ -19,10 +18,6 @@ from model_service.scheduler.store.rows import DEFAULT_SCHEMA
 
 
 MIGRATIONS_DIRECTORY = Path(__file__).with_name("migrations")
-
-
-class MigrationSettings(BaseSettings):
-    database_url: str = Field(default="", validation_alias="DATABASE_URL")
 
 
 async def initialize_execution_schema(dsn: str, *, schema: str) -> None:
@@ -82,7 +77,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--schema", default=DEFAULT_SCHEMA)
     args = parser.parse_args()
-    dsn = MigrationSettings().database_url
+    dsn = os.environ.get("DATABASE_URL", "")
     if not dsn:
         parser.error("set DATABASE_URL to the target PostgreSQL database")
     try:

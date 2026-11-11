@@ -1,4 +1,4 @@
-"""The states, kinds and error codes of an execution."""
+"""The statuses and error codes of an execution."""
 
 from __future__ import annotations
 
