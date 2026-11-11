@@ -42,7 +42,7 @@ class ErrorResponse:
 
 
 ERRORS: dict[int | str, dict[str, Any]] = {
-    code: {"model": ErrorResponse} for code in (404, 409, 413, 422, 429, 503)
+    code: {"model": ErrorResponse} for code in (404, 409, 422, 429, 503)
 }
 
 

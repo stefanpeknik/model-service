@@ -5,7 +5,6 @@ Route presence says the applications are deployed, not that a GPU is warm.
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -32,18 +31,7 @@ class DeploymentStatus:
     missing_routes: tuple[str, ...] = ()
 
 
-class DeploymentHealthCheck(ABC):
-    @abstractmethod
-    async def check(self) -> DeploymentStatus:
-        """Report whether Ray Serve exposes every expected builder and model route.
-
-        Returns:
-            The deployment state and any missing routes.
-        """
-        ...
-
-
-class DeploymentHealth(DeploymentHealthCheck):
+class DeploymentHealth:
     def __init__(
         self, client: httpx.AsyncClient, *, origin: str, routes: Iterable[str]
     ) -> None:

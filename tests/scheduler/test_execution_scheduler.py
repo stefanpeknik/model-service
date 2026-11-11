@@ -10,9 +10,7 @@ from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any
 
 from model_service.providers.standalone.provider import StandaloneProviderAdapter
-from model_service.providers.standalone.shared_storage import (
-    SharedStorageAccessFactory,
-)
+from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from model_service.scheduler.builder_dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,
@@ -45,9 +43,7 @@ from model_service.scheduler.public import (
 )
 from model_service.scheduler.running_work import ActiveWorkRegistry
 from model_service.scheduler.status import ExecutionStatus
-from model_service.scheduler.store.repository import (
-    ExecutionRepositoryUnavailableError,
-)
+from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
 from model_service.scheduler.worker import ExecutionWorker
 from model_service.shared.invocation import (
     ExecutionContext,

@@ -81,11 +81,7 @@ async def submit(
     """
     try:
         result = await scheduler.schedule(request)
-    except (
-        UnknownBuilderError,
-        UnknownModelError,
-        IncompatibleModelError,
-    ) as error:
+    except (UnknownBuilderError, UnknownModelError, IncompatibleModelError) as error:
         _log_refusal(request, error)
         raise lookup_error(error) from error
     except ScheduleConflictError as error:
@@ -102,13 +98,6 @@ async def submit(
 
 
 def _log_refusal(request: ScheduleRequest, error: Exception) -> None:
-    """Log why a schedule request was refused.
-
-    Args:
-        request: The refused request.
-        error: The refusal; its message is safe to log.
-    """
-    # The callers (JES among them) may not log the response body, so the
-    # reason is kept here; error messages are the safe public ones.
+    """Log why a schedule request was refused; error messages are the safe public ones."""
     subject = f"{request.provider} {request.builder_id} on {request.model_id}"
     logger.warning("Refused %s: %s", subject, error)

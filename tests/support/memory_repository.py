@@ -29,9 +29,7 @@ from model_service.scheduler.public import (
     UnknownExecutionError,
 )
 from model_service.scheduler.status import ExecutionStatus
-from model_service.scheduler.transitions import (
-    ExecutionTransitions,
-)
+from model_service.scheduler.transitions import ExecutionTransitions
 from model_service.shared.invocation import ExecutionContext, Invocation
 from model_service.shared.model_declarations import (
     InferenceContract,

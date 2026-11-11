@@ -9,9 +9,7 @@ from typing import Annotated
 from pydantic import Field, StrictBool, TypeAdapter
 
 from model_service.shared.invocation import ExecutionContext, Invocation
-from model_service.shared.model_declarations import (
-    ModelBinding,
-)
+from model_service.shared.model_declarations import ModelBinding
 
 
 @dataclass(frozen=True, slots=True)

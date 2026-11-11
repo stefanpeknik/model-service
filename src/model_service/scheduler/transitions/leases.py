@@ -12,9 +12,7 @@ from model_service.scheduler.internal_state import (
     WorkClaim,
     WorkKind,
 )
-from model_service.scheduler.status import (
-    ExecutionStatus,
-)
+from model_service.scheduler.status import ExecutionStatus
 
 
 if TYPE_CHECKING:

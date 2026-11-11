@@ -103,9 +103,7 @@ class EmpaiaProvider(Provider):
         Raises:
             pydantic.ValidationError: If the `EMPAIA_*` settings are invalid.
         """
-        from model_service.providers.empaia.jobs.inputs import (
-            EmpaiaInputAccessFactory,
-        )
+        from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessFactory
 
         del settings
         empaia = EmpaiaSettings()

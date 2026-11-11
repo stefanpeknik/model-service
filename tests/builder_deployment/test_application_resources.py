@@ -18,9 +18,7 @@ from model_service.builders.registry import BUILDERS, get_builder
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessFactory
 from model_service.providers.standalone.provider import StandaloneProviderAdapter
-from model_service.providers.standalone.shared_storage import (
-    SharedStorageAccessFactory,
-)
+from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from model_service.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.scheduler.public import ScheduleRequest
 from model_service.scheduler.running_work import ActiveWorkRegistry

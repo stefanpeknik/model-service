@@ -20,9 +20,7 @@ from model_service.shared.failures import (
     ContractViolation,
     InvalidInvocation,
 )
-from model_service.shared.result import (
-    BuilderResult,
-)
+from model_service.shared.result import BuilderResult
 
 
 if TYPE_CHECKING:

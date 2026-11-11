@@ -14,10 +14,6 @@ from model_service.shared.invocation import (
 )
 
 
-# The provider name of requests made through the public builder routes.
-STANDALONE_PROVIDER = "standalone"
-
-
 class BuilderRequest(BaseModel):
     """Inputs and their access, and an optional output path.
 

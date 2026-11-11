@@ -13,9 +13,7 @@ from model_service.providers.empaia.app_service.gateway import (
     EmpaiaGatewayFactory,
     EmpaiaJobContext,
 )
-from model_service.providers.empaia.jobs.mapping import (
-    raise_preparation_error,
-)
+from model_service.providers.empaia.jobs.mapping import raise_preparation_error
 from model_service.scheduler.public import (
     ProviderFinishFailureError,
     SchedulingUnavailableError,

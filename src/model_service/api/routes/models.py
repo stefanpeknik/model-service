@@ -14,9 +14,7 @@ from model_service.builders.registry import compatible_builders
 from model_service.http_common.auth import Access, Action
 from model_service.http_common.errors import ERRORS, lookup_error
 from model_service.shared.failures import UnknownModelError
-from model_service.shared.json_values import (
-    JsonValue,
-)
+from model_service.shared.json_values import JsonValue
 from model_service.shared.model_declarations import (
     InferenceContract,
     ModelBinding,

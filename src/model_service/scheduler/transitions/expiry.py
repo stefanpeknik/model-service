@@ -19,9 +19,7 @@ if TYPE_CHECKING:
     from datetime import datetime
 
 
-from model_service.scheduler.transitions.common import (
-    TransitionsBase,
-)
+from model_service.scheduler.transitions.common import TransitionsBase
 
 
 class ExpiryTransitions(TransitionsBase):

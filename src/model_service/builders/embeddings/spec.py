@@ -16,9 +16,7 @@ from model_service.builders.declarations import (
     StrideFraction,
 )
 from model_service.shared.model_declarations import InferenceContract
-from model_service.shared.result import (
-    SharedArtifact,
-)
+from model_service.shared.result import SharedArtifact
 
 
 class EmbeddingInputs(BuilderInputs):

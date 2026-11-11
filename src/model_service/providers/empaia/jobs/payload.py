@@ -9,12 +9,8 @@ from typing import TYPE_CHECKING, Annotated
 import jwt
 from pydantic import Field, ValidationError
 
-from model_service.providers.empaia.app_service.gateway import (
-    EmpaiaJobContext,
-)
-from model_service.scheduler.public import (
-    InvalidScheduleRequestError,
-)
+from model_service.providers.empaia.app_service.gateway import EmpaiaJobContext
+from model_service.scheduler.public import InvalidScheduleRequestError
 
 
 if TYPE_CHECKING:

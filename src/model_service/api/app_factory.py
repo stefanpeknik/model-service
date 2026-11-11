@@ -13,7 +13,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from model_service.api.health import (
-    DeploymentHealthCheck,
+    DeploymentHealth,
     DeploymentState,
     DeploymentStatus,
 )
@@ -28,7 +28,6 @@ if TYPE_CHECKING:
 
     from starlette.types import Lifespan
 
-    from model_service.api.synchronous_runs import SynchronousBuilderRunner
     from model_service.inference.catalog import ModelCatalog
     from model_service.providers.provider import RouteFactory
     from model_service.scheduler.protocols import Scheduler
@@ -40,7 +39,6 @@ from typing import TYPE_CHECKING
 
 import httpx
 
-from model_service.api.health import DeploymentHealth
 from model_service.api.synchronous_runs import SynchronousBuilderService
 from model_service.builders.registry import BUILDERS, get_builder
 from model_service.inference.catalog import ModelCatalog
@@ -84,9 +82,9 @@ def create_app(
     scheduler: Scheduler,
     *,
     catalog: ModelCatalog,
-    builder_runner: SynchronousBuilderRunner | None = None,
+    builder_runner: SynchronousBuilderService | None = None,
     lifespan: Lifespan[FastAPI] | None = None,
-    deployment_health: DeploymentHealthCheck | None = None,
+    deployment_health: DeploymentHealth | None = None,
     access: Access | None = None,
     provider_routes: Sequence[RouteFactory] = (),
 ) -> FastAPI:

@@ -22,7 +22,7 @@ from model_service.scheduler.public import (
     ScheduleRequest,
     SubmissionIdentity,
 )
-from model_service.shared.caller_request import STANDALONE_PROVIDER, BuilderRequest
+from model_service.shared.caller_request import BuilderRequest
 from model_service.shared.failures import InvalidInvocation
 from model_service.shared.invocation import (
     SHARED_STORAGE,
@@ -46,15 +46,14 @@ if TYPE_CHECKING:
     from model_service.shared.json_values import JsonValue
 
 
+# The provider name of requests made through the public builder routes.
+STANDALONE_PROVIDER = "standalone"
+
+
 class StandaloneProviderAdapter(ProviderAdapter):
     name = STANDALONE_PROVIDER
 
     def __init__(self, shared_storage: SharedStorageAccessFactory) -> None:
-        """Keep the shared-storage adapter that checks inputs at admission.
-
-        Args:
-            shared_storage: The adapter for the allowed shared-storage roots.
-        """
         self._shared_storage = shared_storage
 
     def identify(self, request: ScheduleRequest) -> SubmissionIdentity:

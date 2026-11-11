@@ -10,18 +10,14 @@ from model_service.scheduler.internal_state import (
     ExecutionRecord,
     WorkKind,
 )
-from model_service.scheduler.status import (
-    ExecutionStatus,
-)
+from model_service.scheduler.status import ExecutionStatus
 
 
 if TYPE_CHECKING:
     from datetime import datetime
 
 
-from model_service.scheduler.transitions.common import (
-    TransitionsBase,
-)
+from model_service.scheduler.transitions.common import TransitionsBase
 
 
 class AdmissionTransitions(TransitionsBase):

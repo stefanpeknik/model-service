@@ -7,9 +7,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from model_service.providers.standalone.shared_storage import (
-    SharedStorageAccessFactory,
-)
+from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from model_service.shared.failures import InvalidInvocation
 from model_service.shared.invocation import ExecutionContext, SharedPathInput
 from tests.support.builder_fixtures import invocation

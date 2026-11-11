@@ -13,9 +13,7 @@ from model_service.scheduler.internal_state import (
     AdmissionResult,
     ExecutionRecord,
 )
-from model_service.scheduler.public import (
-    ScheduleConflictError,
-)
+from model_service.scheduler.public import ScheduleConflictError
 from model_service.scheduler.store.rows import ExecutionRow
 
 

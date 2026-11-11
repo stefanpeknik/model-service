@@ -23,9 +23,7 @@ from model_service.builders.heatmap.processor import (
     SlideHeatmapProcessor,
 )
 from model_service.builders.registry import get_builder
-from model_service.providers.standalone.shared_storage import (
-    SharedStorageAccessFactory,
-)
+from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from model_service.shared.invocation import SharedPathInput
 from model_service.shared.model_declarations import SpatialScoresModel
 from model_service.shared.result import SharedArtifact

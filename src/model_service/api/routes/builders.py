@@ -11,12 +11,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, Request, Response, status
+from pydantic import Field
 
-# FastAPI reads these annotations at runtime.
-from model_service.api.request_bodies import (
-    ImmediateBuilderRequest,
-    ScheduledBuilderRequest,
-)
 from model_service.builders.registry import BUILDERS
 from model_service.http_common.auth import Access, Action
 from model_service.http_common.errors import (
@@ -26,35 +22,49 @@ from model_service.http_common.errors import (
     lookup_error,
 )
 from model_service.http_common.scheduling import require_idempotency_key, submit
+from model_service.providers.standalone.provider import STANDALONE_PROVIDER
 from model_service.scheduler.builder_dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,
     UnknownOutcomeError,
 )
 from model_service.scheduler.public import ScheduleRequest, ScheduleResult
-from model_service.shared.caller_request import STANDALONE_PROVIDER as STANDALONE
+from model_service.shared.caller_request import BuilderRequest
 from model_service.shared.failures import (
     IncompatibleModelError,
     InvalidInvocation,
     UnknownBuilderError,
     UnknownModelError,
 )
-from model_service.shared.json_values import (
-    JsonValue,
-)
-from model_service.shared.model_declarations import (
-    InferenceContract,
-)
-from model_service.shared.result import (
-    BuilderResult,
-)
+from model_service.shared.invocation import Deadline
+from model_service.shared.json_values import JsonValue
+from model_service.shared.model_declarations import InferenceContract
+from model_service.shared.result import BuilderResult
 
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
 
-    from model_service.api.synchronous_runs import SynchronousBuilderRunner
+    from model_service.api.synchronous_runs import SynchronousBuilderService
     from model_service.scheduler.protocols import Scheduler
+
+
+class ImmediateBuilderRequest(BuilderRequest):
+    deadline_at: Deadline
+
+
+class ScheduledBuilderRequest(BuilderRequest):
+    """A builder request plus a timeout; the `Idempotency-Key` header names it."""
+
+    requested_timeout_seconds: Annotated[int, Field(strict=True, gt=0)] | None = None
+
+    def builder_request(self) -> dict[str, JsonValue]:
+        """Serialize the builder request without the scheduling timeout.
+
+        Returns:
+            The JSON body stored with the execution.
+        """
+        return self.model_dump(mode="json", exclude={"requested_timeout_seconds"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,7 +90,7 @@ class BuilderView:
 
 def create_router(
     scheduler: Scheduler,
-    builder_runner: SynchronousBuilderRunner | None,
+    builder_runner: SynchronousBuilderService | None,
     access: Access,
 ) -> APIRouter:
     """Build the `/v1/builders` router: the catalog, synchronous runs and scheduling.
@@ -191,7 +201,7 @@ def create_router(
             ScheduleRequest(
                 builder_id=builder_id,
                 model_id=model_id,
-                provider=STANDALONE,
+                provider=STANDALONE_PROVIDER,
                 body=body.builder_request(),
                 requested_timeout_seconds=body.requested_timeout_seconds,
                 idempotency_key=idempotency_key,

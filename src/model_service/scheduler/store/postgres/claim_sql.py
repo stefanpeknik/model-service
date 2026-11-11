@@ -23,9 +23,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
-from model_service.scheduler.store.postgres.base import (
-    PostgresBase,
-)
+from model_service.scheduler.store.postgres.base import PostgresBase
 
 
 logger = logging.getLogger(__name__)

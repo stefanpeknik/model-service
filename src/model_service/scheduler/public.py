@@ -18,9 +18,7 @@ from model_service.shared.failures import (
     UnknownModelError,
 )
 from model_service.shared.invocation import Invocation
-from model_service.shared.json_values import (
-    JsonValue,
-)
+from model_service.shared.json_values import JsonValue
 from model_service.shared.model_declarations import ModelBinding
 from model_service.shared.result import BuilderResult
 

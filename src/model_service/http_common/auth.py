@@ -12,15 +12,11 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from fastapi import Depends, Request
 
 from model_service.http_common.errors import ApiErrorCode, http_error
-
-
-if TYPE_CHECKING:
-    from collections.abc import Mapping
 
 
 class Action(StrEnum):
@@ -38,10 +34,6 @@ class Principal:
     """The caller; `subject` is None for anonymous requests."""
 
     subject: str | None
-    claims: Mapping[str, object] = field(default_factory=dict)
-
-
-ANONYMOUS = Principal(None)
 
 
 class AuthenticationError(Exception):
@@ -89,28 +81,15 @@ class Authorizer(ABC):
 
 class AllowAnonymous(Authenticator):
     async def authenticate(self, request: Request) -> Principal:
-        """Accept every request as anonymous.
-
-        Args:
-            request: The incoming HTTP request; ignored.
-
-        Returns:
-            The anonymous principal.
-        """
-        return ANONYMOUS
+        """Accept every request as anonymous."""
+        return Principal(None)
 
 
 class AllowAll(Authorizer):
     async def authorize(
         self, principal: Principal, action: Action, execution_id: str | None
     ) -> None:
-        """Allow every action.
-
-        Args:
-            principal: The caller; ignored.
-            action: The requested action; ignored.
-            execution_id: The execution the route names; ignored.
-        """
+        """Allow every action."""
         return None
 
 

@@ -17,9 +17,7 @@ from typing import TYPE_CHECKING, Annotated, Union, get_args, get_origin
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from model_service.shared.failures import IncompatibleModelError, InvalidInvocation
-from model_service.shared.model_declarations import (
-    InferenceContract,
-)
+from model_service.shared.model_declarations import InferenceContract
 from model_service.shared.result import (
     BuilderResult,
     InlineOutput,

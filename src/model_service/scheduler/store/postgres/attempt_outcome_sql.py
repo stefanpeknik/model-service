@@ -6,9 +6,7 @@ from model_service.scheduler.internal_state import (
     ExecutionRecord,
     Settlement,
 )
-from model_service.scheduler.store.postgres.base import (
-    PostgresBase,
-)
+from model_service.scheduler.store.postgres.base import PostgresBase
 
 
 class SettlementOperations(PostgresBase):

@@ -24,9 +24,7 @@ from model_service.api.health import DeploymentHealth
 from model_service.api.synchronous_runs import SynchronousBuilderService
 from model_service.inference.catalog import ModelCatalog
 from model_service.providers.standalone.provider import StandaloneProviderAdapter
-from model_service.providers.standalone.shared_storage import (
-    SharedStorageAccessFactory,
-)
+from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from model_service.scheduler.builder_dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,
