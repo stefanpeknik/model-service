@@ -4,15 +4,9 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
-from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Never
 
-from model_service.providers.empaia.app_service.gateway import (
-    EmpaiaGateway,
-    EmpaiaGatewayError,
-    EmpaiaGatewayFactory,
-    EmpaiaJobContext,
-)
+from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.jobs.mapping import raise_preparation_error
 from model_service.scheduler.public import (
     ProviderFinishFailureError,
@@ -21,24 +15,62 @@ from model_service.scheduler.public import (
 
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncIterator, Callable
+    from contextlib import AbstractAsyncContextManager
+
+    from model_service.providers.empaia.app_service.gateway import (
+        EmpaiaGateway,
+        EmpaiaGatewayFactory,
+        EmpaiaJobContext,
+    )
 
 
-class EmpaiaErrorCode(StrEnum):
-    """Name the safe failure for unsuccessful EMPAIA publication or terminal reporting."""
-
-    FINISH_FAILED = "empaia_finish_failed"
-
+# The safe error code for unsuccessful EMPAIA publication or terminal reporting.
+FINISH_FAILED = "empaia_finish_failed"
+_UNAVAILABLE = "EMPAIA integration is temporarily unavailable"
 
 logger = logging.getLogger(__name__)
 
 
+def preparation_gateway(
+    factory: EmpaiaGatewayFactory, context: EmpaiaJobContext
+) -> AbstractAsyncContextManager[EmpaiaGateway]:
+    """Own a gateway for admission; failing to open or close it refuses admission.
+
+    Args:
+        factory: Creates the gateway.
+        context: The job's connection settings.
+
+    Returns:
+        A context manager yielding the gateway.
+    """
+    return _owned_gateway(factory, context, _raise_preparation, close_strictly=True)
+
+
+def finish_gateway(
+    factory: EmpaiaGatewayFactory, context: EmpaiaJobContext
+) -> AbstractAsyncContextManager[EmpaiaGateway]:
+    """Own a gateway for finish; closing errors are only logged, keeping the outcome.
+
+    Args:
+        factory: Creates the gateway.
+        context: The job's connection settings.
+
+    Returns:
+        A context manager yielding the gateway.
+    """
+    return _owned_gateway(factory, context, _raise_finish, close_strictly=False)
+
+
 @asynccontextmanager
-async def preparation_gateway(
+async def _owned_gateway(
     factory: EmpaiaGatewayFactory,
     context: EmpaiaJobContext,
+    raise_translated: Callable[[Exception], Never],
+    *,
+    close_strictly: bool,
 ) -> AsyncIterator[EmpaiaGateway]:
-    """Own a preparation gateway and translate acquisition/cleanup failures.
+    """Open, yield and close a gateway, translating opening failures.
 
     A failure in the body closes the gateway, logging cleanup errors, and is
     re-raised unchanged.
@@ -46,83 +78,32 @@ async def preparation_gateway(
     Args:
         factory: Creates the gateway.
         context: The job's connection settings.
+        raise_translated: Raises the caller-facing error for a gateway failure.
+        close_strictly: Whether a failed close after success is translated too.
 
     Yields:
         The gateway.
-
-    Raises:
-        SchedulingUnavailableError: If creating or closing the gateway fails
-            retryably or unexpectedly.
-        InvalidScheduleRequestError: If creating or closing the gateway fails
-            with a non-retryable gateway error.
     """
     try:
         gateway = factory(context)
-    except EmpaiaGatewayError as error:
-        raise_preparation_error(error)
     except Exception as error:
-        raise SchedulingUnavailableError(
-            "EMPAIA integration is temporarily unavailable"
-        ) from error
+        raise_translated(error)
     try:
         yield gateway
     except BaseException:
-        await close_preserving_outcome(gateway)
+        await _close_logged(gateway)
         raise
-    try:
-        await gateway.close()
-    except EmpaiaGatewayError as error:
-        raise_preparation_error(error)
-    except Exception as error:
-        raise SchedulingUnavailableError(
-            "EMPAIA integration is temporarily unavailable"
-        ) from error
-
-
-@asynccontextmanager
-async def finish_gateway(
-    factory: EmpaiaGatewayFactory,
-    context: EmpaiaJobContext,
-) -> AsyncIterator[EmpaiaGateway]:
-    """Own a finish gateway and translate acquisition failures.
-
-    A failure in the body closes the gateway and is re-raised unchanged; cleanup
-    errors are only logged, so the external completion outcome is kept.
-
-    Args:
-        factory: Creates the gateway.
-        context: The job's connection settings.
-
-    Yields:
-        The gateway.
-
-    Raises:
-        ProviderFinishFailureError: If creating the gateway fails; retryable when
-            the failure is not a gateway error.
-    """
-    try:
-        gateway = factory(context)
-    except EmpaiaGatewayError as error:
-        raise finish_failure(error) from error
-    except Exception as error:
-        raise ProviderFinishFailureError(
-            code=EmpaiaErrorCode.FINISH_FAILED,
-            safe_message="EMPAIA integration is temporarily unavailable",
-            retryable=True,
-        ) from error
-    try:
-        yield gateway
-    except BaseException:
-        await close_preserving_outcome(gateway)
-        raise
+    if not close_strictly:
+        await _close_logged(gateway)
+        return
     try:
         await gateway.close()
     except Exception as error:
-        logger.warning("EMPAIA gateway cleanup failed: %s", type(error).__name__)
+        raise_translated(error)
 
 
-async def close_preserving_outcome(gateway: EmpaiaGateway) -> None:
-    """Close a gateway and log cleanup errors without replacing an already established outcome.
+async def _close_logged(gateway: EmpaiaGateway) -> None:
+    """Close a gateway, logging rather than raising a cleanup error.
 
     Args:
         gateway: The gateway to close.
@@ -133,18 +114,37 @@ async def close_preserving_outcome(gateway: EmpaiaGateway) -> None:
         logger.warning("EMPAIA gateway cleanup failed: %s", type(error).__name__)
 
 
-def finish_failure(error: EmpaiaGatewayError) -> ProviderFinishFailureError:
-    """Translate safe gateway retry and uncertainty metadata into a provider finish failure.
+def _raise_preparation(error: Exception) -> Never:
+    """Refuse admission: gateway errors by their retry flag, anything else as unavailable.
 
     Args:
-        error: The gateway error.
+        error: The failure.
 
-    Returns:
-        The finish failure, with the same message, retry flag and outcome.
+    Raises:
+        SchedulingUnavailableError: If the failure is retryable or unexpected.
+        InvalidScheduleRequestError: If the gateway error is not retryable.
     """
-    return ProviderFinishFailureError(
-        code=EmpaiaErrorCode.FINISH_FAILED,
+    if isinstance(error, EmpaiaGatewayError):
+        raise_preparation_error(error)
+    raise SchedulingUnavailableError(_UNAVAILABLE) from error
+
+
+def _raise_finish(error: Exception) -> Never:
+    """Fail the finish with the gateway's safe metadata, or as retryable if unexpected.
+
+    Args:
+        error: The failure.
+
+    Raises:
+        ProviderFinishFailureError: Always.
+    """
+    if not isinstance(error, EmpaiaGatewayError):
+        raise ProviderFinishFailureError(
+            code=FINISH_FAILED, safe_message=_UNAVAILABLE, retryable=True
+        ) from error
+    raise ProviderFinishFailureError(
+        code=FINISH_FAILED,
         safe_message=error.safe_message,
         retryable=error.retryable,
         outcome_unknown=error.outcome_unknown,
-    )
+    ) from error

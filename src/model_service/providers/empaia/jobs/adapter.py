@@ -36,7 +36,7 @@ from model_service.providers.empaia.app_service.gateway import (
 )
 from model_service.providers.empaia.ead.builder_io import BUILDER_IO
 from model_service.providers.empaia.jobs.gateways import (
-    EmpaiaErrorCode,
+    FINISH_FAILED,
     finish_gateway,
     preparation_gateway,
 )
@@ -313,7 +313,7 @@ class EmpaiaProviderAdapter(ProviderAdapter):
                     await gateway.report_failure("execution was cancelled")
             except EmpaiaGatewayError as error:
                 raise ProviderFinishFailureError(
-                    code=EmpaiaErrorCode.FINISH_FAILED,
+                    code=FINISH_FAILED,
                     safe_message=error.safe_message,
                     retryable=error.retryable,
                     outcome_unknown=error.outcome_unknown or mutation_completed,
