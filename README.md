@@ -35,8 +35,10 @@ Dated records of live runs, newest first (all in
 - [2026-10-14](docs/operations/core-acceptance-2026-10-14.md): core API and
   scheduler acceptance.
 
-Known gap: a standalone (region-of-interest) result completes but the EMPAIA
-case browser does not show it yet; raised with its maintainers.
+Pending check: a standalone (region-of-interest) result completed but the EMPAIA
+case browser did not show it. Its maintainers reported a fix on 2026-11-11 (a
+small bug and an outdated case-browser version); a new standalone run should
+confirm it.
 
 ## Layout
 

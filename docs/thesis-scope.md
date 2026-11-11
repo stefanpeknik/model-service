@@ -79,4 +79,5 @@ concurrently); the whole EMPAIA job takes 49 s warm and 101 s with a cold GPU
 
 - Tiles go to the model one call each; replica-side `@serve.batch` groups
   them, but client-side batches would cut per-call overhead further.
-- A standalone EMPAIA result is not yet shown by the case browser.
+- A standalone EMPAIA result was not shown by the case browser; its maintainers
+  reported a fix on 2026-11-11, still to be confirmed with a new run.
