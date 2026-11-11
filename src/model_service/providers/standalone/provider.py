@@ -145,13 +145,7 @@ class StandaloneProviderAdapter(ProviderAdapter):
         *,
         before_mutation: BeforeMutation,
     ) -> None:
-        """Do nothing; the outputs already sit in shared storage.
-
-        Args:
-            _protected_context: Unused; standalone executions have none.
-            _outcome: Unused.
-            before_mutation: Unused; nothing is written.
-        """
+        """Do nothing; the outputs already sit in shared storage."""
         del before_mutation
 
 

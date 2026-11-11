@@ -83,27 +83,8 @@ class EmpaiaGatewayError(RuntimeError):
 
     @classmethod
     def invalid(cls, safe_message: str) -> EmpaiaGatewayError:
-        """Create an error for rejected or malformed integration data; retrying will not help.
-
-        Args:
-            safe_message: A message safe to log and show the job's user.
-
-        Returns:
-            A non-retryable error with a known outcome.
-        """
+        """Create a non-retryable error for rejected or malformed integration data."""
         return cls(safe_message, retryable=False)
-
-    @classmethod
-    def unavailable(cls, safe_message: str) -> EmpaiaGatewayError:
-        """Create an error for a transient failure; the attempt may be retried.
-
-        Args:
-            safe_message: A message safe to log and show the job's user.
-
-        Returns:
-            A retryable error with a known outcome.
-        """
-        return cls(safe_message, retryable=True)
 
 
 class EmpaiaJobMode(StrEnum):
@@ -150,50 +131,22 @@ class EmpaiaGateway(ABC):
 
     @abstractmethod
     def set_before_mutation(self, callback: MutationGuard) -> None:
-        """Install an async guard to persist the scheduler's mutation marker before external writes.
-
-        Args:
-            callback: Awaited before each external write.
-        """
+        """Install an async guard to persist the scheduler's mutation marker before external writes."""
         ...
 
     @abstractmethod
     async def get_configuration(self) -> dict[str, JsonValue]:
-        """Fetch the job's resolved provider configuration as JSON values.
-
-        Returns:
-            The configuration, by key.
-
-        Raises:
-            EmpaiaGatewayError: If the request fails or the configuration is invalid.
-        """
+        """Fetch the job's resolved provider configuration as JSON values."""
         ...
 
     @abstractmethod
     async def get_mode(self) -> EmpaiaJobMode:
-        """Fetch how the job was started.
-
-        Returns:
-            The job's mode.
-
-        Raises:
-            EmpaiaGatewayError: If the request fails or the mode is unknown.
-        """
+        """Fetch how the job was started."""
         ...
 
     @abstractmethod
     async def has_input(self, name: str) -> bool:
-        """Check whether the job has the named input; optional builder inputs depend on the app's mode.
-
-        Args:
-            name: The EMPAIA input key.
-
-        Returns:
-            True if the job has the input.
-
-        Raises:
-            EmpaiaGatewayError: If the request fails other than by a missing input.
-        """
+        """Check whether the job has the named input; optional builder inputs depend on the app's mode."""
         ...
 
     @abstractmethod
@@ -202,85 +155,36 @@ class EmpaiaGateway(ABC):
         name: str,
         directory: str,
     ) -> str:
-        """Make a named job input available inside `directory`.
-
-        Args:
-            name: The EMPAIA input key.
-            directory: The directory to put the file in.
-
-        Returns:
-            The path of the file.
-
-        Raises:
-            EmpaiaGatewayError: If the input cannot be fetched or materialized.
-        """
+        """Make a named job input available inside `directory`."""
         ...
 
     @abstractmethod
     async def post_primitive(
         self, name: str, output_type: str, value: JsonValue
     ) -> None:
-        """Post one output as a primitive of the given EMPAIA type.
-
-        Args:
-            name: The EMPAIA output key.
-            output_type: The EMPAIA primitive type, e.g. `integer`.
-            value: The output's value.
-
-        Raises:
-            EmpaiaGatewayError: If the value is not a valid primitive or the write
-                fails; a failed write may leave an unknown outcome.
-        """
+        """Post one output as a primitive of the given EMPAIA type."""
         ...
 
     @abstractmethod
     async def slide_info(self) -> SlideInfo:
-        """Fetch the job's slide with every level's downsample factor.
-
-        Returns:
-            The slide.
-
-        Raises:
-            EmpaiaGatewayError: If the request fails.
-        """
+        """Fetch the job's slide with every level's downsample factor."""
         ...
 
     @abstractmethod
     async def publish_pixelmap(
         self, name: str, slide_id: str, tile_sets: tuple[PixelmapTileSet, ...]
     ) -> None:
-        """Create one output pixelmap on the slide and upload its levels.
-
-        Args:
-            name: The EMPAIA output key, also the pixelmap's name.
-            slide_id: The slide the pixelmap belongs to.
-            tile_sets: The pyramid levels to upload.
-
-        Raises:
-            EmpaiaGatewayError: If creating or uploading fails; a failed write may
-                leave an unknown outcome.
-        """
+        """Create one output pixelmap on the slide and upload its levels."""
         ...
 
     @abstractmethod
     async def finalize(self) -> None:
-        """Mark the external job's successful completion after its outputs are published.
-
-        Raises:
-            EmpaiaGatewayError: If the request fails; the outcome may be unknown.
-        """
+        """Mark the external job's successful completion after its outputs are published."""
         ...
 
     @abstractmethod
     async def report_failure(self, message: str) -> None:
-        """Report a safe failure or cancellation message to the external job.
-
-        Args:
-            message: The safe message to report.
-
-        Raises:
-            EmpaiaGatewayError: If the request fails; the outcome may be unknown.
-        """
+        """Report a safe failure or cancellation message to the external job."""
         ...
 
     @abstractmethod

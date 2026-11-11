@@ -17,7 +17,7 @@ from model_service.providers.empaia.ead.apps import (
 )
 from model_service.providers.empaia.ead.builder_io import BUILDER_IO
 from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
-from model_service.providers.empaia.publishing.pixelmap import _clip
+from model_service.providers.empaia.jobs.inputs import _clip
 from model_service.providers.empaia.publishing.publishers import (
     PrimitivePublisher,
     PublisherRegistry,

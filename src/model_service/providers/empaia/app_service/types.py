@@ -6,7 +6,6 @@ use them to place inputs and outputs on the slide.
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -52,27 +51,3 @@ class Rectangle:
     y: int
     width: int
     height: int
-
-
-class RectangleMaskWriter(ABC):
-    """Define local rasterization of a slide-space rectangle into a mask file."""
-
-    @abstractmethod
-    def write(
-        self,
-        destination: Path,
-        slide: SlideMetadata,
-        rectangle: Rectangle,
-    ) -> None:
-        """Write a region mask with geometry and physical resolution derived from the slide.
-
-        Args:
-            destination: The mask file to write.
-            slide: The slide the rectangle lies on.
-            rectangle: The region, in slide level-0 pixels.
-
-        Raises:
-            EmpaiaGatewayError: If the rectangle misses the slide or the mask cannot be
-                written.
-        """
-        ...

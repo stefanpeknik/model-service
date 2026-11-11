@@ -1,8 +1,4 @@
-"""The providers this deployment composes, in order.
-
-Adding a provider adds its `Provider` here. Kept apart from `provider.py`, which
-every provider imports for the `Provider` base.
-"""
+"""The providers this deployment composes, in order; a new provider is added here."""
 
 from __future__ import annotations
 

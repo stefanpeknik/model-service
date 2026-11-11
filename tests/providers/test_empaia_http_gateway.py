@@ -33,7 +33,7 @@ class RecordingRectangleWriter:
         """Start an empty list of mask destinations and geometry requests."""
         self.calls: list[tuple[Path, SlideMetadata, Rectangle]] = []
 
-    def write(
+    def __call__(
         self,
         destination: Path,
         slide: SlideMetadata,

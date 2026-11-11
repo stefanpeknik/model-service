@@ -36,6 +36,7 @@ from model_service.providers.empaia.app_service.types import (
 from model_service.providers.empaia.jobs.inputs import (
     link_direct_input,
     write_rectangle_input,
+    write_rectangle_mask,
 )
 
 
@@ -49,7 +50,7 @@ if TYPE_CHECKING:
         EmpaiaGatewayFactory,
         MutationGuard,
     )
-    from model_service.providers.empaia.app_service.types import RectangleMaskWriter
+    from model_service.providers.empaia.jobs.inputs import RectangleMaskWriter
     from model_service.providers.empaia.settings import EmpaiaSettings
     from model_service.shared.json_values import JsonValue
 
@@ -64,7 +65,7 @@ class HttpEmpaiaGateway(EmpaiaGateway):
         credential: str,
         *,
         client: Client | None = None,
-        rectangle_writer: RectangleMaskWriter | None = None,
+        rectangle_writer: RectangleMaskWriter = write_rectangle_mask,
     ) -> None:
         """Require complete connection settings and select the SDK client and rectangle writer.
 
@@ -88,12 +89,7 @@ class HttpEmpaiaGateway(EmpaiaGateway):
             )
         self._job_id = job_id
         self._client = client or Client(api_url, job_id, credential)
-        if rectangle_writer is None:
-            from model_service.providers.empaia.publishing.pixelmap import (
-                VipsRectangleMaskWriter,
-            )
-
-        self._rectangle_writer = rectangle_writer or VipsRectangleMaskWriter()
+        self._rectangle_writer = rectangle_writer
 
     def set_before_mutation(self, callback: MutationGuard) -> None:
         """Install the async durable-claim guard used immediately before each external mutation.
