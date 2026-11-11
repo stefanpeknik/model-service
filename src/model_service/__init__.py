@@ -6,7 +6,7 @@
   it calls builder replicas over HTTP in builder_dispatch.py (see docs/adr/0001).
 - builders/: the whole-slide builders and how to declare one.
 - builder_deployment/: the Ray Serve deployment that hosts a builder.
-- inference/: the deployed models (catalog.py, read from the model YAML) and
+- deployed_models/: the deployed models (catalog.py, read from the model YAML) and
   the clients that call and check them (model_clients.py).
 - providers/: where inputs come from and results go (standalone, EMPAIA).
 - http_common/: auth, error mapping and scheduling calls the API and provider routes share.

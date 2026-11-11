@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, status
 from fastapi.exceptions import RequestValidationError
+from pydantic import Field
 from ray import serve
 
 from model_service.builder_deployment.http_handler import (
@@ -19,7 +20,6 @@ from model_service.builder_deployment.http_handler import (
     run_http,
 )
 from model_service.builder_deployment.runner import BuilderApplication
-from model_service.builder_deployment.settings import DeploymentSettings
 from model_service.builders.base import ReplicaSettings
 from model_service.builders.registry import get_builder
 from model_service.providers.registry import PROVIDERS
@@ -33,6 +33,12 @@ if TYPE_CHECKING:
 
 fastapi = FastAPI()
 fastapi.add_exception_handler(RequestValidationError, invalid_request)  # type: ignore[arg-type]
+
+
+class DeploymentSettings(ReplicaSettings):
+    """The deployment's Ray `user_config`: which builder, and its replica settings."""
+
+    builder_id: str = Field(min_length=1)
 
 
 def build_application(config: DeploymentSettings) -> BuilderApplication:

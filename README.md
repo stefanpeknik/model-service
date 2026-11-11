@@ -1,7 +1,7 @@
 # Model Service
 
-RationAI's service for running pathology models on Ray Serve: raw per-tile
-inference, and **builders** that run a chosen model over a whole slide, either
+RationAI's service for running pathology models on Ray Serve: **builders** run
+a chosen model over a whole slide, either
 synchronously or as durable executions you can poll, cancel, or leave queued
 until a GPU frees up.
 
@@ -47,7 +47,7 @@ src/model_service/
   scheduler/              durable executions on PostgreSQL (runs inside the API process)
   builders/               builder contract and the builders: heatmap/, embeddings/
   builder_deployment/     the Ray Serve app that hosts builders
-  inference/              model catalog and one client per inference contract
+  deployed_models/        model catalog and one client per inference contract
   providers/              where builders read input and publish output: standalone, empaia/
   shared/                 types more than one process uses
   model_implementations/  inference code served by Ray Serve

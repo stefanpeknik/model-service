@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 
     from starlette.types import Lifespan
 
-    from model_service.inference.catalog import ModelCatalog
+    from model_service.deployed_models.catalog import ModelCatalog
     from model_service.providers.provider import RouteFactory
     from model_service.scheduler.protocols import Scheduler
 
@@ -41,7 +41,7 @@ import httpx
 
 from model_service.api.synchronous_runs import SynchronousBuilderService
 from model_service.builders.registry import BUILDERS, get_builder
-from model_service.inference.catalog import ModelCatalog
+from model_service.deployed_models.catalog import ModelCatalog
 from model_service.providers.registry import PROVIDERS
 from model_service.scheduler.builder_dispatch import HTTPBuilderDispatch
 from model_service.scheduler.execution_scheduler import ExecutionScheduler

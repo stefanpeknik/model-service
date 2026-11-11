@@ -9,7 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from model_service.builders.registry import compatible_builders
-from model_service.inference.catalog import CatalogError, ModelCatalog
+from model_service.deployed_models.catalog import CatalogError, ModelCatalog
 from model_service.shared.failures import UnknownModelError
 from model_service.shared.model_declarations import (
     InferenceContract,
@@ -227,7 +227,7 @@ class ModelImplementationTests(unittest.TestCase):
 
         import yaml
 
-        from model_service.inference.model_clients import CLIENTS
+        from model_service.deployed_models.model_clients import CLIENTS
 
         self.assertTrue(MODEL_FILES)
         for path in MODEL_FILES:

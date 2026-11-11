@@ -22,7 +22,7 @@ from model_service.shared.model_declarations import (
 
 
 if TYPE_CHECKING:
-    from model_service.inference.catalog import ModelCatalog
+    from model_service.deployed_models.catalog import ModelCatalog
 
 
 @dataclass(frozen=True, slots=True)

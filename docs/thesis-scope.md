@@ -19,7 +19,7 @@ and add a trained model with one YAML file.
 | Public API | One HTTP entry point for models, builders and executions, with auth hooks, capacity checks and health | `src/model_service/api/`, `http_common/` |
 | Durable scheduler | Executions stored in PostgreSQL: queueing until capacity frees, leases, retries, deadlines, cancellation, priorities | `src/model_service/scheduler/` |
 | Builders | Whole-slide outputs as plug-ins: heatmap (score grid) and tile embeddings (HDF5), one Ray Serve app hosting any builder | `builders/`, `builder_deployment/` |
-| Model catalog | One YAML per trained model feeds both Ray Serve and the API; the API refuses to start on an inconsistent file, and each run checks the running model matches its declaration | `inference/catalog.py`, `deploy/helm/rayservice/models/` |
+| Model catalog | One YAML per trained model feeds both Ray Serve and the API; the API refuses to start on an inconsistent file, and each run checks the running model matches its declaration | `deployed_models/catalog.py`, `deploy/helm/rayservice/models/` |
 | EMPAIA provider | Self-registration as an EMPAIA app, JES job execution in STANDALONE and PREPROCESSING modes, publication of primitives and pixelmaps through the EMPAIA SDK | `providers/empaia/`, [EMPAIA integration](architecture/empaia.md) |
 | Tests | About 380 unit and PostgreSQL tests, including a contract test kit every builder runs | `tests/` |
 
@@ -46,15 +46,9 @@ Removed because something replaced them: the stand-alone
 
 ## How traffic flows
 
-Immediate raw inference, `POST /v1/models/{m}/run`:
-
-```text
-client ─HTTP─▶ API ─HTTP─▶ Ray proxy ─▶ model replica      (and back)
-```
-
-The API hop adds auth, capacity limits and tile validation that the baseline's
-direct proxy access lacked. Scheduled raw inference stores the payload on a
-shared volume so it survives an API restart.
+Raw per-tile inference does not go through model-service: a caller posts a
+tile straight to the model's Ray Serve ingress (`POST /<model-id>/`), as in the
+baseline.
 
 Builder run (immediate or scheduled):
 
@@ -84,5 +78,4 @@ concurrently); the whole EMPAIA job takes 49 s warm and 101 s with a cold GPU
 
 - Tiles go to the model one call each; replica-side `@serve.batch` groups
   them, but client-side batches would cut per-call overhead further.
-- The raw inference proxy buffers the model's response before returning it.
 - A standalone EMPAIA result is not yet shown by the case browser.

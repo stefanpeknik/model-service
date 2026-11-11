@@ -9,7 +9,7 @@ contract, and any model of that contract can run with it.
 deploy/helm/rayservice/models/<model>.yaml    inference.contract: spatial-scores
         │ catalog (facade)                    serve: the Ray application
         ▼
-inference/model_clients.py                     SpatialScoresClient: get_config + predict,
+deployed_models/model_clients.py                     SpatialScoresClient: get_config + predict,
         │ client per contract                 checked answers, failure codes
         ▼
 builders/<builder>/spec.py             accepts=SPATIAL_SCORES, inputs, configuration,
@@ -178,7 +178,7 @@ scores.
 
    A model file's `inference` block must then match it (see
    [Adding models](adding-models.md)).
-2. **Write its client** in `src/model_service/inference/model_clients.py`, a
+2. **Write its client** in `src/model_service/deployed_models/model_clients.py`, a
    `ModelClient` subclass. It sets `contract`, and `methods`: the deployment
    methods a model of the contract must have. It also implements:
    - `_matches(running)`: does the `get_config()` result equal the
@@ -190,7 +190,7 @@ scores.
    Add the client to `CLIENTS`.
 3. **Implement it in models.** A model implementation in `src/model_service/model_implementations/`
    provides those methods, and its YAML names the contract.
-   `tests/inference/test_catalog.py` fails if a model file's implementation
+   `tests/deployed_models/test_catalog.py` fails if a model file's implementation
    lacks a method its contract's client calls.
 
 Then add builders that accept the new contract, as above.

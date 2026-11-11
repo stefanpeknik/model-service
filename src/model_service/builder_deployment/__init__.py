@@ -3,7 +3,6 @@
 - serve.py: the Ray Serve ingress (Helm imports serve:app).
 - runner.py: runs one invocation: checks, deadline, cleanup.
 - http_handler.py: answers a run request and maps exceptions to HTTP errors.
-- settings.py: DeploymentSettings, the deployment's user_config.
 
 Its HTTP format is shared/builder_http.py; the client that calls it is
 scheduler/builder_dispatch.py.

@@ -7,7 +7,7 @@ from typing import Any
 
 import numpy as np
 
-from model_service.inference.model_clients import (
+from model_service.deployed_models.model_clients import (
     CLIENTS,
     SpatialScoresClient,
     TileEmbeddingClient,

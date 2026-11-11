@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
     from model_service.builders.base import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
-    from model_service.inference.catalog import ModelCatalog
+    from model_service.deployed_models.catalog import ModelCatalog
     from model_service.scheduler.protocols import Scheduler
     from model_service.scheduler.public import (
         BeforeMutation,

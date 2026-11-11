@@ -10,7 +10,7 @@ from model_service.shared.invocation import ExecutionContext
 
 if TYPE_CHECKING:
     from model_service.api.routes.builders import ImmediateBuilderRequest
-    from model_service.inference.catalog import ModelCatalog
+    from model_service.deployed_models.catalog import ModelCatalog
     from model_service.scheduler.builder_dispatch import HTTPBuilderDispatch
     from model_service.shared.result import BuilderResult
 

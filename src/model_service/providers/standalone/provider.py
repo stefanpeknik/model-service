@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
     from model_service.builders.base import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
-    from model_service.inference.catalog import ModelCatalog
+    from model_service.deployed_models.catalog import ModelCatalog
     from model_service.providers.provider import ApiContribution
     from model_service.providers.standalone.shared_storage import (
         SharedStorageAccessFactory,

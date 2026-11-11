@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     import numpy as np
 
     from model_service.builders.base import BuilderContext
-    from model_service.inference.model_clients import HandleLookup
+    from model_service.deployed_models.model_clients import HandleLookup
     from model_service.shared.model_declarations import ModelBinding
 
 
