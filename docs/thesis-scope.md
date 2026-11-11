@@ -16,7 +16,7 @@ and add a trained model with one YAML file.
 
 | Area | What it gives | Where |
 | --- | --- | --- |
-| Public API | One HTTP entry point for models, builders and executions, with auth hooks, capacity checks and health | `src/model_service/api/`, `http_common/` |
+| Public API | One HTTP entry point for builders, executions and the model catalog, with auth hooks, capacity checks and health | `src/model_service/api/`, `http_common/` |
 | Durable scheduler | Executions stored in PostgreSQL: queueing until capacity frees, leases, retries, deadlines, cancellation, priorities | `src/model_service/scheduler/` |
 | Builders | Whole-slide outputs as plug-ins: heatmap (score grid) and tile embeddings (HDF5), one Ray Serve app hosting any builder | `builders/`, `builder_deployment/` |
 | Model catalog | One YAML per trained model feeds both Ray Serve and the API; the API refuses to start on an inconsistent file, and each run checks the running model matches its declaration | `deployed_models/catalog.py`, `deploy/helm/rayservice/models/` |
@@ -38,6 +38,9 @@ the top-level `models/` to `src/model_service/model_implementations/`.
   ONNX Runtime options as `sess_options=`, its real keyword; the baseline's
   `session_options=` was silently ignored, so the TensorRT settings now take
   effect.
+  It also caches the TensorRT engine per checkpoint and shape profile, so a
+  retrained model is never served by the previous engine; the first start
+  after this change builds the engines again.
 
 Removed because something replaced them: the stand-alone
 `builders/heatmap_builder.py` (now the heatmap builder),

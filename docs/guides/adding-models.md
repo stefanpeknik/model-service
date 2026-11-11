@@ -175,12 +175,11 @@ def reconfigure(self, config: Config) -> None:
   self.predict.set_batch_wait_timeout_s(config["batch_wait_timeout_s"])
 ```
 
-For TensorRT, mixed precision, and other runtime tuning options, see [Optimization Guide](optimization-guide.md).
 
 Data and control flow:
 
 - Read static inference shape from config (`tile_size`).
-- Resolve model provider from `_target_` and fetch the ONNX artifact (typically from MLflow).
+- Resolve the artifact loader from `_target_` and fetch the ONNX artifact (typically from MLflow).
 - Build ONNX Runtime session with desired execution providers.
 - Cache input and output tensor names for fast inference calls.
 - Apply batching limits from config directly to `predict`.
@@ -297,12 +296,7 @@ Builders in `src/model_service/builders/` do the whole-slide work; a model only 
 
 ## Next Step
 
-After the Python entrypoint is ready, continue with the [Deployment Guide](deployment-guide.md). That guide covers the Helm application YAML, deployment, rollout monitoring, and smoke testing in the order you should run them.
-
-## Related Guides
-
-- [Deployment Guide](deployment-guide.md)
-- [Configuration Reference](configuration-reference.md)
-- [Optimization Guide](optimization-guide.md)
-- [Troubleshooting](troubleshooting.md)
-- [Architecture Overview](../architecture/overview.md)
+List the model file under `models:` in the values file and `helm upgrade`; see
+[Iterating on a model](#iterating-on-a-model) above. For how the service fits
+together, read the [README](../../README.md); for EMPAIA, the
+[EMPAIA integration](../architecture/empaia.md).

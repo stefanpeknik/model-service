@@ -7,7 +7,7 @@ until a GPU frees up.
 
 ## In short
 
-- **What it does:** turns a trained model (an ONNX file in MLflow) into a
+- **What it does:** turns a trained model (an ONNX checkpoint in MLflow, or a foundation model) into a
   service that scores whole slides, for RationAI's own tools and for
   researchers working in EMPAIA.
 - **Adding a model:** a model that fits an existing implementation is one YAML
@@ -53,9 +53,7 @@ src/model_service/
   model_implementations/  inference code served by Ray Serve
 deploy/
   helm/rayservice/models/<id>.yaml   one file per trained model
-  images/                            Dockerfiles; Dockerfile.code-refresh only
-                                     swaps our code into an existing image, for test
-                                     deployments, and is to be removed (docs/spec.md)
+  images/                            Dockerfiles
   k8s/                               manifests the chart does not create
 testing/         deployable test doubles (constant classifier, mock AppService)
 tests/           unit and PostgreSQL tests
