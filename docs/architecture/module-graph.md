@@ -11,46 +11,46 @@ flowchart LR
   classDef proc fill:#e8f0fe,stroke:#4a6fd1
   classDef ext fill:#f4f4f4,stroke:#999,stroke-dasharray:3
 
-  subgraph API["API process (uvicorn: api.main)"]
-    api[api<br/>app_factory, synchronous_runs,<br/>raw_inference_proxy]
-    routes[api.routes<br/>builders · executions · models]
-    http_common[http_common<br/>auth · errors · scheduling]
-    subgraph SCHED[scheduler]
-      scheduler[scheduler<br/>public, execution_scheduler,<br/>worker, dispatch]
-      transitions[scheduler.transitions]
-      store[scheduler.store<br/>repository · postgres · migrations]
+  subgraph sg_api["API process (uvicorn: api.main)"]
+    api["api<br/>app_factory, synchronous_runs,<br/>raw_inference_proxy"]
+    routes["api.routes<br/>builders · executions · models"]
+    http_common["http_common<br/>auth · errors · scheduling"]
+    subgraph sg_sched["scheduler"]
+      scheduler["scheduler<br/>public, execution_scheduler,<br/>worker, builder_dispatch"]
+      transitions["scheduler.transitions"]
+      store["scheduler.store<br/>repository · postgres · migrate"]
     end
-    providers[providers<br/>provider · registry]
-    standalone[providers.standalone]
-    subgraph EMP[providers.empaia]
-      empaia[empaia<br/>provider · registration · settings]
-      jobs[empaia.jobs<br/>routes · adapter · gateways]
-      publishing[empaia.publishing]
-      ead[empaia.ead]
-      app_service[empaia.app_service]
+    providers["providers<br/>provider · registry"]
+    standalone["providers.standalone"]
+    subgraph sg_emp["providers.empaia"]
+      empaia["empaia<br/>provider · registration · settings"]
+      jobs["empaia.jobs<br/>routes · adapter · gateways"]
+      publishing["empaia.publishing"]
+      ead["empaia.ead"]
+      app_service["empaia.app_service"]
     end
   end
 
-  subgraph BD["Builder process (Ray Serve: builder_deployment.serve)"]
-    builder_deployment[builder_deployment<br/>serve · runner · http_handler]
-    builders[builders<br/>base · registry · input_access]
-    heatmap[builders.heatmap]
-    embeddings[builders.embeddings]
-    slides[builders.slides]
+  subgraph sg_bd["Builder process (Ray Serve: builder_deployment.serve)"]
+    builder_deployment["builder_deployment<br/>serve · runner · http_handler"]
+    builders["builders<br/>base · registry · input_access"]
+    heatmap["builders.heatmap"]
+    embeddings["builders.embeddings"]
+    slides["builders.slides"]
   end
 
-  inference[inference<br/>catalog · model_clients]
-  shared[shared<br/>cross-process types]
-  models[model_implementations<br/>Ray Serve model apps]:::proc
-  pg[(PostgreSQL)]:::ext
-  jes[EMPAIA JES / App Service]:::ext
+  inference["inference<br/>catalog · model_clients"]
+  shared["shared<br/>cross-process types"]
+  models["model_implementations<br/>Ray Serve model apps"]:::proc
+  pg[("PostgreSQL")]:::ext
+  jes["EMPAIA JES / App Service"]:::ext
 
   routes --> api & http_common & scheduler & builders & shared
   api --> http_common & scheduler & store & builders & inference & providers & shared
   http_common --> scheduler & shared
-  scheduler --> transitions & store & shared
+  scheduler --> store & shared
   transitions --> scheduler
-  store --> scheduler
+  store --> scheduler & transitions
 
   providers --> standalone & empaia
   standalone --> providers & scheduler & builders & shared
@@ -67,16 +67,17 @@ flowchart LR
   slides --> shared
   inference --> shared
 
-  store -.SQL.-> pg
-  scheduler -.HTTP run request.-> builder_deployment
-  inference -.Ray handle.-> models
-  app_service -.HTTP.-> jes
-  jes -.HTTP job post.-> jobs
+  store -.->|SQL| pg
+  scheduler -.->|HTTP run request| builder_deployment
+  inference -.->|Ray handle| models
+  app_service -.->|HTTP| jes
+  jes -.->|HTTP job post| jobs
 ```
 
-`store ⇄ scheduler`, `transitions ⇄ scheduler` and `app_service ⇄ jobs` are
-two-way at package level only. The modules on each side import different
-files, so no import cycle runs at runtime.
+`store ⇄ scheduler`, `app_service ⇄ jobs` and the loop
+`scheduler → store → transitions → scheduler` exist at package level only. The
+modules on each side import different files, so no import cycle runs at
+runtime.
 
 ## One scheduled job
 
