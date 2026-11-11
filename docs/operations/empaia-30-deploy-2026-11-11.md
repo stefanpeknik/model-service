@@ -15,5 +15,5 @@ capacity message removed, and TensorRT engines cached per checkpoint.
 Not yet checked here: a job end to end on `empaia-30`, including a standalone
 run now that the case browser's display fix is reported (2026-11-11). The first
 job builds the prostate TensorRT engine again under its per-checkpoint path, so
-expect a longer cold start. The `model-service-inference` claim is still in the
-namespace; nothing mounts it any more.
+expect a longer cold start. The unused `model-service-inference` claim (8Gi, nfs-csi)
+was deleted afterwards, with its old raw-inference payload files.
