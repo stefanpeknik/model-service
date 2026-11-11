@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from model_service.providers.empaia.app_service.input_files import link_direct_input
 from model_service.providers.empaia.app_service.types import DirectAccess
-from model_service.providers.empaia.jobs.inputs import link_direct_input
 
 
 class LinkDirectInputTests(unittest.TestCase):

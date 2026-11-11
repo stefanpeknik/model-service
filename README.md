@@ -59,8 +59,9 @@ testing/         deployable test doubles (constant classifier, mock AppService)
 tests/           unit and PostgreSQL tests
 ```
 
-Read [how it is put together](docs/architecture/core.md), then the
-[documentation map](docs/README.md).
+Start with [what this thesis added](docs/thesis-scope.md), then
+[Adding models](docs/guides/adding-models.md) or the
+[EMPAIA integration](docs/architecture/empaia.md).
 
 ## Add a model
 

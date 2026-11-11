@@ -22,6 +22,11 @@ from model_service.providers.empaia.app_service.gateway import (
     EmpaiaJobMode,
     PrimitiveType,
 )
+from model_service.providers.empaia.app_service.input_files import (
+    link_direct_input,
+    write_rectangle_input,
+    write_rectangle_mask,
+)
 from model_service.providers.empaia.app_service.responses import (
     ConfigurationResponse,
     RectangleResponse,
@@ -32,11 +37,6 @@ from model_service.providers.empaia.app_service.types import (
     Rectangle,
     SlideLevel,
     SlideMetadata,
-)
-from model_service.providers.empaia.jobs.inputs import (
-    link_direct_input,
-    write_rectangle_input,
-    write_rectangle_mask,
 )
 
 
@@ -50,7 +50,9 @@ if TYPE_CHECKING:
         EmpaiaGatewayFactory,
         MutationGuard,
     )
-    from model_service.providers.empaia.jobs.inputs import RectangleMaskWriter
+    from model_service.providers.empaia.app_service.input_files import (
+        RectangleMaskWriter,
+    )
     from model_service.providers.empaia.settings import EmpaiaSettings
     from model_service.shared.json_values import JsonValue
 

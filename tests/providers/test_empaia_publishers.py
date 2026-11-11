@@ -10,6 +10,7 @@ from zipfile import BadZipFile
 from model_service.builders.declarations import OutputSpec
 from model_service.builders.registry import get_builder
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
+from model_service.providers.empaia.app_service.input_files import _clip
 from model_service.providers.empaia.ead.apps import (
     AppMode,
     EmpaiaListing,
@@ -17,7 +18,6 @@ from model_service.providers.empaia.ead.apps import (
 )
 from model_service.providers.empaia.ead.builder_io import BUILDER_IO
 from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
-from model_service.providers.empaia.jobs.inputs import _clip
 from model_service.providers.empaia.publishing.publishers import (
     PrimitivePublisher,
     PublisherRegistry,
