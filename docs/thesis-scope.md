@@ -28,7 +28,7 @@ and add a trained model with one YAML file.
 The inference implementations still do the same maths; they moved from
 the top-level `models/` to `src/model_service/model_implementations/`.
 
-- `semantic_segmentation.py`: unchanged apart from imports.
+- `semantic_segmentation.py`: the maths is unchanged.
 - `virchow2.py`, `prov_gigapath.py`: the HTTP handler was split into
   `_encode`, `_pool` and `embed` so builders can call the model by Ray handle.
   The embedding is unchanged (class token plus the mean of patch tokens), and the
@@ -38,9 +38,9 @@ the top-level `models/` to `src/model_service/model_implementations/`.
   ONNX Runtime options as `sess_options=`, its real keyword; the baseline's
   `session_options=` was silently ignored, so the TensorRT settings now take
   effect.
-  It also caches the TensorRT engine per checkpoint and shape profile, so a
-  retrained model is never served by the previous engine; the first start
-  after this change builds the engines again.
+- `binary_classifier.py`, `semantic_segmentation.py`: cache the TensorRT engine
+  per checkpoint and shape profile, so a retrained model is never served by the
+  previous engine; the first start after this change builds the engines again.
 
 Removed because something replaced them: the stand-alone
 `builders/heatmap_builder.py` (now the heatmap builder),
