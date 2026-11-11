@@ -21,7 +21,6 @@ if TYPE_CHECKING:
 
 from model_service.scheduler.transitions.common import (
     TransitionsBase,
-    _has_provider_phase,
 )
 
 
@@ -67,7 +66,6 @@ class AdmissionTransitions(TransitionsBase):
             error=None,
             created_at=now,
             updated_at=now,
-            operation=admission.operation,
             priority=admission.priority,
         )
 
@@ -75,8 +73,8 @@ class AdmissionTransitions(TransitionsBase):
     def cancel(execution: ExecutionRecord, now: datetime) -> ExecutionRecord:
         """Make a nonterminal execution cancelled, fence its attempt, and queue provider cancellation reporting.
 
-        Raw inference has no provider, so it gets no report. Publication marks and
-        finish attempts are reset because they belong to the publication, not the report.
+        Publication marks and finish attempts are reset because they belong to the
+        publication, not the report.
 
         Args:
             execution: Current execution record.
@@ -91,12 +89,11 @@ class AdmissionTransitions(TransitionsBase):
             ExecutionStatus.CANCELLED,
         }:
             return execution
-        report = _has_provider_phase(execution)
         return replace(
             execution,
             status=ExecutionStatus.CANCELLED,
-            work_kind=WorkKind.PROVIDER_CANCELLATION_REPORT if report else None,
-            next_attempt_at=now if report else None,
+            work_kind=WorkKind.PROVIDER_CANCELLATION_REPORT,
+            next_attempt_at=now,
             lease_owner=None,
             fencing_token=None,
             lease_expires_at=None,

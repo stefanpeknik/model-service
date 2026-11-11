@@ -57,14 +57,10 @@ over many slides and let it queue:
   For many slides, call `schedule` once per slide; there is no batch call.
   Each model runs at most its configured replicas, so queued work never takes
   more GPUs than the model file allows.
-- Raw per-tile inference: `POST /v1/models/<id>/run` with one LZ4-compressed
-  `tile_size`×`tile_size`×3 uint8 tile; the API rejects any other body.
-  The API handles about 100 raw tiles/s per 1-CPU replica, so it suits trying a
-  model, not scoring slides. For many tiles write a builder, which calls the
-  model by Ray handle inside the cluster.
-  Inside the cluster you can skip the API and post the same body to the Ray
-  Serve proxy at `/<id>/`, as before model-service had an API; you lose the
-  API's auth, capacity limits and tile check.
+- Raw per-tile inference is not part of the API: post one LZ4-compressed
+  `tile_size`×`tile_size`×3 uint8 tile to the model's Ray Serve ingress at
+  `/<id>/` (`scripts/warm_model.py` does this with a blank tile). For many
+  tiles write a builder, which calls the model by Ray handle inside the cluster.
 
 ## A new kind of model: an inference implementation
 

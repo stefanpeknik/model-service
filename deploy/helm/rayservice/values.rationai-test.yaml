@@ -82,11 +82,6 @@ executionScheduler:
   sharedStorage:
     existingClaim: model-service-full-wsi-outputs
     mountPath: /mnt/shared
-  # deploy/k8s/rationai-test-ns/storage.yaml
-  inferenceStorage:
-    existingClaim: model-service-inference
-    mountPath: /mnt/model-service-inference
-  inferenceTimeoutSeconds: 900
   defaultDeadlineSeconds: 21600
   maximumDeadlineSeconds: 86400
   processingAttempts: 2

@@ -56,9 +56,7 @@ class EmpaiaExecutionStatus:
     message: str | None = None
 
 
-def create_router(
-    scheduler: Scheduler, access: Access | None = None
-) -> APIRouter:
+def create_router(scheduler: Scheduler, access: Access | None = None) -> APIRouter:
     """Build JES's remote execution routes under `/v1/empaia`.
 
     Args:

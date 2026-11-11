@@ -28,8 +28,6 @@ class SchedulerSettingsTests(unittest.TestCase):
                 "MODEL_CATALOG_PATH": "/etc/catalog.json",
                 "BUILDER_IDS": '["heatmap", "tile-embeddings"]',
                 "SHARED_STORAGE_ROOTS": '["/mnt/data", "/mnt/projects"]',
-                "INFERENCE_SERVE_ORIGIN": " http://model-serve ",
-                "INFERENCE_MODEL_ORIGINS": '{"classifier":"http://model-serve"}',
                 "LEASE_SECONDS": "12.5",
                 "PER_MODEL_LIMIT": "2",
                 "MAX_CONCURRENT_EXECUTIONS": "8",
@@ -42,10 +40,6 @@ class SchedulerSettingsTests(unittest.TestCase):
         self.assertEqual(
             settings.shared_storage_roots, (Path("/mnt/data"), Path("/mnt/projects"))
         )
-        self.assertEqual(settings.inference_serve_origin, "http://model-serve")
-        self.assertEqual(
-            str(settings.inference_model_origins["classifier"]), "http://model-serve/"
-        )
         self.assertEqual(settings.lease_duration, timedelta(seconds=12.5))
         self.assertEqual(settings.per_model_limit, 2)
         self.assertEqual(settings.max_concurrent_executions, 8)
@@ -53,13 +47,10 @@ class SchedulerSettingsTests(unittest.TestCase):
     def test_unset_optional_settings_deny_shared_storage_and_deploy_all_builders(
         self,
     ) -> None:
-        settings = SchedulerSettings.from_environment(
-            {**self.environment, "INFERENCE_SERVE_ORIGIN": " \t "}
-        )
+        settings = SchedulerSettings.from_environment(self.environment)
 
         self.assertEqual(settings.shared_storage_roots, ())
         self.assertIsNone(settings.builder_ids)
-        self.assertIsNone(settings.inference_serve_origin)
 
     def test_explicit_mapping_never_falls_back_to_process_environment(self) -> None:
         with patch.dict(os.environ, self.environment, clear=True):
@@ -79,8 +70,6 @@ class SchedulerSettingsTests(unittest.TestCase):
             {"PER_MODEL_LIMIT": "0"},
             {"MAX_CONCURRENT_EXECUTIONS": "0"},
             {"LEASE_SECONDS": "nan"},
-            {"INFERENCE_MODEL_ORIGINS": '{"nested/model":"http://model-serve"}'},
-            {"INFERENCE_MODEL_ORIGINS": '{"model":"file:///tmp/model"}'},
             {"INITIAL_BACKOFF_SECONDS": "301"},
             {"DEFAULT_DEADLINE_SECONDS": "86401"},
         ):

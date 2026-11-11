@@ -95,7 +95,6 @@ class LeaseTransitions(TransitionsBase):
                 fencing_token=fencing_token,
                 result=claimed.result,
                 error=claimed.error,
-                operation=claimed.operation,
             ),
         )
 

@@ -1,4 +1,4 @@
-"""`/v1/executions`: status, lookup, stored inference results and cancellation.
+"""`/v1/executions`: status, lookup and cancellation.
 
 Submitting work is `/v1/builders/.../schedule` in builders.py.
 """
@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException
 from pydantic import Field
 
 from model_service.http_common.auth import Access, Action
@@ -20,7 +20,6 @@ from model_service.http_common.errors import (
 )
 from model_service.scheduler.public import (
     ExecutionView,
-    ResultUnavailableError,
     SchedulingUnavailableError,
     UnknownExecutionError,
 )
@@ -39,7 +38,7 @@ class ExecutionLookup:
 
 
 def create_router(scheduler: Scheduler, access: Access) -> APIRouter:
-    """Build the `/v1/executions` router: status, lookup, results and cancellation.
+    """Build the `/v1/executions` router: status, lookup and cancellation.
 
     Args:
         scheduler: Reads and cancels executions.
@@ -75,32 +74,6 @@ def create_router(scheduler: Scheduler, access: Access) -> APIRouter:
             return await scheduler.get_many(body.ids)
         except SchedulingUnavailableError as error:
             raise unavailable(error) from error
-
-    @router.get(
-        "/{execution_id}/result",
-        responses={
-            200: {"content": {"application/octet-stream": {}}},
-            **ERRORS,
-        },
-        dependencies=[access.require(Action.READ_EXECUTION)],
-    )
-    async def get_inference_result(execution_id: str) -> Response:
-        """The stored model response of a succeeded inference execution."""
-        try:
-            result, content = await scheduler.inference_result(execution_id)
-        except SchedulingUnavailableError as error:
-            raise unavailable(error) from error
-        except UnknownExecutionError as error:
-            raise _unknown_execution() from error
-        except ResultUnavailableError as error:
-            raise http_error(
-                409,
-                ApiErrorCode.RESULT_UNAVAILABLE,
-                "execution has no inference response",
-            ) from error
-        return Response(
-            content=content, media_type=result.media_type, headers=result.headers
-        )
 
     @router.post(
         "/{execution_id}/cancel",

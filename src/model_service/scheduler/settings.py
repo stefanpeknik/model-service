@@ -1,7 +1,6 @@
 """Settings of the API process, which also runs the scheduler, from the environment.
 
-Required storage, encryption, and dispatch settings are separate from optional
-per-model origins; each provider reads its own settings. Parsed durations feed runtime wiring and retry policies.
+Storage, encryption, and dispatch settings; each provider reads its own settings. Parsed durations feed runtime wiring and retry policies.
 """
 
 from __future__ import annotations
@@ -14,10 +13,8 @@ from pydantic import (
     BeforeValidator,
     Field,
     FiniteFloat,
-    HttpUrl,
     StringConstraints,
     TypeAdapter,
-    field_validator,
     model_validator,
 )
 from pydantic_settings import BaseSettings, EnvSettingsSource, SettingsConfigDict
@@ -29,7 +26,6 @@ if TYPE_CHECKING:
     from pydantic_settings import PydanticBaseSettingsSource
 
 
-_ModelPrefix = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9._-]+$")]
 _SECONDS = TypeAdapter(FiniteFloat)
 
 
@@ -81,17 +77,6 @@ class SchedulerSettings(BaseSettings):
     shared_storage_roots: tuple[Path, ...] = Field(
         default=(), validation_alias="SHARED_STORAGE_ROOTS"
     )
-    inference_serve_origin: str | None = Field(
-        default=None, validation_alias="INFERENCE_SERVE_ORIGIN"
-    )
-    inference_model_origins: dict[_ModelPrefix, HttpUrl] = Field(
-        default_factory=dict, validation_alias="INFERENCE_MODEL_ORIGINS"
-    )
-    inference_timeout: _SecondsDuration = Field(
-        default=timedelta(minutes=15),
-        gt=timedelta(0),
-        validation_alias="INFERENCE_TIMEOUT_SECONDS",
-    )
     lease_duration: _SecondsDuration = Field(
         default=timedelta(seconds=60), gt=timedelta(0), validation_alias="LEASE_SECONDS"
     )
@@ -128,29 +113,6 @@ class SchedulerSettings(BaseSettings):
     max_concurrent_executions: int = Field(
         default=4, gt=0, validation_alias="MAX_CONCURRENT_EXECUTIONS"
     )
-    per_model_inference_limit: int = Field(
-        default=32, gt=0, validation_alias="PER_MODEL_INFERENCE_LIMIT"
-    )
-    max_concurrent_inference: int = Field(
-        default=32, gt=0, validation_alias="MAX_CONCURRENT_INFERENCE"
-    )
-    inference_max_request_bytes: int = Field(
-        default=2 * 1024 * 1024, gt=0, validation_alias="INFERENCE_MAX_REQUEST_BYTES"
-    )
-    inference_max_result_bytes: int = Field(
-        default=4 * 1024 * 1024, gt=0, validation_alias="INFERENCE_MAX_RESULT_BYTES"
-    )
-    inference_retention: _SecondsDuration = Field(
-        default=timedelta(hours=24),
-        gt=timedelta(0),
-        validation_alias="INFERENCE_RETENTION_SECONDS",
-    )
-    # Request and response files of scheduled raw inference; every API
-    # replica must see the same directory.
-    inference_storage_path: Path = Field(
-        default=Path("/mnt/model-service-inference"),
-        validation_alias="INFERENCE_STORAGE_PATH",
-    )
 
     @classmethod
     def settings_customise_sources(
@@ -185,7 +147,7 @@ class SchedulerSettings(BaseSettings):
     ) -> SchedulerSettings:
         """Parse settings from environment variables.
 
-        Model origins and numeric bounds are validated.
+        Numeric bounds are validated.
 
         Args:
             environment: Variables to read instead of the process environment.
@@ -200,24 +162,6 @@ class SchedulerSettings(BaseSettings):
         if environment is not None:
             source.env_vars = dict(environment)
         return cls(**source())
-
-    @field_validator(
-        "inference_serve_origin",
-        mode="before",
-    )
-    @classmethod
-    def _empty_optional_setting(cls, value: object) -> object:
-        """Treat blank optional origins as absent.
-
-        Args:
-            value: The raw setting.
-
-        Returns:
-            None for a blank string, the stripped string, or the value unchanged.
-        """
-        if isinstance(value, str):
-            return value.strip() or None
-        return value
 
     @model_validator(mode="after")
     def _validate_policy_bounds(self) -> Self:

@@ -10,7 +10,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
-import lz4.frame
 from httpx import (
     ASGITransport,
     AsyncClient,
@@ -22,7 +21,6 @@ from httpx import (
 
 from model_service.api.app_factory import create_app, model_resolver
 from model_service.api.health import DeploymentHealth
-from model_service.api.raw_inference_proxy import HttpInferenceProxy, ModelInference
 from model_service.api.synchronous_runs import SynchronousBuilderService
 from model_service.inference.catalog import ModelCatalog
 from model_service.providers.standalone.provider import StandaloneProviderAdapter
@@ -41,7 +39,7 @@ from model_service.scheduler.public import (
     ScheduleResult,
     SchedulingUnavailableError,
 )
-from model_service.scheduler.status import ExecutionStatus, Operation
+from model_service.scheduler.status import ExecutionStatus
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
 from model_service.shared.model_declarations import (
     SpatialScoresModel,
@@ -115,7 +113,6 @@ class RecordingScheduler:
         return ScheduleResult(
             execution=ExecutionView(
                 id="execution-1",
-                operation=Operation.BUILDER,
                 builder_id=request.builder_id,
                 model_id=request.model_id,
                 status=ExecutionStatus.QUEUED,
@@ -299,7 +296,6 @@ class ScheduleRouteTests(ApiTestCase):
             polled.json(),
             {
                 "id": execution_id,
-                "operation": "builder",
                 "builder_id": "heatmap",
                 "model_id": "prostate-classifier-1",
                 "status": "queued",
@@ -693,109 +689,6 @@ class HealthAndAvailabilityTests(ApiTestCase):
             response = await self.schedule(client)
 
         self.assert_error(response, 503, "scheduling_unavailable", retryable=True)
-
-
-class RawInferenceTests(ApiTestCase):
-    RUN = "/v1/models/prostate-classifier-1/run"
-
-    def tile(self, size: int = PROSTATE.tile_size) -> bytes:
-        return lz4.frame.compress(bytes(size * size * 3))
-
-    def inference_app(self, handler: Callable[[Request], Response]) -> FastAPI:
-        ray = AsyncClient(transport=MockTransport(handler))
-        self.addAsyncCleanup(ray.aclose)
-        proxy = HttpInferenceProxy(ray, origin="http://ray")
-        target = ModelInference(CATALOG, proxy, max_result_bytes=1024)
-        return self.app(inference_target=target)
-
-    async def test_raw_model_calls_are_forwarded_with_allowed_headers(self) -> None:
-        forwarded: list[Request] = []
-
-        def ray(request: Request) -> Response:
-            forwarded.append(request)
-            return Response(
-                200,
-                content=b"compressed-result",
-                headers={
-                    "content-type": "application/octet-stream",
-                    "x-output-shape": "(1, 2, 2)",
-                    "set-cookie": "session=1",
-                },
-            )
-
-        tile = self.tile()
-        async with self.client(self.inference_app(ray)) as client:
-            response = await client.post(
-                self.RUN,
-                content=tile,
-                headers={
-                    "content-type": "application/octet-stream",
-                    "x-output-dtype": "float32",
-                    "authorization": "Bearer facade-only",
-                },
-            )
-
-        self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(response.content, b"compressed-result")
-        self.assertEqual(response.headers["x-output-shape"], "(1, 2, 2)")
-        self.assertEqual(response.headers["content-type"], "application/octet-stream")
-        self.assertNotIn("set-cookie", response.headers)
-        [request] = forwarded
-        self.assertEqual(request.url, "http://ray/prostate-classifier-1/")
-        self.assertEqual(request.content, tile)
-        self.assertEqual(request.headers["x-output-dtype"], "float32")
-        self.assertNotIn("authorization", request.headers)
-
-    async def test_upstream_status_is_preserved(self) -> None:
-        def ray(_request: Request) -> Response:
-            return Response(500, content=b"model failed")
-
-        async with self.client(self.inference_app(ray)) as client:
-            response = await client.post(self.RUN, content=self.tile())
-
-        self.assertEqual(response.status_code, 500)
-        self.assertEqual(response.content, b"model failed")
-
-    async def test_transport_failure_is_retryable(self) -> None:
-        def ray(request: Request) -> Response:
-            raise ConnectError("Ray is unavailable", request=request)
-
-        async with self.client(self.inference_app(ray)) as client:
-            response = await client.post(self.RUN, content=self.tile())
-
-        self.assert_error(response, 503, "model_inference_unavailable", retryable=True)
-
-    async def test_unavailable_without_an_inference_target(self) -> None:
-        async with self.client(self.app()) as client:
-            response = await client.post(self.RUN, content=self.tile())
-
-        self.assert_error(response, 503, "model_inference_unavailable", retryable=True)
-
-    async def test_requests_are_checked_before_forwarding(self) -> None:
-        forwarded: list[Request] = []
-
-        def ray(request: Request) -> Response:
-            forwarded.append(request)
-            return Response(200)
-
-        async with self.client(self.inference_app(ray)) as client:
-            unknown = await client.post("/v1/models/missing/run", content=self.tile())
-            wrong_size = await client.post(self.RUN, content=self.tile(size=224))
-            not_lz4 = await client.post(self.RUN, content=b"raw")
-
-        self.assert_error(unknown, 404, "unknown_model")
-        self.assert_error(wrong_size, 422, "invalid_request")
-        self.assert_error(not_lz4, 422, "invalid_request")
-        self.assertEqual(forwarded, [])
-
-    async def test_the_root_proxy_route_is_gone(self) -> None:
-        def ray(_request: Request) -> Response:
-            return Response(200)
-
-        async with self.client(self.inference_app(ray)) as client:
-            response = await client.post("/prostate-classifier-1", content=b"x")
-
-        self.assertEqual(response.status_code, 404)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,6 @@
 {{- $databaseSecret := required "executionScheduler.database.existingSecret is required" .Values.executionScheduler.database.existingSecret }}
 {{- $encryptionSecret := required "executionScheduler.encryption.existingSecret is required" .Values.executionScheduler.encryption.existingSecret }}
 {{- $workspaceClaim := required "empaia.workspaceClaim is required: the facade publishes EMPAIA results the builders wrote there" .Values.empaia.workspaceClaim }}
-{{- $inferenceClaim := required "executionScheduler.inferenceStorage.existingClaim is required: scheduled raw inference keeps its request and response files there" .Values.executionScheduler.inferenceStorage.existingClaim }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -69,16 +68,6 @@ spec:
               value: {{ keys .Values.builders | sortAlpha | toJson | quote }}
             - name: SHARED_STORAGE_ROOTS
               value: {{ .Values.sharedStorageRoots | toJson | quote }}
-            {{- if .Values.executionScheduler.inferenceServeOrigin }}
-            - name: INFERENCE_SERVE_ORIGIN
-              value: {{ .Values.executionScheduler.inferenceServeOrigin | quote }}
-            {{- end }}
-            {{- if .Values.executionScheduler.inferenceModelOrigins }}
-            - name: INFERENCE_MODEL_ORIGINS
-              value: {{ .Values.executionScheduler.inferenceModelOrigins | toJson | quote }}
-            {{- end }}
-            - name: INFERENCE_TIMEOUT_SECONDS
-              value: {{ default 900 .Values.executionScheduler.inferenceTimeoutSeconds | quote }}
             - name: LEASE_SECONDS
               value: {{ .Values.executionScheduler.leaseSeconds | quote }}
             - name: WORKER_POLL_SECONDS
@@ -99,20 +88,6 @@ spec:
               value: {{ .Values.executionScheduler.perModelLimit | quote }}
             - name: MAX_CONCURRENT_EXECUTIONS
               value: {{ .Values.executionScheduler.maxConcurrentExecutions | quote }}
-            {{- with .Values.executionScheduler.scheduledInference }}
-            - name: PER_MODEL_INFERENCE_LIMIT
-              value: {{ .perModelLimit | quote }}
-            - name: MAX_CONCURRENT_INFERENCE
-              value: {{ .maxConcurrent | quote }}
-            - name: INFERENCE_MAX_REQUEST_BYTES
-              value: {{ .maxRequestBytes | int64 | quote }}
-            - name: INFERENCE_MAX_RESULT_BYTES
-              value: {{ .maxResultBytes | int64 | quote }}
-            - name: INFERENCE_RETENTION_SECONDS
-              value: {{ .retentionSeconds | int64 | quote }}
-            {{- end }}
-            - name: INFERENCE_STORAGE_PATH
-              value: {{ .Values.executionScheduler.inferenceStorage.mountPath | quote }}
 {{- include "model-service.empaiaEnv" . | nindent 12 }}
             {{- with .Values.empaia.marketplace }}
             {{- if .url }}
@@ -168,8 +143,6 @@ spec:
             {{- end }}
             - name: empaia-workspace
               mountPath: {{ .Values.empaia.workspaceRoot | quote }}
-            - name: inference-storage
-              mountPath: {{ .Values.executionScheduler.inferenceStorage.mountPath | quote }}
 {{- include "model-service.slideVolumeMount" . | nindent 12 }}
       volumes:
         - name: tmp
@@ -185,8 +158,5 @@ spec:
         - name: empaia-workspace
           persistentVolumeClaim:
             claimName: {{ $workspaceClaim | quote }}
-        - name: inference-storage
-          persistentVolumeClaim:
-            claimName: {{ $inferenceClaim | quote }}
 {{- include "model-service.slideVolume" . | nindent 8 }}
 {{- end }}

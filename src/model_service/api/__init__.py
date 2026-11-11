@@ -7,7 +7,6 @@
 - http_errors.py: the public error envelope.
 - scheduling_http.py: HTTP plumbing for scheduling routes, providers' too
   (Idempotency-Key header, scheduler refusals as HTTP errors).
-- raw_inference_proxy.py: forwards raw tiles to models.
 - synchronous_runs.py: runs a builder while the caller waits (SynchronousBuilderRunner).
 - health.py: Ray Serve readiness.
 """

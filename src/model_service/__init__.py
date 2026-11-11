@@ -1,6 +1,7 @@
 """RationAI model service: runs pathology models on Ray Serve behind one API.
 
-- api/: the API process (HTTP routes, wiring, raw inference proxy).
+- api/: the API process (HTTP routes, wiring). Raw tiles go straight to Ray
+  Serve (`POST /<model-id>/`), not through the API.
 - scheduler/: durable executions on PostgreSQL, run inside the API process;
   it calls builders through builder_dispatch.py (interface) and
   http_builder_dispatch.py (over HTTP, see docs/adr/0001).

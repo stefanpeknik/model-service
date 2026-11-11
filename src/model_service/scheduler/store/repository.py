@@ -23,7 +23,6 @@ if TYPE_CHECKING:
         WorkClaim,
     )
     from model_service.scheduler.public import SubmissionIdentity
-    from model_service.scheduler.status import Operation
 
 
 class ExecutionRepository(ABC):
@@ -40,7 +39,7 @@ class ExecutionRepository(ABC):
 
     @abstractmethod
     async def maintain(self) -> None:
-        """Expire deadlines, recover abandoned leases and delete expired inference results.
+        """Expire deadlines and recover abandoned leases.
 
         Raises:
             ExecutionRepositoryUnavailableError: Storage is unavailable.
@@ -68,7 +67,7 @@ class ExecutionRepository(ABC):
 
     @abstractmethod
     async def admit(self, admission: Admission) -> AdmissionResult:
-        """Atomically insert a prepared execution (and its inference payload) or return the existing identical submission.
+        """Atomically insert a prepared execution or return the existing identical submission.
 
         Args:
             admission: Prepared execution to store.
@@ -134,58 +133,19 @@ class ExecutionRepository(ABC):
         self,
         owner: str,
         lease_duration: timedelta,
-        operations: Collection[Operation] | None = None,
     ) -> WorkClaim | None:
-        """Lease one eligible attempt of the given operations (all when None).
+        """Lease one eligible attempt.
 
-        Provider work comes first; processing respects each model's capacity for
-        that operation. An inference claim carries its payload.
+        Provider work comes first; processing respects each model's capacity.
 
         Args:
             owner: ID of the claiming worker.
             lease_duration: How long the claim stays valid without renewal.
-            operations: Operations to claim from, or None for all.
 
         Returns:
             The claim, or None when nothing is due.
 
         Raises:
-            ExecutionRepositoryUnavailableError: Storage is unavailable.
-        """
-        ...
-
-    @abstractmethod
-    async def claim_inference(
-        self, owner: str, lease_duration: timedelta, limit: int
-    ) -> list[WorkClaim]:
-        """Lease up to `limit` due inference attempts, with payloads, at once.
-
-        Args:
-            owner: ID of the claiming worker.
-            lease_duration: How long each claim stays valid without renewal.
-            limit: Maximum number of claims.
-
-        Returns:
-            The claims; empty when nothing is due or limit is not positive.
-
-        Raises:
-            ExecutionRepositoryUnavailableError: Storage is unavailable.
-        """
-        ...
-
-    @abstractmethod
-    async def inference_content(self, execution_id: str) -> bytes:
-        """Return a succeeded inference execution's stored response bytes.
-
-        Args:
-            execution_id: ID of the inference execution.
-
-        Returns:
-            The response body.
-
-        Raises:
-            UnknownExecutionError: No execution has this ID.
-            ResultUnavailableError: The execution has no stored response or it cannot be read.
             ExecutionRepositoryUnavailableError: Storage is unavailable.
         """
         ...

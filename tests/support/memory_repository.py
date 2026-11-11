@@ -8,12 +8,8 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-import tempfile
-import weakref
 from contextlib import asynccontextmanager
-from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -22,7 +18,6 @@ from model_service.scheduler.internal_state import (
     Admission,
     AdmissionResult,
     ExecutionRecord,
-    InferenceSucceeded,
     RenewDirective,
     RetryPolicy,
     Settlement,
@@ -30,19 +25,12 @@ from model_service.scheduler.internal_state import (
     WorkKind,
 )
 from model_service.scheduler.public import (
-    ResultUnavailableError,
     ScheduleConflictError,
     UnknownExecutionError,
 )
-from model_service.scheduler.status import ExecutionStatus, Operation
-from model_service.scheduler.store.payloads import (
-    PayloadMissingError,
-    PayloadStore,
-    StoredPayload,
-)
+from model_service.scheduler.status import ExecutionStatus
 from model_service.scheduler.transitions import (
     ExecutionTransitions,
-    SettlementAccepted,
 )
 from model_service.shared.invocation import ExecutionContext, Invocation
 from model_service.shared.model_declarations import (
@@ -60,11 +48,6 @@ if TYPE_CHECKING:
     from model_service.scheduler.public import SubmissionIdentity
 
 
-_TERMINAL = frozenset(
-    {ExecutionStatus.SUCCEEDED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED}
-)
-
-
 def utc_now() -> datetime:
     """Return the timezone-aware UTC wall clock used when no test clock is injected."""
     return datetime.now(UTC)
@@ -78,25 +61,14 @@ class InMemoryExecutionRepository:
         *,
         clock: Callable[[], datetime] = utc_now,
         per_model_limit: int = 1,
-        per_model_inference_limit: int = 32,
-        inference_retention: timedelta = timedelta(hours=24),
         processing_policy: RetryPolicy | None = None,
         finish_policy: RetryPolicy | None = None,
-        payload_root: Path | None = None,
     ) -> None:
-        """Set capacity and retry policies, create the state machine, and start with empty records under one async lock.
-
-        Inference bytes go to files under `payload_root`, a temporary directory
-        removed with the repository when none is given.
-        """
-        if per_model_limit <= 0 or per_model_inference_limit <= 0:
+        """Set capacity and retry policies, create the state machine, and start with empty records under one async lock."""
+        if per_model_limit <= 0:
             raise ValueError("per-model limits must be positive")
         self._clock = clock
-        self._limits = {
-            Operation.BUILDER: per_model_limit,
-            Operation.INFERENCE: per_model_inference_limit,
-        }
-        self._inference_retention = inference_retention
+        self._per_model_limit = per_model_limit
         self._processing_policy = processing_policy or RetryPolicy(
             max_attempts=3,
             initial_backoff=timedelta(seconds=5),
@@ -111,16 +83,7 @@ class InMemoryExecutionRepository:
             self._processing_policy,
             self._finish_policy,
         )
-        if payload_root is None:
-            directory = tempfile.TemporaryDirectory()
-            weakref.finalize(self, directory.cleanup)
-            payload_root = Path(directory.name)
-        self.payload_root = payload_root
-        self._payloads = PayloadStore(payload_root)
         self._executions: dict[str, ExecutionRecord] = {}
-        self._requests: dict[str, StoredPayload] = {}
-        self._responses: dict[str, StoredPayload] = {}
-        self._released: list[str] = []
         self._submissions: dict[tuple[str, str], str] = {}
         self._lock = asyncio.Lock()
 
@@ -138,20 +101,6 @@ class InMemoryExecutionRepository:
             now = self._clock()
             self._expire_deadlines(now)
             self._recover_expired_leases(now)
-            for execution in tuple(self._executions.values()):
-                if (
-                    execution.operation is Operation.INFERENCE
-                    and execution.work_kind is None
-                    and execution.updated_at <= now - self._inference_retention
-                ):
-                    del self._executions[execution.id]
-                    del self._submissions[
-                        (execution.identity.provider, execution.identity.key)
-                    ]
-                    for payloads in (self._requests, self._responses):
-                        stored = payloads.pop(execution.id, None)
-                        if stored is not None:
-                            self._released.append(stored.path)
 
     async def find_submission(
         self,
@@ -181,10 +130,6 @@ class InMemoryExecutionRepository:
                 str(uuid4()),
                 now,
             )
-            if admission.payload is not None:
-                self._requests[execution.id] = await self._payloads.write_request(
-                    execution.id, admission.payload
-                )
             self._executions[execution.id] = execution
             self._submissions[key] = execution.id
             return AdmissionResult(execution, created=True)
@@ -214,10 +159,8 @@ class InMemoryExecutionRepository:
         self,
         owner: str,
         lease_duration: timedelta,
-        operations: Collection[Operation] | None = None,
     ) -> WorkClaim | None:
         """Run maintenance and lease the highest-priority due work within per-model processing capacity."""
-        allowed = frozenset(Operation if operations is None else operations)
         async with self._operation():
             now = self._clock()
             self._expire_deadlines(now)
@@ -227,16 +170,15 @@ class InMemoryExecutionRepository:
                 execution
                 for execution in self._executions.values()
                 if execution.work_kind is not None
-                and execution.operation in allowed
                 and execution.next_attempt_at is not None
                 and execution.next_attempt_at <= now
                 and execution.fencing_token is None
             ]
-            first_created: dict[tuple[Operation, str], datetime] = {}
-            top_priority: dict[tuple[Operation, str], int] = {}
+            first_created: dict[str, datetime] = {}
+            top_priority: dict[str, int] = {}
             for execution in due:
                 if execution.work_kind is WorkKind.PROCESSING:
-                    target = (execution.operation, execution.model_id)
+                    target = execution.model_id
                     first_created[target] = min(
                         first_created.get(target, execution.created_at),
                         execution.created_at,
@@ -248,7 +190,7 @@ class InMemoryExecutionRepository:
 
             def order(item: ExecutionRecord) -> tuple[object, ...]:
                 if item.work_kind is WorkKind.PROCESSING:
-                    target = (item.operation, item.model_id)
+                    target = item.model_id
                     group = (-top_priority[target], first_created[target])
                 else:
                     group = (-item.priority, item.next_attempt_at)
@@ -261,10 +203,10 @@ class InMemoryExecutionRepository:
                 )
 
             for execution in sorted(due, key=order):
-                target = (execution.operation, execution.model_id)
+                target = execution.model_id
                 if (
                     execution.work_kind is WorkKind.PROCESSING
-                    and active.get(target, 0) >= self._limits[execution.operation]
+                    and active.get(target, 0) >= self._per_model_limit
                 ):
                     continue
                 token = str(uuid4())
@@ -278,37 +220,8 @@ class InMemoryExecutionRepository:
                     now=now,
                 )
                 self._executions[execution.id] = claimed.execution
-                if claimed.claim.operation is Operation.INFERENCE:
-                    try:
-                        payload = await self._payloads.read(
-                            self._requests[execution.id]
-                        )
-                    except PayloadMissingError:
-                        return claimed.claim
-                    return replace(claimed.claim, payload=payload)
                 return claimed.claim
             return None
-
-    async def claim_inference(
-        self, owner: str, lease_duration: timedelta, limit: int
-    ) -> list[WorkClaim]:
-        claims = []
-        while len(claims) < limit and (
-            claim := await self.claim_due(owner, lease_duration, [Operation.INFERENCE])
-        ):
-            claims.append(claim)
-        return claims
-
-    async def inference_content(self, execution_id: str) -> bytes:
-        async with self._operation():
-            execution = self._get(execution_id)
-            response = self._responses.get(execution_id)
-            if response is None or execution.status is not ExecutionStatus.SUCCEEDED:
-                raise ResultUnavailableError("execution has no inference response")
-        try:
-            return await self._payloads.read(response)
-        except PayloadMissingError as error:
-            raise ResultUnavailableError("inference response is unavailable") from error
 
     async def renew(
         self,
@@ -348,14 +261,6 @@ class InMemoryExecutionRepository:
             )
             if decision.execution is not None:
                 self._store(decision.execution)
-            if isinstance(settlement, InferenceSucceeded):
-                response = await self._payloads.write_response(
-                    execution_id, fencing_token, settlement.content
-                )
-                if isinstance(decision, SettlementAccepted):
-                    self._responses[execution_id] = response
-                elif self._responses.get(execution_id) != response:
-                    self._released.append(response.path)
             return decision.accepted_execution()
 
     async def mark_finish_mutation_started(
@@ -387,27 +292,15 @@ class InMemoryExecutionRepository:
 
     @asynccontextmanager
     async def _operation(self) -> AsyncIterator[None]:
-        """Hold the lock, then remove the files the operation released."""
-        released: list[str] = []
-        try:
-            async with self._lock:
-                try:
-                    yield
-                finally:
-                    released, self._released = self._released, []
-        finally:
-            await self._payloads.delete(released)
+        async with self._lock:
+            yield
 
     def _store(self, execution: ExecutionRecord) -> None:
         self._executions[execution.id] = execution
-        if execution.status in _TERMINAL:
-            request = self._requests.pop(execution.id, None)
-            if request is not None:
-                self._released.append(request.path)
 
-    def _active_processing(self, now: datetime) -> dict[tuple[Operation, str], int]:
-        """Count only processing claims with an unexpired lease per operation and model."""
-        counts: dict[tuple[Operation, str], int] = {}
+    def _active_processing(self, now: datetime) -> dict[str, int]:
+        """Count only processing claims with an unexpired lease per model."""
+        counts: dict[str, int] = {}
         for execution in self._executions.values():
             if (
                 execution.work_kind is WorkKind.PROCESSING
@@ -415,7 +308,7 @@ class InMemoryExecutionRepository:
                 and execution.lease_expires_at is not None
                 and execution.lease_expires_at > now
             ):
-                target = (execution.operation, execution.model_id)
+                target = execution.model_id
                 counts[target] = counts.get(target, 0) + 1
         return counts
 

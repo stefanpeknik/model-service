@@ -73,7 +73,6 @@ executionScheduler:
     existingClaim: ""
     mountPath: /mnt/data
   rayServeOrigin: ""
-  inferenceModelOrigins: {}
   leaseSeconds: 60
   workerPollSeconds: 0.5
   processingAttempts: 3
@@ -84,23 +83,6 @@ executionScheduler:
   maximumDeadlineSeconds: 86400
   perModelLimit: 1
   maxConcurrentExecutions: 4
-  # POST /v1/models/{id}/schedule: one execution per tile, with its own
-  # slots so tiles and builders cannot starve each other. Worst-case facade
-  # memory for running tiles is maxConcurrent x (maxRequestBytes + maxResultBytes).
-  scheduledInference:
-    perModelLimit: 32
-    maxConcurrent: 32
-    maxRequestBytes: 2097152
-    maxResultBytes: 4194304
-    retentionSeconds: 86400
-  # Request and response files of scheduled raw inference. A ReadWriteMany
-  # claim mounted by every facade replica and nothing else, separate from the
-  # EMPAIA workspace so a burst of tiles cannot fill the volume publication
-  # needs. Size it for the tiles kept: up to 4 MiB per response for
-  # retentionSeconds, plus requests still queued.
-  inferenceStorage:
-    existingClaim: ""
-    mountPath: /mnt/model-service-inference
   resources:
     requests:
       cpu: 100m

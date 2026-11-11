@@ -18,7 +18,6 @@ from model_service.scheduler.public import ExecutionError
 from model_service.scheduler.status import (
     ExecutionErrorCode,
     ExecutionStatus,
-    Operation,
 )
 
 
@@ -127,7 +126,7 @@ class TransitionsBase(ABC):
         """Retain the policies used to bound attempts and calculate retry delays.
 
         Args:
-            processing_policy: Retry policy for builder and inference processing.
+            processing_policy: Retry policy for builder processing.
             finish_policy: Retry policy for provider publication and terminal reports.
         """
         self._processing_policy = processing_policy
@@ -251,8 +250,7 @@ class TransitionsBase(ABC):
     ) -> ExecutionRecord:
         """Record a safe failure, release the lease, and optionally queue a failure report.
 
-        The report is new provider work, so it gets its own finish attempts. Raw
-        inference never gets one.
+        The report is new provider work, so it gets its own finish attempts.
 
         Args:
             execution: Current execution record.
@@ -263,7 +261,6 @@ class TransitionsBase(ABC):
         Returns:
             The failed record.
         """
-        report = report and _has_provider_phase(execution)
         return replace(
             execution,
             status=ExecutionStatus.FAILED,
@@ -298,17 +295,3 @@ class TransitionsBase(ABC):
             lease_expires_at=None,
             updated_at=now,
         )
-
-
-def _has_provider_phase(execution: ExecutionRecord) -> bool:
-    """Return whether the execution has a provider to publish to or report back to.
-
-    Raw inference has none.
-
-    Args:
-        execution: Current execution record.
-
-    Returns:
-        True for builder executions.
-    """
-    return execution.operation is Operation.BUILDER

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
+import logging
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -14,16 +14,10 @@ from model_service.scheduler.internal_state import (
     WorkClaim,
     WorkKind,
 )
-from model_service.scheduler.public import (
-    ResultUnavailableError,
-)
-from model_service.scheduler.status import ExecutionStatus, Operation
-from model_service.scheduler.store.payloads import PayloadMissingError, StoredPayload
 from model_service.scheduler.store.rows import ExecutionRow
 
 
 if TYPE_CHECKING:
-    from collections.abc import Collection
     from datetime import datetime, timedelta
 
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,9 +25,10 @@ if TYPE_CHECKING:
 
 from model_service.scheduler.store.postgres.base import (
     PostgresBase,
-    _stored_request,
-    logger,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class ClaimOperations(PostgresBase):
@@ -43,33 +38,27 @@ class ClaimOperations(PostgresBase):
         self,
         owner: str,
         lease_duration: timedelta,
-        operations: Collection[Operation] | None = None,
     ) -> WorkClaim | None:
         """Run maintenance, then lease due provider work before capacity-limited processing using database time.
 
         Args:
             owner: ID of the claiming worker.
             lease_duration: How long the claim stays valid without renewal.
-            operations: Operations to claim from, or None for all. Provider work is claimed only when builders are allowed.
 
         Returns:
-            The claim, with its payload for inference, or None when nothing is due or
-            the selected row's context is unreadable.
+            The claim, or None when nothing is due or the selected row's context is
+            unreadable.
 
         Raises:
             ExecutionRepositoryUnavailableError: The database is unavailable.
         """
-        allowed = frozenset(Operation if operations is None else operations)
         async with self._transaction() as session:
             now = await self._database_now(session)
             await self._expire_deadlines(session, now)
             await self._recover_expired_leases(session, now)
-            row = None
-            if Operation.BUILDER in allowed:
-                row = await self._select_finish(session, now)
+            row = await self._select_finish(session, now)
             if row is None:
-                rows = await self._select_processing(session, now, allowed, limit=1)
-                row = rows[0] if rows else None
+                row = await self._select_processing(session, now)
             if row is None:
                 return None
             execution = await self._claimable(session, row, now)
@@ -83,92 +72,7 @@ class ClaimOperations(PostgresBase):
                 now=now,
             )
             await self._persist_state(session, row, claimed.execution)
-            request = _stored_request(row)
-        if claimed.claim.operation is not Operation.INFERENCE:
-            return claimed.claim
-        return await self._with_request(claimed.claim, request)
-
-    async def claim_inference(
-        self, owner: str, lease_duration: timedelta, limit: int
-    ) -> list[WorkClaim]:
-        """Lease up to `limit` due inference attempts, with payloads, in one transaction.
-
-        Payload files are read after commit, not while the row locks are held.
-
-        Args:
-            owner: ID of the claiming worker.
-            lease_duration: How long each claim stays valid without renewal.
-            limit: Maximum number of claims.
-
-        Returns:
-            The claims; empty when nothing is due or limit is not positive.
-
-        Raises:
-            ExecutionRepositoryUnavailableError: The database is unavailable.
-        """
-        if limit <= 0:
-            return []
-        async with self._transaction() as session:
-            now = await self._database_now(session)
-            await self._expire_deadlines(session, now)
-            await self._recover_expired_leases(session, now)
-            rows = await self._select_processing(
-                session, now, frozenset({Operation.INFERENCE}), limit=limit
-            )
-            claims = []
-            for row in rows:
-                execution = await self._claimable(session, row, now)
-                if execution is None:
-                    continue
-                claimed = self._transitions.claim(
-                    execution,
-                    owner=owner,
-                    fencing_token=str(uuid4()),
-                    lease_duration=lease_duration,
-                    now=now,
-                )
-                self._apply_state(row, claimed.execution)
-                claims.append((claimed.claim, _stored_request(row)))
-            if not claims:
-                return []
-            await session.flush()
-        # Read the files after commit, not while holding the rows' locks.
-        return list(
-            await asyncio.gather(
-                *(self._with_request(claim, request) for claim, request in claims)
-            )
-        )
-
-    async def inference_content(self, execution_id: str) -> bytes:
-        """Return the stored response of a succeeded inference execution.
-
-        Args:
-            execution_id: ID of the inference execution.
-
-        Returns:
-            The response body.
-
-        Raises:
-            UnknownExecutionError: No execution has this ID.
-            ResultUnavailableError: The execution has no stored response or its file cannot be read.
-            ExecutionRepositoryUnavailableError: The database is unavailable.
-        """
-        async with self._transaction() as session:
-            row = await self._fetch(session, execution_id)
-            response = None
-            if (
-                row.operation is Operation.INFERENCE
-                and row.status is ExecutionStatus.SUCCEEDED
-                and row.response_path is not None
-                and row.response_size is not None
-            ):
-                response = StoredPayload(row.response_path, row.response_size)
-        if response is None:
-            raise ResultUnavailableError("execution has no inference response")
-        try:
-            return await self._payloads.read(response)
-        except (PayloadMissingError, OSError) as error:
-            raise ResultUnavailableError("inference response is unavailable") from error
+        return claimed.claim
 
     async def renew(
         self,
@@ -249,50 +153,40 @@ class ClaimOperations(PostgresBase):
         )
 
     async def _select_processing(
-        self,
-        session: AsyncSession,
-        now: datetime,
-        operations: frozenset[Operation],
-        *,
-        limit: int,
-    ) -> list[ExecutionRow]:
-        """Lock up to `limit` oldest eligible processing rows within each model's capacity.
+        self, session: AsyncSession, now: datetime
+    ) -> ExecutionRow | None:
+        """Lock the oldest eligible processing row within its model's capacity.
 
-        Builders and raw inference have separate limits per model. A
-        transaction-scoped advisory lock per (operation, model) serializes the
-        capacity check across scheduler replicas; a model whose lock is held elsewhere is skipped.
+        A transaction-scoped advisory lock per model serializes the capacity check
+        across scheduler replicas; a model whose lock is held elsewhere is skipped.
 
         Args:
             session: Session of the caller's transaction.
             now: Current database time.
-            operations: Operations to select from.
-            limit: Maximum number of rows.
 
         Returns:
-            The locked rows, by model priority and age.
+            The locked row, by model priority and age, or None.
         """
         eligible = (
             ExecutionRow.work_kind == WorkKind.PROCESSING,
             ExecutionRow.fencing_token.is_(None),
             ExecutionRow.next_attempt_at <= now,
             ExecutionRow.deadline_at > now,
-            ExecutionRow.operation.in_(operations),
         )
-        targets = await session.execute(
-            select(ExecutionRow.operation, ExecutionRow.model_id)
+        models = await session.scalars(
+            select(ExecutionRow.model_id)
             .where(*eligible)
-            .group_by(ExecutionRow.operation, ExecutionRow.model_id)
+            .group_by(ExecutionRow.model_id)
             .order_by(
                 func.max(ExecutionRow.priority).desc(),
                 func.min(ExecutionRow.created_at),
             )
         )
-        selected: list[ExecutionRow] = []
-        for operation, model_id in targets.tuples():
+        for model_id in models.all():
             locked = await session.scalar(
                 select(
                     func.pg_try_advisory_xact_lock(
-                        func.hashtextextended(f"{operation.value}:{model_id}", 0)
+                        func.hashtextextended(f"builder:{model_id}", 0)
                     )
                 )
             )
@@ -304,35 +198,28 @@ class ClaimOperations(PostgresBase):
                     .select_from(ExecutionRow)
                     .where(
                         ExecutionRow.model_id == model_id,
-                        ExecutionRow.operation == operation,
                         ExecutionRow.work_kind == WorkKind.PROCESSING,
                         ExecutionRow.fencing_token.is_not(None),
                         ExecutionRow.lease_expires_at > now,
                     )
                 )
             ).scalar_one()
-            wanted = min(self._limits[operation] - active, limit - len(selected))
-            if wanted <= 0:
+            if active >= self._per_model_limit:
                 continue
-            candidates = await session.scalars(
+            row = await session.scalar(
                 select(ExecutionRow)
-                .where(
-                    ExecutionRow.model_id == model_id,
-                    ExecutionRow.operation == operation,
-                    *eligible,
-                )
+                .where(ExecutionRow.model_id == model_id, *eligible)
                 .order_by(
                     ExecutionRow.priority.desc(),
                     ExecutionRow.next_attempt_at,
                     ExecutionRow.created_at,
                 )
                 .with_for_update(skip_locked=True)
-                .limit(wanted)
+                .limit(1)
             )
-            selected.extend(candidates)
-            if len(selected) >= limit:
-                break
-        return selected
+            if row is not None:
+                return row
+        return None
 
     async def _claimable(
         self, session: AsyncSession, row: ExecutionRow, now: datetime

@@ -6,7 +6,7 @@ not themselves write to storage or start work.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -16,19 +16,14 @@ from model_service.scheduler.public import (
     ProviderName,
     SubmissionIdentity,
 )
-from model_service.scheduler.status import Operation
 
 
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from model_service.scheduler.public import (
-        ExecutionError,
-        InferenceResult,
-        StoredInvocation,
-        StoredResult,
-    )
+    from model_service.scheduler.public import ExecutionError
     from model_service.scheduler.status import ExecutionStatus
+    from model_service.shared.invocation import Invocation
     from model_service.shared.json_values import JsonValue
     from model_service.shared.result import BuilderResult
 
@@ -100,14 +95,12 @@ class Admission:
     """Carry the complete prepared submission that persistence must admit atomically."""
 
     identity: SubmissionIdentity
-    builder_id: str | None
+    builder_id: str
     model_id: str
-    invocation: StoredInvocation
+    invocation: Invocation
     protected_context: dict[str, JsonValue]
     deadline_at: datetime
     terminal_report_deadline_at: datetime | None = None
-    operation: Operation = Operation.BUILDER
-    payload: bytes | None = None
     priority: int = Priority.NORMAL
 
 
@@ -117,10 +110,10 @@ class ExecutionRecord:
 
     id: str
     identity: SubmissionIdentity
-    builder_id: str | None
+    builder_id: str
     model_id: str
     status: ExecutionStatus
-    invocation: StoredInvocation
+    invocation: Invocation
     protected_context: dict[str, JsonValue]
     deadline_at: datetime
     terminal_report_deadline_at: datetime | None
@@ -133,11 +126,10 @@ class ExecutionRecord:
     lease_owner: str | None
     fencing_token: str | None
     lease_expires_at: datetime | None
-    result: StoredResult | None
+    result: BuilderResult | None
     error: ExecutionError | None
     created_at: datetime
     updated_at: datetime
-    operation: Operation = Operation.BUILDER
     priority: int = Priority.NORMAL
 
     @property
@@ -161,18 +153,16 @@ class WorkClaim:
     """Give a worker the inputs and token for one leased processing or provider attempt."""
 
     execution_id: str
-    builder_id: str | None
+    builder_id: str
     model_id: str
     provider: ProviderName
     kind: WorkKind
-    invocation: StoredInvocation
+    invocation: Invocation
     protected_context: dict[str, JsonValue]
     attempt: int
     fencing_token: str
-    result: StoredResult | None
+    result: BuilderResult | None
     error: ExecutionError | None
-    operation: Operation = Operation.BUILDER
-    payload: bytes | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,14 +170,6 @@ class ProcessingSucceeded:
     """Report a computation result to store before scheduling provider finish."""
 
     result: BuilderResult
-
-
-@dataclass(frozen=True, slots=True)
-class InferenceSucceeded:
-    """A raw model response; the repository stores `content` next to the execution."""
-
-    result: InferenceResult
-    content: bytes = field(repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -221,7 +203,6 @@ class ProviderFinishFailed:
 
 type Settlement = (
     ProcessingSucceeded
-    | InferenceSucceeded
     | ProcessingRejected
     | ProcessingFailed
     | ProviderFinishSucceeded

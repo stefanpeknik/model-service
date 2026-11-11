@@ -32,7 +32,6 @@ if TYPE_CHECKING:
     from model_service.inference.catalog import ModelCatalog
     from model_service.providers.provider import RouteFactory
     from model_service.scheduler.protocols import Scheduler
-    from model_service.scheduler.raw_inference_jobs import InferenceTarget
 
 
 import asyncio
@@ -42,7 +41,6 @@ from typing import TYPE_CHECKING
 import httpx
 
 from model_service.api.health import DeploymentHealth
-from model_service.api.raw_inference_proxy import HttpInferenceProxy, ModelInference
 from model_service.api.synchronous_runs import SynchronousBuilderService
 from model_service.builders.registry import BUILDERS, get_builder
 from model_service.inference.catalog import ModelCatalog
@@ -51,7 +49,6 @@ from model_service.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.scheduler.http_builder_dispatch import HTTPBuilderDispatch
 from model_service.scheduler.internal_state import RetryPolicy
 from model_service.scheduler.settings import SchedulerSettings
-from model_service.scheduler.store.payloads import PayloadStore
 from model_service.scheduler.store.postgres import PostgresExecutionRepository
 from model_service.scheduler.store.protected_context import ProtectedContextCipher
 
@@ -88,10 +85,8 @@ def create_app(
     *,
     catalog: ModelCatalog,
     builder_runner: SynchronousBuilderRunner | None = None,
-    inference_target: InferenceTarget | None = None,
     lifespan: Lifespan[FastAPI] | None = None,
     deployment_health: DeploymentHealthCheck | None = None,
-    inference_max_request_bytes: int = 2 * 1024 * 1024,
     access: Access | None = None,
     provider_routes: Sequence[RouteFactory] = (),
 ) -> FastAPI:
@@ -101,10 +96,8 @@ def create_app(
         scheduler: Admits, reads and cancels durable executions.
         catalog: Deployed models served under `/v1/models`.
         builder_runner: Runs builders synchronously; None makes `/run` answer 503.
-        inference_target: Runs raw model requests; None makes direct inference answer 503.
         lifespan: Startup and shutdown context for the app.
         deployment_health: Checks Ray Serve routes; None reports `not_configured`.
-        inference_max_request_bytes: Largest raw inference body accepted, in bytes.
         access: Guards the public API; the default lets everyone in. Providers
             guard their own routes.
         provider_routes: Router factories contributed by providers.
@@ -160,11 +153,7 @@ def create_app(
             response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return result
 
-    app.include_router(
-        models.create_router(
-            scheduler, catalog, inference_target, inference_max_request_bytes, access
-        )
-    )
+    app.include_router(models.create_router(catalog, access))
     app.include_router(builders.create_router(scheduler, builder_runner, access))
     for routes in provider_routes:
         app.include_router(routes(scheduler))
@@ -202,11 +191,8 @@ def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
     repository = PostgresExecutionRepository(
         config.database_url,
         cipher=cipher,
-        payloads=PayloadStore(config.inference_storage_path),
         pool_size=config.database_pool_size,
         per_model_limit=config.per_model_limit,
-        per_model_inference_limit=config.per_model_inference_limit,
-        inference_retention=config.inference_retention,
         processing_policy=RetryPolicy(
             max_attempts=config.processing_attempts,
             initial_backoff=config.initial_backoff,
@@ -221,18 +207,6 @@ def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
     contributions = [provider.api(catalog, config) for provider in providers]
     client = httpx.AsyncClient()
     dispatch = HTTPBuilderDispatch(client, origin=config.ray_serve_origin)
-    inference_proxy = HttpInferenceProxy(
-        client,
-        origin=config.inference_serve_origin or config.ray_serve_origin,
-        model_origins={
-            model: str(origin)
-            for model, origin in config.inference_model_origins.items()
-        },
-        timeout=config.inference_timeout.total_seconds(),
-    )
-    inference_target = ModelInference(
-        catalog, inference_proxy, max_result_bytes=config.inference_max_result_bytes
-    )
     scheduler = ExecutionScheduler(
         repository=repository,
         dispatch=dispatch,
@@ -243,8 +217,6 @@ def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
         lease_duration=config.lease_duration,
         poll_interval=config.poll_interval,
         max_concurrent=config.max_concurrent_executions,
-        inference_target=inference_target,
-        max_concurrent_inference=config.max_concurrent_inference,
     )
 
     @asynccontextmanager
@@ -270,8 +242,6 @@ def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
         scheduler,
         catalog=catalog,
         builder_runner=SynchronousBuilderService(catalog, dispatch),
-        inference_target=inference_target,
-        inference_max_request_bytes=config.inference_max_request_bytes,
         lifespan=lifespan,
         provider_routes=[c.routes for c in contributions if c.routes is not None],
         deployment_health=DeploymentHealth(

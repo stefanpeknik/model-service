@@ -11,7 +11,6 @@ import logging
 from contextlib import suppress
 from typing import TYPE_CHECKING
 
-from model_service.scheduler import raw_inference_jobs
 from model_service.scheduler.builder_dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,
@@ -31,7 +30,6 @@ from model_service.scheduler.internal_state import (
 from model_service.scheduler.public import (
     ExecutionError,
     IncompatibleModelError,
-    InferenceInvocation,
     ProviderCancellation,
     ProviderFailure,
     ProviderFinishFailureError,
@@ -40,7 +38,7 @@ from model_service.scheduler.public import (
     UnknownBuilderError,
     UnknownModelError,
 )
-from model_service.scheduler.status import ExecutionErrorCode, Operation
+from model_service.scheduler.status import ExecutionErrorCode
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
 from model_service.shared.invocation import ExecutionContext
 from model_service.shared.result import BuilderResult
@@ -57,18 +55,12 @@ if TYPE_CHECKING:
     from model_service.scheduler.builder_dispatch import BuilderDispatch
     from model_service.scheduler.internal_state import Settlement
     from model_service.scheduler.public import ModelResolver, ProviderName
-    from model_service.scheduler.raw_inference_jobs import InferenceTarget
     from model_service.scheduler.running_work import ActiveWorkRegistry
     from model_service.scheduler.store.repository import ExecutionRepository
 
 
 class ExecutionWorker:
-    """Claim due work, renew leases and settle.
-
-    Builder work (with its provider phases) and raw inference have separate slot
-    pools, `max_concurrent` and `max_concurrent_inference`, so a burst of tiles
-    cannot starve builders or the other way round.
-    """
+    """Claim due work, renew leases and settle."""
 
     def __init__(
         self,
@@ -81,12 +73,8 @@ class ExecutionWorker:
         lease_duration: timedelta,
         active_work: ActiveWorkRegistry,
         max_concurrent: int = 1,
-        inference_target: InferenceTarget | None = None,
-        max_concurrent_inference: int = 0,
     ) -> None:
-        """Store collaborators and size the builder and inference slot pools.
-
-        Inference gets no slots without an inference target.
+        """Store collaborators and the number of attempts to run at once.
 
         Args:
             repository: Durable execution store.
@@ -97,13 +85,11 @@ class ExecutionWorker:
             lease_duration: How long a claim stays valid without renewal.
             active_work: Registry of local tasks, used for prompt cancellation.
             max_concurrent: Builder and provider attempts run at once.
-            inference_target: Model client for raw inference, or None.
-            max_concurrent_inference: Inference attempts run at once.
 
         Raises:
-            ValueError: max_concurrent is not positive or max_concurrent_inference is negative.
+            ValueError: max_concurrent is not positive.
         """
-        if max_concurrent <= 0 or max_concurrent_inference < 0:
+        if max_concurrent <= 0:
             raise ValueError("concurrency limits must be positive")
         self._repository = repository
         self._providers = dict(providers)
@@ -112,13 +98,7 @@ class ExecutionWorker:
         self._owner = owner
         self._lease_duration = lease_duration
         self._active_work = active_work
-        self._inference = inference_target
-        self._slots = {
-            Operation.BUILDER: max_concurrent,
-            Operation.INFERENCE: (
-                max_concurrent_inference if inference_target is not None else 0
-            ),
-        }
+        self._max_concurrent = max_concurrent
 
     async def run(self, stop: asyncio.Event, *, poll_interval: float) -> None:
         """Run maintenance and the claim loop until stop is set.
@@ -159,67 +139,38 @@ class ExecutionWorker:
     async def _run_claims(self, stop: asyncio.Event, *, poll_interval: float) -> None:
         """Claim work into free slots and start a task per claim until stop is set.
 
-        Inference is claimed in batches of a quarter of its slots, or fewer once a poll
-        interval has passed. Claim failures are logged and the loop continues. On exit
-        all running attempts are cancelled and awaited.
+        Claim failures are logged and the loop continues. On exit all running
+        attempts are cancelled and awaited.
 
         Args:
             stop: Event that ends the loop.
             poll_interval: Seconds to wait when nothing was claimed and slots are free.
         """
-        running: dict[Operation, set[asyncio.Task[None]]] = {
-            operation: set() for operation in Operation
-        }
-        # Tiles are claimed in batches: one transaction per quarter of the slots
-        # instead of one per tile.
-        batch = max(1, self._slots[Operation.INFERENCE] // 4)
-        loop = asyncio.get_running_loop()
-        last_inference_claim = -poll_interval
+        running: set[asyncio.Task[None]] = set()
         stopping = asyncio.ensure_future(stop.wait())
         try:
             while not stop.is_set():
-                free = {
-                    operation: self._slots[operation] - len(tasks)
-                    for operation, tasks in running.items()
-                }
-                claims: list[WorkClaim] = []
-                try:
-                    if free[Operation.INFERENCE] >= batch or (
-                        free[Operation.INFERENCE] > 0
-                        and loop.time() - last_inference_claim >= poll_interval
-                    ):
-                        last_inference_claim = loop.time()
-                        claims.extend(
-                            await self._repository.claim_inference(
-                                self._owner,
-                                self._lease_duration,
-                                free[Operation.INFERENCE],
-                            )
-                        )
-                    if free[Operation.BUILDER] > 0:
+                free = self._max_concurrent - len(running)
+                claim = None
+                if free > 0:
+                    try:
                         claim = await self._repository.claim_due(
-                            self._owner, self._lease_duration, [Operation.BUILDER]
+                            self._owner, self._lease_duration
                         )
-                        if claim is not None:
-                            claims.append(claim)
-                except Exception as error:
-                    logger.error("execution claim failed: %s", type(error).__name__)
-                for claim in claims:
-                    running[claim.operation].add(
-                        asyncio.create_task(self._process_logged(claim))
-                    )
-                if claims:
+                    except Exception as error:
+                        logger.error("execution claim failed: %s", type(error).__name__)
+                if claim is not None:
+                    running.add(asyncio.create_task(self._process_logged(claim)))
                     continue
                 await asyncio.wait(
-                    {stopping, *(task for tasks in running.values() for task in tasks)},
-                    timeout=poll_interval if any(free.values()) else None,
+                    {stopping, *running},
+                    timeout=poll_interval if free > 0 else None,
                     return_when=asyncio.FIRST_COMPLETED,
                 )
-                for tasks in running.values():
-                    tasks.difference_update({task for task in tasks if task.done()})
+                running.difference_update({task for task in running if task.done()})
         finally:
             stopping.cancel()
-            pending = [task for tasks in running.values() for task in tasks]
+            pending = list(running)
             for task in pending:
                 task.cancel()
             await asyncio.gather(stopping, *pending, return_exceptions=True)
@@ -233,11 +184,7 @@ class ExecutionWorker:
         Raises:
             ExecutionRepositoryUnavailableError: The repository is unavailable for the claim, or for the settlement during a whole lease.
         """
-        claim = await self._repository.claim_due(
-            self._owner,
-            self._lease_duration,
-            [operation for operation, slots in self._slots.items() if slots],
-        )
+        claim = await self._repository.claim_due(self._owner, self._lease_duration)
         if claim is None:
             return False
         await self._process(claim)
@@ -383,7 +330,7 @@ class ExecutionWorker:
         return RenewDirective.CONTINUE
 
     async def _execute(self, claim: WorkClaim) -> Settlement:
-        """Run the claimed work: builder or inference processing, or a provider finish or report.
+        """Run the claimed work: builder processing, or a provider finish or report.
 
         Provider finish marks the mutation boundary before its first external write.
 
@@ -397,8 +344,6 @@ class ExecutionWorker:
             RuntimeError: The claim lacks what its work kind needs.
         """
         if claim.kind is WorkKind.PROCESSING:
-            if claim.operation is Operation.INFERENCE:
-                return await self._run_inference(claim)
             return await self._run_builder(claim)
         try:
             mutation_started = False
@@ -426,70 +371,6 @@ class ExecutionWorker:
                 outcome_unknown=error.outcome_unknown,
             )
 
-    async def _run_inference(self, claim: WorkClaim) -> Settlement:
-        """Recheck the payload against the model's current input, then call the model.
-
-        Args:
-            claim: Leased attempt.
-
-        Returns:
-            The settlement from the model's response, or a failure: permanent for a
-            missing request, unknown model, incompatible input or oversized response;
-            retryable when the model did not answer.
-
-        Raises:
-            RuntimeError: No inference target is configured or the claim is not an inference invocation.
-        """
-        if self._inference is None or not isinstance(
-            claim.invocation, InferenceInvocation
-        ):
-            raise RuntimeError("inference claim cannot run in this worker")
-        if claim.payload is None:
-            return ProcessingFailed(
-                error=ExecutionError(
-                    ExecutionErrorCode.REQUEST_UNAVAILABLE,
-                    "the stored request is no longer available",
-                ),
-                retryable=False,
-            )
-        try:
-            # The model may have changed since admission.
-            self._inference.check(claim.model_id, claim.payload)
-        except UnknownModelError:
-            return ProcessingFailed(
-                error=ExecutionError(
-                    ExecutionErrorCode.UNKNOWN_MODEL,
-                    f"model {claim.model_id!r} is no longer deployed",
-                ),
-                retryable=False,
-            )
-        except raw_inference_jobs.IncompatibleInputError as error:
-            return ProcessingFailed(
-                error=ExecutionError(ExecutionErrorCode.INCOMPATIBLE_INPUT, str(error)),
-                retryable=False,
-            )
-        try:
-            response = await self._inference.call(
-                claim.model_id, claim.payload, claim.invocation.headers
-            )
-        except raw_inference_jobs.ModelUnavailableError:
-            return ProcessingFailed(
-                error=ExecutionError(
-                    ExecutionErrorCode.MODEL_UNAVAILABLE,
-                    "model did not answer the request",
-                ),
-                retryable=True,
-            )
-        except raw_inference_jobs.ResultTooLargeError:
-            return ProcessingFailed(
-                error=ExecutionError(
-                    ExecutionErrorCode.RESULT_TOO_LARGE,
-                    "model response exceeds the stored result limit",
-                ),
-                retryable=False,
-            )
-        return raw_inference_jobs.settlement(response)
-
     async def _run_builder(self, claim: WorkClaim) -> Settlement:
         """Resolve the model's current binding and dispatch the builder.
 
@@ -500,14 +381,7 @@ class ExecutionWorker:
             Success with the builder result; a rejection for confirmed backpressure; or
             a failure, permanent for an unknown or incompatible model and retryable for
             an unknown dispatch outcome.
-
-        Raises:
-            RuntimeError: The claim has no builder invocation.
         """
-        if claim.builder_id is None or isinstance(
-            claim.invocation, InferenceInvocation
-        ):
-            raise RuntimeError("builder claim has no builder invocation")
         try:
             # Each attempt uses the model's current catalog declaration.
             model = self._resolve_model(claim.builder_id, claim.model_id)
@@ -569,7 +443,7 @@ def _finish_outcome(claim: WorkClaim) -> ProviderFinishOutcome:
         RuntimeError: The claim lacks the stored result or error its kind requires, or its kind is not provider work.
     """
     if claim.kind is WorkKind.PROVIDER_FINISH:
-        if not isinstance(claim.result, BuilderResult) or claim.builder_id is None:
+        if not isinstance(claim.result, BuilderResult):
             raise RuntimeError("provider finish requires a durable builder result")
         return ProviderSuccess(claim.result, claim.builder_id)
     if claim.kind is WorkKind.PROVIDER_FAILURE_REPORT:

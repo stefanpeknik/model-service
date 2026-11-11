@@ -18,7 +18,7 @@ from model_service.http_common.auth import (
 from model_service.inference.catalog import ModelCatalog
 from model_service.providers.empaia.jobs.routes import create_router
 from model_service.scheduler.public import ExecutionView
-from model_service.scheduler.status import ExecutionStatus, Operation
+from model_service.scheduler.status import ExecutionStatus
 from model_service.shared.model_declarations import SpatialScoresModel
 
 
@@ -41,7 +41,6 @@ class Scheduler:
     async def get(self, execution_id: str) -> ExecutionView:
         return ExecutionView(
             id=execution_id,
-            operation=Operation.BUILDER,
             builder_id="heatmap",
             model_id="classifier",
             status=ExecutionStatus.QUEUED,

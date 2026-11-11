@@ -42,7 +42,7 @@ case browser does not show it yet; raised with its maintainers.
 
 ```text
 src/model_service/
-  api/                    the public API process: routes/, raw inference proxy, synchronous runs
+  api/                    the public API process: routes/, synchronous runs
   http_common/            auth, error mapping, scheduling calls (API and provider routes)
   scheduler/              durable executions on PostgreSQL (runs inside the API process)
   builders/               builder contract and the builders: heatmap/, embeddings/
@@ -97,6 +97,11 @@ with Client(base_url="http://<model-service>:8080") as client:
     )
     print(client.executions.get(scheduled.execution.id).status)
 ```
+
+For one raw tile, skip the API: post a single LZ4-compressed
+`tile_size`×`tile_size`×3 uint8 tile to the model's Ray Serve ingress,
+`POST http://<ray-serve>:8000/<model-id>/`. `GET /v1/models/<id>` gives the
+model's `tile_size` and contract.
 
 The heatmap is a score grid: `numpy.load("heatmap.npz")` gives the scores per
 cell (`values`), which cells were scored, and the slide level, cell size and

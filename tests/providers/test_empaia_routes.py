@@ -16,7 +16,7 @@ from model_service.scheduler.public import (
     ScheduleResult,
     UnknownExecutionError,
 )
-from model_service.scheduler.status import ExecutionStatus, Operation
+from model_service.scheduler.status import ExecutionStatus
 from model_service.shared.failures import UnknownModelError
 from model_service.shared.model_declarations import SpatialScoresModel
 
@@ -41,7 +41,6 @@ JOB = {
 def view(status: ExecutionStatus, **fields: object) -> ExecutionView:
     return ExecutionView(
         id="execution-1",
-        operation=Operation.BUILDER,
         builder_id="heatmap",
         model_id=PROSTATE.id,
         status=status,

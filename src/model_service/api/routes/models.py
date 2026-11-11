@@ -1,33 +1,18 @@
-"""`/v1/models`: the model catalog and raw inference, run directly or scheduled.
+"""`/v1/models`: the read-only model catalog.
 
-A raw request is one LZ4-compressed RGB tile of the model's `tile_size`, with
-optional `x-output-dtype` and `x-pool-tokens` headers. The model's response is
-returned (or, when scheduled, stored) as the model produced it.
+Raw tiles go straight to the model's Ray Serve ingress (`POST /<model-id>/`).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter
 
-from model_service.api.raw_inference_proxy import inference_headers
 from model_service.builders.registry import compatible_builders
 from model_service.http_common.auth import Access, Action
-from model_service.http_common.errors import (
-    ERRORS,
-    ApiErrorCode,
-    http_error,
-    lookup_error,
-)
-from model_service.http_common.scheduling import require_idempotency_key, submit
-from model_service.scheduler.public import InferenceScheduleRequest, ScheduleResult
-from model_service.scheduler.raw_inference_jobs import (
-    IncompatibleInputError,
-    ModelUnavailableError,
-    ResultTooLargeError,
-)
+from model_service.http_common.errors import ERRORS, lookup_error
 from model_service.shared.failures import UnknownModelError
 from model_service.shared.json_values import (
     JsonValue,
@@ -40,8 +25,6 @@ from model_service.shared.model_declarations import (
 
 if TYPE_CHECKING:
     from model_service.inference.catalog import ModelCatalog
-    from model_service.scheduler.protocols import Scheduler
-    from model_service.scheduler.raw_inference_jobs import InferenceTarget
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,32 +52,11 @@ def model_view(model: ModelBinding) -> ModelView:
     )
 
 
-_BINARY_BODY = {
-    "requestBody": {
-        "required": True,
-        "content": {
-            "application/octet-stream": {
-                "schema": {"type": "string", "format": "binary"}
-            }
-        },
-    }
-}
-
-
-def create_router(
-    scheduler: Scheduler,
-    catalog: ModelCatalog,
-    inference: InferenceTarget | None,
-    max_request_bytes: int,
-    access: Access,
-) -> APIRouter:
-    """Build the `/v1/models` router: the catalog and direct or scheduled inference.
+def create_router(catalog: ModelCatalog, access: Access) -> APIRouter:
+    """Build the `/v1/models` catalog router.
 
     Args:
-        scheduler: Admits durable inference executions.
         catalog: Deployed models.
-        inference: Runs raw model requests; None makes `/run` answer 503.
-        max_request_bytes: Largest raw request body accepted, in bytes.
         access: Guards the routes.
 
     Returns:
@@ -120,119 +82,4 @@ def create_router(
         except UnknownModelError as error:
             raise lookup_error(error) from error
 
-    @router.post(
-        "/{model_id}/run",
-        responses={200: {"content": {"application/octet-stream": {}}}, **ERRORS},
-        openapi_extra=_BINARY_BODY,
-        dependencies=[access.require(Action.RUN)],
-    )
-    async def run_inference(model_id: str, request: Request) -> Response:
-        """Send one raw request to the model and return its response."""
-        if inference is None:
-            raise http_error(
-                503,
-                ApiErrorCode.MODEL_UNAVAILABLE,
-                "model inference is unavailable",
-                retryable=True,
-            )
-        payload = await _read_body(request, max_request_bytes)
-        try:
-            inference.check(model_id, payload)
-            response = await inference.call(
-                model_id, payload, inference_headers(request.headers)
-            )
-        except UnknownModelError as error:
-            raise lookup_error(error) from error
-        except IncompatibleInputError as error:
-            raise http_error(422, ApiErrorCode.INVALID_REQUEST, str(error)) from error
-        except ModelUnavailableError as error:
-            raise http_error(
-                503, ApiErrorCode.MODEL_UNAVAILABLE, str(error), retryable=True
-            ) from error
-        except ResultTooLargeError as error:
-            raise http_error(
-                502,
-                ApiErrorCode.MODEL_UNAVAILABLE,
-                "model response exceeds the result limit",
-            ) from error
-        return Response(
-            status_code=response.status_code,
-            content=response.content,
-            headers={
-                name: value
-                for name, value in response.headers.items()
-                if name == "content-type" or name.startswith("x-")
-            },
-        )
-
-    @router.post(
-        "/{model_id}/schedule",
-        status_code=status.HTTP_202_ACCEPTED,
-        responses={200: {"model": ScheduleResult}, **ERRORS},
-        openapi_extra=_BINARY_BODY,
-        dependencies=[access.require(Action.SCHEDULE)],
-    )
-    async def schedule_inference(
-        model_id: str,
-        request: Request,
-        response: Response,
-        idempotency_key: Annotated[str, Depends(require_idempotency_key)],
-        timeout_seconds: int | None = None,
-    ) -> ScheduleResult:
-        """Durably queue one raw model request (the body `run` takes)."""
-        payload = await _read_body(request, max_request_bytes)
-        return await submit(
-            scheduler,
-            InferenceScheduleRequest(
-                model_id=model_id,
-                payload=payload,
-                headers={
-                    name: value
-                    for name, value in inference_headers(request.headers).items()
-                    if name.startswith("x-")
-                },
-                idempotency_key=idempotency_key,
-                requested_timeout_seconds=timeout_seconds,
-            ),
-            response,
-        )
-
     return router
-
-
-async def _read_body(request: Request, limit: int) -> bytes:
-    """Read the request body, stopping as soon as it exceeds the limit.
-
-    Args:
-        request: The incoming request.
-        limit: Largest body accepted, in bytes.
-
-    Returns:
-        The body.
-
-    Raises:
-        HTTPException: 413 if `Content-Length` or the streamed body exceeds the limit.
-    """
-    declared = request.headers.get("content-length", "")
-    if declared.isdigit() and int(declared) > limit:
-        raise _payload_too_large(limit)
-    body = bytearray()
-    async for chunk in request.stream():
-        body += chunk
-        if len(body) > limit:
-            raise _payload_too_large(limit)
-    return bytes(body)
-
-
-def _payload_too_large(limit: int) -> HTTPException:
-    """Build the 413 for a body over the limit.
-
-    Args:
-        limit: The limit in bytes, named in the message.
-
-    Returns:
-        The HTTP error to raise.
-    """
-    return http_error(
-        413, ApiErrorCode.PAYLOAD_TOO_LARGE, f"request body exceeds {limit} bytes"
-    )

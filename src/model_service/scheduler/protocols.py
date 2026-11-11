@@ -12,8 +12,6 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from model_service.scheduler.public import (
         ExecutionView,
-        InferenceResult,
-        InferenceScheduleRequest,
         ScheduleRequest,
         ScheduleResult,
     )
@@ -52,26 +50,6 @@ class Scheduler(Protocol):
         """
         ...
 
-    async def schedule_inference(
-        self, request: InferenceScheduleRequest
-    ) -> ScheduleResult:
-        """Admit a durable raw inference execution, or return the one its key names.
-
-        Args:
-            request: The model, payload, headers and idempotency key.
-
-        Returns:
-            The execution and whether it was created.
-
-        Raises:
-            UnknownModelError: If the model is not deployed.
-            IncompatibleInputError: If the payload is not a valid tile for the model.
-            ScheduleConflictError: If the idempotency key names a different request.
-            InvalidScheduleRequestError: If the request is invalid.
-            SchedulingUnavailableError: If the execution repository is unavailable.
-        """
-        ...
-
     async def get(self, execution_id: str) -> ExecutionView:
         """Read one execution.
 
@@ -101,24 +79,6 @@ class Scheduler(Protocol):
         """
         ...
 
-    async def inference_result(
-        self, execution_id: str
-    ) -> tuple[InferenceResult, bytes]:
-        """Read the stored model response of a succeeded inference execution.
-
-        Args:
-            execution_id: The execution ID.
-
-        Returns:
-            The response's media type and headers, and its body.
-
-        Raises:
-            UnknownExecutionError: If no execution has this ID.
-            ResultUnavailableError: If the execution has no stored response.
-            SchedulingUnavailableError: If the execution repository is unavailable.
-        """
-        ...
-
     async def cancel(self, execution_id: str) -> ExecutionView:
         """Cancel an execution.
 
@@ -133,4 +93,3 @@ class Scheduler(Protocol):
             SchedulingUnavailableError: If the execution repository is unavailable.
         """
         ...
-

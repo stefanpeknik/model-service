@@ -1,37 +1,38 @@
-"""Warm a model by scheduling one blank tile and following it to the end.
+"""Warm a model by sending one blank LZ4 tile straight to its Ray Serve ingress.
 
-Run where the scheduler API is reachable, e.g. inside the scheduler pod:
+Usage: warm_model.py MODEL TILE_SIZE [RAY_SERVE_ORIGIN]
 
-    oc -n peknik-ns exec -i deploy/model-service-validation-execution-scheduler -- \
-        python - prostate-classifier-1 512 < scripts/warm_model.py
+The origin defaults to $RAY_SERVE_ORIGIN, then http://localhost:8000. Run it where
+Ray Serve is reachable, e.g. in a pod of the release or through a port-forward.
 """
 
-import json
+import os
 import sys
 import time
+import urllib.error
 import urllib.request
 
 import lz4.frame
 
 
-BASE = "http://localhost:8080"
 model, tile_size = sys.argv[1], int(sys.argv[2])
+origin = (
+    sys.argv[3]
+    if len(sys.argv) > 3
+    else os.environ.get("RAY_SERVE_ORIGIN", "http://localhost:8000")
+)
 request = urllib.request.Request(
-    f"{BASE}/v1/models/{model}/schedule",
+    f"{origin.rstrip('/')}/{model}/",
     data=lz4.frame.compress(bytes(tile_size * tile_size * 3)),
-    headers={"Idempotency-Key": f"warm-{model}-{int(time.time())}"},
+    headers={"content-type": "application/octet-stream"},
     method="POST",
 )
-execution = json.load(urllib.request.urlopen(request, timeout=30))["execution"]
-print("scheduled", execution["id"], flush=True)
-started = time.time()
-while time.time() - started < 900:
-    url = f"{BASE}/v1/executions/{execution['id']}"
-    view = json.load(urllib.request.urlopen(url, timeout=30))
-    print(
-        f"{time.time() - started:5.0f}s {view['status']}",
-        flush=True,
-    )
-    if view["status"] in {"succeeded", "failed", "cancelled"}:
-        break
-    time.sleep(30)
+started = time.monotonic()
+try:
+    with urllib.request.urlopen(request, timeout=900) as response:
+        status = response.status
+        response.read()
+except urllib.error.HTTPError as error:
+    status = error.code
+print(f"{model}: HTTP {status} in {time.monotonic() - started:.1f}s", flush=True)
+sys.exit(0 if status == 200 else 1)

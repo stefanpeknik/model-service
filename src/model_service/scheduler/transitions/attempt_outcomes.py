@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 
 from model_service.scheduler.internal_state import (
     ExecutionRecord,
-    InferenceSucceeded,
     ProcessingFailed,
     ProcessingRejected,
     ProcessingSucceeded,
@@ -35,7 +34,6 @@ from model_service.scheduler.transitions.common import (
     SettlementRejected,
     SettlementRejection,
     TransitionsBase,
-    _has_provider_phase,
 )
 
 
@@ -64,7 +62,7 @@ class AttemptOutcomeTransitions(TransitionsBase):
             The state update and the rejection reason, if any.
 
         Raises:
-            StaleWorkClaimError: The outcome does not fit the claimed work kind or operation.
+            StaleWorkClaimError: The outcome does not fit the claimed work kind.
             TypeError: The settlement type is unknown.
         """
         if execution.fencing_token != fencing_token:
@@ -129,31 +127,11 @@ class AttemptOutcomeTransitions(TransitionsBase):
             The record after the outcome.
 
         Raises:
-            StaleWorkClaimError: The outcome does not fit the work kind, or a builder and
-                raw inference settle each other's result type.
+            StaleWorkClaimError: The outcome does not fit the work kind.
             TypeError: The settlement type is unknown.
         """
-        if isinstance(settlement, InferenceSucceeded):
-            self._require_kind(execution, WorkKind.PROCESSING)
-            if _has_provider_phase(execution):
-                raise StaleWorkClaimError("a builder cannot settle a model response")
-            return replace(
-                execution,
-                status=ExecutionStatus.SUCCEEDED,
-                result=settlement.result,
-                work_kind=None,
-                next_attempt_at=None,
-                lease_owner=None,
-                fencing_token=None,
-                lease_expires_at=None,
-                updated_at=now,
-            )
         if isinstance(settlement, ProcessingSucceeded):
             self._require_kind(execution, WorkKind.PROCESSING)
-            if not _has_provider_phase(execution):
-                raise StaleWorkClaimError(
-                    "raw inference cannot settle a builder result"
-                )
             return replace(
                 execution,
                 status=ExecutionStatus.RUNNING,

@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from model_service.scheduler.public import SubmissionIdentity
-    from model_service.scheduler.store.payloads import StoredPayload
 
 
 from model_service.scheduler.store.postgres.base import (
@@ -64,9 +63,6 @@ class AdmissionOperations(PostgresBase):
     async def admit(self, admission: Admission) -> AdmissionResult:
         """Encrypt protected context and atomically insert a queued record or return an identical concurrent replay.
 
-        An inference request is written to its file first; a replay, conflict or
-        failed insert removes the unused file.
-
         Args:
             admission: Prepared execution to store.
 
@@ -75,32 +71,17 @@ class AdmissionOperations(PostgresBase):
 
         Raises:
             ScheduleConflictError: A concurrent submission used the key for a different request.
-            ExecutionRepositoryUnavailableError: The database or payload storage is unavailable.
+            ExecutionRepositoryUnavailableError: The database is unavailable.
         """
-        encrypted_context = self._cipher.encrypt(admission.protected_context)
-        execution_id = str(uuid4())
-        request = None
-        if admission.payload is not None:
-            request = await self._write_payload(
-                self._payloads.write_request(execution_id, admission.payload)
-            )
-        created = False
-        try:
-            result = await self._insert(
-                admission, execution_id, encrypted_context, request
-            )
-            created = result.created
-        finally:
-            if request is not None and not created:
-                await self._delete_payloads([request.path])
-        return result
+        return await self._insert(
+            admission, str(uuid4()), self._cipher.encrypt(admission.protected_context)
+        )
 
     async def _insert(
         self,
         admission: Admission,
         execution_id: str,
         encrypted_context: bytes,
-        request: StoredPayload | None,
     ) -> AdmissionResult:
         """Insert the execution row, or read the row a concurrent submission inserted first.
 
@@ -108,7 +89,6 @@ class AdmissionOperations(PostgresBase):
             admission: Prepared execution to store.
             execution_id: ID for the new execution.
             encrypted_context: Encrypted provider context.
-            request: Stored inference request file, or None.
 
         Returns:
             The stored execution and whether this call created it.
@@ -126,7 +106,6 @@ class AdmissionOperations(PostgresBase):
                 insert(ExecutionRow)
                 .values(
                     id=execution.id,
-                    operation=execution.operation,
                     provider=execution.identity.provider,
                     submission_key=execution.identity.key,
                     request_fingerprint=execution.identity.fingerprint,
@@ -144,8 +123,6 @@ class AdmissionOperations(PostgresBase):
                     finish_attempts=execution.finish_attempts,
                     finish_mutation_started=execution.finish_mutation_started,
                     priority=execution.priority,
-                    request_path=request.path if request is not None else None,
-                    request_size=request.size if request is not None else None,
                     created_at=execution.created_at,
                     updated_at=execution.updated_at,
                 )
