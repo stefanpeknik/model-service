@@ -8,6 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock
 
+from model_service.contracts.result import BuilderResult, SharedArtifact
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
 from model_service.providers.empaia.jobs.inputs import job_workspace
@@ -20,7 +21,6 @@ from model_service.scheduler.public import (
     ProviderSuccess,
     ScheduleRequest,
 )
-from model_service.shared.result import BuilderResult, SharedArtifact
 
 
 # Publishes nothing: these tests are about the workspace.

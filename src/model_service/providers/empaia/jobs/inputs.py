@@ -20,25 +20,29 @@ from model_service.builders.input_access import (
     InputAccessFactory,
     close_resource,
 )
+from model_service.contracts.failures import (
+    BuilderFailure,
+    FailureCode,
+    InvalidInvocation,
+)
+from model_service.contracts.invocation import ExecutionContext, ProviderInput
 from model_service.providers.empaia.app_service.gateway import (
     EmpaiaGatewayError,
     EmpaiaInputState,
     EmpaiaJobContext,
 )
-from model_service.shared.failures import BuilderFailure, FailureCode, InvalidInvocation
-from model_service.shared.invocation import ExecutionContext, ProviderInput
 
 
 logger = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
+    from model_service.contracts.invocation import Invocation
+    from model_service.contracts.model_declarations import ModelBinding
     from model_service.providers.empaia.app_service.gateway import (
         EmpaiaGateway,
         EmpaiaGatewayFactory,
     )
-    from model_service.shared.invocation import Invocation
-    from model_service.shared.model_declarations import ModelBinding
 
 
 class EmpaiaInputAccess(InputAccess):

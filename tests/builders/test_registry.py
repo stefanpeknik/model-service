@@ -7,17 +7,17 @@ from datetime import UTC, datetime, timedelta
 
 from model_service.builders.heatmap.spec import HeatmapConfiguration
 from model_service.builders.registry import BUILDERS, get_builder
-from model_service.shared.failures import (
+from model_service.contracts.failures import (
     IncompatibleModelError,
     InvalidInvocation,
     UnknownBuilderError,
 )
-from model_service.shared.invocation import (
+from model_service.contracts.invocation import (
     InputAccessContext,
     Invocation,
     SharedPathInput,
 )
-from model_service.shared.model_declarations import (
+from model_service.contracts.model_declarations import (
     SpatialScoresModel,
     TileEmbeddingModel,
 )

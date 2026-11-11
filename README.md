@@ -49,7 +49,7 @@ src/model_service/
   builder_deployment/     the Ray Serve app that hosts builders
   deployed_models/        model catalog and one client per inference contract
   providers/              where builders read input and publish output: standalone, empaia/
-  shared/                 types more than one process uses
+  contracts/              data shapes processes hand each other
   model_implementations/  inference code served by Ray Serve
 deploy/
   helm/rayservice/models/<id>.yaml   one file per trained model

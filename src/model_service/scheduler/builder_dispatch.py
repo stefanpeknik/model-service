@@ -13,14 +13,14 @@ from urllib.parse import quote
 import httpx
 from pydantic import TypeAdapter, ValidationError
 
-from model_service.shared.builder_http import RUN_REQUEST, ErrorResponse, RunRequest
-from model_service.shared.result import RESULT
+from model_service.contracts.builder_http import RUN_REQUEST, ErrorResponse, RunRequest
+from model_service.contracts.result import RESULT
 
 
 if TYPE_CHECKING:
-    from model_service.shared.invocation import ExecutionContext, Invocation
-    from model_service.shared.model_declarations import ModelBinding
-    from model_service.shared.result import BuilderResult
+    from model_service.contracts.invocation import ExecutionContext, Invocation
+    from model_service.contracts.model_declarations import ModelBinding
+    from model_service.contracts.result import BuilderResult
 
 
 _ERROR_RESPONSE = TypeAdapter(ErrorResponse)

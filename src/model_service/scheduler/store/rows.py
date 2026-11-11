@@ -29,10 +29,10 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
 
+from model_service.contracts.invocation import Invocation
+from model_service.contracts.result import BuilderResult
 from model_service.scheduler.internal_state import WorkKind
 from model_service.scheduler.status import ExecutionStatus
-from model_service.shared.invocation import Invocation
-from model_service.shared.result import BuilderResult
 
 
 if TYPE_CHECKING:

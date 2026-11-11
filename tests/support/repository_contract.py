@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
+from model_service.contracts.invocation import InputAccessContext, Invocation
+from model_service.contracts.result import BuilderResult
 from model_service.scheduler.internal_state import (
     Admission,
     ProcessingRejected,
@@ -16,8 +18,6 @@ from model_service.scheduler.public import (
     Priority,
     SubmissionIdentity,
 )
-from model_service.shared.invocation import InputAccessContext, Invocation
-from model_service.shared.result import BuilderResult
 
 
 if TYPE_CHECKING:

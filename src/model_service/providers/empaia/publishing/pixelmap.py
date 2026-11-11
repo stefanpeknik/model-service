@@ -9,19 +9,19 @@ import asyncio
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from model_service.contracts.model_declarations import SpatialScoresModel
+from model_service.contracts.result import SharedArtifact
+from model_service.contracts.score_grid import read_score_grid
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.app_service.types import SlideLevel
 from model_service.providers.empaia.publishing.publishers import OutputPublisher
-from model_service.shared.model_declarations import SpatialScoresModel
-from model_service.shared.result import SharedArtifact
-from model_service.shared.score_grid import read_score_grid
 
 
 if TYPE_CHECKING:
+    from model_service.contracts.model_declarations import ModelBinding
+    from model_service.contracts.result import BuilderOutput
     from model_service.providers.empaia.app_service.gateway import EmpaiaGateway
     from model_service.providers.empaia.publishing.publishers import Commit
-    from model_service.shared.model_declarations import ModelBinding
-    from model_service.shared.result import BuilderOutput
 
 
 class ScoreGridPublisher(OutputPublisher):

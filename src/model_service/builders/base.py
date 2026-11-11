@@ -16,9 +16,9 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 from model_service.builders.declarations import BuilderInputs, BuilderOutputs
+from model_service.contracts.failures import InvalidInvocation
+from model_service.contracts.result import SharedArtifact
 from model_service.deployed_models.model_clients import ModelClient
-from model_service.shared.failures import InvalidInvocation
-from model_service.shared.result import SharedArtifact
 
 
 if TYPE_CHECKING:

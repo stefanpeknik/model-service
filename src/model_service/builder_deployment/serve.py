@@ -22,9 +22,9 @@ from model_service.builder_deployment.http_handler import (
 from model_service.builder_deployment.runner import BuilderApplication
 from model_service.builders.base import ReplicaSettings
 from model_service.builders.registry import get_builder
+from model_service.contracts.builder_http import ErrorCode, ErrorResponse, RunRequest
+from model_service.contracts.result import BuilderResult
 from model_service.providers.registry import PROVIDERS
-from model_service.shared.builder_http import ErrorCode, ErrorResponse, RunRequest
-from model_service.shared.result import BuilderResult
 
 
 if TYPE_CHECKING:

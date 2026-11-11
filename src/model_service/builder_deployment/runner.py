@@ -21,16 +21,16 @@ from pydantic import ValidationError
 from model_service.builders.base import BuilderContext
 from model_service.builders.declarations import BuilderInputs, BuilderOutputs
 from model_service.builders.input_access import close_resource
-from model_service.deployed_models.model_clients import client_for, ray_handle
-from model_service.shared.failures import (
+from model_service.contracts.failures import (
     BuilderFailure,
     ContractViolation,
     FailureCode,
     InvalidInvocation,
 )
-from model_service.shared.invocation import ExecutionContext
-from model_service.shared.json_values import is_json_value
-from model_service.shared.result import BuilderResult, InlineOutput, SharedArtifact
+from model_service.contracts.invocation import ExecutionContext
+from model_service.contracts.json_values import is_json_value
+from model_service.contracts.result import BuilderResult, InlineOutput, SharedArtifact
+from model_service.deployed_models.model_clients import client_for, ray_handle
 
 
 if TYPE_CHECKING:
@@ -39,9 +39,9 @@ if TYPE_CHECKING:
     from model_service.builders.base import Builder
     from model_service.builders.declarations import BuilderSpec
     from model_service.builders.input_access import InputAccess, InputAccessFactory
+    from model_service.contracts.invocation import InputAccessKind, Invocation
+    from model_service.contracts.model_declarations import ModelBinding
     from model_service.deployed_models.model_clients import HandleLookup
-    from model_service.shared.invocation import InputAccessKind, Invocation
-    from model_service.shared.model_declarations import ModelBinding
 
 
 logger = logging.getLogger(__name__)

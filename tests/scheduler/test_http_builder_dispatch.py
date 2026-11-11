@@ -9,20 +9,20 @@ from typing import TYPE_CHECKING
 
 import httpx
 
+from model_service.contracts.invocation import (
+    ExecutionContext,
+    InputAccessContext,
+    Invocation,
+    SharedPathInput,
+)
+from model_service.contracts.model_declarations import SpatialScoresModel
+from model_service.contracts.result import BuilderResult, InlineOutput
 from model_service.scheduler.builder_dispatch import (
     ConfirmedRejectionError,
     HTTPBuilderDispatch,
     RemoteFailureError,
     UnknownOutcomeError,
 )
-from model_service.shared.invocation import (
-    ExecutionContext,
-    InputAccessContext,
-    Invocation,
-    SharedPathInput,
-)
-from model_service.shared.model_declarations import SpatialScoresModel
-from model_service.shared.result import BuilderResult, InlineOutput
 
 
 if TYPE_CHECKING:

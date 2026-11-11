@@ -14,6 +14,14 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from model_service.builders.registry import get_builder
+from model_service.contracts.invocation import ExecutionContext, Invocation
+from model_service.contracts.model_declarations import (
+    InferenceContract,
+    ModelBinding,
+    SpatialScoresModel,
+    TileEmbeddingModel,
+)
+from model_service.contracts.result import BuilderResult
 from model_service.scheduler.internal_state import (
     Admission,
     AdmissionResult,
@@ -30,14 +38,6 @@ from model_service.scheduler.public import (
 )
 from model_service.scheduler.status import ExecutionStatus
 from model_service.scheduler.transitions import ExecutionTransitions
-from model_service.shared.invocation import ExecutionContext, Invocation
-from model_service.shared.model_declarations import (
-    InferenceContract,
-    ModelBinding,
-    SpatialScoresModel,
-    TileEmbeddingModel,
-)
-from model_service.shared.result import BuilderResult
 
 
 if TYPE_CHECKING:

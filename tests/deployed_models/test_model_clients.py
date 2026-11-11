@@ -7,17 +7,17 @@ from typing import Any
 
 import numpy as np
 
+from model_service.contracts.failures import BuilderFailure, FailureCode
+from model_service.contracts.model_declarations import (
+    InferenceContract,
+    SpatialScoresModel,
+    TileEmbeddingModel,
+)
 from model_service.deployed_models.model_clients import (
     CLIENTS,
     SpatialScoresClient,
     TileEmbeddingClient,
     client_for,
-)
-from model_service.shared.failures import BuilderFailure, FailureCode
-from model_service.shared.model_declarations import (
-    InferenceContract,
-    SpatialScoresModel,
-    TileEmbeddingModel,
 )
 from tests.support.builder_fixtures import FakeDeployment, running_config
 

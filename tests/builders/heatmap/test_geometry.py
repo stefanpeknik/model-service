@@ -9,8 +9,8 @@ from tempfile import TemporaryDirectory
 import numpy as np
 
 from model_service.builders.heatmap.processor import build_heatmap
-from model_service.shared.model_declarations import SpatialScoresModel
-from model_service.shared.score_grid import ScoreGrid, read_score_grid
+from model_service.contracts.model_declarations import SpatialScoresModel
+from model_service.contracts.score_grid import ScoreGrid, read_score_grid
 from tests.support.builder_fixtures import write_slide
 
 

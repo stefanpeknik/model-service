@@ -9,13 +9,13 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from model_service.builders.registry import compatible_builders
-from model_service.deployed_models.catalog import CatalogError, ModelCatalog
-from model_service.shared.failures import UnknownModelError
-from model_service.shared.model_declarations import (
+from model_service.contracts.failures import UnknownModelError
+from model_service.contracts.model_declarations import (
     InferenceContract,
     SpatialScoresModel,
     TileEmbeddingModel,
 )
+from model_service.deployed_models.catalog import CatalogError, ModelCatalog
 
 
 def spatial_document(model_id: str = "prostate-classifier-1") -> dict[str, object]:

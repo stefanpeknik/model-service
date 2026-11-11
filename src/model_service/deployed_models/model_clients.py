@@ -24,8 +24,8 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import ValidationError
 
-from model_service.shared.failures import BuilderFailure, FailureCode
-from model_service.shared.model_declarations import (
+from model_service.contracts.failures import BuilderFailure, FailureCode
+from model_service.contracts.model_declarations import (
     InferenceContract,
     SpatialScoresModel,
     TileEmbeddingModel,
@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
     from ray.serve.handle import DeploymentHandle
 
-    from model_service.shared.model_declarations import ModelBinding
+    from model_service.contracts.model_declarations import ModelBinding
 
     type HandleLookup = Callable[[str], DeploymentHandle[Any]]
 

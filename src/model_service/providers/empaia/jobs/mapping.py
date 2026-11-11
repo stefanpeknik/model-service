@@ -5,19 +5,19 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Never
 
+from model_service.contracts.failures import InvalidInvocation
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.ead.apps import VIEWER_CONFIG_KEY
 from model_service.scheduler.public import (
     InvalidScheduleRequestError,
     SchedulingUnavailableError,
 )
-from model_service.shared.failures import InvalidInvocation
 
 
 if TYPE_CHECKING:
     from model_service.builders.declarations import BuilderSpec
+    from model_service.contracts.json_values import JsonValue
     from model_service.providers.empaia.app_service.gateway import EmpaiaGateway
-    from model_service.shared.json_values import JsonValue
 
 
 logger = logging.getLogger(__name__)

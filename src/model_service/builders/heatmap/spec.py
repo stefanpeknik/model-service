@@ -15,8 +15,8 @@ from model_service.builders.declarations import (
     Slide,
     StrideFraction,
 )
-from model_service.shared.model_declarations import InferenceContract
-from model_service.shared.result import SharedArtifact
+from model_service.contracts.model_declarations import InferenceContract
+from model_service.contracts.result import SharedArtifact
 
 
 class HeatmapInputs(BuilderInputs):
@@ -36,7 +36,7 @@ class HeatmapConfiguration(BaseModel):
 class HeatmapOutputs(BuilderOutputs):
     heatmap: Annotated[
         SharedArtifact,
-        # The score grid format, see `shared/score_grid.py`.
+        # The score grid format, see `contracts/score_grid.py`.
         Artifact(media_type="application/x-npz", default_path="heatmap.npz"),
     ]
 

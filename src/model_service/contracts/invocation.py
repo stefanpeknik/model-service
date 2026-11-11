@@ -20,7 +20,7 @@ from pydantic import (
 )
 from pydantic.dataclasses import dataclass as validated_dataclass
 
-from model_service.shared.json_values import (
+from model_service.contracts.json_values import (
     JsonObject,
     NonEmptyString,
 )

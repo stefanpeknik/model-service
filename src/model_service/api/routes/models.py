@@ -11,14 +11,14 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter
 
 from model_service.builders.registry import compatible_builders
-from model_service.http_common.auth import Access, Action
-from model_service.http_common.errors import ERRORS, lookup_error
-from model_service.shared.failures import UnknownModelError
-from model_service.shared.json_values import JsonValue
-from model_service.shared.model_declarations import (
+from model_service.contracts.failures import UnknownModelError
+from model_service.contracts.json_values import JsonValue
+from model_service.contracts.model_declarations import (
     InferenceContract,
     ModelBinding,
 )
+from model_service.http_common.auth import Access, Action
+from model_service.http_common.errors import ERRORS, lookup_error
 
 
 if TYPE_CHECKING:

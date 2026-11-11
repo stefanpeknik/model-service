@@ -21,11 +21,11 @@ from model_service.scheduler.public import (
 if TYPE_CHECKING:
     from datetime import datetime
 
+    from model_service.contracts.invocation import Invocation
+    from model_service.contracts.json_values import JsonValue
+    from model_service.contracts.result import BuilderResult
     from model_service.scheduler.public import ExecutionError
     from model_service.scheduler.status import ExecutionStatus
-    from model_service.shared.invocation import Invocation
-    from model_service.shared.json_values import JsonValue
-    from model_service.shared.result import BuilderResult
 
 
 class WorkKind(StrEnum):

@@ -15,19 +15,19 @@ from typing import TYPE_CHECKING
 from pydantic import ValidationError
 
 from model_service.builders.registry import get_builder
+from model_service.contracts.caller_request import BuilderRequest
+from model_service.contracts.failures import InvalidInvocation
+from model_service.contracts.invocation import (
+    SHARED_STORAGE,
+    ExecutionContext,
+    SharedPathInput,
+)
 from model_service.providers.provider import Provider, ProviderAdapter
 from model_service.scheduler.public import (
     InvalidScheduleRequestError,
     PreparedInvocation,
     ScheduleRequest,
     SubmissionIdentity,
-)
-from model_service.shared.caller_request import BuilderRequest
-from model_service.shared.failures import InvalidInvocation
-from model_service.shared.invocation import (
-    SHARED_STORAGE,
-    ExecutionContext,
-    SharedPathInput,
 )
 
 
@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 
     from model_service.builders.base import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
+    from model_service.contracts.json_values import JsonValue
     from model_service.deployed_models.catalog import ModelCatalog
     from model_service.providers.provider import ApiContribution
     from model_service.providers.standalone.shared_storage import (
@@ -43,7 +44,6 @@ if TYPE_CHECKING:
     )
     from model_service.scheduler.public import BeforeMutation, ProviderFinishOutcome
     from model_service.scheduler.settings import SchedulerSettings
-    from model_service.shared.json_values import JsonValue
 
 
 # The provider name of requests made through the public builder routes.

@@ -46,6 +46,7 @@ if TYPE_CHECKING:
     from rationai.empaia.typing import SlideInfo
     from rationai.empaia.utils.scalar_output import PixelmapTileSet
 
+    from model_service.contracts.json_values import JsonValue
     from model_service.providers.empaia.app_service.gateway import (
         EmpaiaGatewayFactory,
         MutationGuard,
@@ -54,7 +55,6 @@ if TYPE_CHECKING:
         RectangleMaskWriter,
     )
     from model_service.providers.empaia.settings import EmpaiaSettings
-    from model_service.shared.json_values import JsonValue
 
 
 class HttpEmpaiaGateway(EmpaiaGateway):

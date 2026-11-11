@@ -1,6 +1,6 @@
 """Answer a builder run request and map exceptions to the deployment's HTTP errors.
 
-The format is shared/builder_http.py; the public API's is http_common/errors.py.
+The format is contracts/builder_http.py; the public API's is http_common/errors.py.
 """
 
 from __future__ import annotations
@@ -11,16 +11,16 @@ from fastapi import HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from model_service.shared.builder_http import (
+from model_service.contracts.builder_http import (
     ErrorCode,
     RunRequest,
 )
-from model_service.shared.failures import (
+from model_service.contracts.failures import (
     BuilderFailure,
     ContractViolation,
     InvalidInvocation,
 )
-from model_service.shared.result import BuilderResult
+from model_service.contracts.result import BuilderResult
 
 
 if TYPE_CHECKING:

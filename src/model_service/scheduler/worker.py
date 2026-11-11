@@ -11,6 +11,8 @@ import logging
 from contextlib import suppress
 from typing import TYPE_CHECKING
 
+from model_service.contracts.invocation import ExecutionContext
+from model_service.contracts.result import BuilderResult
 from model_service.scheduler.builder_dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,
@@ -40,8 +42,6 @@ from model_service.scheduler.public import (
 )
 from model_service.scheduler.status import ExecutionErrorCode
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
-from model_service.shared.invocation import ExecutionContext
-from model_service.shared.result import BuilderResult
 
 
 logger = logging.getLogger(__name__)

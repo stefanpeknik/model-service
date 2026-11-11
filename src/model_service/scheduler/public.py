@@ -11,16 +11,16 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import TYPE_CHECKING
 
-from model_service.scheduler.status import ExecutionStatus
-from model_service.shared.failures import (
+from model_service.contracts.failures import (
     IncompatibleModelError,
     UnknownBuilderError,
     UnknownModelError,
 )
-from model_service.shared.invocation import Invocation
-from model_service.shared.json_values import JsonValue
-from model_service.shared.model_declarations import ModelBinding
-from model_service.shared.result import BuilderResult
+from model_service.contracts.invocation import Invocation
+from model_service.contracts.json_values import JsonValue
+from model_service.contracts.model_declarations import ModelBinding
+from model_service.contracts.result import BuilderResult
+from model_service.scheduler.status import ExecutionStatus
 
 
 if TYPE_CHECKING:

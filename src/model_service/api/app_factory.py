@@ -54,8 +54,8 @@ from model_service.scheduler.store.protected_context import ProtectedContextCiph
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+    from model_service.contracts.model_declarations import ModelBinding
     from model_service.scheduler.public import ModelResolver
-    from model_service.shared.model_declarations import ModelBinding
 
 
 def model_resolver(catalog: ModelCatalog) -> ModelResolver:

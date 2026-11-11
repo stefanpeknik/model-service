@@ -11,7 +11,7 @@ from pydantic import (
     TypeAdapter,
 )
 
-from model_service.shared.json_values import (
+from model_service.contracts.json_values import (
     JsonValue,
     NonEmptyString,
 )

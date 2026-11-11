@@ -10,7 +10,7 @@
   the clients that call and check them (model_clients.py).
 - providers/: where inputs come from and results go (standalone, EMPAIA).
 - http_common/: auth, error mapping and scheduling calls the API and provider routes share.
-- shared/: types shared across processes (invocation, result, failures, model
+- contracts/: data shapes processes hand each other (invocation, result, failures, model
   declarations, the builder HTTP format, score grid).
 - model_implementations/: the Ray Serve code that serves trained models; each
   trained model is one file in deploy/helm/rayservice/models/ naming its implementation.

@@ -15,8 +15,8 @@ from model_service.builders.declarations import (
     Slide,
     StrideFraction,
 )
-from model_service.shared.model_declarations import InferenceContract
-from model_service.shared.result import SharedArtifact
+from model_service.contracts.model_declarations import InferenceContract
+from model_service.contracts.result import SharedArtifact
 
 
 class EmbeddingInputs(BuilderInputs):

@@ -7,6 +7,11 @@ from typing import TYPE_CHECKING, Annotated
 
 from fastapi import Header
 
+from model_service.contracts.failures import (
+    IncompatibleModelError,
+    UnknownBuilderError,
+    UnknownModelError,
+)
 from model_service.http_common.errors import (
     ApiErrorCode,
     http_error,
@@ -17,11 +22,6 @@ from model_service.scheduler.public import (
     InvalidScheduleRequestError,
     ScheduleConflictError,
     SchedulingUnavailableError,
-)
-from model_service.shared.failures import (
-    IncompatibleModelError,
-    UnknownBuilderError,
-    UnknownModelError,
 )
 
 

@@ -19,6 +19,12 @@ from typing import TYPE_CHECKING
 from pydantic import ValidationError
 
 from model_service.builders.registry import get_builder
+from model_service.contracts.invocation import (
+    InputAccessContext,
+    Invocation,
+    ProviderInput,
+)
+from model_service.contracts.json_values import is_json_value
 from model_service.providers.empaia.app_service.gateway import (
     INPUT_ACCESS_KIND,
     PROVIDER_NAME,
@@ -61,22 +67,16 @@ from model_service.scheduler.public import (
     SchedulingUnavailableError,
     SubmissionIdentity,
 )
-from model_service.shared.invocation import (
-    InputAccessContext,
-    Invocation,
-    ProviderInput,
-)
-from model_service.shared.json_values import is_json_value
 
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
 
+    from model_service.contracts.json_values import JsonValue
     from model_service.providers.empaia.ead.builder_io import BuilderIo
     from model_service.providers.empaia.publishing.publishers import PublisherRegistry
     from model_service.scheduler.public import BeforeMutation
-    from model_service.shared.json_values import JsonValue
 
 
 logger = logging.getLogger(__name__)

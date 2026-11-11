@@ -17,31 +17,31 @@ from model_service.builder_deployment.http_handler import run_http
 from model_service.builder_deployment.runner import BuilderApplication
 from model_service.builders.base import _atomic_artifact as atomic_artifact
 from model_service.builders.declarations import InputSpec
-from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessFactory
-from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
-from model_service.scheduler.builder_dispatch import (
-    HTTPBuilderDispatch,
-    RemoteFailureError,
-)
-from model_service.shared.builder_http import RunRequest
-from model_service.shared.failures import (
+from model_service.contracts.builder_http import RunRequest
+from model_service.contracts.failures import (
     BuilderFailure,
     ContractViolation,
     FailureCode,
     IncompatibleModelError,
     InvalidInvocation,
 )
-from model_service.shared.invocation import (
+from model_service.contracts.invocation import (
     INVOCATION,
     ExecutionContext,
     ProviderInput,
     SharedPathInput,
 )
-from model_service.shared.result import (
+from model_service.contracts.result import (
     RESULT,
     BuilderResult,
     InlineOutput,
     SharedArtifact,
+)
+from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessFactory
+from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
+from model_service.scheduler.builder_dispatch import (
+    HTTPBuilderDispatch,
+    RemoteFailureError,
 )
 from tests.support.builder_fixtures import (
     DECLARED,

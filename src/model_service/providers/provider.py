@@ -30,6 +30,8 @@ if TYPE_CHECKING:
 
     from model_service.builders.base import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
+    from model_service.contracts.invocation import InputAccessKind
+    from model_service.contracts.json_values import JsonValue
     from model_service.deployed_models.catalog import ModelCatalog
     from model_service.scheduler.protocols import Scheduler
     from model_service.scheduler.public import (
@@ -41,8 +43,6 @@ if TYPE_CHECKING:
         SubmissionIdentity,
     )
     from model_service.scheduler.settings import SchedulerSettings
-    from model_service.shared.invocation import InputAccessKind
-    from model_service.shared.json_values import JsonValue
 
 
 class ProviderAdapter(ABC):

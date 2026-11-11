@@ -8,6 +8,7 @@ from fastapi import Request
 from httpx import ASGITransport, AsyncClient
 
 from model_service.api.app_factory import create_app
+from model_service.contracts.model_declarations import SpatialScoresModel
 from model_service.deployed_models.catalog import ModelCatalog
 from model_service.http_common.auth import (
     Access,
@@ -19,7 +20,6 @@ from model_service.http_common.auth import (
 from model_service.providers.empaia.jobs.routes import create_router
 from model_service.scheduler.public import ExecutionView
 from model_service.scheduler.status import ExecutionStatus
-from model_service.shared.model_declarations import SpatialScoresModel
 
 
 CATALOG = ModelCatalog(

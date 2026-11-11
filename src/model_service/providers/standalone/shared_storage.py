@@ -14,19 +14,19 @@ from typing import TYPE_CHECKING, Annotated
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from model_service.builders.input_access import InputAccess, InputAccessFactory
-from model_service.shared.failures import InvalidInvocation
-from model_service.shared.invocation import SharedPathInput
+from model_service.contracts.failures import InvalidInvocation
+from model_service.contracts.invocation import SharedPathInput
 
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
-    from model_service.shared.invocation import (
+    from model_service.contracts.invocation import (
         BuilderInput,
         ExecutionContext,
         Invocation,
     )
-    from model_service.shared.model_declarations import ModelBinding
+    from model_service.contracts.model_declarations import ModelBinding
 
 
 class SharedStorageState(BaseModel):

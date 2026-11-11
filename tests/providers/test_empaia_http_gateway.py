@@ -13,16 +13,16 @@ from aiohttp import web
 from aiohttp.test_utils import TestServer
 from rationai.empaia import Client
 
-from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
-from model_service.providers.empaia.app_service.http import HttpEmpaiaGateway
-from model_service.providers.empaia.app_service.types import Rectangle, SlideMetadata
-from model_service.providers.empaia.publishing.pixelmap import ScoreGridPublisher
-from model_service.shared.result import SharedArtifact
-from model_service.shared.score_grid import (
+from model_service.contracts.result import SharedArtifact
+from model_service.contracts.score_grid import (
     MEDIA_TYPE,
     ScoreGrid,
     write_score_grid,
 )
+from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
+from model_service.providers.empaia.app_service.http import HttpEmpaiaGateway
+from model_service.providers.empaia.app_service.types import Rectangle, SlideMetadata
+from model_service.providers.empaia.publishing.pixelmap import ScoreGridPublisher
 from tests.providers.empaia_fixtures import PIXELMAP_ID, SLIDE_ID, created
 
 

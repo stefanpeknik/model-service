@@ -14,6 +14,17 @@ from fastapi import APIRouter, Depends, Request, Response, status
 from pydantic import Field
 
 from model_service.builders.registry import BUILDERS
+from model_service.contracts.caller_request import BuilderRequest
+from model_service.contracts.failures import (
+    IncompatibleModelError,
+    InvalidInvocation,
+    UnknownBuilderError,
+    UnknownModelError,
+)
+from model_service.contracts.invocation import Deadline
+from model_service.contracts.json_values import JsonValue
+from model_service.contracts.model_declarations import InferenceContract
+from model_service.contracts.result import BuilderResult
 from model_service.http_common.auth import Access, Action
 from model_service.http_common.errors import (
     ERRORS,
@@ -29,17 +40,6 @@ from model_service.scheduler.builder_dispatch import (
     UnknownOutcomeError,
 )
 from model_service.scheduler.public import ScheduleRequest, ScheduleResult
-from model_service.shared.caller_request import BuilderRequest
-from model_service.shared.failures import (
-    IncompatibleModelError,
-    InvalidInvocation,
-    UnknownBuilderError,
-    UnknownModelError,
-)
-from model_service.shared.invocation import Deadline
-from model_service.shared.json_values import JsonValue
-from model_service.shared.model_declarations import InferenceContract
-from model_service.shared.result import BuilderResult
 
 
 if TYPE_CHECKING:

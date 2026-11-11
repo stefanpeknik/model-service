@@ -16,9 +16,9 @@ from typing import TYPE_CHECKING, Annotated, Union, get_args, get_origin
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from model_service.shared.failures import IncompatibleModelError, InvalidInvocation
-from model_service.shared.model_declarations import InferenceContract
-from model_service.shared.result import (
+from model_service.contracts.failures import IncompatibleModelError, InvalidInvocation
+from model_service.contracts.model_declarations import InferenceContract
+from model_service.contracts.result import (
     BuilderResult,
     InlineOutput,
     OutputKind,
@@ -29,9 +29,9 @@ from model_service.shared.result import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from model_service.shared.invocation import Invocation
-    from model_service.shared.json_values import JsonValue
-    from model_service.shared.model_declarations import ModelBinding
+    from model_service.contracts.invocation import Invocation
+    from model_service.contracts.json_values import JsonValue
+    from model_service.contracts.model_declarations import ModelBinding
 
 
 @dataclass(frozen=True, slots=True)

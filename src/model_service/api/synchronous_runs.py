@@ -5,14 +5,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from model_service.builders.registry import get_builder
-from model_service.shared.invocation import ExecutionContext
+from model_service.contracts.invocation import ExecutionContext
 
 
 if TYPE_CHECKING:
     from model_service.api.routes.builders import ImmediateBuilderRequest
+    from model_service.contracts.result import BuilderResult
     from model_service.deployed_models.catalog import ModelCatalog
     from model_service.scheduler.builder_dispatch import HTTPBuilderDispatch
-    from model_service.shared.result import BuilderResult
 
 
 class SynchronousBuilderService:

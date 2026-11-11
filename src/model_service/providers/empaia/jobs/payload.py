@@ -14,7 +14,7 @@ from model_service.scheduler.public import InvalidScheduleRequestError
 
 
 if TYPE_CHECKING:
-    from model_service.shared.json_values import JsonValue
+    from model_service.contracts.json_values import JsonValue
 
 
 class EmpaiaSchedulePayload(EmpaiaJobContext):
