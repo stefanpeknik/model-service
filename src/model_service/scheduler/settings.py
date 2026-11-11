@@ -53,7 +53,7 @@ _RequiredString = Annotated[str, StringConstraints(min_length=1)]
 
 
 class SchedulerSettings(BaseSettings):
-    """Hold database, transport, retry, lease, capacity, and deadline settings for the public scheduler process."""
+    """Hold database, transport, retry, lease, and deadline settings for the public scheduler process."""
 
     model_config = SettingsConfigDict(
         frozen=True,
@@ -71,14 +71,6 @@ class SchedulerSettings(BaseSettings):
         validation_alias="PROVIDER_CONTEXT_KEY", repr=False
     )
     ray_serve_origin: _RequiredString = Field(validation_alias="RAY_SERVE_ORIGIN")
-    ray_dashboard_origin: str | None = Field(
-        default=None, validation_alias="RAY_DASHBOARD_ORIGIN"
-    )
-    capacity_grace: _SecondsDuration = Field(
-        default=timedelta(seconds=60),
-        ge=timedelta(0),
-        validation_alias="CAPACITY_GRACE_SECONDS",
-    )
     model_catalog_path: Path = Field(
         default=Path("/etc/model-service/model-catalog.json"),
         validation_alias="MODEL_CATALOG_PATH",
@@ -211,7 +203,6 @@ class SchedulerSettings(BaseSettings):
 
     @field_validator(
         "inference_serve_origin",
-        "ray_dashboard_origin",
         mode="before",
     )
     @classmethod

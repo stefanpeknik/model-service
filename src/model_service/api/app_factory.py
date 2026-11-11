@@ -20,7 +20,6 @@ from model_service.api.health import (
 from model_service.api.routes import builders, executions, models
 from model_service.http_common.auth import Access
 from model_service.http_common.errors import ApiErrorCode, http_error
-from model_service.scheduler.protocols import NoCapacityInfo
 from model_service.scheduler.public import SchedulingUnavailableError
 
 
@@ -32,7 +31,7 @@ if TYPE_CHECKING:
     from model_service.api.synchronous_runs import SynchronousBuilderRunner
     from model_service.inference.catalog import ModelCatalog
     from model_service.providers.provider import RouteFactory
-    from model_service.scheduler.protocols import Capacity, Scheduler
+    from model_service.scheduler.protocols import Scheduler
     from model_service.scheduler.raw_inference_jobs import InferenceTarget
 
 
@@ -42,7 +41,6 @@ from typing import TYPE_CHECKING
 
 import httpx
 
-from model_service.api.capacity import ServeCapacity
 from model_service.api.health import DeploymentHealth
 from model_service.api.raw_inference_proxy import HttpInferenceProxy, ModelInference
 from model_service.api.synchronous_runs import SynchronousBuilderService
@@ -94,7 +92,6 @@ def create_app(
     lifespan: Lifespan[FastAPI] | None = None,
     deployment_health: DeploymentHealthCheck | None = None,
     inference_max_request_bytes: int = 2 * 1024 * 1024,
-    capacity: Capacity | None = None,
     access: Access | None = None,
     provider_routes: Sequence[RouteFactory] = (),
 ) -> FastAPI:
@@ -108,8 +105,6 @@ def create_app(
         lifespan: Startup and shutdown context for the app.
         deployment_health: Checks Ray Serve routes; None reports `not_configured`.
         inference_max_request_bytes: Largest raw inference body accepted, in bytes.
-        capacity: Explains running executions stuck waiting for Ray capacity;
-            None adds no explanation.
         access: Guards the public API; the default lets everyone in. Providers
             guard their own routes.
         provider_routes: Router factories contributed by providers.
@@ -117,7 +112,6 @@ def create_app(
     Returns:
         The assembled application.
     """
-    capacity = capacity or NoCapacityInfo()
     access = access or Access()
     app = FastAPI(title="model-service", lifespan=lifespan)
 
@@ -173,8 +167,8 @@ def create_app(
     )
     app.include_router(builders.create_router(scheduler, builder_runner, access))
     for routes in provider_routes:
-        app.include_router(routes(scheduler, capacity))
-    app.include_router(executions.create_router(scheduler, capacity, access))
+        app.include_router(routes(scheduler))
+    app.include_router(executions.create_router(scheduler, access))
     return app
 
 
@@ -280,15 +274,6 @@ def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
         inference_max_request_bytes=config.inference_max_request_bytes,
         lifespan=lifespan,
         provider_routes=[c.routes for c in contributions if c.routes is not None],
-        capacity=(
-            ServeCapacity(
-                client,
-                origin=config.ray_dashboard_origin,
-                grace_seconds=config.capacity_grace.total_seconds(),
-            )
-            if config.ray_dashboard_origin is not None
-            else None
-        ),
         deployment_health=DeploymentHealth(
             client,
             origin=config.ray_serve_origin,

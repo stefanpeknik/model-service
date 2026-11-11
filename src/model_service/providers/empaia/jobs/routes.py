@@ -37,7 +37,7 @@ from model_service.scheduler.status import ExecutionStatus
 
 
 if TYPE_CHECKING:
-    from model_service.scheduler.protocols import Capacity, Scheduler
+    from model_service.scheduler.protocols import Scheduler
     from model_service.scheduler.public import ExecutionView
 
 
@@ -57,13 +57,12 @@ class EmpaiaExecutionStatus:
 
 
 def create_router(
-    scheduler: Scheduler, capacity: Capacity, access: Access | None = None
+    scheduler: Scheduler, access: Access | None = None
 ) -> APIRouter:
     """Build JES's remote execution routes under `/v1/empaia`.
 
     Args:
         scheduler: Admits, reads and cancels executions.
-        capacity: Explains a polled execution's status.
         access: Guards the routes; everyone is let in by default.
 
     Returns:
@@ -122,7 +121,7 @@ def create_router(
             raise unavailable(error) from error
         except UnknownExecutionError as error:
             raise _unknown_execution() from error
-        return remote_status(await capacity.explain(execution))
+        return remote_status(execution)
 
     @router.delete(
         "/executions/{execution_id}",
@@ -158,7 +157,7 @@ def remote_status(execution: ExecutionView) -> EmpaiaExecutionStatus:
     if execution.status is ExecutionStatus.FAILED:
         message = execution.error.message if execution.error is not None else None
         return EmpaiaExecutionStatus(ExecutionStatus.FAILED, message)
-    return EmpaiaExecutionStatus(execution.status, execution.message)
+    return EmpaiaExecutionStatus(execution.status)
 
 
 def _unknown_execution() -> Exception:

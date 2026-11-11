@@ -4,9 +4,6 @@ Run where the scheduler API is reachable, e.g. inside the scheduler pod:
 
     oc -n peknik-ns exec -i deploy/model-service-validation-execution-scheduler -- \
         python - prostate-classifier-1 512 < scripts/warm_model.py
-
-A replica that cannot be placed shows up as a "waiting for capacity" message
-while the execution stays running.
 """
 
 import json
@@ -32,7 +29,7 @@ while time.time() - started < 900:
     url = f"{BASE}/v1/executions/{execution['id']}"
     view = json.load(urllib.request.urlopen(url, timeout=30))
     print(
-        f"{time.time() - started:5.0f}s {view['status']} {view.get('message') or ''}",
+        f"{time.time() - started:5.0f}s {view['status']}",
         flush=True,
     )
     if view["status"] in {"succeeded", "failed", "cancelled"}:

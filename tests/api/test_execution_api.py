@@ -306,7 +306,6 @@ class ScheduleRouteTests(ApiTestCase):
                 "result": None,
                 "error": None,
                 "provider_pending": False,
-                "message": None,
             },
         )
         self.assertEqual(cancelled.json()["status"], "cancelled")

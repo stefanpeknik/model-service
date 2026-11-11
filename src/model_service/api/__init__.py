@@ -9,5 +9,5 @@
   (Idempotency-Key header, scheduler refusals as HTTP errors).
 - raw_inference_proxy.py: forwards raw tiles to models.
 - synchronous_runs.py: runs a builder while the caller waits (SynchronousBuilderRunner).
-- capacity.py, health.py: Ray Serve state for executions and readiness.
+- health.py: Ray Serve readiness.
 """

@@ -27,7 +27,7 @@ from model_service.scheduler.public import (
 
 
 if TYPE_CHECKING:
-    from model_service.scheduler.protocols import Capacity, Scheduler
+    from model_service.scheduler.protocols import Scheduler
 
 
 MAX_LOOKUP_IDS = 1000
@@ -38,14 +38,11 @@ class ExecutionLookup:
     ids: Annotated[list[str], Field(max_length=MAX_LOOKUP_IDS)]
 
 
-def create_router(
-    scheduler: Scheduler, capacity: Capacity, access: Access
-) -> APIRouter:
+def create_router(scheduler: Scheduler, access: Access) -> APIRouter:
     """Build the `/v1/executions` router: status, lookup, results and cancellation.
 
     Args:
         scheduler: Reads and cancels executions.
-        capacity: Explains running executions waiting for Ray capacity.
         access: Guards the routes.
 
     Returns:
@@ -65,7 +62,7 @@ def create_router(
             raise unavailable(error) from error
         except UnknownExecutionError as error:
             raise _unknown_execution() from error
-        return await capacity.explain(execution)
+        return execution
 
     @router.post(
         "/lookup",
@@ -75,10 +72,9 @@ def create_router(
     async def lookup_executions(body: ExecutionLookup) -> list[ExecutionView]:
         """Views of the listed executions that exist; unknown IDs are left out."""
         try:
-            executions = await scheduler.get_many(body.ids)
+            return await scheduler.get_many(body.ids)
         except SchedulingUnavailableError as error:
             raise unavailable(error) from error
-        return [await capacity.explain(execution) for execution in executions]
 
     @router.get(
         "/{execution_id}/result",

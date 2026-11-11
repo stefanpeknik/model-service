@@ -1,4 +1,4 @@
-"""What the API needs from the scheduler: the Scheduler interface and capacity explanations.
+"""What the API needs from the scheduler: the Scheduler interface.
 
 The API's routes and providers' routes depend on these; ExecutionScheduler
 implements Scheduler.
@@ -6,7 +6,6 @@ implements Scheduler.
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Protocol
 
 
@@ -135,29 +134,3 @@ class Scheduler(Protocol):
         """
         ...
 
-
-class Capacity(ABC):
-    @abstractmethod
-    async def explain(self, execution: ExecutionView) -> ExecutionView:
-        """Add a message explaining why a running execution makes no progress.
-
-        Args:
-            execution: The execution to explain.
-
-        Returns:
-            The execution, with a message if one applies.
-        """
-        ...
-
-
-class NoCapacityInfo(Capacity):
-    async def explain(self, execution: ExecutionView) -> ExecutionView:
-        """Leave the execution unexplained, for deployments without a Ray dashboard.
-
-        Args:
-            execution: The execution.
-
-        Returns:
-            The execution unchanged.
-        """
-        return execution

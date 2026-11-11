@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from model_service.builders.base import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
     from model_service.inference.catalog import ModelCatalog
-    from model_service.scheduler.protocols import Capacity, Scheduler
+    from model_service.scheduler.protocols import Scheduler
     from model_service.scheduler.public import (
         BeforeMutation,
         PreparedInvocation,
@@ -103,7 +103,7 @@ class ProviderAdapter(ABC):
         ...
 
 
-type RouteFactory = Callable[[Scheduler, Capacity], APIRouter]
+type RouteFactory = Callable[[Scheduler], APIRouter]
 
 
 @dataclass(frozen=True, slots=True)
