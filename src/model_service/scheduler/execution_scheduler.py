@@ -57,7 +57,7 @@ class ExecutionScheduler:
         default_timeout: timedelta,
         maximum_timeout: timedelta,
         clock: Callable[[], datetime] | None = None,
-        lease_duration: timedelta = timedelta(seconds=60),
+        lease_duration: timedelta = timedelta(seconds=300),
         poll_interval: float = 0.5,
         max_concurrent: int = 1,
     ) -> None:

@@ -57,7 +57,9 @@ class SchedulerSettings(BaseSettings):
         default=(), validation_alias="SHARED_STORAGE_ROOTS"
     )
     lease_duration: _SecondsDuration = Field(
-        default=timedelta(seconds=60), gt=timedelta(0), validation_alias="LEASE_SECONDS"
+        default=timedelta(seconds=300),
+        gt=timedelta(0),
+        validation_alias="LEASE_SECONDS",
     )
     poll_interval: FiniteFloat = Field(
         default=0.5, gt=0, validation_alias="WORKER_POLL_SECONDS"

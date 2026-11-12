@@ -75,7 +75,7 @@ api:
     existingClaim: ""
     mountPath: /mnt/data
   rayServeOrigin: ""
-  leaseSeconds: 60
+  leaseSeconds: 300
   workerPollSeconds: 0.5
   processingAttempts: 3
   providerFinishAttempts: 3
