@@ -46,7 +46,7 @@ builders:
       num_threads: 2
       max_concurrent_tasks: 8
 
-# Roots callers may name in shared-storage requests (facade and builders).
+# Roots callers may name in shared-storage requests (API and builders).
 sharedStorageRoots: [/mnt/data, /mnt/projects]
 
 workers:
@@ -58,11 +58,11 @@ rayImage:
   tag: 2.58.0-py312
   pullPolicy: Always
 
-executionScheduler:
+api:
   enabled: false
   replicas: 2
   image:
-    repository: cerit.io/rationai/model-service-execution-scheduler
+    repository: cerit.io/rationai/model-service-api
     tag: ""
     pullPolicy: IfNotPresent
   database:
@@ -100,20 +100,20 @@ empaia:
   # AppService URLs that may receive EMPAIA job credentials.
   apiUrls: []
   workspaceRoot: /mnt/model-service-executions
-  # Shared by the facade and the builder workers: builders write job outputs
-  # there and the facade publishes them. Required by the facade with apiUrls.
+  # Shared by the API and the builder workers: builders write job outputs
+  # there and the API publishes them. Required by the API with apiUrls.
   workspaceClaim: ""
   # Slide inputs are linked from the file named by the RationAI direct-access
   # route. The claim holding the installation's slides, mounted
   # read-only where its CDS mounts it, since model-service links the absolute
-  # path CDS answers. The facade mounts it; worker files include it too.
+  # path CDS answers. The API mounts it; worker files include it too.
   slideVolume:
     existingClaim: ""
     mountPath: ""
   # Extra DNS search domains for pods that call AppService, when the
   # installation hands out short host names from another namespace.
   dnsSearches: []
-  # The facade registers an app, with its listed modes, for every model whose
+  # The API registers an app, with its listed modes, for every model whose
   # file has an `empaia` block, at startup, in this marketplace (the marketplace mock that
   # EMPAIA test installations run). Empty url: no registration.
   marketplace:

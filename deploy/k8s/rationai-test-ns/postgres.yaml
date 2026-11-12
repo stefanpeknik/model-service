@@ -1,6 +1,6 @@
 # PostgreSQL for the model-service release in rationai-infra-test-ns, as in
 # peknik-ns. The model-service-db Secret holds postgres-password (and the
-# facade's database-url and provider-context-key).
+# API's database-url and provider-context-key).
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

@@ -23,9 +23,9 @@ ARG SOURCE_REVISION
 LABEL org.opencontainers.image.revision=${SOURCE_REVISION}
 COPY src/model_service model_service
 
-RUN groupadd --gid 10001 scheduler \
-    && useradd --uid 10001 --gid scheduler --no-create-home \
-        --home-dir /nonexistent --shell /usr/sbin/nologin scheduler
+RUN groupadd --gid 10001 api \
+    && useradd --uid 10001 --gid api --no-create-home \
+        --home-dir /nonexistent --shell /usr/sbin/nologin api
 
 USER 10001:10001
 EXPOSE 8080

@@ -1,4 +1,4 @@
-{{- /* The facade's model catalog, rendered from the same files as the Serve config. */}}
+{{- /* The API's model catalog, rendered from the same files as the Serve config. */}}
 apiVersion: v1
 kind: ConfigMap
 metadata:

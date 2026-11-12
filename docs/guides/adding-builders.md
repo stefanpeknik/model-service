@@ -7,7 +7,7 @@ contract, and any model of that contract can run with it.
 
 ```text
 deploy/helm/rayservice/models/<model>.yaml    inference.contract: spatial-scores
-        │ catalog (facade)                    serve: the Ray application
+        │ catalog (API)                    serve: the Ray application
         ▼
 deployed_models/model_clients.py                     SpatialScoresClient: get_config + predict,
         │ client per contract                 checked answers, failure codes
@@ -31,9 +31,9 @@ Take a builder that traces annotations from a `spatial-scores` model.
 ### 1. Declare it
 
 `src/model_service/builders/annotations/spec.py` holds everything the
-facade needs: which contract the builder accepts, its inputs, its configuration
+API needs: which contract the builder accepts, its inputs, its configuration
 and its outputs. It imports only Pydantic and `builders.spec`, because the
-facade loads it without the slide libraries.
+API loads it without the slide libraries.
 
 ```python
 class AnnotationsInputs(BuilderInputs):
@@ -126,7 +126,7 @@ a failure code. Anything else becomes a retryable internal error.
 - Add an entry under `builders:` in `deploy/helm/rayservice/values.yaml`, keyed
   by the builder ID, with its Ray deployment options and `userConfig`
   (`num_threads`, `max_concurrent_tasks`). The chart makes it a Ray application
-  at `/builders/<id>` running `builder_deployment.serve:app`, and tells the facade it
+  at `/builders/<id>` running `builder_deployment.serve:app`, and tells the API it
   exists.
 
 The builder then gets the public routes (`/v1/builders/<id>/models/<m>/run`

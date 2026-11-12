@@ -22,7 +22,7 @@ JES polls the execution (GET Location); cancel and timeout send DELETE
 
 | Where | What |
 | --- | --- |
-| `rationai-infra-test-ns` | JES `0.6.15-1` with `JES_HTTP_TARGETS={"model-service": "http://model-service-execution-scheduler.rationai-infra-test-ns.svc.cluster.local:8080/v1/empaia"}` (patched on the Deployment) |
+| `rationai-infra-test-ns` | JES `0.6.15-1` with `JES_HTTP_TARGETS={"model-service": "http://model-service-api.rationai-infra-test-ns.svc.cluster.local:8080/v1/empaia"}` (patched on the Deployment) |
 | test marketplace | **Prostate Heatmap** (`ProstHM`, preprocessing, slide only), image `http::model-service/builders/heatmap/models/prostate-classifier-1` |
 | `rationai-infra-test-ns` | model-service, Helm release `model-service` ([deployment](../operations/rationai-test-ns.md)) |
 
@@ -32,14 +32,14 @@ JES polls the execution (GET Location); cancel and timeout send DELETE
    Warm it with one scheduled tile; a replica that stays unplaced shows
    "waiting for capacity" on the execution:
    ```sh
-   oc -n rationai-infra-test-ns exec -i deploy/model-service-execution-scheduler -- \
+   oc -n rationai-infra-test-ns exec -i deploy/model-service-api -- \
        python - prostate-classifier-1 512 < scripts/warm_model.py
    ```
    The replica scales back to zero two minutes after the last request, so warm it
    shortly before starting the job.
 2. Readiness: every builder and model route is deployed.
    ```sh
-   oc get --raw /api/v1/namespaces/rationai-infra-test-ns/services/model-service-execution-scheduler:8080/proxy/healthz/deployments
+   oc get --raw /api/v1/namespaces/rationai-infra-test-ns/services/model-service-api:8080/proxy/healthz/deployments
    ```
 3. Pick the slide: the whole slide is processed (no quality-control mask yet),
    so the smallest slide in the case keeps the run short.
@@ -51,7 +51,7 @@ JES polls the execution (GET Location); cancel and timeout send DELETE
 2. Follow it:
    - JES: `oc -n rationai-infra-test-ns logs -f deploy/test-jobs-jes | grep -E "Running Job|Finished Job"`
      shows the stored handle `http::…/v1/empaia/executions/<id>` and the end.
-   - model-service: `oc get --raw /api/v1/namespaces/rationai-infra-test-ns/services/model-service-execution-scheduler:8080/proxy/v1/executions/<id>`
+   - model-service: `oc get --raw /api/v1/namespaces/rationai-infra-test-ns/services/model-service-api:8080/proxy/v1/executions/<id>`
      (`running`, then `succeeded`; a wait for GPU capacity is explained in `message`).
    - App Service traffic: `oc -n rationai-infra-test-ns logs -f deploy/test-jobs-app-api | grep <job-id>`
      (the direct-access call, then the pixelmap upload and `finalize`).
@@ -78,7 +78,7 @@ JES polls the execution (GET Location); cancel and timeout send DELETE
   background; batching tiles per model call is not done yet.
 - No authentication between JES and model-service yet (cluster-internal).
 - JES `0.6.15-1` drops the `-memory` resource limits for container apps.
-- The facade registers apps automatically (`empaia.marketplace`), but the test
+- The API registers apps automatically (`empaia.marketplace`), but the test
   marketplace needs a service-client token (LS-AAI) and model-service has no
   client there yet; the app above was registered by hand from inside the JES
   pod, under the older namespace `org.empaia.rationai.prostate_cls_preprocessing.v3.0`.

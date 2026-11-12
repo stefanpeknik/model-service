@@ -26,7 +26,7 @@ The model-ready input and prediction structure a model deployment declares:
 _Avoid_: Model type
 
 **Model catalog**:
-The facade's list of model deployments and their contracts, rendered from the
+The API's list of model deployments and their contracts, rendered from the
 same files that deploy the models.
 
 **Builder**:

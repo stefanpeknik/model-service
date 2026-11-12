@@ -65,12 +65,12 @@ validation:
   appService:
     enabled: false
 
-executionScheduler:
+api:
   enabled: true
   # Two, so a restart (e.g. for a new model) never takes the API down.
   replicas: 2
   image:
-    repository: cerit.io/stefanpeknik/model-service-scheduler
+    repository: cerit.io/stefanpeknik/model-service-api
     tag: empaia-30
     pullPolicy: IfNotPresent
   database:

@@ -149,7 +149,7 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
                     builder_runner=SynchronousBuilderService(catalog, dispatch),
                 )
             ),
-            base_url="http://facade",
+            base_url="http://api",
         )
         self.addAsyncCleanup(client.aclose)
         return client

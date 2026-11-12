@@ -1,23 +1,23 @@
-{{- if .Values.executionScheduler.enabled }}
-{{- $imageTag := required "executionScheduler.image.tag is required" .Values.executionScheduler.image.tag }}
-{{- $databaseSecret := required "executionScheduler.database.existingSecret is required" .Values.executionScheduler.database.existingSecret }}
-{{- $encryptionSecret := required "executionScheduler.encryption.existingSecret is required" .Values.executionScheduler.encryption.existingSecret }}
+{{- if .Values.api.enabled }}
+{{- $imageTag := required "api.image.tag is required" .Values.api.image.tag }}
+{{- $databaseSecret := required "api.database.existingSecret is required" .Values.api.database.existingSecret }}
+{{- $encryptionSecret := required "api.encryption.existingSecret is required" .Values.api.encryption.existingSecret }}
 {{- $empaia := .Values.empaia.apiUrls }}
 {{- $workspaceClaim := "" }}
 {{- if $empaia }}
-{{- $workspaceClaim = required "empaia.workspaceClaim is required with apiUrls: the facade publishes EMPAIA results the builders wrote there" .Values.empaia.workspaceClaim }}
+{{- $workspaceClaim = required "empaia.workspaceClaim is required with apiUrls: the API publishes EMPAIA results the builders wrote there" .Values.empaia.workspaceClaim }}
 {{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-execution-scheduler
+  name: {{ .Release.Name }}-api
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: model-service-execution-scheduler
+    app.kubernetes.io/name: model-service-api
     app.kubernetes.io/instance: {{ .Release.Name }}
 spec:
-  replicas: {{ .Values.executionScheduler.replicas }}
-  # A model or config change restarts the facade; replace it one pod at a time,
+  replicas: {{ .Values.api.replicas }}
+  # A model or config change restarts the API; replace it one pod at a time,
   # never dropping below the set replicas, so the API stays up.
   strategy:
     type: RollingUpdate
@@ -26,14 +26,14 @@ spec:
       maxSurge: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: model-service-execution-scheduler
+      app.kubernetes.io/name: model-service-api
       app.kubernetes.io/instance: {{ .Release.Name }}
   template:
     metadata:
       annotations:
         checksum/model-catalog: {{ include (print $.Template.BasePath "/model-catalog.yaml") . | sha256sum }}
       labels:
-        app.kubernetes.io/name: model-service-execution-scheduler
+        app.kubernetes.io/name: model-service-api
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
 {{- include "model-service.empaiaDns" . | nindent 6 }}
@@ -45,9 +45,9 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: execution-scheduler
-          image: "{{ .Values.executionScheduler.image.repository }}:{{ $imageTag }}"
-          imagePullPolicy: {{ .Values.executionScheduler.image.pullPolicy }}
+        - name: api
+          image: "{{ .Values.api.image.repository }}:{{ $imageTag }}"
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
           # Explicit, so code-refresh images built on older bases start the current module.
           command: ["uvicorn", "model_service.api.main:app", "--host", "0.0.0.0", "--port", "8080"]
           ports:
@@ -58,14 +58,14 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ $databaseSecret }}
-                  key: {{ .Values.executionScheduler.database.urlKey }}
+                  key: {{ .Values.api.database.urlKey }}
             - name: PROVIDER_CONTEXT_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ $encryptionSecret }}
-                  key: {{ .Values.executionScheduler.encryption.keyKey }}
+                  key: {{ .Values.api.encryption.keyKey }}
             - name: RAY_SERVE_ORIGIN
-              value: {{ default (printf "http://%s-serve-svc.%s.svc.cluster.local:8000" .Release.Name (.Release.Namespace | default "rationai-jobs-ns")) .Values.executionScheduler.rayServeOrigin | quote }}
+              value: {{ default (printf "http://%s-serve-svc.%s.svc.cluster.local:8000" .Release.Name (.Release.Namespace | default "rationai-jobs-ns")) .Values.api.rayServeOrigin | quote }}
             - name: MODEL_CATALOG_PATH
               value: /etc/model-service/model-catalog.json
             - name: BUILDER_IDS
@@ -73,25 +73,25 @@ spec:
             - name: SHARED_STORAGE_ROOTS
               value: {{ .Values.sharedStorageRoots | toJson | quote }}
             - name: LEASE_SECONDS
-              value: {{ .Values.executionScheduler.leaseSeconds | quote }}
+              value: {{ .Values.api.leaseSeconds | quote }}
             - name: WORKER_POLL_SECONDS
-              value: {{ .Values.executionScheduler.workerPollSeconds | quote }}
+              value: {{ .Values.api.workerPollSeconds | quote }}
             - name: PROCESSING_ATTEMPTS
-              value: {{ .Values.executionScheduler.processingAttempts | quote }}
+              value: {{ .Values.api.processingAttempts | quote }}
             - name: PROVIDER_FINISH_ATTEMPTS
-              value: {{ .Values.executionScheduler.providerFinishAttempts | quote }}
+              value: {{ .Values.api.providerFinishAttempts | quote }}
             - name: INITIAL_BACKOFF_SECONDS
-              value: {{ .Values.executionScheduler.initialBackoffSeconds | quote }}
+              value: {{ .Values.api.initialBackoffSeconds | quote }}
             - name: MAXIMUM_BACKOFF_SECONDS
-              value: {{ .Values.executionScheduler.maximumBackoffSeconds | quote }}
+              value: {{ .Values.api.maximumBackoffSeconds | quote }}
             - name: DEFAULT_DEADLINE_SECONDS
-              value: {{ .Values.executionScheduler.defaultDeadlineSeconds | quote }}
+              value: {{ .Values.api.defaultDeadlineSeconds | quote }}
             - name: MAXIMUM_DEADLINE_SECONDS
-              value: {{ .Values.executionScheduler.maximumDeadlineSeconds | quote }}
+              value: {{ .Values.api.maximumDeadlineSeconds | quote }}
             - name: PER_MODEL_LIMIT
-              value: {{ .Values.executionScheduler.perModelLimit | quote }}
+              value: {{ .Values.api.perModelLimit | quote }}
             - name: MAX_CONCURRENT_EXECUTIONS
-              value: {{ .Values.executionScheduler.maxConcurrentExecutions | quote }}
+              value: {{ .Values.api.maxConcurrentExecutions | quote }}
 {{- include "model-service.empaiaEnv" . | nindent 12 }}
             {{- with .Values.empaia.marketplace }}
             {{- if and $empaia .url }}
@@ -127,7 +127,7 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 3
           resources:
-            {{- toYaml .Values.executionScheduler.resources | nindent 12 }}
+            {{- toYaml .Values.api.resources | nindent 12 }}
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -141,9 +141,9 @@ spec:
             - name: model-catalog
               mountPath: /etc/model-service
               readOnly: true
-            {{- if .Values.executionScheduler.sharedStorage.existingClaim }}
+            {{- if .Values.api.sharedStorage.existingClaim }}
             - name: shared-storage
-              mountPath: {{ .Values.executionScheduler.sharedStorage.mountPath | quote }}
+              mountPath: {{ .Values.api.sharedStorage.mountPath | quote }}
             {{- end }}
             {{- if $empaia }}
             - name: empaia-workspace
@@ -156,10 +156,10 @@ spec:
         - name: model-catalog
           configMap:
             name: {{ .Release.Name }}-model-catalog
-        {{- if .Values.executionScheduler.sharedStorage.existingClaim }}
+        {{- if .Values.api.sharedStorage.existingClaim }}
         - name: shared-storage
           persistentVolumeClaim:
-            claimName: {{ .Values.executionScheduler.sharedStorage.existingClaim | quote }}
+            claimName: {{ .Values.api.sharedStorage.existingClaim | quote }}
         {{- end }}
         {{- if $empaia }}
         - name: empaia-workspace

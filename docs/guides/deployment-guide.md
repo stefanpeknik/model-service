@@ -36,7 +36,7 @@ If you still need to export the model or upload it to MLflow, do that first in [
 
 Create a file in `deploy/helm/rayservice/models/` (for example `my-model.yaml`). The
 `serve` block is a Ray Serve application and is passed to Ray unchanged; the
-`inference` block feeds the facade's model catalog:
+`inference` block feeds the API's model catalog:
 
 ```yaml
 inference:
@@ -171,7 +171,7 @@ Keep routes unique and validate each endpoint separately after deploy.
 
 For plain Ray Serve inference without builders, set `builders: null` in your
 values file (Helm merges `{}` with the defaults instead of replacing them); the
-facade then starts with no builders and still serves `/v1/models`. EMPAIA is
+API then starts with no builders and still serves `/v1/models`. EMPAIA is
 off until `empaia.apiUrls` lists an AppService, and nothing EMPAIA-specific is
 rendered while it is off.
 

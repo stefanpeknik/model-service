@@ -1,4 +1,4 @@
-"""Check facade settings parsing from the environment."""
+"""Check API settings parsing from the environment."""
 
 from __future__ import annotations
 

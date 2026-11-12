@@ -575,7 +575,7 @@ class HealthAndAvailabilityTests(ApiTestCase):
             routes=["/builders/heatmap", "/prostate-classifier-1"],
         )
 
-    async def test_a_facade_without_a_running_worker_is_not_live(self) -> None:
+    async def test_an_api_without_a_running_worker_is_not_live(self) -> None:
         async with self.client(self.app()) as client:
             stopped = await client.get("/healthz")
             async with self.scheduler.running():

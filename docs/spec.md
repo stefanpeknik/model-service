@@ -59,9 +59,9 @@ serve:            # a Ray Serve application, injected into serveConfigV2 unchang
 ```
 
 Helm renders every `serve` block into the RayService and the whole list into a
-`model-catalog` ConfigMap mounted into the facade. A checksum annotation
-restarts the facade when the catalog changes; the scheduler is durable, so a
-restart is safe. The facade validates the catalog at startup with Pydantic and
+`model-catalog` ConfigMap mounted into the API. A checksum annotation
+restarts the API when the catalog changes; the scheduler is durable, so a
+restart is safe. The API validates the catalog at startup with Pydantic and
 refuses to start on an invalid entry.
 
 Contract parameters come from the `serve` block's first deployment
@@ -102,7 +102,7 @@ The EMPAIA adapter reads a stored result back as the builder's outputs model.
 | `heatmap` | `spatial-scores` | `slide`, optional `region_of_interest` mask | `heatmap` score grid (`.npz`) | stride 0.5, background tiles skipped |
 | `tile-embeddings` | `tile-embedding` | `slide`, optional `region_of_interest` mask | `embeddings` HDF5 | stride 1.0 |
 
-- The facade resolves the model's current catalog entry for every attempt and
+- The API resolves the model's current catalog entry for every attempt and
   sends it with the invocation. Builders never read the catalog.
 - `heatmap` checks the model's `get_config()` against the declared parameters
   and fails with the non-retryable `model_contract_mismatch` on disagreement.
@@ -168,7 +168,7 @@ a sentence of the description per mode, and the image
 `http::<target>/builders/<builder>/models/<model>` are derived; each EAD is
 validated against the bundled EAD v3 schema.
 
-At startup the facade registers these apps in the marketplace set by
+At startup the API registers these apps in the marketplace set by
 `EMPAIA_MARKETPLACE_URL` (Helm `empaia.marketplace`), in the background and
 retrying every minute until it succeeds. It uses the marketplace mock's route
 (`/v1/custom-mock/portal-apps`) that EMPAIA test installations run; a
@@ -215,7 +215,7 @@ never scales down a replica that was never placed.
   execution every 5 s whichever way it runs, and the scheduler adds about a
   second (admission, the worker's 0.5 s poll, the claim) to jobs that take
   minutes. What a waiting user would notice is queueing behind preprocessing,
-  which priority addresses, without losing durability across facade restarts.
+  which priority addresses, without losing durability across API restarts.
 - Lease renewal tolerates transient database errors until the lease would
   actually expire.
 - Database connections are pooled (`DATABASE_POOL_SIZE`, 20). A new
@@ -235,13 +235,13 @@ request the raw route takes and returns an execution.
   lifecycle (leases, fencing, retries, deadlines, cancellation, idempotent
   admission) but has no provider phase: there is nothing to publish or report.
 - Every model's raw input is one LZ4 frame holding an HWC uint8 RGB tile of the
-  model's `tile_size`. The facade checks that at admission and before every
+  model's `tile_size`. The API checks that at admission and before every
   attempt, decompressing at most one byte past the expected size. A model whose
   tile size changed while a tile waited fails it with `incompatible_input`
   instead of sending reinterpreted data.
 - Request and response bytes are files, not database values, under
   `INFERENCE_STORAGE_PATH` (Helm `executionScheduler.inferenceStorage`: a
-  ReadWriteMany claim mounted by every facade replica and nothing else, apart
+  ReadWriteMany claim mounted by every API replica and nothing else, apart
   from the EMPAIA workspace so a burst of tiles cannot fill the volume
   publication needs). Files sit in 256 shard directories named by the first
   two characters of the execution ID, as `<id>.request` and
@@ -272,24 +272,24 @@ request the raw route takes and returns an execution.
   400/413/415/422 fail with `model_rejected_input`; other statuses and lost
   connections are retryable failures.
 - Tiles have their own capacity: `PER_MODEL_INFERENCE_LIMIT` (32) attempts per
-  model and `MAX_CONCURRENT_INFERENCE` (32) per facade process, separate from
+  model and `MAX_CONCURRENT_INFERENCE` (32) per API process, separate from
   builder slots, so neither starves the other. Ray Serve's own queue limits
   still protect the replica. The worker claims tiles in batches of a quarter of
   its tile slots per transaction.
-- Facade memory for running tiles is bounded by
+- API memory for running tiles is bounded by
   `MAX_CONCURRENT_INFERENCE × (INFERENCE_MAX_REQUEST_BYTES + INFERENCE_MAX_RESULT_BYTES)`,
   192 MiB with the defaults (2 MiB and 4 MiB).
-- Throughput is bounded by the facade's CPU, about 100 tiles/s per 1-CPU
+- Throughput is bounded by the API's CPU, about 100 tiles/s per 1-CPU
   replica. Replicas scale it: leases and the per-model locks already
   coordinate them.
 
 EMPAIA wiring is one settings class, `EmpaiaSettings` (`EMPAIA_*`), read by
-the facade and by builder replicas: `EMPAIA_API_URLS` (empty refuses every
+the API and by builder replicas: `EMPAIA_API_URLS` (empty refuses every
 EMPAIA job),
 `EMPAIA_WORKSPACE_ROOT`, and
 `EMPAIA_APP_SERVICE_TIMEOUT_SECONDS` (default 60; creating a pixelmap took 10 s
 on the test instance, and the SDK's 5 s default failed that job). Helm renders
-them from the top-level `empaia` values for the facade and every worker group;
+them from the top-level `empaia` values for the API and every worker group;
 `empaia.dnsSearches` adds DNS search domains where an installation hands JES a
 short App Service name from another namespace.
 
@@ -324,7 +324,7 @@ type, so builders know nothing of EMPAIA. Then
 `src/model_service/providers/empaia/publishers.py` maps each (type, media
 type) pair to a publisher: the four primitive types (inline values, checked
 against the declared type) and `continuous_pixelmap` from a score grid. The
-mapping is built once at facade startup. App generation offers a model with a
+mapping is built once at API startup. App generation offers a model with a
 builder only if every output has a publisher that takes the model, and logs
 why it skips one. Finish publishes each output with the publisher of its
 declaration and fails the job, before any write, for an output that is not
@@ -373,7 +373,7 @@ the unsafe legacy `src/model_service/builders/heatmap_builder.py` endpoint, and
 3. The RationAI SDK runs and schedules builders with a model ID.
 4. Scheduled raw inference (2026-10-15): tiles admitted while no GPU worker
    exists complete after it starts, without the client staying connected;
-   results equal direct calls; a facade restart loses no tile.
+   results equal direct calls; an API restart loses no tile.
 
 ## Operator tooling
 
@@ -407,8 +407,8 @@ Ideas with a reason, not commitments:
   their own Dockerfiles again. It swaps only our code into the October
   checkpoint images, so test images build in a minute, but their dependencies
   are that base plus hand-picked extras and can drift from `pyproject.toml`
-  (the facade once crashed on a missing `jsonschema`). Before then, check that
-  `Dockerfile.ray-gpu`, `Dockerfile.cpu` and `Dockerfile.execution-scheduler`
+  (the API once crashed on a missing `jsonschema`). Before then, check that
+  `Dockerfile.ray-gpu`, `Dockerfile.cpu` and `Dockerfile.api`
   still build with the current code.
 
 - Fewer slide reads in the heatmap builder. With stride 0.5 neighbouring

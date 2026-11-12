@@ -20,7 +20,7 @@ another tile encoder. These need no Python and no image rebuild.
    for example `heatmap`. Run it with
    `client.builders.run("heatmap", BuilderRequest(model_id="<model-id>", ...))`.
 
-The facade refuses to start if a model file is inconsistent (wrong
+The API refuses to start if a model file is inconsistent (wrong
 `route_prefix`, missing geometry, a parameter declared twice), so a mistake shows
 up at `helm upgrade` rather than at the first request.
 

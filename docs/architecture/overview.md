@@ -1,6 +1,6 @@
 # Architecture Overview
 
-This page describes the Ray model-inference layer. For builders, the facade and
+This page describes the Ray model-inference layer. For builders, the API and
 the durable scheduler, see [How model-service is put together](core.md).
 
 This section provides a structured overview of Model Service's architecture.

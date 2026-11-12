@@ -107,9 +107,9 @@ with Client() as client:
   print(emb.shape)
 ```
 
-### 5. Builders (`/v1/builders/...` on the facade)
+### 5. Builders (`/v1/builders/...` on the API)
 
-Builders run a model over a whole slide. They are called through the facade's
+Builders run a model over a whole slide. They are called through the API's
 public API, not on the Ray route, and take the model as a parameter:
 
 | Builder | Accepts | Output |
@@ -123,7 +123,7 @@ public API, not on the Ray route, and take the model as a parameter:
 from rationai import Client
 from rationai.types import BuilderRequest, InputAccess, SharedPathInput
 
-with Client(base_url="http://<facade>:8080") as client:
+with Client(base_url="http://<model-service>:8080") as client:
   result = client.builders.run(
     "heatmap",
     BuilderRequest(

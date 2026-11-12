@@ -8,13 +8,13 @@ Release `model-service`, values `deploy/helm/rayservice/values.rationai-test.yam
 
 ## Layout
 
-- Facade Deployment `model-service-execution-scheduler` with PostgreSQL
+- API Deployment `model-service-api` with PostgreSQL
   `model-service-postgres`.
 - RayService with one CPU worker group (builders, the constant model) and one
   MIG GPU worker group that scales to zero. GPUs are scarce on the cluster:
   after testing, check that no `gpu-workers` pod remains (it goes about six
   minutes after the last request).
-- Slides: linked through the direct-access route. The facade and both worker groups mount
+- Slides: linked through the direct-access route. The API and both worker groups mount
   the instance's `test-data-storage-pvc` read-only at `/data/Projects`, where
   its CDS plugins mount it, because model-service links the absolute path CDS
   answers. The claim is read-only on the volume itself, not only the mount,
@@ -51,7 +51,7 @@ Upgrades use `helm upgrade` with the same arguments.
 ## Ship code
 
 Dependencies rarely change, so images are a thin code layer over the October
-GPU and facade images. Pushing into the same Harbor repository reuses their
+GPU and API images (the API base is still named `model-service-scheduler`). Pushing into the same Harbor repository reuses their
 large base layers. Until a release of the EMPAIA SDK carries model-service's
 additions, its wheel goes in `deploy/images/wheels/`.
 
@@ -67,9 +67,9 @@ podman build -f deploy/images/Dockerfile.code-refresh \
   --build-arg BASE=cerit.io/stefanpeknik/model-service-scheduler:checkpoint-20261008-a91b519 \
   --build-arg RUN_USER=10001 --build-arg 'EXTRA_PACKAGES=lz4>=4.4.5 jsonschema>=4.23.0,<5 numpy imageio h5py' \
   --build-arg SOURCE_REVISION=$REV \
-  -t cerit.io/stefanpeknik/model-service-scheduler:core-$REV .
+  -t cerit.io/stefanpeknik/model-service-api:core-$REV .
 podman push cerit.io/stefanpeknik/model-service-ray:core-$REV
-podman push cerit.io/stefanpeknik/model-service-scheduler:core-$REV
+podman push cerit.io/stefanpeknik/model-service-api:core-$REV
 ```
 
 Set both tags in `values.rationai-test.yaml`, then `helm upgrade`.
@@ -78,14 +78,16 @@ Set both tags in `values.rationai-test.yaml`, then `helm upgrade`.
 
 The instance's JES reaches model-service through its `JES_HTTP_TARGETS`
 entry `model-service`, set by hand on the `test-jobs-jes` Deployment to
-`http://model-service-execution-scheduler.rationai-infra-test-ns.svc.cluster.local:8080/v1/empaia`.
+`http://model-service-api.rationai-infra-test-ns.svc.cluster.local:8080/v1/empaia`.
 A `helm upgrade` of the `test-jobs` release reverts it. Changing it touches a
-shared service and needs authorization for the task.
+shared service and needs authorization for the task. Releases before the
+rename served it as `model-service-execution-scheduler`; the first upgrade
+with the renamed chart needs this entry changed too.
 
 ## Try it
 
 ```sh
-oc -n rationai-infra-test-ns port-forward svc/model-service-execution-scheduler 18080:8080
+oc -n rationai-infra-test-ns port-forward svc/model-service-api 18080:8080
 curl localhost:18080/v1/models
 curl localhost:18080/healthz/deployments
 ```
@@ -104,7 +106,7 @@ curl -s localhost:18080/v1/executions/<id>/result
 
 ## Logs
 
-- Facade: refused submissions and ignored EMPAIA configuration keys, with
+- API: refused submissions and ignored EMPAIA configuration keys, with
   reasons.
 - Builder progress and errors: the builder replica's log
   (`/tmp/ray/session_latest/logs/serve/replica_builder-heatmap_*.log` on the CPU
