@@ -259,6 +259,7 @@ class ExecutionRepositoryContract:
 
         # The report's worker dies before it writes anything.
         await self._advance_time(timedelta(seconds=31))
+        await self.repository.maintain()
         retried = await self.repository.claim_due("worker", timedelta(seconds=30))
 
         assert retried is not None, "the cancellation report was dropped"

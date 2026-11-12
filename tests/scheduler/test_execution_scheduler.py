@@ -1121,6 +1121,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         abandoned_task.cancel()
         await asyncio.gather(abandoned_task, return_exceptions=True)
         clock.advance(timedelta(seconds=31))
+        await repository.maintain()
 
         self.assertTrue(await replacement_worker.run_once())
         recovered = await repository.get(admitted.execution.id)

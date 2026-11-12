@@ -697,6 +697,7 @@ class PostgresExecutionRepositoryTests(
         assert abandoned is not None
 
         await asyncio.sleep(0.08)
+        await self.repository.maintain()
         replacement = await self._repository().claim_due(
             "worker-2",
             timedelta(seconds=30),
@@ -791,6 +792,7 @@ class PostgresExecutionRepositoryTests(
         assert abandoned_finish is not None
 
         await asyncio.sleep(0.08)
+        await self.repository.maintain()
         replacement = await self._repository().claim_due(
             "worker-2",
             timedelta(seconds=1),

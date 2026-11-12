@@ -36,9 +36,9 @@ cancel ────────────────────────�
 - A publication that fails or whose outcome is unknown is not retried; the
   execution fails and the provider gets a failure report.
 - Leases are renewed every third of their duration. Renewal errors are retried
-  until the lease would have expired; then the attempt stops and another
-  claim recovers it. Every write checks the fencing token, so a stale worker
-  cannot overwrite a newer attempt.
+  until the lease would have expired; then the attempt stops and the next
+  maintenance pass (every poll interval) recovers it. Every write checks the
+  fencing token, so a stale worker cannot overwrite a newer attempt.
 
 Tests: `tests/test_execution_scheduler.py` (behaviour, in-memory repository),
 `tests/repository_contract.py` (shared by both repositories) and

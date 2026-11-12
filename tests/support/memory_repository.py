@@ -158,11 +158,9 @@ class InMemoryExecutionRepository:
         owner: str,
         lease_duration: timedelta,
     ) -> WorkClaim | None:
-        """Run maintenance and lease the highest-priority due work within per-model processing capacity."""
+        """Lease the highest-priority due work within per-model processing capacity."""
         async with self._operation():
             now = self._clock()
-            self._expire_deadlines(now)
-            self._recover_expired_leases(now)
             active = self._active_processing(now)
             due = [
                 execution

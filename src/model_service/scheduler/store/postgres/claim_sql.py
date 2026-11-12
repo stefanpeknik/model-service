@@ -30,14 +30,14 @@ logger = logging.getLogger(__name__)
 
 
 class ClaimOperations(PostgresBase):
-    """Claiming due work and renewing its lease; claims recover expired leases first."""
+    """Claiming due work and renewing its lease; maintain() recovers expired leases."""
 
     async def claim_due(
         self,
         owner: str,
         lease_duration: timedelta,
     ) -> WorkClaim | None:
-        """Run maintenance, then lease due provider work before capacity-limited processing using database time.
+        """Lease due provider work before capacity-limited processing using database time.
 
         Args:
             owner: ID of the claiming worker.
@@ -52,8 +52,6 @@ class ClaimOperations(PostgresBase):
         """
         async with self._transaction() as session:
             now = await self._database_now(session)
-            await self._expire_deadlines(session, now)
-            await self._recover_expired_leases(session, now)
             row = await self._select_finish(session, now)
             if row is None:
                 row = await self._select_processing(session, now)
