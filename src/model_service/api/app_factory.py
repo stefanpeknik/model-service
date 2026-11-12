@@ -6,8 +6,11 @@ the catalog, scheduler, providers and dispatch into it.
 
 from __future__ import annotations
 
+import asyncio
+from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
+import httpx
 from fastapi import FastAPI, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -18,43 +21,29 @@ from model_service.api.health import (
     DeploymentStatus,
 )
 from model_service.api.routes import builders, executions, models
-from model_service.http_common.auth import Access
-from model_service.http_common.errors import ApiErrorCode, http_error
-from model_service.scheduler.public import SchedulingUnavailableError
-
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
-
-    from starlette.types import Lifespan
-
-    from model_service.deployed_models.catalog import ModelCatalog
-    from model_service.providers.provider import RouteFactory
-    from model_service.scheduler.protocols import Scheduler
-
-
-import asyncio
-from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING
-
-import httpx
-
 from model_service.api.synchronous_runs import SynchronousBuilderService
 from model_service.builders.registry import BUILDERS, get_builder
 from model_service.deployed_models.catalog import ModelCatalog
+from model_service.http_common.auth import Access
+from model_service.http_common.errors import ApiErrorCode, http_error
 from model_service.providers.registry import PROVIDERS
 from model_service.scheduler.builder_dispatch import HTTPBuilderDispatch
 from model_service.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.scheduler.internal_state import RetryPolicy
+from model_service.scheduler.public import SchedulingUnavailableError
 from model_service.scheduler.settings import SchedulerSettings
 from model_service.scheduler.store.postgres import PostgresExecutionRepository
 from model_service.scheduler.store.protected_context import ProtectedContextCipher
 
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncIterator, Sequence
+
+    from starlette.types import Lifespan
 
     from model_service.contracts.model_declarations import ModelBinding
+    from model_service.providers.provider import RouteFactory
+    from model_service.scheduler.protocols import Scheduler
     from model_service.scheduler.public import ModelResolver
 
 
