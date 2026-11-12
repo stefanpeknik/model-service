@@ -10,11 +10,11 @@ moves it through processing and provider finish.
 | `execution_scheduler.py` | Admission (validates builder, model and provider), views, cancellation, worker lifetime |
 | `worker.py`, `running_work.py` | Claim loop, lease renewal, dispatch, settlement |
 | `builder_dispatch.py` | Calling a builder replica over HTTP |
-| `transitions/` | Every state change: admit, claim, renew, settle, cancel, lease recovery, deadlines |
+| `transitions/` | Every state change: admit, claim, renew, settle, cancel, lease recovery, deadlines. `ExecutionTransitions` holds one object per concern (`admission`, `leases`, `outcomes`, `expiry`); leases and outcomes get the expiry object for deadline checks |
 | `public.py`, `internal_state.py`, `status.py` | Public request/view types, internal records, statuses |
 | `protocols.py` | The `Scheduler` interface the API uses |
 | `store/repository.py` | The persistence interface |
-| `store/postgres/` | PostgreSQL implementation; an advisory lock per model serializes capacity checks |
+| `store/postgres/` | PostgreSQL implementation; an advisory lock per model serializes capacity checks. `PostgresExecutionRepository` delegates to one operations class per concern (admission, claims, settlement, maintenance), each built over `PostgresDatabase` (pool, transactions, row mapping) |
 | `store/migrations/` | Yoyo migrations, applied at startup ([guide](store/migrations/README.md)) |
 | `store/protected_context.py` | AES-GCM encryption of provider secrets at rest |
 

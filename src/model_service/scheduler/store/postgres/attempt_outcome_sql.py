@@ -2,15 +2,28 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from model_service.scheduler.internal_state import (
     ExecutionRecord,
     Settlement,
 )
-from model_service.scheduler.store.postgres.base import PostgresBase
 
 
-class SettlementOperations(PostgresBase):
+if TYPE_CHECKING:
+    from model_service.scheduler.store.postgres.base import PostgresDatabase
+
+
+class SettlementOperations:
     """Settling attempts and provider-finish mutations."""
+
+    def __init__(self, db: PostgresDatabase) -> None:
+        """Keep the database these operations run on.
+
+        Args:
+            db: Connection pool, transactions and row mapping.
+        """
+        self._db = db
 
     async def settle(
         self,
@@ -33,16 +46,16 @@ class SettlementOperations(PostgresBase):
             StaleWorkClaimError: The token or lease is no longer current, the deadline passed, or the outcome does not fit the work.
             ExecutionRepositoryUnavailableError: The database is unavailable.
         """
-        async with self._transaction() as session:
-            row = await self._fetch(session, execution_id, for_update=True)
-            decision = self._transitions.outcomes.decide_settlement(
-                self._record(row),
+        async with self._db.transaction() as session:
+            row = await self._db.fetch(session, execution_id, for_update=True)
+            decision = self._db.transitions.outcomes.decide_settlement(
+                self._db.record(row),
                 fencing_token,
                 settlement,
-                await self._database_now(session),
+                await self._db.database_now(session),
             )
             if decision.execution is not None:
-                await self._persist_state(session, row, decision.execution)
+                await self._db.persist_state(session, row, decision.execution)
         return decision.accepted_execution()
 
     async def mark_finish_mutation_started(
@@ -61,11 +74,11 @@ class SettlementOperations(PostgresBase):
             StaleWorkClaimError: The claim is not provider work or is no longer current.
             ExecutionRepositoryUnavailableError: The database is unavailable.
         """
-        async with self._transaction() as session:
-            row = await self._fetch(session, execution_id, for_update=True)
-            marked = self._transitions.outcomes.mark_finish_mutation_started(
-                self._record(row),
+        async with self._db.transaction() as session:
+            row = await self._db.fetch(session, execution_id, for_update=True)
+            marked = self._db.transitions.outcomes.mark_finish_mutation_started(
+                self._db.record(row),
                 fencing_token,
-                await self._database_now(session),
+                await self._db.database_now(session),
             )
-            await self._persist_state(session, row, marked)
+            await self._db.persist_state(session, row, marked)

@@ -22,15 +22,22 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
-
-from model_service.scheduler.store.postgres.base import PostgresBase
+    from model_service.scheduler.store.postgres.base import PostgresDatabase
 
 
 logger = logging.getLogger(__name__)
 
 
-class ClaimOperations(PostgresBase):
-    """Claiming due work and renewing its lease; maintain() recovers expired leases."""
+class ClaimOperations:
+    """Claiming due work and renewing its lease; MaintenanceOperations recovers expired leases."""
+
+    def __init__(self, db: PostgresDatabase) -> None:
+        """Keep the database these operations run on.
+
+        Args:
+            db: Connection pool, transactions and row mapping.
+        """
+        self._db = db
 
     async def claim_due(
         self,
@@ -50,8 +57,8 @@ class ClaimOperations(PostgresBase):
         Raises:
             ExecutionRepositoryUnavailableError: The database is unavailable.
         """
-        async with self._transaction() as session:
-            now = await self._database_now(session)
+        async with self._db.transaction() as session:
+            now = await self._db.database_now(session)
             row = await self._select_finish(session, now)
             if row is None:
                 row = await self._select_processing(session, now)
@@ -60,14 +67,14 @@ class ClaimOperations(PostgresBase):
             execution = await self._claimable(session, row, now)
             if execution is None:
                 return None
-            claimed = self._transitions.leases.claim(
+            claimed = self._db.transitions.leases.claim(
                 execution,
                 owner=owner,
                 fencing_token=str(uuid4()),
                 lease_duration=lease_duration,
                 now=now,
             )
-            await self._persist_state(session, row, claimed.execution)
+            await self._db.persist_state(session, row, claimed.execution)
         return claimed.claim
 
     async def renew(
@@ -90,16 +97,16 @@ class ClaimOperations(PostgresBase):
             UnknownExecutionError: No execution has this ID.
             ExecutionRepositoryUnavailableError: The database is unavailable.
         """
-        async with self._transaction() as session:
-            row = await self._fetch(session, execution_id, for_update=True)
-            decision = self._transitions.leases.decide_renewal(
-                self._record(row),
+        async with self._db.transaction() as session:
+            row = await self._db.fetch(session, execution_id, for_update=True)
+            decision = self._db.transitions.leases.decide_renewal(
+                self._db.record(row),
                 fencing_token=fencing_token,
                 lease_duration=lease_duration,
-                now=await self._database_now(session),
+                now=await self._db.database_now(session),
             )
             if decision.execution is not None:
-                await self._persist_state(session, row, decision.execution)
+                await self._db.persist_state(session, row, decision.execution)
             return decision.directive
 
     async def _select_finish(
@@ -200,7 +207,7 @@ class ClaimOperations(PostgresBase):
                     )
                 )
             ).scalar_one()
-            if active >= self._per_model_limit:
+            if active >= self._db.per_model_limit:
                 continue
             row = await session.scalar(
                 select(ExecutionRow)
@@ -234,12 +241,12 @@ class ClaimOperations(PostgresBase):
             The record with its decrypted context, or None if the context is unreadable.
         """
         try:
-            return self._record(row, protected=True)
+            return self._db.record(row, protected=True)
         except ValueError:  # Includes ProtectedContextError: a bad envelope or key.
             logger.error("execution %s has an unreadable provider context", row.id)
             # Not _persist_state: the stored bytes stay, in case the key was wrong.
-            self._apply_state(
-                row, self._transitions.outcomes.unreadable(self._record(row), now)
+            self._db.apply_state(
+                row, self._db.transitions.outcomes.unreadable(self._db.record(row), now)
             )
             await session.flush()
             return None

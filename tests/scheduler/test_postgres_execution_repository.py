@@ -986,7 +986,7 @@ class PostgresExecutionRepositoryTests(
             )
             row = await cursor.fetchone()
         assert row is not None
-        self.assertEqual(self.repository._cipher.decrypt(bytes(row[0])), {})
+        self.assertEqual(self.repository._db.cipher.decrypt(bytes(row[0])), {})
 
     def _repository(
         self, *, schema: str | None = None, per_model_limit: int = 1

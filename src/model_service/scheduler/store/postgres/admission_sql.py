@@ -23,16 +23,24 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from model_service.scheduler.public import SubmissionIdentity
+    from model_service.scheduler.store.postgres.base import PostgresDatabase
 
 
 from model_service.scheduler.store.postgres.base import (
-    PostgresBase,
     _is_uuid,
 )
 
 
-class AdmissionOperations(PostgresBase):
+class AdmissionOperations:
     """Admission, lookup and cancellation."""
+
+    def __init__(self, db: PostgresDatabase) -> None:
+        """Keep the database these operations run on.
+
+        Args:
+            db: Connection pool, transactions and row mapping.
+        """
+        self._db = db
 
     async def find_submission(
         self,
@@ -50,11 +58,11 @@ class AdmissionOperations(PostgresBase):
             ScheduleConflictError: The key was used for a request with a different fingerprint.
             ExecutionRepositoryUnavailableError: The database is unavailable.
         """
-        async with self._transaction() as session:
+        async with self._db.transaction() as session:
             row = await self._find_submission(session, identity)
             if row is None:
                 return None
-            execution = self._record(row)
+            execution = self._db.record(row)
             self._check_fingerprint(execution, identity)
             return execution
 
@@ -72,7 +80,9 @@ class AdmissionOperations(PostgresBase):
             ExecutionRepositoryUnavailableError: The database is unavailable.
         """
         return await self._insert(
-            admission, str(uuid4()), self._cipher.encrypt(admission.protected_context)
+            admission,
+            str(uuid4()),
+            self._db.cipher.encrypt(admission.protected_context),
         )
 
     async def _insert(
@@ -96,9 +106,9 @@ class AdmissionOperations(PostgresBase):
             RuntimeError: The conflicting row disappeared before it could be read.
             ExecutionRepositoryUnavailableError: The database is unavailable.
         """
-        async with self._transaction() as session:
-            execution = self._transitions.admission.admit(
-                admission, execution_id, await self._database_now(session)
+        async with self._db.transaction() as session:
+            execution = self._db.transitions.admission.admit(
+                admission, execution_id, await self._db.database_now(session)
             )
             row = await session.scalar(
                 insert(ExecutionRow)
@@ -130,11 +140,11 @@ class AdmissionOperations(PostgresBase):
                 .returning(ExecutionRow)
             )
             if row is not None:
-                return AdmissionResult(self._record(row), created=True)
+                return AdmissionResult(self._db.record(row), created=True)
             existing = await self._find_submission(session, admission.identity)
             if existing is None:
                 raise RuntimeError("conflicting admission disappeared")
-            execution = self._record(existing)
+            execution = self._db.record(existing)
             self._check_fingerprint(execution, admission.identity)
             return AdmissionResult(execution, created=False)
 
@@ -151,8 +161,8 @@ class AdmissionOperations(PostgresBase):
             UnknownExecutionError: No execution has this ID.
             ExecutionRepositoryUnavailableError: The database is unavailable.
         """
-        async with self._transaction() as session:
-            return self._record(await self._fetch(session, execution_id))
+        async with self._db.transaction() as session:
+            return self._db.record(await self._db.fetch(session, execution_id))
 
     async def get_many(self, execution_ids: Collection[str]) -> list[ExecutionRecord]:
         """Read existing records in the requested order, ignoring unknown IDs.
@@ -169,11 +179,11 @@ class AdmissionOperations(PostgresBase):
         valid = [value for value in execution_ids if _is_uuid(value)]
         if not valid:
             return []
-        async with self._transaction() as session:
+        async with self._db.transaction() as session:
             rows = await session.scalars(
                 select(ExecutionRow).where(ExecutionRow.id.in_(valid))
             )
-            found = {row.id: self._record(row) for row in rows}
+            found = {row.id: self._db.record(row) for row in rows}
         return [found[value] for value in valid if value in found]
 
     async def request_cancel(self, execution_id: str) -> ExecutionRecord:
@@ -191,15 +201,15 @@ class AdmissionOperations(PostgresBase):
             UnknownExecutionError: No execution has this ID.
             ExecutionRepositoryUnavailableError: The database is unavailable.
         """
-        async with self._transaction() as session:
-            row = await self._fetch(session, execution_id, for_update=True)
-            execution = self._record(row)
-            cancelled = self._transitions.admission.cancel(
-                execution, await self._database_now(session)
+        async with self._db.transaction() as session:
+            row = await self._db.fetch(session, execution_id, for_update=True)
+            execution = self._db.record(row)
+            cancelled = self._db.transitions.admission.cancel(
+                execution, await self._db.database_now(session)
             )
             if cancelled is execution:
                 return execution
-            return await self._persist_state(session, row, cancelled)
+            return await self._db.persist_state(session, row, cancelled)
 
     @staticmethod
     async def _find_submission(

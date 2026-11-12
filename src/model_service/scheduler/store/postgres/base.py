@@ -14,21 +14,19 @@ from uuid import UUID
 
 from psycopg import AsyncConnection
 from psycopg import Error as PsycopgError
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from model_service.scheduler.internal_state import (
     ExecutionRecord,
     RetryPolicy,
-    WorkKind,
 )
 from model_service.scheduler.public import (
     ExecutionError,
     SubmissionIdentity,
     UnknownExecutionError,
 )
-from model_service.scheduler.status import ExecutionStatus
 from model_service.scheduler.store.migrate import initialize_execution_schema
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
 from model_service.scheduler.store.rows import DEFAULT_SCHEMA, ExecutionRow
@@ -41,8 +39,14 @@ if TYPE_CHECKING:
     from model_service.scheduler.store.protected_context import ProtectedContextCipher
 
 
-class PostgresBase:
-    """State and helpers every group of repository operations shares."""
+class PostgresDatabase:
+    """The connection pool, transactions and row mapping every group of operations uses.
+
+    Attributes:
+        cipher: Cipher for the stored provider context.
+        per_model_limit: Concurrent builder executions allowed per model.
+        transitions: The shared state machine.
+    """
 
     def __init__(
         self,
@@ -75,7 +79,7 @@ class PostgresBase:
             raise ValueError("PostgreSQL schema must be an identifier")
         if per_model_limit <= 0:
             raise ValueError("per-model limits must be positive")
-        self._cipher = cipher
+        self.cipher = cipher
         self._schema = schema
         self._dsn = dsn
 
@@ -97,8 +101,8 @@ class PostgresBase:
             execution_options={"schema_translate_map": {DEFAULT_SCHEMA: schema}},
         )
         self._sessions = async_sessionmaker(self._engine, expire_on_commit=False)
-        self._per_model_limit = per_model_limit
-        self._transitions = ExecutionTransitions(
+        self.per_model_limit = per_model_limit
+        self.transitions = ExecutionTransitions(
             processing_policy
             or RetryPolicy(
                 max_attempts=3,
@@ -127,21 +131,10 @@ class PostgresBase:
         Raises:
             ExecutionRepositoryUnavailableError: The database is unavailable.
         """
-        async with self._transaction() as session:
+        async with self.transaction() as session:
             await session.execute(select(ExecutionRow.id).limit(1))
 
-    async def maintain(self) -> None:
-        """Expire deadlines and recover abandoned claims.
-
-        Raises:
-            ExecutionRepositoryUnavailableError: The database is unavailable.
-        """
-        async with self._transaction() as session:
-            now = await self._database_now(session)
-            await self._expire_deadlines(session, now)
-            await self._recover_expired_leases(session, now)
-
-    async def _persist_state(
+    async def persist_state(
         self,
         session: AsyncSession,
         row: ExecutionRow,
@@ -160,15 +153,15 @@ class PostgresBase:
         Returns:
             The record read back from the row, without its protected context.
         """
-        self._apply_state(row, execution)
+        self.apply_state(row, execution)
         if execution.work_kind is None:
             # Nothing will use the job's credential again.
-            row.protected_context = self._cipher.encrypt({})
+            row.protected_context = self.cipher.encrypt({})
         await session.flush()
-        return self._record(row)
+        return self.record(row)
 
     @staticmethod
-    def _apply_state(row: ExecutionRow, execution: ExecutionRecord) -> None:
+    def apply_state(row: ExecutionRow, execution: ExecutionRecord) -> None:
         """Copy the mutable fields of a record onto its row without flushing.
 
         Args:
@@ -192,7 +185,7 @@ class PostgresBase:
         )
         row.updated_at = execution.updated_at
 
-    async def _fetch(
+    async def fetch(
         self, session: AsyncSession, execution_id: str, *, for_update: bool = False
     ) -> ExecutionRow:
         """Read a row by ID, optionally locking it, or raise UnknownExecutionError.
@@ -219,7 +212,7 @@ class PostgresBase:
         return row
 
     @staticmethod
-    async def _database_now(session: AsyncSession) -> datetime:
+    async def database_now(session: AsyncSession) -> datetime:
         """Read PostgreSQL clock_timestamp so workers share the database's lease clock.
 
         Args:
@@ -232,7 +225,7 @@ class PostgresBase:
         return result.scalar_one()
 
     @asynccontextmanager
-    async def _transaction(self) -> AsyncIterator[AsyncSession]:
+    async def transaction(self) -> AsyncIterator[AsyncSession]:
         """Own one session and transaction, committing on success and translating database errors into availability failures.
 
         Yields:
@@ -249,7 +242,7 @@ class PostgresBase:
                 "execution repository is unavailable"
             ) from error
 
-    def _record(self, row: ExecutionRow, *, protected: bool = False) -> ExecutionRecord:
+    def record(self, row: ExecutionRow, *, protected: bool = False) -> ExecutionRecord:
         """Convert an ORM row to an immutable domain record; only a claim decrypts the provider context.
 
         Args:
@@ -282,7 +275,7 @@ class PostgresBase:
             status=row.status,
             invocation=row.invocation,
             protected_context=(
-                self._cipher.decrypt(row.protected_context) if protected else {}
+                self.cipher.decrypt(row.protected_context) if protected else {}
             ),
             deadline_at=row.deadline_at,
             terminal_report_deadline_at=row.terminal_report_deadline_at,
@@ -301,80 +294,6 @@ class PostgresBase:
             updated_at=row.updated_at,
             priority=row.priority,
         )
-
-    async def _recover_expired_leases(
-        self, session: AsyncSession, now: datetime
-    ) -> None:
-        """Lock available expired claims with SKIP LOCKED and persist their recovery decisions.
-
-        Args:
-            session: Session of the caller's transaction.
-            now: Current database time.
-        """
-        rows = await session.scalars(
-            select(ExecutionRow)
-            .where(
-                ExecutionRow.fencing_token.is_not(None),
-                ExecutionRow.lease_expires_at <= now,
-            )
-            .with_for_update(skip_locked=True)
-        )
-        for row in rows:
-            recovered = self._transitions.expiry.recover_expired(self._record(row), now)
-            await self._persist_state(session, row, recovered)
-
-    async def _expire_deadlines(self, session: AsyncSession, now: datetime) -> None:
-        """Lock overdue active executions and terminal reports, skipping busy rows, and apply deadline transitions.
-
-        Args:
-            session: Session of the caller's transaction.
-            now: Current database time.
-        """
-        rows = await session.scalars(
-            select(ExecutionRow)
-            .where(
-                # Implied by the conditions below; lets the planner use the
-                # partial deadline indexes instead of scanning finished rows.
-                ExecutionRow.work_kind.is_not(None),
-                or_(
-                    ExecutionRow.deadline_at <= now,
-                    ExecutionRow.terminal_report_deadline_at <= now,
-                ),
-                or_(
-                    and_(
-                        ExecutionRow.status.not_in(
-                            (
-                                ExecutionStatus.SUCCEEDED,
-                                ExecutionStatus.FAILED,
-                                ExecutionStatus.CANCELLED,
-                            )
-                        ),
-                        ExecutionRow.deadline_at <= now,
-                    ),
-                    and_(
-                        ExecutionRow.status.in_(
-                            (ExecutionStatus.FAILED, ExecutionStatus.CANCELLED)
-                        ),
-                        ExecutionRow.work_kind.in_(
-                            (
-                                WorkKind.PROVIDER_FAILURE_REPORT,
-                                WorkKind.PROVIDER_CANCELLATION_REPORT,
-                            )
-                        ),
-                        func.coalesce(
-                            ExecutionRow.terminal_report_deadline_at,
-                            ExecutionRow.deadline_at,
-                        )
-                        <= now,
-                    ),
-                ),
-            )
-            .with_for_update(skip_locked=True)
-        )
-        for row in rows:
-            await self._persist_state(
-                session, row, self._transitions.expiry.deadline(self._record(row), now)
-            )
 
 
 def _is_uuid(value: str) -> bool:
