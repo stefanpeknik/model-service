@@ -2,7 +2,11 @@
 {{- $imageTag := required "executionScheduler.image.tag is required" .Values.executionScheduler.image.tag }}
 {{- $databaseSecret := required "executionScheduler.database.existingSecret is required" .Values.executionScheduler.database.existingSecret }}
 {{- $encryptionSecret := required "executionScheduler.encryption.existingSecret is required" .Values.executionScheduler.encryption.existingSecret }}
-{{- $workspaceClaim := required "empaia.workspaceClaim is required: the facade publishes EMPAIA results the builders wrote there" .Values.empaia.workspaceClaim }}
+{{- $empaia := .Values.empaia.apiUrls }}
+{{- $workspaceClaim := "" }}
+{{- if $empaia }}
+{{- $workspaceClaim = required "empaia.workspaceClaim is required with apiUrls: the facade publishes EMPAIA results the builders wrote there" .Values.empaia.workspaceClaim }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -65,7 +69,7 @@ spec:
             - name: MODEL_CATALOG_PATH
               value: /etc/model-service/model-catalog.json
             - name: BUILDER_IDS
-              value: {{ keys .Values.builders | sortAlpha | toJson | quote }}
+              value: {{ keys (.Values.builders | default dict) | sortAlpha | toJson | quote }}
             - name: SHARED_STORAGE_ROOTS
               value: {{ .Values.sharedStorageRoots | toJson | quote }}
             - name: LEASE_SECONDS
@@ -90,7 +94,7 @@ spec:
               value: {{ .Values.executionScheduler.maxConcurrentExecutions | quote }}
 {{- include "model-service.empaiaEnv" . | nindent 12 }}
             {{- with .Values.empaia.marketplace }}
-            {{- if .url }}
+            {{- if and $empaia .url }}
             - name: EMPAIA_MARKETPLACE_URL
               value: {{ .url | quote }}
             - name: EMPAIA_ORGANIZATION_ID
@@ -141,8 +145,10 @@ spec:
             - name: shared-storage
               mountPath: {{ .Values.executionScheduler.sharedStorage.mountPath | quote }}
             {{- end }}
+            {{- if $empaia }}
             - name: empaia-workspace
               mountPath: {{ .Values.empaia.workspaceRoot | quote }}
+            {{- end }}
 {{- include "model-service.slideVolumeMount" . | nindent 12 }}
       volumes:
         - name: tmp
@@ -155,8 +161,10 @@ spec:
           persistentVolumeClaim:
             claimName: {{ .Values.executionScheduler.sharedStorage.existingClaim | quote }}
         {{- end }}
+        {{- if $empaia }}
         - name: empaia-workspace
           persistentVolumeClaim:
             claimName: {{ $workspaceClaim | quote }}
+        {{- end }}
 {{- include "model-service.slideVolume" . | nindent 8 }}
 {{- end }}

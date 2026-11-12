@@ -169,6 +169,12 @@ You can deploy multiple models by adding multiple files in `deploy/helm/rayservi
 
 Keep routes unique and validate each endpoint separately after deploy.
 
+For plain Ray Serve inference without builders, set `builders: null` in your
+values file (Helm merges `{}` with the defaults instead of replacing them); the
+facade then starts with no builders and still serves `/v1/models`. EMPAIA is
+off until `empaia.apiUrls` lists an AppService, and nothing EMPAIA-specific is
+rendered while it is off.
+
 ## Related Guides
 
 - [Adding New Models](adding-models.md)

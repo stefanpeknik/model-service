@@ -8,12 +8,17 @@
 {{- end }}
 
 
-{{/* EMPAIA settings (EmpaiaSettings) for every process that talks to App Service. */}}
+{{/*
+EMPAIA settings (EmpaiaSettings) for every process that talks to App Service.
+The EMPAIA helpers render nothing while empaia.apiUrls is empty.
+*/}}
 {{- define "model-service.empaiaEnv" -}}
+{{- if .Values.empaia.apiUrls -}}
 - name: EMPAIA_API_URLS
   value: {{ .Values.empaia.apiUrls | toJson | quote }}
 - name: EMPAIA_WORKSPACE_ROOT
   value: {{ .Values.empaia.workspaceRoot | quote }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -23,7 +28,7 @@ EMPAIA files to this pod's fsGroup.
 */}}
 {{- define "model-service.slideVolumeMount" -}}
 {{- with .Values.empaia.slideVolume }}
-{{- if .existingClaim }}
+{{- if and $.Values.empaia.apiUrls .existingClaim }}
 - name: empaia-slides
   mountPath: {{ required "empaia.slideVolume.mountPath is required with a claim" .mountPath | quote }}
   readOnly: true
@@ -33,7 +38,7 @@ EMPAIA files to this pod's fsGroup.
 
 {{- define "model-service.slideVolume" -}}
 {{- with .Values.empaia.slideVolume }}
-{{- if .existingClaim }}
+{{- if and $.Values.empaia.apiUrls .existingClaim }}
 - name: empaia-slides
   persistentVolumeClaim:
     claimName: {{ .existingClaim | quote }}
@@ -44,8 +49,10 @@ EMPAIA files to this pod's fsGroup.
 
 {{/* Extra DNS search domains, for installations that hand out short App Service names. */}}
 {{- define "model-service.empaiaDns" -}}
+{{- if .Values.empaia.apiUrls }}
 {{- with .Values.empaia.dnsSearches }}
 dnsConfig:
   searches: {{ toJson . }}
+{{- end }}
 {{- end }}
 {{- end }}

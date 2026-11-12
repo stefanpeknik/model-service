@@ -171,7 +171,9 @@ def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
         config.model_catalog_path,
         [p.catalog_block for p in providers if p.catalog_block is not None],
     )
-    builder_ids = config.builder_ids or frozenset(BUILDERS)
+    builder_ids = (
+        frozenset(BUILDERS) if config.builder_ids is None else config.builder_ids
+    )
     for builder_id in builder_ids:
         get_builder(builder_id)
     cipher = ProtectedContextCipher.from_base64(config.provider_context_key)

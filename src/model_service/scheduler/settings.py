@@ -49,8 +49,9 @@ class SchedulerSettings(BaseSettings):
         default=Path("/etc/model-service/model-catalog.json"),
         validation_alias="MODEL_CATALOG_PATH",
     )
+    # Deployed builders; unset means all registered, empty means none.
     builder_ids: frozenset[_RequiredString] | None = Field(
-        default=None, min_length=1, validation_alias="BUILDER_IDS"
+        default=None, validation_alias="BUILDER_IDS"
     )
     shared_storage_roots: tuple[Path, ...] = Field(
         default=(), validation_alias="SHARED_STORAGE_ROOTS"

@@ -55,10 +55,14 @@ class SchedulerSettingsTests(unittest.TestCase):
         self.assertEqual(settings.shared_storage_roots, ())
         self.assertIsNone(settings.builder_ids)
 
+    def test_an_empty_builder_list_deploys_no_builders(self) -> None:
+        settings = load({**self.environment, "BUILDER_IDS": "[]"})
+
+        self.assertEqual(settings.builder_ids, frozenset())
+
     def test_invalid_values_are_rejected(self) -> None:
         for overrides in (
             {"DATABASE_URL": " "},
-            {"BUILDER_IDS": "[]"},
             {"BUILDER_IDS": "heatmap"},
             {"SHARED_STORAGE_ROOTS": "/mnt/data"},
             {"PER_MODEL_LIMIT": "0"},

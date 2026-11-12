@@ -8,6 +8,8 @@ models:
   - prov-gigapath
 
 # Builders run `builder_deployment.serve:app`; the key is the builder ID.
+# `builders: null` in an override file deploys the models for plain Ray Serve
+# inference only (`{}` would merge with these defaults).
 builders:
   heatmap:
     deployment:
@@ -91,13 +93,15 @@ executionScheduler:
       cpu: 1
       memory: 512Mi
 
+# EMPAIA is on when apiUrls lists an AppService. Empty (the default) refuses
+# every EMPAIA job and leaves out all EMPAIA env, volumes, DNS settings and
+# marketplace registration; the rest of this block is then ignored.
 empaia:
-  # AppService URLs that may receive EMPAIA job credentials; empty refuses
-  # every EMPAIA job.
+  # AppService URLs that may receive EMPAIA job credentials.
   apiUrls: []
   workspaceRoot: /mnt/model-service-executions
   # Shared by the facade and the builder workers: builders write job outputs
-  # there and the facade publishes them. Required by the facade.
+  # there and the facade publishes them. Required by the facade with apiUrls.
   workspaceClaim: ""
   # Slide inputs are linked from the file named by the RationAI direct-access
   # route. The claim holding the installation's slides, mounted
