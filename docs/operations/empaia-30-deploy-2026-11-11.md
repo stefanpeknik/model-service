@@ -40,3 +40,20 @@ the same morning.
 
 So the standalone display fix in the case browser is still unconfirmed, and
 `empaia-30` has not yet run a job end to end.
+
+## empaia-31, 2026-11-12
+
+`empaia-31` (built from `727f625`) renames the API process to `api`: the
+Deployment and Service are now `model-service-api` and the image
+`model-service-api`. It also moves standalone results to their requested
+path, makes EMPAIA optional in the chart, defaults the lease to five minutes and
+composes the scheduler's transitions and PostgreSQL operations.
+
+- `helm upgrade` to revision 13 created `model-service-api` (2/2) and removed
+  the old `model-service-execution-scheduler` Deployment and Service.
+- `test-jobs-jes` now has `JES_HTTP_TARGETS` pointing at
+  `http://model-service-api.rationai-infra-test-ns.svc.cluster.local:8080/v1/empaia`
+  (set with `oc set env`; a `helm upgrade` of `test-jobs` reverts it). JES
+  reaches `GET /v1/models` with 200.
+- The API re-registered app `71e38adc`; `/healthz/deployments` is `ready` while
+  the RayService rolls to the new cluster.
