@@ -64,7 +64,6 @@ from model_service.scheduler.public import (
     ProviderFinishOutcome,
     ProviderSuccess,
     ScheduleRequest,
-    SchedulingUnavailableError,
     SubmissionIdentity,
 )
 
@@ -188,9 +187,7 @@ class EmpaiaProviderAdapter(ProviderAdapter):
             try:
                 configuration = await gateway.get_configuration()
             except EmpaiaGatewayError as error:
-                if error.retryable:
-                    raise SchedulingUnavailableError(error.safe_message) from error
-                raise InvalidScheduleRequestError(error.safe_message) from error
+                raise_preparation_error(error)
             if not is_json_value(configuration):
                 raise InvalidScheduleRequestError(
                     "EMPAIA configuration must contain only JSON-compatible values"
