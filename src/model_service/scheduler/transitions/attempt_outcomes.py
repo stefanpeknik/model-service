@@ -25,7 +25,8 @@ from model_service.scheduler.status import (
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from model_service.scheduler.internal_state import Settlement
+    from model_service.scheduler.internal_state import RetryPolicy, Settlement
+    from model_service.scheduler.transitions.expiry import ExpiryTransitions
 
 
 from model_service.scheduler.transitions.common import (
@@ -33,12 +34,34 @@ from model_service.scheduler.transitions.common import (
     SettlementDecision,
     SettlementRejected,
     SettlementRejection,
-    TransitionsBase,
+    clear_work,
+    require_kind,
+    require_provider_kind,
+    retry,
+    terminal_failure,
+    work_deadline_at,
 )
 
 
-class AttemptOutcomeTransitions(TransitionsBase):
+class AttemptOutcomeTransitions:
     """Settling an attempt's outcome: success, retry or failure."""
+
+    def __init__(
+        self,
+        processing_policy: RetryPolicy,
+        finish_policy: RetryPolicy,
+        expiry: ExpiryTransitions,
+    ) -> None:
+        """Keep the retry policies and the expiry rules a settlement past its deadline applies.
+
+        Args:
+            processing_policy: Attempts and backoff for builder processing.
+            finish_policy: Attempts and backoff for provider finish and reports.
+            expiry: Deadline and lease-recovery rules.
+        """
+        self._processing_policy = processing_policy
+        self._finish_policy = finish_policy
+        self._expiry = expiry
 
     def decide_settlement(
         self,
@@ -67,9 +90,10 @@ class AttemptOutcomeTransitions(TransitionsBase):
         """
         if execution.fencing_token != fencing_token:
             return SettlementRejected(SettlementRejection.STALE_CLAIM)
-        if self.work_deadline_at(execution) <= now:
+        if work_deadline_at(execution) <= now:
             return SettlementRejected(
-                SettlementRejection.DEADLINE_EXCEEDED, self.deadline(execution, now)
+                SettlementRejection.DEADLINE_EXCEEDED,
+                self._expiry.deadline(execution, now),
             )
         if execution.lease_expires_at is None or execution.lease_expires_at <= now:
             return SettlementRejected(SettlementRejection.STALE_CLAIM)
@@ -96,12 +120,12 @@ class AttemptOutcomeTransitions(TransitionsBase):
         Raises:
             StaleWorkClaimError: The claim is not provider work, its token or lease is no longer current, or its deadline passed.
         """
-        self._require_provider_kind(execution)
+        require_provider_kind(execution)
         if (
             execution.fencing_token != fencing_token
             or execution.lease_expires_at is None
             or execution.lease_expires_at <= now
-            or self.work_deadline_at(execution) <= now
+            or work_deadline_at(execution) <= now
         ):
             raise StaleWorkClaimError("provider finish claim is no longer current")
         return replace(execution, finish_mutation_started=True, updated_at=now)
@@ -131,7 +155,7 @@ class AttemptOutcomeTransitions(TransitionsBase):
             TypeError: The settlement type is unknown.
         """
         if isinstance(settlement, ProcessingSucceeded):
-            self._require_kind(execution, WorkKind.PROCESSING)
+            require_kind(execution, WorkKind.PROCESSING)
             return replace(
                 execution,
                 status=ExecutionStatus.RUNNING,
@@ -144,7 +168,7 @@ class AttemptOutcomeTransitions(TransitionsBase):
                 updated_at=now,
             )
         if isinstance(settlement, ProcessingRejected):
-            self._require_kind(execution, WorkKind.PROCESSING)
+            require_kind(execution, WorkKind.PROCESSING)
             rejection_count = execution.processing_rejections + 1
             backoff = self._processing_policy.backoff(rejection_count)
             if settlement.retry_after is not None:
@@ -161,25 +185,25 @@ class AttemptOutcomeTransitions(TransitionsBase):
                 updated_at=now,
             )
         if isinstance(settlement, ProcessingFailed):
-            self._require_kind(execution, WorkKind.PROCESSING)
+            require_kind(execution, WorkKind.PROCESSING)
             if (
                 settlement.retryable
                 and execution.processing_attempts < self._processing_policy.max_attempts
             ):
-                return self._retry(
+                return retry(
                     execution,
                     now,
                     self._processing_policy.backoff(execution.processing_attempts),
                     status=ExecutionStatus.QUEUED,
                 )
-            return self._terminal_failure(
+            return terminal_failure(
                 execution,
                 settlement.error,
                 now,
                 report=True,
             )
         if isinstance(settlement, ProviderFinishSucceeded):
-            self._require_provider_kind(execution)
+            require_provider_kind(execution)
             return replace(
                 execution,
                 status=(
@@ -196,14 +220,14 @@ class AttemptOutcomeTransitions(TransitionsBase):
                 updated_at=now,
             )
         if isinstance(settlement, ProviderFinishFailed):
-            self._require_provider_kind(execution)
+            require_provider_kind(execution)
             if (
                 settlement.retryable
                 and not settlement.outcome_unknown
                 and execution.finish_attempts < self._finish_policy.max_attempts
             ):
                 return replace(
-                    self._retry(
+                    retry(
                         execution,
                         now,
                         self._finish_policy.backoff(execution.finish_attempts),
@@ -214,10 +238,8 @@ class AttemptOutcomeTransitions(TransitionsBase):
             if execution.work_kind is WorkKind.PROVIDER_FINISH:
                 # Tell the provider: an EMPAIA job must not stay open after a
                 # publication that failed or whose outcome is unknown.
-                return self._terminal_failure(
-                    execution, settlement.error, now, report=True
-                )
-            return self._clear_work(execution, now)
+                return terminal_failure(execution, settlement.error, now, report=True)
+            return clear_work(execution, now)
         raise TypeError("unknown work settlement")
 
     def unreadable(self, execution: ExecutionRecord, now: datetime) -> ExecutionRecord:
@@ -233,8 +255,8 @@ class AttemptOutcomeTransitions(TransitionsBase):
             The failed record with no pending work, or the ended record with its work cleared.
         """
         if execution.status in {ExecutionStatus.FAILED, ExecutionStatus.CANCELLED}:
-            return self._clear_work(execution, now)
-        return self._terminal_failure(
+            return clear_work(execution, now)
+        return terminal_failure(
             execution,
             ExecutionError(
                 code=ExecutionErrorCode.PROTECTED_CONTEXT_UNREADABLE,

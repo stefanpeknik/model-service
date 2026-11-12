@@ -25,7 +25,7 @@ TRANSITIONS = ExecutionTransitions(POLICY, POLICY)
 
 def publishing():
     deadline = NOW + timedelta(minutes=5)
-    admitted = TRANSITIONS.admit(
+    admitted = TRANSITIONS.admission.admit(
         Admission(
             identity=SubmissionIdentity("empaia", "job", "job"),
             builder_id="heatmap",
@@ -56,13 +56,13 @@ def publishing():
 
 class TransitionTests(unittest.TestCase):
     def test_a_cancellation_report_gets_its_own_attempts(self) -> None:
-        cancelled = TRANSITIONS.cancel(publishing(), NOW)
+        cancelled = TRANSITIONS.admission.cancel(publishing(), NOW)
 
         self.assertIs(cancelled.work_kind, WorkKind.PROVIDER_CANCELLATION_REPORT)
         self.assertEqual(cancelled.finish_attempts, 0)
 
     def test_an_unreadable_context_fails_without_a_report(self) -> None:
-        failed = TRANSITIONS.unreadable(publishing(), NOW)
+        failed = TRANSITIONS.outcomes.unreadable(publishing(), NOW)
 
         self.assertIs(failed.status, ExecutionStatus.FAILED)
         self.assertIsNone(failed.work_kind)
@@ -72,9 +72,9 @@ class TransitionTests(unittest.TestCase):
         )
 
     def test_an_unreadable_context_keeps_an_outcome_already_reached(self) -> None:
-        cancelled = TRANSITIONS.cancel(publishing(), NOW)
+        cancelled = TRANSITIONS.admission.cancel(publishing(), NOW)
 
-        ended = TRANSITIONS.unreadable(cancelled, NOW)
+        ended = TRANSITIONS.outcomes.unreadable(cancelled, NOW)
 
         self.assertIs(ended.status, ExecutionStatus.CANCELLED)
         self.assertIsNone(ended.work_kind)

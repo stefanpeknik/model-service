@@ -320,7 +320,7 @@ class PostgresBase:
             .with_for_update(skip_locked=True)
         )
         for row in rows:
-            recovered = self._transitions.recover_expired(self._record(row), now)
+            recovered = self._transitions.expiry.recover_expired(self._record(row), now)
             await self._persist_state(session, row, recovered)
 
     async def _expire_deadlines(self, session: AsyncSession, now: datetime) -> None:
@@ -373,7 +373,7 @@ class PostgresBase:
         )
         for row in rows:
             await self._persist_state(
-                session, row, self._transitions.deadline(self._record(row), now)
+                session, row, self._transitions.expiry.deadline(self._record(row), now)
             )
 
 

@@ -18,12 +18,33 @@ from model_service.scheduler.status import (
 if TYPE_CHECKING:
     from datetime import datetime
 
+    from model_service.scheduler.internal_state import RetryPolicy
 
-from model_service.scheduler.transitions.common import TransitionsBase
+
+from model_service.scheduler.transitions.common import (
+    clear_work,
+    finish_outcome_unknown,
+    retry,
+    terminal_failure,
+)
 
 
-class ExpiryTransitions(TransitionsBase):
+class ExpiryTransitions:
     """Expired leases and passed deadlines."""
+
+    def __init__(
+        self,
+        processing_policy: RetryPolicy,
+        finish_policy: RetryPolicy,
+    ) -> None:
+        """Keep the retry policies.
+
+        Args:
+            processing_policy: Attempts and backoff for builder processing.
+            finish_policy: Attempts and backoff for provider finish and reports.
+        """
+        self._processing_policy = processing_policy
+        self._finish_policy = finish_policy
 
     def recover_expired(
         self,
@@ -46,7 +67,7 @@ class ExpiryTransitions(TransitionsBase):
             execution.work_kind is WorkKind.PROVIDER_FINISH
             and execution.finish_mutation_started
         ):
-            return self._finish_outcome_unknown(execution, now)
+            return finish_outcome_unknown(execution, now)
         if (
             execution.work_kind
             in {
@@ -55,12 +76,12 @@ class ExpiryTransitions(TransitionsBase):
             }
             and execution.finish_mutation_started
         ):
-            return self._clear_work(execution, now)
+            return clear_work(execution, now)
         if (
             execution.work_kind is WorkKind.PROCESSING
             and execution.processing_attempts >= self._processing_policy.max_attempts
         ):
-            return self._terminal_failure(
+            return terminal_failure(
                 execution,
                 ExecutionError(
                     code=ExecutionErrorCode.PROCESSING_ATTEMPTS_EXHAUSTED,
@@ -73,7 +94,7 @@ class ExpiryTransitions(TransitionsBase):
             )
         if execution.finish_attempts >= self._finish_policy.max_attempts:
             if execution.work_kind is WorkKind.PROVIDER_FINISH:
-                return self._terminal_failure(
+                return terminal_failure(
                     execution,
                     ExecutionError(
                         code=ExecutionErrorCode.PROVIDER_FINISH_ATTEMPTS_EXHAUSTED,
@@ -84,10 +105,10 @@ class ExpiryTransitions(TransitionsBase):
                     now,
                     report=True,
                 )
-            return self._clear_work(execution, now)
+            return clear_work(execution, now)
         processing = execution.work_kind is WorkKind.PROCESSING
         policy = self._processing_policy if processing else self._finish_policy
-        return self._retry(
+        return retry(
             execution,
             now,
             policy.backoff(execution.current_attempt),
@@ -111,15 +132,15 @@ class ExpiryTransitions(TransitionsBase):
             execution.work_kind is WorkKind.PROVIDER_FINISH
             and execution.finish_mutation_started
         ):
-            return self._finish_outcome_unknown(execution, now)
+            return finish_outcome_unknown(execution, now)
         if execution.status in {ExecutionStatus.FAILED, ExecutionStatus.CANCELLED}:
             if (
                 execution.terminal_report_deadline_at is not None
                 and execution.terminal_report_deadline_at > now
             ):
                 return execution
-            return self._clear_work(execution, now)
-        return self._terminal_failure(
+            return clear_work(execution, now)
+        return terminal_failure(
             execution,
             ExecutionError(
                 code=ExecutionErrorCode.DEADLINE_EXCEEDED,

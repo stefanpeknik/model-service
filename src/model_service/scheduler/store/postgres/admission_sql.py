@@ -97,7 +97,7 @@ class AdmissionOperations(PostgresBase):
             ExecutionRepositoryUnavailableError: The database is unavailable.
         """
         async with self._transaction() as session:
-            execution = self._transitions.admit(
+            execution = self._transitions.admission.admit(
                 admission, execution_id, await self._database_now(session)
             )
             row = await session.scalar(
@@ -194,7 +194,7 @@ class AdmissionOperations(PostgresBase):
         async with self._transaction() as session:
             row = await self._fetch(session, execution_id, for_update=True)
             execution = self._record(row)
-            cancelled = self._transitions.cancel(
+            cancelled = self._transitions.admission.cancel(
                 execution, await self._database_now(session)
             )
             if cancelled is execution:

@@ -60,7 +60,7 @@ class ClaimOperations(PostgresBase):
             execution = await self._claimable(session, row, now)
             if execution is None:
                 return None
-            claimed = self._transitions.claim(
+            claimed = self._transitions.leases.claim(
                 execution,
                 owner=owner,
                 fencing_token=str(uuid4()),
@@ -92,7 +92,7 @@ class ClaimOperations(PostgresBase):
         """
         async with self._transaction() as session:
             row = await self._fetch(session, execution_id, for_update=True)
-            decision = self._transitions.decide_renewal(
+            decision = self._transitions.leases.decide_renewal(
                 self._record(row),
                 fencing_token=fencing_token,
                 lease_duration=lease_duration,
@@ -238,6 +238,8 @@ class ClaimOperations(PostgresBase):
         except ValueError:  # Includes ProtectedContextError: a bad envelope or key.
             logger.error("execution %s has an unreadable provider context", row.id)
             # Not _persist_state: the stored bytes stay, in case the key was wrong.
-            self._apply_state(row, self._transitions.unreadable(self._record(row), now))
+            self._apply_state(
+                row, self._transitions.outcomes.unreadable(self._record(row), now)
+            )
             await session.flush()
             return None

@@ -35,7 +35,7 @@ class SettlementOperations(PostgresBase):
         """
         async with self._transaction() as session:
             row = await self._fetch(session, execution_id, for_update=True)
-            decision = self._transitions.decide_settlement(
+            decision = self._transitions.outcomes.decide_settlement(
                 self._record(row),
                 fencing_token,
                 settlement,
@@ -63,7 +63,7 @@ class SettlementOperations(PostgresBase):
         """
         async with self._transaction() as session:
             row = await self._fetch(session, execution_id, for_update=True)
-            marked = self._transitions.mark_finish_mutation_started(
+            marked = self._transitions.outcomes.mark_finish_mutation_started(
                 self._record(row),
                 fencing_token,
                 await self._database_now(session),

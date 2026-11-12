@@ -38,6 +38,7 @@ from model_service.scheduler.public import (
 )
 from model_service.scheduler.status import ExecutionStatus
 from model_service.scheduler.transitions import ExecutionTransitions
+from model_service.scheduler.transitions.common import work_deadline_at
 
 
 if TYPE_CHECKING:
@@ -123,7 +124,7 @@ class InMemoryExecutionRepository:
                 self._check_fingerprint(existing, admission.identity)
                 return AdmissionResult(existing, created=False)
             now = self._clock()
-            execution = self._transitions.admit(
+            execution = self._transitions.admission.admit(
                 admission,
                 str(uuid4()),
                 now,
@@ -149,7 +150,7 @@ class InMemoryExecutionRepository:
         """Apply cancellation atomically and store the record with its previous claim invalidated."""
         async with self._operation():
             execution = self._get(execution_id)
-            cancelled = self._transitions.cancel(execution, self._clock())
+            cancelled = self._transitions.admission.cancel(execution, self._clock())
             self._store(cancelled)
             return cancelled
 
@@ -208,7 +209,7 @@ class InMemoryExecutionRepository:
                 token = str(uuid4())
                 if execution.work_kind is WorkKind.PROCESSING:
                     active[target] = active.get(target, 0) + 1
-                claimed = self._transitions.claim(
+                claimed = self._transitions.leases.claim(
                     execution,
                     owner=owner,
                     fencing_token=token,
@@ -229,7 +230,7 @@ class InMemoryExecutionRepository:
         async with self._operation():
             execution = self._get(execution_id)
             now = self._clock()
-            decision = self._transitions.decide_renewal(
+            decision = self._transitions.leases.decide_renewal(
                 execution,
                 fencing_token=fencing_token,
                 lease_duration=lease_duration,
@@ -249,7 +250,7 @@ class InMemoryExecutionRepository:
         async with self._operation():
             execution = self._get(execution_id)
             now = self._clock()
-            decision = self._transitions.decide_settlement(
+            decision = self._transitions.outcomes.decide_settlement(
                 execution,
                 fencing_token,
                 settlement,
@@ -268,7 +269,7 @@ class InMemoryExecutionRepository:
         async with self._operation():
             execution = self._get(execution_id)
             self._executions[execution_id] = (
-                self._transitions.mark_finish_mutation_started(
+                self._transitions.outcomes.mark_finish_mutation_started(
                     execution,
                     fencing_token,
                     self._clock(),
@@ -284,7 +285,7 @@ class InMemoryExecutionRepository:
                 or execution.lease_expires_at > now
             ):
                 continue
-            self._store(self._transitions.recover_expired(execution, now))
+            self._store(self._transitions.expiry.recover_expired(execution, now))
 
     @asynccontextmanager
     async def _operation(self) -> AsyncIterator[None]:
@@ -311,7 +312,7 @@ class InMemoryExecutionRepository:
     def _expire_deadlines(self, now: datetime) -> None:
         """Apply the appropriate execution or reporting deadline to records that still have work."""
         for execution in tuple(self._executions.values()):
-            deadline_at = self._transitions.work_deadline_at(execution)
+            deadline_at = work_deadline_at(execution)
             if deadline_at <= now and (
                 execution.status
                 not in {
@@ -321,7 +322,7 @@ class InMemoryExecutionRepository:
                 }
                 or execution.work_kind is not None
             ):
-                self._store(self._transitions.deadline(execution, now))
+                self._store(self._transitions.expiry.deadline(execution, now))
 
     @staticmethod
     def _check_fingerprint(

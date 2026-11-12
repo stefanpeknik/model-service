@@ -18,16 +18,26 @@ from model_service.scheduler.status import ExecutionStatus
 if TYPE_CHECKING:
     from datetime import datetime, timedelta
 
+    from model_service.scheduler.transitions.expiry import ExpiryTransitions
+
 
 from model_service.scheduler.transitions.common import (
     ClaimDecision,
     RenewalDecision,
-    TransitionsBase,
+    work_deadline_at,
 )
 
 
-class LeaseTransitions(TransitionsBase):
+class LeaseTransitions:
     """Claiming work and deciding lease renewal."""
+
+    def __init__(self, expiry: ExpiryTransitions) -> None:
+        """Keep the expiry rules a renewal past its deadline applies.
+
+        Args:
+            expiry: Deadline and lease-recovery rules.
+        """
+        self._expiry = expiry
 
     @staticmethod
     def claim(
@@ -130,9 +140,9 @@ class LeaseTransitions(TransitionsBase):
                     else RenewDirective.LEASE_LOST
                 ),
             )
-        if self.work_deadline_at(execution) <= now:
+        if work_deadline_at(execution) <= now:
             return RenewalDecision(
-                execution=self.deadline(execution, now),
+                execution=self._expiry.deadline(execution, now),
                 directive=RenewDirective.DEADLINE_EXCEEDED,
             )
         return RenewalDecision(
