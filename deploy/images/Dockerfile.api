@@ -4,9 +4,9 @@ FROM python:3.12-slim
 
 COPY --from=uv /uv /usr/local/bin/uv
 
-# uv.lock pins every dependency. The EMPAIA SDK is a path dependency on the
-# sibling checkout, so it comes from the `empaia-sdk` build context instead;
-# its own dependencies are in the lock.
+# uv.lock pins the API's dependencies; the `serve` extra (Ray Serve, models)
+# is left out. The EMPAIA SDK is a path dependency on the sibling checkout, so
+# it comes from the `empaia-sdk` build context; its own dependencies are locked.
 COPY pyproject.toml uv.lock /tmp/lock/
 RUN uv export --project /tmp/lock --frozen --no-dev --no-emit-project \
         --no-emit-package rationai-empaia -o /tmp/lock/requirements.txt \
@@ -15,8 +15,6 @@ RUN uv export --project /tmp/lock --frozen --no-dev --no-emit-project \
 COPY --from=empaia-sdk pyproject.toml README.md LICENSE /opt/empaia-sdk/
 COPY --from=empaia-sdk rationai /opt/empaia-sdk/rationai
 RUN uv pip install --system --no-cache --no-deps /opt/empaia-sdk
-# The locked pyvips needs libvips, which the slim base lacks.
-RUN uv pip install --system --no-cache "pyvips[binary]>=3.0.0,<4"
 
 WORKDIR /app
 ARG SOURCE_REVISION
