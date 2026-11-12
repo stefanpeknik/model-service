@@ -222,7 +222,7 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
                 ["global", "local_mean"],
             )
 
-    async def test_scheduled_run_writes_to_an_attempt_directory(self) -> None:
+    async def test_scheduled_run_ends_at_the_requested_path(self) -> None:
         client = await self.client(("tile",))
 
         async with self.scheduler.running():
@@ -242,7 +242,7 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(view["status"], "succeeded", view)
         self.assertEqual(view["model_id"], "encoder")
         path = Path(view["result"]["outputs"]["embeddings"]["path"])
-        self.assertIn(".attempts", path.parts)
+        self.assertNotIn(".attempts", path.parts)
         self.assertTrue(path.is_file())
 
     async def test_model_failure_leaves_no_artifact(self) -> None:

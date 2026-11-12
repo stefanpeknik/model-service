@@ -1,16 +1,22 @@
 """Standalone provider: shared-storage inputs and outputs, no external job lifecycle.
 
-The caller's idempotency key identifies a submission. Finish is a no-op because
-outputs already sit in shared storage, but it still runs through the common
-provider finish.
+The caller's idempotency key identifies a submission. Scheduled attempts write
+below `.attempts/<execution>/` in the shared-storage root; finish moves the
+accepted attempt's artifacts to their requested paths and removes that
+directory, including failed and superseded attempts.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
+import shutil
+from dataclasses import replace
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from pydantic import ValidationError
 
@@ -22,10 +28,19 @@ from model_service.contracts.invocation import (
     ExecutionContext,
     SharedPathInput,
 )
+from model_service.contracts.result import BuilderResult, SharedArtifact
 from model_service.providers.provider import Provider, ProviderAdapter
+from model_service.providers.standalone.shared_storage import (
+    ATTEMPTS_DIR,
+    ATTEMPTS_KEY,
+    SharedStorageAccess,
+    SharedStorageAccessFactory,
+)
 from model_service.scheduler.public import (
     InvalidScheduleRequestError,
     PreparedInvocation,
+    ProviderFinishFailureError,
+    ProviderSuccess,
     ScheduleRequest,
     SubmissionIdentity,
 )
@@ -39,9 +54,6 @@ if TYPE_CHECKING:
     from model_service.contracts.json_values import JsonValue
     from model_service.deployed_models.catalog import ModelCatalog
     from model_service.providers.provider import ApiContribution
-    from model_service.providers.standalone.shared_storage import (
-        SharedStorageAccessFactory,
-    )
     from model_service.scheduler.public import BeforeMutation, ProviderFinishOutcome
     from model_service.scheduler.settings import SchedulerSettings
 
@@ -109,7 +121,8 @@ class StandaloneProviderAdapter(ProviderAdapter):
                 before it.
 
         Returns:
-            The invocation, with no protected context.
+            The invocation, with the root and a fresh attempts directory name as
+            protected context.
 
         Raises:
             InvalidScheduleRequestError: If the body is invalid, the invocation fails
@@ -134,19 +147,65 @@ class StandaloneProviderAdapter(ProviderAdapter):
             for name, value in invocation.inputs.items():
                 if isinstance(value, SharedPathInput):
                     access.input_path(name)
+            root = self._shared_storage.root(invocation.input_access.state)
         except InvalidInvocation as error:
             raise InvalidScheduleRequestError(str(error)) from error
-        return PreparedInvocation(invocation=invocation, protected_context={})
+        return PreparedInvocation(
+            invocation=invocation,
+            protected_context={"root": str(root), ATTEMPTS_KEY: uuid4().hex},
+        )
 
     async def finish(
         self,
-        _protected_context: dict[str, JsonValue],
-        _outcome: ProviderFinishOutcome,
+        protected_context: dict[str, JsonValue],
+        outcome: ProviderFinishOutcome,
         *,
         before_mutation: BeforeMutation,
-    ) -> None:
-        """Do nothing; the outputs already sit in shared storage."""
+    ) -> BuilderResult | None:
+        """Move accepted artifacts to their requested paths and remove the attempts.
+
+        A retry after a partial move finds the moved files in place. Executions
+        admitted without an attempts directory keep their outputs where they are.
+
+        Returns:
+            On success, the result with the requested paths; otherwise None.
+
+        Raises:
+            ProviderFinishFailureError: An artifact could not be moved; retryable.
+        """
         del before_mutation
+        root, group = protected_context.get("root"), protected_context.get(ATTEMPTS_KEY)
+        if not isinstance(root, str) or not isinstance(group, str):
+            return None
+        attempts = Path(root, ATTEMPTS_DIR, group)
+        result = None
+        if isinstance(outcome, ProviderSuccess):
+            outputs = dict(outcome.result.outputs)
+            try:
+                for name, output in outputs.items():
+                    if not isinstance(output, SharedArtifact):
+                        continue
+                    source = Path(output.path)
+                    if not source.is_relative_to(attempts):
+                        continue
+                    # Drop the attempt's own directory from the relative path.
+                    relative = source.relative_to(attempts).parts[1:]
+                    destination = SharedStorageAccess(Path(root), {}).output_path(
+                        "/".join(relative)
+                    )
+                    if source.exists():
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        os.replace(source, destination)
+                    outputs[name] = replace(output, path=str(destination))
+            except (OSError, InvalidInvocation) as error:
+                raise ProviderFinishFailureError(
+                    code="output_unavailable",
+                    safe_message="could not move the result to its output path",
+                    retryable=True,
+                ) from error
+            result = BuilderResult(outputs)
+        shutil.rmtree(attempts, ignore_errors=True)
+        return result
 
 
 class StandaloneProvider(Provider):
@@ -169,9 +228,6 @@ class StandaloneProvider(Provider):
             the API contribution.
         """
         from model_service.providers.provider import ApiContribution
-        from model_service.providers.standalone.shared_storage import (
-            SharedStorageAccessFactory,
-        )
 
         del catalog
         return ApiContribution(
@@ -191,10 +247,6 @@ class StandaloneProvider(Provider):
         Returns:
             The shared-storage adapter, keyed by `SHARED_STORAGE`.
         """
-        from model_service.providers.standalone.shared_storage import (
-            SharedStorageAccessFactory,
-        )
-
         return {
             SHARED_STORAGE: SharedStorageAccessFactory(settings.shared_storage_roots)
         }

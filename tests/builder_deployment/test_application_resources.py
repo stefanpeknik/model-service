@@ -361,12 +361,14 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
                     await adapter.create(invocation("empaia", state), context)
                 self.assertNotIn("secret", str(raised.exception))
 
-    async def test_worker_supplies_the_attempt_and_isolates_results(self) -> None:
+    async def test_worker_isolates_attempts_and_finish_moves_results(self) -> None:
         with TemporaryDirectory() as directory:
             attempts: list[str | None] = []
+            written: list[Path] = []
 
             async def build(context: BuilderContext) -> BuilderResult:
                 output = context.output_path("artifact")
+                written.append(output)
                 output.parent.mkdir(parents=True, exist_ok=True)
                 output.write_bytes(str(len(attempts)).encode())
                 return BuilderResult({"artifact": SharedArtifact(str(output))})
@@ -449,10 +451,11 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
                 artifact = item.result.outputs["artifact"]
                 assert isinstance(artifact, SharedArtifact)
                 paths.append(Path(artifact.path))
-            self.assertNotEqual(paths[0], paths[1])
-            self.assertTrue(all(".attempts" in path.parts for path in paths))
-            self.assertEqual(paths[0].read_bytes(), b"1")
-            self.assertEqual(paths[1].read_bytes(), b"2")
+            self.assertNotEqual(written[0], written[1])
+            self.assertTrue(all(".attempts" in path.parts for path in written))
+            self.assertEqual(paths, [Path(directory).resolve() / "result.bin"] * 2)
+            self.assertEqual(paths[0].read_bytes(), b"2")
+            self.assertEqual(list((Path(directory) / ".attempts").iterdir()), [])
             self.assertEqual(len(set(attempts)), 2)
             self.assertNotIn(None, attempts)
 

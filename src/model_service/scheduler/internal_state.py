@@ -176,6 +176,9 @@ class ProcessingSucceeded:
 class ProviderFinishSucceeded:
     """Report that publication or terminal reporting completed successfully."""
 
+    # Replaces the stored result when the provider moved its outputs.
+    result: BuilderResult | None = None
+
 
 @dataclass(frozen=True, slots=True)
 class ProcessingRejected:

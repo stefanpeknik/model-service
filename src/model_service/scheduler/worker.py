@@ -358,12 +358,12 @@ class ExecutionWorker:
                 )
                 mutation_started = True
 
-            await self._providers[claim.provider].finish(
+            result = await self._providers[claim.provider].finish(
                 claim.protected_context,
                 _finish_outcome(claim),
                 before_mutation=before_mutation,
             )
-            return ProviderFinishSucceeded()
+            return ProviderFinishSucceeded(result)
         except ProviderFinishFailureError as error:
             return ProviderFinishFailed(
                 error=ExecutionError(error.code, error.safe_message),

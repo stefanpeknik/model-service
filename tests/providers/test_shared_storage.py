@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import unittest
 from pathlib import Path
@@ -9,7 +10,14 @@ from tempfile import TemporaryDirectory
 
 from model_service.contracts.failures import InvalidInvocation
 from model_service.contracts.invocation import ExecutionContext, SharedPathInput
+from model_service.contracts.result import BuilderResult, SharedArtifact
+from model_service.providers.standalone.provider import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
+from model_service.scheduler.public import (
+    ExecutionError,
+    ProviderFailure,
+    ProviderSuccess,
+)
 from tests.support.builder_fixtures import invocation
 
 
@@ -148,6 +156,45 @@ class SharedStorageTests(unittest.TestCase):
             access(None).output_path("outputs/heatmap.tiff"),
             self.allowed.resolve() / "outputs" / "heatmap.tiff",
         )
+
+    def test_finish_moves_the_accepted_artifact_and_removes_every_attempt(
+        self,
+    ) -> None:
+        context = {"root": str(self.allowed.resolve()), "attempts": "execution"}
+
+        def write(attempt: str) -> Path:
+            path = self.adapter.create(
+                shared(self.allowed),
+                ExecutionContext(attempt, protected_context=context),
+            ).output_path("outputs/heatmap.tiff")
+            path.parent.mkdir(parents=True)
+            path.write_bytes(attempt.encode())
+            return path
+
+        write("failed")
+        success = ProviderSuccess(
+            BuilderResult({"heatmap": SharedArtifact(str(write("accepted")))}),
+            "heatmap",
+        )
+        finish = StandaloneProviderAdapter(self.adapter).finish
+
+        async def noop() -> None:
+            return None
+
+        moved = asyncio.run(finish(context, success, before_mutation=noop))
+        # A retry after the move finds the file already in place.
+        retried = asyncio.run(finish(context, success, before_mutation=noop))
+
+        final = self.allowed.resolve() / "outputs" / "heatmap.tiff"
+        self.assertEqual(moved, BuilderResult({"heatmap": SharedArtifact(str(final))}))
+        self.assertEqual(retried, moved)
+        self.assertEqual(final.read_bytes(), b"accepted")
+        self.assertEqual(list((self.allowed / ".attempts").iterdir()), [])
+
+        write("failed-again")
+        failure = ProviderFailure(ExecutionError("failed", "failed"))
+        self.assertIsNone(asyncio.run(finish(context, failure, before_mutation=noop)))
+        self.assertEqual(list((self.allowed / ".attempts").iterdir()), [])
 
 
 if __name__ == "__main__":

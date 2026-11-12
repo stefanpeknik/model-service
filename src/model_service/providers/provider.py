@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from model_service.builders.input_access import InputAccessFactory
     from model_service.contracts.invocation import InputAccessKind
     from model_service.contracts.json_values import JsonValue
+    from model_service.contracts.result import BuilderResult
     from model_service.deployed_models.catalog import ModelCatalog
     from model_service.scheduler.protocols import Scheduler
     from model_service.scheduler.public import (
@@ -86,7 +87,7 @@ class ProviderAdapter(ABC):
         outcome: ProviderFinishOutcome,
         *,
         before_mutation: BeforeMutation,
-    ) -> None:
+    ) -> BuilderResult | None:
         """Publish or report a stored outcome to the provider.
 
         Awaits before_mutation before the first external change. Scheduling and
@@ -96,6 +97,10 @@ class ProviderAdapter(ABC):
             protected_context: Provider context stored at admission.
             outcome: Success, failure or cancellation to report.
             before_mutation: Callback to await before the first external change.
+
+        Returns:
+            A result to store in place of the processing result, e.g. with moved
+            artifact paths, or None to keep it.
 
         Raises:
             ProviderFinishFailureError: Publication failed; carries retry permission and whether the outcome is unknown.

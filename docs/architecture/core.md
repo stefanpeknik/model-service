@@ -81,10 +81,12 @@ build on its request body. Adding a provider means a package and one entry in
    queued work always uses current settings.
 4. The builder replica opens inputs through an access adapter, runs, and writes
    its artifact atomically. Scheduled attempts write under
-   `.attempts/<hash of attempt token>/` so a stale attempt never overwrites a
-   newer one.
-5. Provider finish delivers the result: nothing to do for standalone, or
-   publication to the AppService for EMPAIA.
+   `.attempts/<execution>/<hash of attempt token>/` so a stale attempt never
+   overwrites a newer one.
+5. Provider finish delivers the result. Standalone moves the accepted
+   artifacts to their requested paths, stores those paths in the result and
+   removes the execution's attempt directories; EMPAIA publishes to the
+   AppService.
 
 A scheduled tile (`POST /v1/models/{m}/schedule`) is the same lifecycle with a
 different payload: the facade checks the tile against the model's `tile_size`,

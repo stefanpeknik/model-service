@@ -187,6 +187,7 @@ class AttemptOutcomeTransitions(TransitionsBase):
                     if execution.work_kind is WorkKind.PROVIDER_FINISH
                     else execution.status
                 ),
+                result=settlement.result or execution.result,
                 work_kind=None,
                 next_attempt_at=None,
                 lease_owner=None,
