@@ -8,7 +8,7 @@ authors = [
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.12"
-# What the API process needs: HTTP and the scheduler's database.
+# What the API process needs: HTTP, the scheduler's database, and the EMPAIA SDK.
 dependencies = [
     "cryptography>=45.0.0",
     "fastapi>=0.115.0",
@@ -17,6 +17,7 @@ dependencies = [
     "pydantic-settings>=2.10.0,<3",
     "pyyaml>=6.0.2",
     "psycopg[binary]>=3.2.0",
+    "rationai-empaia>=0.1.2",
     "sqlalchemy[asyncio]>=2.0.36,<2.1",
     "uvicorn>=0.30.0",
     "yoyo-migrations>=9.0.0,<10",
@@ -42,6 +43,9 @@ dev = [
     "ruff>=0.14.6",
 ]
 docs = ["mkdocs>=1.6.0", "mkdocs-material>=9.6.0", "pymdown-extensions>=10.0"]
+
+[tool.uv.sources]
+rationai-empaia = { git = "ssh://git@gitlab.ics.muni.cz/524810/empaia.git", branch = "feat/job-configuration-client-on-mr10" }
 
 [build-system]
 requires = ["hatchling>=1.25"]
