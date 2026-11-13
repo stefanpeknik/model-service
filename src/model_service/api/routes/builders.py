@@ -50,6 +50,12 @@ if TYPE_CHECKING:
 
 
 class ImmediateBuilderRequest(BuilderRequest):
+    """A synchronous builder run: the builder request plus a deadline.
+
+    Attributes:
+        deadline_at: When the run must have finished.
+    """
+
     deadline_at: Deadline
 
 
@@ -69,18 +75,42 @@ class ScheduledBuilderRequest(BuilderRequest):
 
 @dataclass(frozen=True, slots=True)
 class BuilderInputView:
+    """A builder input, as the catalog lists it.
+
+    Attributes:
+        required: Whether an invocation must provide it.
+        media_type: The expected media type, if declared.
+    """
+
     required: bool
     media_type: str | None
 
 
 @dataclass(frozen=True, slots=True)
 class BuilderOutputView:
+    """A builder output, as the catalog lists it.
+
+    Attributes:
+        kind: How the output is returned (inline or as a shared artifact).
+        media_type: The output's media type, if declared.
+    """
+
     kind: str
     media_type: str | None
 
 
 @dataclass(frozen=True, slots=True)
 class BuilderView:
+    """A builder, as the catalog lists it.
+
+    Attributes:
+        id: The builder's id.
+        accepts: The model contract it accepts.
+        inputs: Its inputs by name.
+        outputs: Its outputs by name.
+        configuration: Its configuration defaults.
+    """
+
     id: str
     accepts: InferenceContract
     inputs: dict[str, BuilderInputView]
@@ -110,6 +140,11 @@ def create_router(
         dependencies=[access.require(Action.READ_CATALOG)],
     )
     async def list_builders() -> list[BuilderView]:
+        """List the registered builders.
+
+        Returns:
+            Every builder with its inputs, outputs and configuration defaults.
+        """
         return [
             BuilderView(
                 id=spec.id,
@@ -138,6 +173,23 @@ def create_router(
         model_id: str,
         body: ImmediateBuilderRequest,
     ) -> BuilderResult:
+        """Run a builder with a model and wait for its result.
+
+        The run is abandoned when the client disconnects.
+
+        Args:
+            request: The HTTP request, watched for disconnects.
+            builder_id: The builder to run.
+            model_id: The model it uses.
+            body: Inputs, configuration and deadline.
+
+        Returns:
+            The builder's result.
+
+        Raises:
+            HTTPException: Synchronous runs are unavailable, the builder or model
+                is unknown or incompatible, or the builder failed.
+        """
         if builder_runner is None:
             raise http_error(
                 503,
@@ -196,6 +248,19 @@ def create_router(
         response: Response,
         idempotency_key: Annotated[str, Depends(require_idempotency_key)],
     ) -> ScheduleResult:
+        """Schedule a builder run with a model as a durable execution.
+
+        Args:
+            builder_id: The builder to run.
+            model_id: The model it uses.
+            body: Inputs, configuration and requested timeout.
+            response: The response, 201 for a new execution or 200 for a repeat.
+            idempotency_key: The caller's key; repeating it returns the same
+                execution.
+
+        Returns:
+            The execution's id and status.
+        """
         return await submit(
             scheduler,
             ScheduleRequest(

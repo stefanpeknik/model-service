@@ -19,6 +19,8 @@ if TYPE_CHECKING:
 
 
 class SpatialScoresClient(ModelClient[SpatialScoresModel]):
+    """Client for `spatial-scores` models: one score map per tile."""
+
     contract = InferenceContract.SPATIAL_SCORES
     methods = ("get_config", "predict")
 

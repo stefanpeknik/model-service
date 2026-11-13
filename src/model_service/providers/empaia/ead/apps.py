@@ -55,6 +55,8 @@ _TEXT = r"^[a-zA-Z0-9_\s\-]+$"
 
 
 class AppMode(StrEnum):
+    """The EMPAIA job mode an app supports."""
+
     STANDALONE = "standalone"
     PREPROCESSING = "preprocessing"
 
@@ -72,23 +74,49 @@ VIEWER_CONFIG_KEY = "aigopath_viewer"
 
 
 class _ViewerEntry(BaseModel):
+    """Base of the case browser's viewer settings; unknown fields pass through to xOpat."""
+
     # The case browser passes fields it doesn't know on to xOpat.
     model_config = ConfigDict(frozen=True, extra="allow")
 
 
 class ViewerShader(_ViewerEntry):
+    """An xOpat shader for an output.
+
+    Attributes:
+        type: The shader, e.g. `heatmap` or `colormap`.
+        params: The shader's parameters.
+    """
+
     # An xOpat shader, e.g. `heatmap` or `colormap`, with its parameters.
     type: str
     params: dict[str, JsonValue] | None = None
 
 
 class ViewerInput(_ViewerEntry):
+    """How the viewer shows an app input.
+
+    Attributes:
+        target: The input the entry applies to.
+        lossless: Whether the viewer loads it without lossy compression.
+        label: Label shown in the viewer.
+    """
+
     target: str | None = None
     lossless: bool | None = None
     label: str | None = None
 
 
 class ViewerOutput(_ViewerEntry):
+    """How the viewer shows an app output.
+
+    Attributes:
+        render: How the output is drawn.
+        label: Label shown in the viewer.
+        visible: Whether it is shown by default.
+        shader: The shader used when `render` is `shader`.
+    """
+
     render: Literal["shader", "background", "metric", "none"] | None = None
     label: str | None = None
     visible: bool | None = None
@@ -194,6 +222,17 @@ def parse_listings(blocks: Mapping[str, object]) -> dict[str, EmpaiaListing]:
 
 @dataclass(frozen=True, slots=True)
 class AppDefinition:
+    """One EMPAIA app: a builder with a model.
+
+    Attributes:
+        builder_id: The builder the app runs.
+        model_id: The model the builder uses.
+        modes: The job modes the app supports.
+        ead: The app's EAD.
+        global_configuration: Values for the EAD's `configuration.global`,
+            set when the app is registered.
+    """
+
     builder_id: str
     model_id: str
     modes: tuple[AppMode, ...]

@@ -20,6 +20,8 @@ from model_service.http_common.errors import ApiErrorCode, http_error
 
 
 class Action(StrEnum):
+    """What a caller wants to do; the authorizer decides per action."""
+
     READ_CATALOG = "read_catalog"
     RUN = "run"
     SCHEDULE = "schedule"
@@ -45,6 +47,8 @@ class AuthorizationError(Exception):
 
 
 class Authenticator(ABC):
+    """Identifies the caller of a request."""
+
     @abstractmethod
     async def authenticate(self, request: Request) -> Principal:
         """Identify the caller of a request.
@@ -62,6 +66,8 @@ class Authenticator(ABC):
 
 
 class Authorizer(ABC):
+    """Decides whether a caller may perform an action."""
+
     @abstractmethod
     async def authorize(
         self, principal: Principal, action: Action, execution_id: str | None
@@ -80,12 +86,16 @@ class Authorizer(ABC):
 
 
 class AllowAnonymous(Authenticator):
+    """Authenticator that accepts every request as anonymous."""
+
     async def authenticate(self, request: Request) -> Principal:
         """Accept every request as anonymous."""
         return Principal(None)
 
 
 class AllowAll(Authorizer):
+    """Authorizer that allows every action."""
+
     async def authorize(
         self, principal: Principal, action: Action, execution_id: str | None
     ) -> None:
@@ -95,6 +105,13 @@ class AllowAll(Authorizer):
 
 @dataclass(frozen=True, slots=True)
 class Access:
+    """The API's authentication and authorization; open by default.
+
+    Attributes:
+        authenticator: Identifies callers.
+        authorizer: Decides what they may do.
+    """
+
     authenticator: Authenticator = field(default_factory=AllowAnonymous)
     authorizer: Authorizer = field(default_factory=AllowAll)
 
@@ -113,6 +130,18 @@ class Access:
         """
 
         async def check(request: Request) -> Principal:
+            """Authenticate the caller and authorize the action.
+
+            Args:
+                request: The incoming request.
+
+            Returns:
+                The caller's principal.
+
+            Raises:
+                HTTPException: 401 when authentication fails, 403 when the action is
+                    not allowed.
+            """
             try:
                 principal = await self.authenticator.authenticate(request)
             except AuthenticationError as error:

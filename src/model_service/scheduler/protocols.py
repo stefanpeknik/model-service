@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 
 
 class Scheduler(Protocol):
+    """What the API needs from the execution scheduler."""
+
     @property
     def alive(self) -> bool:
         """Whether the scheduler's worker is still running."""

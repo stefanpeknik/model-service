@@ -27,6 +27,8 @@ from model_service.contracts.json_values import (
 
 
 class InputKind(StrEnum):
+    """How an invocation input is reached: a shared-storage path or a provider."""
+
     SHARED_PATH = "shared_path"
     PROVIDER = "provider"
 

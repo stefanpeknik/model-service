@@ -30,6 +30,8 @@ CATALOG_BLOCK = "empaia"
 
 
 class EmpaiaProvider(Provider):
+    """Runs EMPAIA jobs and registers the deployed models' EMPAIA apps."""
+
     catalog_block = CATALOG_BLOCK
 
     def api(
@@ -74,6 +76,7 @@ class EmpaiaProvider(Provider):
         marketplace = _marketplace(empaia)
 
         async def register() -> None:
+            """Register the apps until done, when a marketplace is configured."""
             if marketplace is not None and apps:
                 await register_until_done(marketplace, apps)
 

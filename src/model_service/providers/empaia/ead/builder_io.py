@@ -22,6 +22,13 @@ type IoEntry = Mapping[str, JsonValue]
 
 @dataclass(frozen=True, slots=True)
 class BuilderIo:
+    """A builder's EAD io entries, by builder input and output name.
+
+    Attributes:
+        inputs: Io entries of the builder's inputs.
+        outputs: Io entries of the builder's outputs.
+    """
+
     inputs: Mapping[str, IoEntry]
     outputs: Mapping[str, IoEntry]
 

@@ -105,12 +105,28 @@ StrideFraction = Annotated[float, Field(gt=0, le=1, allow_inf_nan=False)]
 
 @dataclass(frozen=True, slots=True)
 class InputSpec:
+    """A declared builder input.
+
+    Attributes:
+        required: Whether an invocation must provide it.
+        media_type: The expected media type, if any.
+    """
+
     required: bool = True
     media_type: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class OutputSpec:
+    """A declared builder output.
+
+    Attributes:
+        kind: Whether it is returned inline or written as a shared artifact.
+        media_type: The output's media type, if any.
+        default_path: Where an artifact is written when the invocation names
+            no path.
+    """
+
     kind: OutputKind
     media_type: str | None = None
     default_path: str | None = None
@@ -177,6 +193,20 @@ def output_specs(outputs: type[BuilderOutputs]) -> dict[str, OutputSpec]:
 
 @dataclass(frozen=True, slots=True)
 class BuilderSpec:
+    """Everything a builder declares; read by the API, the scheduler and replicas.
+
+    Attributes:
+        id: The builder's id.
+        accepts: The model contract it accepts.
+        input_model: The model of what the builder receives.
+        output_model: The model of what the builder returns.
+        configuration: The model of its configuration.
+        implementation: "module:Class" of the `Builder`, imported only in
+            builder replicas.
+        inputs: Input declarations, derived from `input_model`.
+        outputs: Output declarations, derived from `output_model`.
+    """
+
     id: str
     accepts: InferenceContract
     # What the builder receives and returns; `inputs` and `outputs` derive from them.
