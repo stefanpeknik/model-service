@@ -1,8 +1,6 @@
 - name: episeg-1
-  import_path: models.semantic_segmentation:app
+  import_path: model_service.model_implementations.semantic_segmentation:app
   route_prefix: /episeg-1
-  runtime_env:
-    working_dir: https://github.com/RationAI/model-service/archive/refs/heads/main.zip
   deployments:
     - name: SemanticSegmentation
       max_ongoing_requests: 16
@@ -30,5 +28,5 @@
         trt_cache_path: /mnt/cache/trt_cache/episeg-1/b8
         trt_builder_optimization_level: 3
         model:
-          _target_: providers.model_provider:mlflow
+          _target_: model_service.model_implementations.artifacts:mlflow
           artifact_uri: mlflow-artifacts:/10/39f821ed5b964c71a603cc6db196f9fd/artifacts/checkpoints/epoch=19-step=32020/model.onnx/model.onnx

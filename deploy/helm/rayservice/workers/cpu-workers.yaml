@@ -1,38 +1,28 @@
-groupName: mig20-gpu-workers
+groupName: cpu-workers
 replicas: 0
 minReplicas: 0
-maxReplicas: 4
-rayStartParams:
-  num-gpus: "1"
+maxReplicas: 2
 template:
   spec:
     securityContext:
-      fsGroup: 1000
       fsGroupChangePolicy: OnRootMismatch
       runAsNonRoot: true
-      runAsUser: 1000
       seccompProfile:
         type: RuntimeDefault
     containers:
       - name: ray-worker
-        image: cerit.io/rationai/model-service:2.54.0-gpu
+        image: cerit.io/rationai/model-service:2.58.0
         imagePullPolicy: Always
         resources:
           limits:
             cpu: 8
-            memory: 24Gi
-            nvidia.com/mig-2g.20gb: 1
+            memory: 16Gi
           requests:
             cpu: 8
-            memory: 24Gi
+            memory: 16Gi
         env:
           - name: HTTPS_PROXY
             value: http://proxy.ics.muni.cz:3128
-          - name: HF_TOKEN
-            valueFrom:
-              secretKeyRef:
-                name: huggingface-secret
-                key: token
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
