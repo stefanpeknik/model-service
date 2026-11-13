@@ -1,6 +1,6 @@
 """Specify atomic persistence operations used by the scheduler and worker.
 
-Every adapter applies the same ExecutionTransitions rules.
+The PostgreSQL and in-memory adapters apply the same ExecutionTransitions rules.
 Adapters translate storage failures into ExecutionRepositoryUnavailableError.
 """
 
