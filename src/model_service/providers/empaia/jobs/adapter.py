@@ -154,9 +154,9 @@ class EmpaiaProviderAdapter(ProviderAdapter):
 
         Fetches and resolves configuration, records the job's mode, creates provider
         input references, and separates public job state from protected credentials.
-        Configuration keys the builder does not take are dropped and logged.
-        Optional inputs are taken only if the job has them. Deadlines are capped at
-        credential expiry.
+        Configuration keys the builder does not take are dropped and logged, except
+        the viewer's. Optional inputs are taken only if the job has them. Deadlines
+        are capped at credential expiry.
 
         Args:
             request: The schedule request; its body is the EMPAIA schedule payload.
