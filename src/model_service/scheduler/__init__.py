@@ -12,7 +12,8 @@
 - internal_state.py: internal records, leases, retry policy and outcomes.
 - settings.py: the API process's settings.
 - builder_dispatch.py: sending a builder run to its replica over HTTP, and how a send can end.
-- store/: persistence: the repository interface every store implements.
+- store/: persistence: postgres/ (one operations class per concern over a shared
+  PostgresDatabase), rows.py, migrate.py and migrations/.
 """
 
 from model_service.scheduler.public import (

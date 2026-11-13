@@ -1,0 +1,248 @@
+"""Map durable execution records and their JSON values to PostgreSQL columns.
+
+Constraints enforce replay uniqueness and valid lease/error combinations. ORM rows stay
+inside persistence; the scheduler and worker receive domain records.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from pydantic import TypeAdapter
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    Enum,
+    Index,
+    Integer,
+    LargeBinary,
+    Text,
+    UniqueConstraint,
+    and_,
+    false,
+    func,
+    literal,
+    or_,
+)
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.types import TypeDecorator
+
+from model_service.contracts.invocation import Invocation
+from model_service.contracts.result import BuilderResult
+from model_service.scheduler.internal_state import WorkKind
+from model_service.scheduler.status import ExecutionStatus
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.engine import Dialect
+
+
+DEFAULT_SCHEMA = "model_service"
+_INVOCATION: TypeAdapter[Invocation] = TypeAdapter(Invocation)
+_RESULT: TypeAdapter[BuilderResult] = TypeAdapter(BuilderResult)
+
+
+class InvocationType(TypeDecorator[Invocation]):
+    impl = JSONB(none_as_null=True)
+    cache_ok = True
+
+    def process_bind_param(self, value: Invocation | None, dialect: Dialect) -> object:
+        """Serialize a invocation to JSON for the JSONB column.
+
+        Args:
+            value: The invocation, or None.
+            dialect: Database dialect in use.
+
+        Returns:
+            The JSON-compatible value, or None.
+        """
+        if value is None:
+            return None
+        return _INVOCATION.dump_python(value, mode="json")
+
+    def process_result_value(
+        self, value: object, dialect: Dialect
+    ) -> Invocation | None:
+        """Validate the column's JSON back into a invocation.
+
+        Args:
+            value: JSON from the JSONB column, or None.
+            dialect: Database dialect in use.
+
+        Returns:
+            The invocation, or None.
+
+        Raises:
+            pydantic.ValidationError: The JSON does not match the invocation schema.
+        """
+        return _INVOCATION.validate_python(value) if value is not None else None
+
+
+class ResultType(TypeDecorator[BuilderResult]):
+    impl = JSONB(none_as_null=True)
+    cache_ok = True
+
+    def process_bind_param(
+        self, value: BuilderResult | None, dialect: Dialect
+    ) -> object:
+        """Serialize a builder result to JSON for the JSONB column.
+
+        Args:
+            value: The result, or None.
+            dialect: Database dialect in use.
+
+        Returns:
+            The JSON-compatible value, or None.
+        """
+        return _RESULT.dump_python(value, mode="json") if value is not None else None
+
+    def process_result_value(
+        self, value: object, dialect: Dialect
+    ) -> BuilderResult | None:
+        """Validate the column's JSON back into a builder result.
+
+        Args:
+            value: JSON from the JSONB column, or None.
+            dialect: Database dialect in use.
+
+        Returns:
+            The builder result, or None.
+
+        Raises:
+            pydantic.ValidationError: The JSON does not match the builder result schema.
+        """
+        return _RESULT.validate_python(value) if value is not None else None
+
+
+class Base(DeclarativeBase):
+    """Collect execution ORM mappings for schema-name translation; Yoyo owns DDL."""
+
+
+class ExecutionRow(Base):
+    """Map one execution, including encrypted context, replay identity, pending work, counters, leases, and stored outcomes."""
+
+    __tablename__ = "executions"
+    __table_args__ = (
+        UniqueConstraint("provider", "submission_key"),
+        {"schema": DEFAULT_SCHEMA},
+    )
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True)
+    provider: Mapped[str] = mapped_column(Text)
+    submission_key: Mapped[str] = mapped_column(Text)
+    request_fingerprint: Mapped[str] = mapped_column(Text)
+    builder_id: Mapped[str] = mapped_column(Text)
+    model_id: Mapped[str] = mapped_column(Text)
+    status: Mapped[ExecutionStatus] = mapped_column(
+        Enum(
+            ExecutionStatus,
+            native_enum=False,
+            create_constraint=True,
+            length=None,
+            values_callable=lambda enum: [status.value for status in enum],
+        )
+    )
+    invocation: Mapped[Invocation] = mapped_column(InvocationType())
+    protected_context: Mapped[bytes] = mapped_column(LargeBinary)
+    deadline_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    terminal_report_deadline_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    work_kind: Mapped[WorkKind | None] = mapped_column(
+        Enum(
+            WorkKind,
+            native_enum=False,
+            create_constraint=True,
+            length=None,
+            values_callable=lambda enum: [kind.value for kind in enum],
+        )
+    )
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    processing_attempts: Mapped[int] = mapped_column(server_default=literal(0))
+    processing_rejections: Mapped[int] = mapped_column(server_default=literal(0))
+    finish_attempts: Mapped[int] = mapped_column(server_default=literal(0))
+    finish_mutation_started: Mapped[bool] = mapped_column(server_default=false())
+    lease_owner: Mapped[str | None] = mapped_column(Text)
+    fencing_token: Mapped[str | None] = mapped_column(UUID(as_uuid=False))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    result: Mapped[BuilderResult | None] = mapped_column(ResultType())
+    error_code: Mapped[str | None] = mapped_column(Text)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    priority: Mapped[int] = mapped_column(Integer, server_default=literal(1))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.clock_timestamp()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.clock_timestamp()
+    )
+
+
+for counter in (
+    ExecutionRow.processing_attempts,
+    ExecutionRow.processing_rejections,
+    ExecutionRow.finish_attempts,
+):
+    CheckConstraint(counter >= 0)
+
+CheckConstraint(
+    ExecutionRow.error_code.is_(None) == ExecutionRow.error_message.is_(None)
+)
+CheckConstraint(
+    or_(
+        and_(
+            ExecutionRow.fencing_token.is_(None),
+            ExecutionRow.lease_owner.is_(None),
+            ExecutionRow.lease_expires_at.is_(None),
+        ),
+        and_(
+            ExecutionRow.fencing_token.is_not(None),
+            ExecutionRow.lease_owner.is_not(None),
+            ExecutionRow.lease_expires_at.is_not(None),
+        ),
+    )
+)
+CheckConstraint(
+    or_(
+        ExecutionRow.result.is_(None),
+        ExecutionRow.work_kind == WorkKind.PROVIDER_FINISH,
+        ExecutionRow.status.in_(
+            [
+                ExecutionStatus.SUCCEEDED,
+                ExecutionStatus.FAILED,
+                ExecutionStatus.CANCELLED,
+            ]
+        ),
+    )
+)
+Index(
+    "executions_due_idx",
+    ExecutionRow.next_attempt_at,
+    ExecutionRow.created_at,
+    postgresql_where=ExecutionRow.work_kind.is_not(None),
+)
+Index(
+    "executions_active_processing_idx",
+    ExecutionRow.model_id,
+    ExecutionRow.lease_expires_at,
+    postgresql_where=and_(
+        ExecutionRow.work_kind == WorkKind.PROCESSING,
+        ExecutionRow.fencing_token.is_not(None),
+    ),
+)
+for name, column in (
+    ("executions_deadline_idx", ExecutionRow.deadline_at),
+    ("executions_report_deadline_idx", ExecutionRow.terminal_report_deadline_at),
+):
+    Index(name, column, postgresql_where=ExecutionRow.work_kind.is_not(None))
+Index(
+    "executions_lease_idx",
+    ExecutionRow.lease_expires_at,
+    postgresql_where=ExecutionRow.fencing_token.is_not(None),
+)
+Index(
+    "executions_finished_idx",
+    ExecutionRow.updated_at,
+    postgresql_where=ExecutionRow.work_kind.is_(None),
+)
