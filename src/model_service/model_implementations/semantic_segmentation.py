@@ -1,3 +1,5 @@
+import hashlib
+import json
 import os
 from typing import Any, NotRequired, TypedDict
 
@@ -50,7 +52,15 @@ class SemanticSegmentation:
         self.n_channels = config["n_channels"]
         self.mpp = config["mpp"]
 
-        cache_path = config["trt_cache_path"]
+        # ONNX Runtime keys a cached engine by file and tensor names, not weights
+        # or shape profile, so each checkpoint and profile gets its own directory.
+        checkpoint = json.dumps(
+            [config["model"], config["tile_size"], config["max_batch_size"]],
+            sort_keys=True,
+        ).encode()
+        cache_path = os.path.join(
+            config["trt_cache_path"], hashlib.sha256(checkpoint).hexdigest()[:12]
+        )
         os.makedirs(cache_path, exist_ok=True)
 
         min_shape = f"input:1x3x{self.tile_size}x{self.tile_size}"
