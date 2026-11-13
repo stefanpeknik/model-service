@@ -29,6 +29,15 @@ class ExecutionRepository(ABC):
     """Provide replay-safe admission, leased claims, settlement, and maintenance of durable executions."""
 
     @abstractmethod
+    async def check_ready(self) -> None:
+        """Check that storage is accessible without requiring Ray.
+
+        Raises:
+            ExecutionRepositoryUnavailableError: Storage is unavailable.
+        """
+        ...
+
+    @abstractmethod
     async def maintain(self) -> None:
         """Expire deadlines and recover abandoned leases.
 

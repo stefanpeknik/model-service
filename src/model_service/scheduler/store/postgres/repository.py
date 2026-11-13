@@ -88,6 +88,14 @@ class PostgresExecutionRepository(ExecutionRepository):
         """Apply pending Yoyo migrations under a schema-specific initialization lock."""
         await self._db.initialize()
 
+    async def check_ready(self) -> None:
+        """Query the execution table to confirm database connectivity and schema availability.
+
+        Raises:
+            ExecutionRepositoryUnavailableError: The database is unavailable.
+        """
+        await self._db.check_ready()
+
     async def maintain(self) -> None:
         """Expire deadlines and recover abandoned claims.
 

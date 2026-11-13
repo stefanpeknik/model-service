@@ -86,6 +86,14 @@ class InMemoryExecutionRepository:
         self._submissions: dict[tuple[str, str], str] = {}
         self._lock = asyncio.Lock()
 
+    async def aclose(self) -> None:
+        return None
+
+    async def check_ready(self) -> None:
+        """Acquire the repository lock to confirm this in-process adapter is available."""
+        async with self._operation():
+            return
+
     async def maintain(self) -> None:
         """Expire deadlines and recover abandoned claims under the repository lock."""
         async with self._operation():

@@ -1,8 +1,9 @@
 """Resolve builder files below a shared-storage root with traversal and symlink checks.
 
 The caller names the root, but it must lie within a root the server allows.
-Scheduled attempts write outputs below `.attempts/<hash of attempt token>/`;
-synchronous runs write to the requested relative path directly.
+Scheduled attempts write outputs below `.attempts/<execution>/<hash of attempt
+token>/`, and the provider's finish moves the accepted outputs to their
+requested paths; synchronous runs write to the requested path directly.
 """
 
 from __future__ import annotations
@@ -29,6 +30,11 @@ if TYPE_CHECKING:
     from model_service.contracts.model_declarations import ModelBinding
 
 
+ATTEMPTS_DIR = ".attempts"
+# Protected-context key naming the execution's directory below ATTEMPTS_DIR.
+ATTEMPTS_KEY = "attempts"
+
+
 class SharedStorageState(BaseModel):
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 
@@ -41,24 +47,19 @@ class SharedStorageAccess(InputAccess):
         root: Path,
         inputs: dict[str, BuilderInput],
         *,
-        processing_attempt_id: str | None = None,
+        output_prefix: str = "",
     ) -> None:
         """Hold the resolved root, the inputs and the attempt's output prefix.
 
         Args:
             root: The resolved shared-storage root, already checked against the allowed roots.
             inputs: The invocation's builder inputs by name.
-            processing_attempt_id: The scheduled attempt's ID; outputs go below
-                `.attempts/<sha256 of it>/`. None for synchronous runs, which write to
-                the requested path directly.
+            output_prefix: Relative directory a scheduled attempt writes below; empty
+                for synchronous runs, which write to the requested path directly.
         """
         self._root = root
         self._inputs = inputs
-        self._output_prefix = (
-            ".attempts/" + hashlib.sha256(processing_attempt_id.encode()).hexdigest()
-            if processing_attempt_id is not None
-            else ""
-        )
+        self._output_prefix = output_prefix
 
     def input_path(self, name: str) -> Path:
         """Resolve a shared-path input to an existing regular file below the root.
@@ -212,7 +213,8 @@ class SharedStorageAccessFactory(InputAccessFactory):
 
         Args:
             invocation: The invocation; its input access state names the root.
-            execution_context: Supplies the processing attempt ID that scopes outputs.
+            execution_context: Supplies the processing attempt ID and the
+                execution's attempts directory that scope outputs.
             model: Unused.
 
         Returns:
@@ -222,8 +224,14 @@ class SharedStorageAccessFactory(InputAccessFactory):
             InvalidInvocation: If the root is invalid or not allowed on this server.
         """
         del model
+        attempt = execution_context.processing_attempt_id
+        group = execution_context.protected_context.get(ATTEMPTS_KEY)
+        prefix = ""
+        if attempt is not None:
+            prefix = ATTEMPTS_DIR + (f"/{group}" if isinstance(group, str) else "")
+            prefix += "/" + hashlib.sha256(attempt.encode()).hexdigest()
         return SharedStorageAccess(
             self.root(invocation.input_access.state),
             invocation.inputs,
-            processing_attempt_id=execution_context.processing_attempt_id,
+            output_prefix=prefix,
         )

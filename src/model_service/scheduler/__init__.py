@@ -10,7 +10,7 @@
   attempt outcomes (the retry-or-fail decision when an attempt ends) and expiry
   (expired leases, passed deadlines), composed by ExecutionTransitions.
 - internal_state.py: internal records, leases, retry policy and outcomes.
-- settings.py: the API process's settings.
+- protocols.py: what the API needs from the scheduler (Scheduler); settings.py: process settings.
 - builder_dispatch.py: sending a builder run to its replica over HTTP, and how a send can end.
 - store/: persistence: postgres/ (one operations class per concern over a shared
   PostgresDatabase), rows.py, migrate.py and migrations/.

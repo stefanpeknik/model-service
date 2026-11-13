@@ -1,22 +1,38 @@
-"""The provider contract: how the scheduler admits and finishes a provider's jobs.
+"""The provider contract: what a provider is and every method it writes.
 
-A provider writes a `ProviderAdapter` (here): `identify`, `prepare` and
-`finish`, admitting a job and finishing it, with the types they take and return
-in scheduler/public.py. Its inputs reach builders through an
-`InputAccessFactory` (builders/input_access.py).
+A provider is a `Provider` (here) listed in `providers/registry.py`. The API
+process and the builder deployment compose the providers there and name none
+of them. A provider writes:
+
+- `Provider.api` and `Provider.input_access`: what it adds to each process;
+- a `ProviderAdapter` (here): `identify`, `prepare` and `finish`, admitting a
+  job and finishing it, with the types they take and return in
+  scheduler/public.py;
+- an `InputAccessFactory` (builders/input_access.py) whose `create` returns an
+  `InputAccess`: `input_path`, `output_path`, `is_visible_artifact`, `aclose`.
+
+Each provider imports what only one process needs inside the method for it.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
     from datetime import datetime
 
+    from fastapi import APIRouter
+
+    from model_service.builders.base import ReplicaSettings
+    from model_service.builders.input_access import InputAccessFactory
+    from model_service.contracts.invocation import InputAccessKind
     from model_service.contracts.json_values import JsonValue
     from model_service.contracts.result import BuilderResult
+    from model_service.scheduler.protocols import Scheduler
     from model_service.scheduler.public import (
         BeforeMutation,
         PreparedInvocation,
@@ -25,6 +41,7 @@ if TYPE_CHECKING:
         ScheduleRequest,
         SubmissionIdentity,
     )
+    from model_service.scheduler.settings import SchedulerSettings
 
 
 class ProviderAdapter(ABC):
@@ -85,5 +102,42 @@ class ProviderAdapter(ABC):
 
         Raises:
             ProviderFinishFailureError: Publication failed; carries retry permission and whether the outcome is unknown.
+        """
+        ...
+
+
+type RouteFactory = Callable[[Scheduler], APIRouter]
+
+
+@dataclass(frozen=True, slots=True)
+class ApiContribution:
+    adapter: ProviderAdapter
+    routes: RouteFactory | None = None
+
+
+class Provider(ABC):
+    @abstractmethod
+    def api(self, settings: SchedulerSettings) -> ApiContribution:
+        """Build what this provider adds to the API.
+
+        Args:
+            settings: the API's scheduler settings.
+
+        Returns:
+            The provider's scheduler adapter, and its routes if any.
+        """
+        ...
+
+    @abstractmethod
+    def input_access(
+        self, settings: ReplicaSettings
+    ) -> Mapping[InputAccessKind, InputAccessFactory]:
+        """Build the adapters builder replicas use for the inputs this provider hands out.
+
+        Args:
+            settings: The builder replica's settings.
+
+        Returns:
+            The access adapters by the input access kind they serve.
         """
         ...

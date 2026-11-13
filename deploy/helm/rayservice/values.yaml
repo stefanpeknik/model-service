@@ -29,7 +29,7 @@ builders:
       num_threads: 8
       max_concurrent_tasks: 16
 
-# Roots callers may name in shared-storage requests (builders).
+# Roots callers may name in shared-storage requests (API and builders).
 sharedStorageRoots: [/mnt/data, /mnt/projects]
 
 workers:
@@ -48,7 +48,26 @@ api:
     repository: cerit.io/rationai/model-service-api
     tag: ""
     pullPolicy: IfNotPresent
+  database:
+    existingSecret: ""
+    urlKey: database-url
+  encryption:
+    existingSecret: ""
+    keyKey: provider-context-key
+  sharedStorage:
+    existingClaim: ""
+    mountPath: /mnt/data
   rayServeOrigin: ""
+  leaseSeconds: 300
+  workerPollSeconds: 0.5
+  processingAttempts: 3
+  providerFinishAttempts: 3
+  initialBackoffSeconds: 5
+  maximumBackoffSeconds: 300
+  defaultDeadlineSeconds: 21600
+  maximumDeadlineSeconds: 86400
+  perModelLimit: 1
+  maxConcurrentExecutions: 4
   resources:
     requests:
       cpu: 100m

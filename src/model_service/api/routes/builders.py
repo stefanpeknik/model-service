@@ -1,15 +1,17 @@
 """`/v1/builders`: the builder catalog, and runs of a builder with a model.
 
-`/v1/builders/{builder}/models/{model}/run` waits for the result.
+`/v1/builders/{builder}/models/{model}/run` waits for the result;
+`.../schedule` admits a durable execution with shared-storage inputs.
 """
 
 from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request, Response, status
+from pydantic import Field
 
 from model_service.builders.registry import BUILDERS
 from model_service.contracts.caller_request import BuilderRequest
@@ -30,21 +32,39 @@ from model_service.http_common.errors import (
     http_error,
     lookup_error,
 )
+from model_service.http_common.scheduling import require_idempotency_key, submit
+from model_service.providers.standalone.provider import STANDALONE_PROVIDER
 from model_service.scheduler.builder_dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,
     UnknownOutcomeError,
 )
+from model_service.scheduler.public import ScheduleRequest, ScheduleResult
 
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
 
     from model_service.api.synchronous_runs import SynchronousBuilderService
+    from model_service.scheduler.protocols import Scheduler
 
 
 class ImmediateBuilderRequest(BuilderRequest):
     deadline_at: Deadline
+
+
+class ScheduledBuilderRequest(BuilderRequest):
+    """A builder request plus a timeout; the `Idempotency-Key` header names it."""
+
+    requested_timeout_seconds: Annotated[int, Field(strict=True, gt=0)] | None = None
+
+    def builder_request(self) -> dict[str, JsonValue]:
+        """Serialize the builder request without the scheduling timeout.
+
+        Returns:
+            The JSON body stored with the execution.
+        """
+        return self.model_dump(mode="json", exclude={"requested_timeout_seconds"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,12 +89,14 @@ class BuilderView:
 
 
 def create_router(
+    scheduler: Scheduler,
     builder_runner: SynchronousBuilderService | None,
     access: Access,
 ) -> APIRouter:
-    """Build the `/v1/builders` router: the catalog and synchronous runs.
+    """Build the `/v1/builders` router: the catalog, synchronous runs and scheduling.
 
     Args:
+        scheduler: Admits durable executions.
         builder_runner: Runs builders synchronously; None makes `/run` answer 503.
         access: Guards the routes.
 
@@ -160,6 +182,32 @@ def create_router(
                 "builder outcome is unknown",
                 retryable=True,
             ) from error
+
+    @router.post(
+        "/{builder_id}/models/{model_id}/schedule",
+        status_code=status.HTTP_202_ACCEPTED,
+        responses={200: {"model": ScheduleResult}, **ERRORS},
+        dependencies=[access.require(Action.SCHEDULE)],
+    )
+    async def schedule_builder(
+        builder_id: str,
+        model_id: str,
+        body: ScheduledBuilderRequest,
+        response: Response,
+        idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+    ) -> ScheduleResult:
+        return await submit(
+            scheduler,
+            ScheduleRequest(
+                builder_id=builder_id,
+                model_id=model_id,
+                provider=STANDALONE_PROVIDER,
+                body=body.builder_request(),
+                requested_timeout_seconds=body.requested_timeout_seconds,
+                idempotency_key=idempotency_key,
+            ),
+            response,
+        )
 
     return router
 

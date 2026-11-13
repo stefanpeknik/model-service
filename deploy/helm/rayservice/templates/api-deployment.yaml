@@ -1,5 +1,7 @@
 {{- if .Values.api.enabled }}
 {{- $imageTag := required "api.image.tag is required" .Values.api.image.tag }}
+{{- $databaseSecret := required "api.database.existingSecret is required" .Values.api.database.existingSecret }}
+{{- $encryptionSecret := required "api.encryption.existingSecret is required" .Values.api.encryption.existingSecret }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -45,15 +47,47 @@ spec:
             - name: http
               containerPort: 8080
           env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $databaseSecret }}
+                  key: {{ .Values.api.database.urlKey }}
+            - name: PROVIDER_CONTEXT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $encryptionSecret }}
+                  key: {{ .Values.api.encryption.keyKey }}
             - name: RAY_SERVE_ORIGIN
               value: {{ default (printf "http://%s-serve-svc.%s.svc.cluster.local:8000" .Release.Name (.Release.Namespace | default "rationai-jobs-ns")) .Values.api.rayServeOrigin | quote }}
             - name: MODEL_CATALOG_PATH
               value: /etc/model-service/model-catalog.json
             - name: BUILDER_IDS
               value: {{ keys (.Values.builders | default dict) | sortAlpha | toJson | quote }}
+            - name: SHARED_STORAGE_ROOTS
+              value: {{ .Values.sharedStorageRoots | toJson | quote }}
+            - name: LEASE_SECONDS
+              value: {{ .Values.api.leaseSeconds | quote }}
+            - name: WORKER_POLL_SECONDS
+              value: {{ .Values.api.workerPollSeconds | quote }}
+            - name: PROCESSING_ATTEMPTS
+              value: {{ .Values.api.processingAttempts | quote }}
+            - name: PROVIDER_FINISH_ATTEMPTS
+              value: {{ .Values.api.providerFinishAttempts | quote }}
+            - name: INITIAL_BACKOFF_SECONDS
+              value: {{ .Values.api.initialBackoffSeconds | quote }}
+            - name: MAXIMUM_BACKOFF_SECONDS
+              value: {{ .Values.api.maximumBackoffSeconds | quote }}
+            - name: DEFAULT_DEADLINE_SECONDS
+              value: {{ .Values.api.defaultDeadlineSeconds | quote }}
+            - name: MAXIMUM_DEADLINE_SECONDS
+              value: {{ .Values.api.maximumDeadlineSeconds | quote }}
+            - name: PER_MODEL_LIMIT
+              value: {{ .Values.api.perModelLimit | quote }}
+            - name: MAX_CONCURRENT_EXECUTIONS
+              value: {{ .Values.api.maxConcurrentExecutions | quote }}
           readinessProbe:
             httpGet:
-              path: /healthz
+              path: /readyz
               port: http
             periodSeconds: 5
             timeoutSeconds: 3
@@ -78,10 +112,19 @@ spec:
             - name: model-catalog
               mountPath: /etc/model-service
               readOnly: true
+            {{- if .Values.api.sharedStorage.existingClaim }}
+            - name: shared-storage
+              mountPath: {{ .Values.api.sharedStorage.mountPath | quote }}
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
         - name: model-catalog
           configMap:
             name: {{ .Release.Name }}-model-catalog
+        {{- if .Values.api.sharedStorage.existingClaim }}
+        - name: shared-storage
+          persistentVolumeClaim:
+            claimName: {{ .Values.api.sharedStorage.existingClaim | quote }}
+        {{- end }}
 {{- end }}

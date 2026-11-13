@@ -140,6 +140,7 @@ class PostgresExecutionRepositoryTests(
         self.addAsyncCleanup(self._drop_schema, other_schema)
         repositories = [self._repository(schema=other_schema) for _ in range(4)]
         await asyncio.gather(*(repository.initialize() for repository in repositories))
+        await repositories[0].check_ready()
         admitted = await repositories[0].admit(self._admission("fresh-schema"))
         self.assertEqual(
             await repositories[1].get(admitted.execution.id), admitted.execution
