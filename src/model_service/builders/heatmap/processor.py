@@ -137,6 +137,15 @@ async def build_heatmap(
         predictions = _StageTiming()
 
         def timed_read(x: int, y: int) -> tuple[NDArray[np.uint8] | None, float]:
+            """Read a tile and time the read.
+
+            Args:
+                x: Tile x on the read level.
+                y: Tile y on the read level.
+
+            Returns:
+                The tile, or None when it is skipped, and the seconds the read took.
+            """
             # Timed in the thread, so waiting for a free thread is not counted.
             began = time.perf_counter()
             tile = reader.read(x, y, tile_size)
@@ -145,6 +154,12 @@ async def build_heatmap(
         try:
 
             async def process_tile(x: int, y: int) -> None:
+                """Read, score and accumulate one tile.
+
+                Args:
+                    x: Tile x on the read level.
+                    y: Tile y on the read level.
+                """
                 tile, read_seconds = await loop.run_in_executor(
                     executor, timed_read, x, y
                 )

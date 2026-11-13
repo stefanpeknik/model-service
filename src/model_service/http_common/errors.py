@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 
 
 class ApiErrorCode(StrEnum):
+    """Error codes the API answers with."""
+
     INVALID_REQUEST = "invalid_request"
     UNKNOWN_BUILDER = "unknown_builder"
     UNKNOWN_MODEL = "unknown_model"
@@ -31,6 +33,14 @@ class ApiErrorCode(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ErrorDetail:
+    """An API error.
+
+    Attributes:
+        code: Machine-readable error code.
+        message: Message safe to show callers.
+        retryable: Whether the same request may succeed later.
+    """
+
     code: str
     message: str
     retryable: bool
@@ -38,6 +48,12 @@ class ErrorDetail:
 
 @dataclass(frozen=True, slots=True)
 class ErrorResponse:
+    """The API's error body.
+
+    Attributes:
+        detail: The error.
+    """
+
     detail: ErrorDetail
 
 

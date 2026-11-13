@@ -48,6 +48,8 @@ logger = logging.getLogger(__name__)
 
 
 class BuilderApplication:
+    """Runs one builder's invocations: validation, deadline, input access and cleanup."""
+
     def __init__(
         self,
         spec: BuilderSpec,

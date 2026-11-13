@@ -18,12 +18,21 @@ from model_service.contracts.json_values import (
 
 
 class OutputKind(StrEnum):
+    """How a builder output is returned: inline or as a shared artifact."""
+
     INLINE = "inline"
     SHARED_ARTIFACT = "shared_artifact"
 
 
 @dataclass(frozen=True, slots=True)
 class InlineOutput:
+    """An output returned in the result itself.
+
+    Attributes:
+        value: The JSON value.
+        kind: Always `inline`.
+    """
+
     value: JsonValue = None
     kind: Literal[OutputKind.INLINE] = OutputKind.INLINE
 
@@ -44,6 +53,12 @@ type BuilderOutput = Annotated[
 
 @dataclass(frozen=True, slots=True)
 class BuilderResult:
+    """A builder run's result.
+
+    Attributes:
+        outputs: One output per declared output name.
+    """
+
     outputs: Annotated[dict[str, BuilderOutput], Field(strict=True)]
 
 

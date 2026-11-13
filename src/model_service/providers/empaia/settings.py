@@ -35,6 +35,22 @@ class MarketplaceTarget:
 
 
 class EmpaiaSettings(BaseSettings):
+    """EMPAIA settings, read from `EMPAIA_*` environment variables.
+
+    Attributes:
+        api_urls: App Service URLs that may receive job credentials; empty
+            refuses all.
+        workspace_root: Where builders' EMPAIA inputs and outputs are kept.
+        app_service_timeout_seconds: Timeout of App Service calls.
+        marketplace_url: Marketplace to register apps in at startup; None
+            for no registration.
+        organization_id: The organization that owns the apps.
+        jes_target: model-service's name in JES's HTTP targets.
+        idp_url: Identity provider for marketplace client credentials.
+        client_id: The OAuth client id.
+        client_secret: The OAuth client secret.
+    """
+
     model_config = SettingsConfigDict(env_prefix="EMPAIA_", frozen=True, extra="ignore")
 
     # AppService URLs that may receive EMPAIA job credentials; empty refuses all.

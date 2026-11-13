@@ -53,12 +53,32 @@ UnknownBuilderError, UnknownModelError or IncompatibleModelError."""
 
 @dataclass(frozen=True, slots=True)
 class ExecutionError:
+    """Why an execution failed, safe to show callers.
+
+    Attributes:
+        code: Machine-readable error code.
+        message: Human-readable message.
+    """
+
     code: str
     message: str
 
 
 @dataclass(frozen=True, slots=True)
 class ExecutionView:
+    """An execution, as callers see it.
+
+    Attributes:
+        id: The execution's id.
+        builder_id: The builder it runs.
+        model_id: The model the builder uses.
+        status: Its status.
+        result: The builder's result, once succeeded.
+        error: Why it failed, once failed.
+        provider_pending: A failure or cancellation not yet reported to the
+            provider.
+    """
+
     id: str
     builder_id: str
     model_id: str
@@ -71,12 +91,19 @@ class ExecutionView:
 
 @dataclass(frozen=True, slots=True)
 class ScheduleResult:
+    """The outcome of scheduling.
+
+    Attributes:
+        execution: The admitted execution.
+        created: False when the submission repeated an earlier one.
+    """
+
     execution: ExecutionView
     created: bool
 
 
 class InvalidScheduleRequestError(ValueError):
-    pass
+    """The schedule request is invalid for its builder, model or provider."""
 
 
 class ScheduleConflictError(RuntimeError):
@@ -84,11 +111,11 @@ class ScheduleConflictError(RuntimeError):
 
 
 class SchedulingUnavailableError(RuntimeError):
-    pass
+    """The execution repository is temporarily unavailable."""
 
 
 class UnknownExecutionError(KeyError):
-    pass
+    """No execution has the requested id."""
 
 
 type ProviderFinishOutcome = ProviderSuccess | ProviderFailure | ProviderCancellation

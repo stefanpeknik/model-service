@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 
 
 class InputAccess(ABC):
+    """Resolves one invocation's inputs and outputs to local files."""
+
     @abstractmethod
     def input_path(self, name: str) -> Path:
         """Resolve a named invocation input to a local file.
@@ -66,6 +68,8 @@ class InputAccess(ABC):
 
 
 class InputAccessFactory(ABC):
+    """Creates the input access of one input access kind, per invocation attempt."""
+
     # The model tells an adapter that fetches slides which resolution the builder reads.
     @abstractmethod
     def create(

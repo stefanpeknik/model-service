@@ -36,12 +36,20 @@ ATTEMPTS_KEY = "attempts"
 
 
 class SharedStorageState(BaseModel):
+    """Input access state of a shared-storage invocation.
+
+    Attributes:
+        root: The directory inputs and outputs are relative to.
+    """
+
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 
     root: Annotated[str, Field(min_length=1)]
 
 
 class SharedStorageAccess(InputAccess):
+    """Resolves inputs and outputs below one checked shared-storage root."""
+
     def __init__(
         self,
         root: Path,
@@ -162,6 +170,8 @@ class SharedStorageAccess(InputAccess):
 
 
 class SharedStorageAccessFactory(InputAccessFactory):
+    """Creates shared-storage access for roots within the allowed ones."""
+
     def __init__(self, allowed_roots: Iterable[Path]) -> None:
         """Keep the roots callers may name.
 

@@ -27,6 +27,15 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class ModelView:
+    """A model, as the catalog lists it.
+
+    Attributes:
+        id: The model's id.
+        contract: Its inference contract.
+        parameters: Its contract parameters, such as tile size and mpp.
+        builders: Ids of the builders that accept it.
+    """
+
     id: str
     contract: InferenceContract
     parameters: dict[str, JsonValue]
@@ -67,6 +76,11 @@ def create_router(catalog: ModelCatalog, access: Access) -> APIRouter:
         dependencies=[access.require(Action.READ_CATALOG)],
     )
     async def list_models() -> list[ModelView]:
+        """List the deployed models.
+
+        Returns:
+            Every model in the catalog.
+        """
         return [model_view(model) for model in catalog]
 
     @router.get(
@@ -75,6 +89,17 @@ def create_router(catalog: ModelCatalog, access: Access) -> APIRouter:
         dependencies=[access.require(Action.READ_CATALOG)],
     )
     async def get_model(model_id: str) -> ModelView:
+        """Get one deployed model.
+
+        Args:
+            model_id: The model's id.
+
+        Returns:
+            The model.
+
+        Raises:
+            HTTPException: 404 for an unknown model.
+        """
         try:
             return model_view(catalog.get(model_id))
         except UnknownModelError as error:

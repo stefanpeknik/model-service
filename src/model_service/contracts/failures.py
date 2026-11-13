@@ -6,6 +6,8 @@ from enum import StrEnum
 
 
 class FailureCode(StrEnum):
+    """Why a builder run failed."""
+
     DEADLINE_EXCEEDED = "builder_deadline_exceeded"
     INTERNAL_ERROR = "builder_internal_error"
     INPUT_UNAVAILABLE = "input_unavailable"
@@ -20,11 +22,11 @@ class InvalidInvocation(ValueError):
 
 
 class UnknownBuilderError(KeyError):
-    pass
+    """No builder has the requested id."""
 
 
 class UnknownModelError(KeyError):
-    pass
+    """No model has the requested id."""
 
 
 class IncompatibleModelError(InvalidInvocation):

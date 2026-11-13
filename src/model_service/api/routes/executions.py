@@ -34,6 +34,12 @@ MAX_LOOKUP_IDS = 1000
 
 @dataclass(frozen=True, slots=True)
 class ExecutionLookup:
+    """A batch lookup of executions.
+
+    Attributes:
+        ids: The execution ids, at most `MAX_LOOKUP_IDS`.
+    """
+
     ids: Annotated[list[str], Field(max_length=MAX_LOOKUP_IDS)]
 
 
@@ -55,6 +61,18 @@ def create_router(scheduler: Scheduler, access: Access) -> APIRouter:
         dependencies=[access.require(Action.READ_EXECUTION)],
     )
     async def get_execution(execution_id: str) -> ExecutionView:
+        """Get an execution's status.
+
+        Args:
+            execution_id: The execution's id.
+
+        Returns:
+            The execution as callers see it.
+
+        Raises:
+            HTTPException: 404 for an unknown execution, 503 when the repository
+                is unavailable.
+        """
         try:
             execution = await scheduler.get(execution_id)
         except SchedulingUnavailableError as error:
@@ -81,6 +99,18 @@ def create_router(scheduler: Scheduler, access: Access) -> APIRouter:
         dependencies=[access.require(Action.CANCEL_EXECUTION)],
     )
     async def cancel_execution(execution_id: str) -> ExecutionView:
+        """Cancel an execution that has not finished.
+
+        Args:
+            execution_id: The execution's id.
+
+        Returns:
+            The execution after cancellation.
+
+        Raises:
+            HTTPException: 404 for an unknown execution, 503 when the repository
+                is unavailable.
+        """
         try:
             return await scheduler.cancel(execution_id)
         except SchedulingUnavailableError as error:
