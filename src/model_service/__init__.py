@@ -8,7 +8,7 @@
 - builder_deployment/: the Ray Serve deployment that hosts a builder.
 - deployed_models/: the deployed models (catalog.py, read from the model YAML) and
   the clients that call and check them (model_clients/).
-- providers/: where inputs come from and results go: shared storage.
+- providers/: where inputs come from and results go: the provider contract and shared storage.
 - http_common/: auth and error mapping of the public API.
 - contracts/: data shapes processes hand each other (invocation, result, failures, model
   declarations, the builder HTTP format, score grid).
