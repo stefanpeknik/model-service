@@ -63,3 +63,17 @@ spec:
 {{- range $appName := .Values.applications }}
 {{ printf "applications/%s.yaml" $appName | $.Files.Get | indent 4 }}
 {{- end }}
+{{- range $id, $builder := .Values.builders }}
+    - name: builder-{{ $id }}
+      import_path: model_service.builder_deployment.serve:app
+      route_prefix: /builders/{{ $id }}
+      deployments:
+        - name: BuilderDeployment
+          {{- toYaml $builder.deployment | nindent 10 }}
+          user_config:
+            builder_id: {{ $id }}
+            shared_storage_roots: {{ toJson $.Values.sharedStorageRoots }}
+            {{- with $builder.userConfig }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+{{- end }}

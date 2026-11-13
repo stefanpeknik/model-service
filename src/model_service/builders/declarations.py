@@ -51,14 +51,14 @@ class BuilderOutputs(BaseModel):
 
     A field is a `SharedArtifact`, annotated with `Artifact`, or an
     `InlineOutput`. A builder returns its own subclass; the registry derives the
-    builder's output declaration from the fields, and `result()` turns it into
-    the generic `BuilderResult` that is sent.
+    builder's output declaration from the fields, and the application turns it
+    into the generic `BuilderResult` that is sent and stored.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     def result(self) -> BuilderResult:
-        """Return the outputs as the generic result that is sent.
+        """Return the outputs as the generic result that is sent and stored.
 
         Returns:
             A `BuilderResult` with one entry per field.
@@ -82,8 +82,8 @@ class BuilderInputs(BaseModel):
 
     A field is a `Path` (required) or `Path | None` defaulting to None
     (optional), annotated with `Input`. The registry derives the builder's input
-    declaration from the fields; each supplied input is resolved to a local file
-    through the input access before the builder gets an instance.
+    declaration from the fields; the application resolves each supplied input to
+    a local file through the input access and hands the builder an instance.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
