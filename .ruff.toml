@@ -1,6 +1,7 @@
 fix = true
 line-length = 88
 target-version = "py312"
+src = ["src", "."]
 
 [format]
 docstring-code-format = true # Enable reformatting of code snippets in docstrings.
