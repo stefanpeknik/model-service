@@ -6,8 +6,8 @@ Application queries remain ORM-based. SQL here describes schema changes only.
 
 ## Apply migrations
 
-`PostgresExecutionRepository.initialize()` applies pending migrations. To apply
-them separately, set `DATABASE_URL` through your normal secret
+Scheduler startup applies pending migrations automatically before starting its
+worker. To apply them separately, set `DATABASE_URL` through your normal secret
 configuration, then run from the repository root:
 
 ```sh
@@ -23,7 +23,7 @@ The initializer creates the target schema and serializes startup with a
 PostgreSQL advisory lock. Yoyo also locks migration execution and tracks applied
 versions in that schema, independently of other test or application schemas.
 Each migration is transactional; the entire sequence is not one transaction.
-An initialization failure raises `ExecutionRepositoryUnavailableError`.
+An initialization failure prevents scheduler startup.
 
 ## Change the schema
 

@@ -17,6 +17,8 @@ from model_service.http_common.auth import (
     AuthorizationError,
     Principal,
 )
+from model_service.scheduler.public import ExecutionView
+from model_service.scheduler.status import ExecutionStatus
 
 
 CATALOG = ModelCatalog(
@@ -26,7 +28,22 @@ CATALOG = ModelCatalog(
         )
     ]
 )
-RUN = "/v1/builders/heatmap/models/classifier/run"
+EXECUTION = "00000000-0000-4000-8000-000000000001"
+
+
+class Scheduler:
+    alive = True
+
+    async def check_ready(self) -> None:
+        return None
+
+    async def get(self, execution_id: str) -> ExecutionView:
+        return ExecutionView(
+            id=execution_id,
+            builder_id="heatmap",
+            model_id="classifier",
+            status=ExecutionStatus.QUEUED,
+        )
 
 
 class BearerToken:
@@ -39,19 +56,25 @@ class BearerToken:
 
 
 class Recorder:
-    """Refuses runs and records every decision it was asked for."""
+    """Refuses cancellation and records every decision it was asked for."""
 
     def __init__(self) -> None:
-        self.asked: list[tuple[str | None, Action]] = []
+        self.asked: list[tuple[str | None, Action, str | None]] = []
 
-    async def authorize(self, principal: Principal, action: Action) -> None:
-        self.asked.append((principal.subject, action))
-        if action is Action.RUN:
+    async def authorize(
+        self, principal: Principal, action: Action, execution_id: str | None
+    ) -> None:
+        self.asked.append((principal.subject, action, execution_id))
+        if action is Action.CANCEL_EXECUTION:
             raise AuthorizationError
 
 
 def client(**access: Access) -> AsyncClient:
-    app = create_app(catalog=CATALOG, **access)
+    app = create_app(
+        Scheduler(),  # type: ignore[arg-type]
+        catalog=CATALOG,
+        **access,
+    )
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://ms")
 
 
@@ -78,20 +101,25 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(student.status_code, 200)
         self.assertEqual(health.status_code, 200)
 
-    async def test_the_authorizer_decides_each_action(self) -> None:
+    async def test_the_authorizer_decides_each_action_on_its_execution(self) -> None:
         authorizer = Recorder()
         access = Access(authenticator=BearerToken(), authorizer=authorizer)
         headers = {"Authorization": "Bearer student-token"}
         async with client(access=access) as http:
-            read = await http.get("/v1/builders", headers=headers)
-            run = await http.post(RUN, headers=headers, json={})
+            read = await http.get(f"/v1/executions/{EXECUTION}", headers=headers)
+            cancel = await http.post(
+                f"/v1/executions/{EXECUTION}/cancel", headers=headers
+            )
 
         self.assertEqual(read.status_code, 200)
-        self.assertEqual(run.status_code, 403)
-        self.assertEqual(run.json()["detail"]["code"], "forbidden")
+        self.assertEqual(cancel.status_code, 403)
+        self.assertEqual(cancel.json()["detail"]["code"], "forbidden")
         self.assertEqual(
             authorizer.asked,
-            [("student", Action.READ_CATALOG), ("student", Action.RUN)],
+            [
+                ("student", Action.READ_EXECUTION, EXECUTION),
+                ("student", Action.CANCEL_EXECUTION, EXECUTION),
+            ],
         )
 
 

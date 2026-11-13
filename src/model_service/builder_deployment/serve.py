@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib
 import logging
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, status
 from fastapi.exceptions import RequestValidationError
@@ -22,9 +23,12 @@ from model_service.builder_deployment.runner import BuilderApplication
 from model_service.builders.base import ReplicaSettings
 from model_service.builders.registry import get_builder
 from model_service.contracts.builder_http import ErrorCode, ErrorResponse, RunRequest
-from model_service.contracts.invocation import SHARED_STORAGE
 from model_service.contracts.result import BuilderResult
-from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
+from model_service.providers.registry import PROVIDERS
+
+
+if TYPE_CHECKING:
+    from model_service.builders.input_access import InputAccessFactory
 
 
 fastapi = FastAPI()
@@ -38,7 +42,7 @@ class DeploymentSettings(ReplicaSettings):
 
 
 def build_application(config: DeploymentSettings) -> BuilderApplication:
-    """Load the configured builder with shared-storage input access.
+    """Load the configured builder and its providers' access adapters.
 
     Args:
         config: Deployment settings naming the builder and worker settings.
@@ -53,9 +57,9 @@ def build_application(config: DeploymentSettings) -> BuilderApplication:
     module_name, _, class_name = spec.implementation.partition(":")
     implementation = getattr(importlib.import_module(module_name), class_name)
     settings = ReplicaSettings.model_validate(config.model_dump(exclude={"builder_id"}))
-    adapters = {
-        SHARED_STORAGE: SharedStorageAccessFactory(settings.shared_storage_roots)
-    }
+    adapters: dict[str, InputAccessFactory] = {}
+    for provider in PROVIDERS:
+        adapters.update(provider.input_access(settings))
     return BuilderApplication(spec, implementation(settings), adapters)
 
 

@@ -36,7 +36,7 @@ type ProviderName = str
 
 @dataclass(frozen=True, slots=True)
 class ScheduleRequest:
-    """`body` is provider-specific; its provider's adapter reads it."""
+    """`body` is provider-specific; standalone bodies are a `BuilderRequest`."""
 
     builder_id: str
     model_id: str
@@ -109,7 +109,7 @@ class SubmissionIdentity:
 class Priority(IntEnum):
     """Order in which due work is claimed; higher first, within each model's capacity.
 
-    Internal for now: providers set it.
+    Internal for now: providers set it, the public API does not take it.
     """
 
     LOW = 0

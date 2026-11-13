@@ -125,6 +125,15 @@ class PostgresDatabase:
         """Apply pending Yoyo migrations under a schema-specific initialization lock."""
         await initialize_execution_schema(self._dsn, schema=self._schema)
 
+    async def check_ready(self) -> None:
+        """Query the execution table to confirm database connectivity and schema availability.
+
+        Raises:
+            ExecutionRepositoryUnavailableError: The database is unavailable.
+        """
+        async with self.transaction() as session:
+            await session.execute(select(ExecutionRow.id).limit(1))
+
     async def persist_state(
         self,
         session: AsyncSession,

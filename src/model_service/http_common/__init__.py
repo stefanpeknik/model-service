@@ -1,1 +1,1 @@
-"""HTTP pieces of the public API: auth and error mapping."""
+"""HTTP pieces shared by the public API and provider routes: auth, error mapping, scheduling calls."""
