@@ -1,12 +1,30 @@
 applications:
   - episeg-1
-  - heatmap-builder
   - prostate-classifier-1
   - prov-gigapath
   - virchow2
 
 # Builders run `builder_deployment.serve:app`; the key is the builder ID.
-builders: {}
+# `builders: null` in an override file deploys the models for plain Ray Serve
+# inference only (`{}` would merge with these defaults).
+builders:
+  heatmap:
+    deployment:
+      max_ongoing_requests: 1
+      max_queued_requests: 4
+      backpressure_config:
+        status_code: 429
+        retry_after_s: 5
+      autoscaling_config:
+        min_replicas: 0
+        max_replicas: 4
+        target_ongoing_requests: 1
+      ray_actor_options:
+        num_cpus: 8
+        memory: 12884901888
+    userConfig:
+      num_threads: 8
+      max_concurrent_tasks: 16
 
 # Roots callers may name in shared-storage requests (builders).
 sharedStorageRoots: [/mnt/data, /mnt/projects]

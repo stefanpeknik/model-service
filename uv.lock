@@ -1986,6 +1986,8 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "mypy" },
+    { name = "openslide-bin" },
+    { name = "pyvips", extra = ["binary"] },
     { name = "ruff" },
 ]
 docs = [
@@ -2010,6 +2012,8 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "mypy", specifier = ">=1.18.2" },
+    { name = "openslide-bin", specifier = ">=4.0.0,<5" },
+    { name = "pyvips", extras = ["binary"], specifier = ">=3.0.0,<4" },
     { name = "ruff", specifier = ">=0.14.6" },
 ]
 docs = [
@@ -2539,6 +2543,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/4b/33/b5db29a6c00eb8f50708110d8d453747ca125c8b805bc437b289dbdcc057/opencv_python_headless-4.13.0.92-cp37-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:0bd48544f77c68b2941392fcdf9bcd2b9cdf00e98cb8c29b2455d194763cf99e", size = 60391106, upload-time = "2026-02-05T10:30:14.236Z" },
     { url = "https://files.pythonhosted.org/packages/fb/c3/52cfea47cd33e53e8c0fbd6e7c800b457245c1fda7d61660b4ffe9596a7f/opencv_python_headless-4.13.0.92-cp37-abi3-win32.whl", hash = "sha256:a7cf08e5b191f4ebb530791acc0825a7986e0d0dee2a3c491184bd8599848a4b", size = 30812232, upload-time = "2026-02-05T07:02:29.594Z" },
     { url = "https://files.pythonhosted.org/packages/4a/90/b338326131ccb2aaa3c2c85d00f41822c0050139a4bfe723cfd95455bd2d/opencv_python_headless-4.13.0.92-cp37-abi3-win_amd64.whl", hash = "sha256:77a82fe35ddcec0f62c15f2ba8a12ecc2ed4207c17b0902c7a3151ae29f37fb6", size = 40070414, upload-time = "2026-02-05T07:02:26.448Z" },
+]
+
+[[package]]
+name = "openslide-bin"
+version = "4.0.1.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/59/8b/1bf9f45af355b2679444b3452e034f133b36af69c3aa710ff5f56b440345/openslide_bin-4.0.1.2.tar.gz", hash = "sha256:83c9a4a598f3a5fe1dea83e123745e48b94ce7eab99833f04902bdf4fa0af1db", size = 18591480, upload-time = "2026-06-20T03:57:49.152Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/21/3d/2e34b800de81084dbdd5d00680d0640be2e52b6bfe309b9948e5ae75ec33/openslide_bin-4.0.1.2-py3-none-macosx_11_0_universal2.whl", hash = "sha256:230cdb1e2cfa88b9f28ca8f51a7b47065b20a855ad3e7ba141cd663e5a713e8c", size = 3208622, upload-time = "2026-06-20T03:57:42.206Z" },
+    { url = "https://files.pythonhosted.org/packages/d6/4d/757d272747f37bba14a1e9d02656faf8bab23271ccbdb7f1ab6cdc1d2ca1/openslide_bin-4.0.1.2-py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:0dff14807e1b7ccfd476ca5b6945edf46908b76ec61777d35acb2a514e205c30", size = 2660275, upload-time = "2026-06-20T03:57:44.015Z" },
+    { url = "https://files.pythonhosted.org/packages/da/f0/f4d494e1df28594cff1ea0f3921665011ee3fc48a903653ce864cb27e180/openslide_bin-4.0.1.2-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:8ac4aa3a2277ed5e218ca0019db65bdd6e853f865eb4edd3da00e2f4acf0c923", size = 2758562, upload-time = "2026-06-20T03:57:45.571Z" },
+    { url = "https://files.pythonhosted.org/packages/45/c4/96d8b3b867ee2f304445076d700f6a1c9846614045cb299fc3f1d9bb5866/openslide_bin-4.0.1.2-py3-none-win_amd64.whl", hash = "sha256:0c882f0693e4b43e187a51469bff8057de381e865765ac5508a7e1feba319116", size = 3852125, upload-time = "2026-06-20T03:57:47.223Z" },
 ]
 
 [[package]]
@@ -3246,6 +3262,32 @@ dependencies = [
     { name = "cffi" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/2d/6a/282936de9faac6addf6bc8792c18e006489d0023ffd8856b8643f54d0558/pyvips-3.1.1.tar.gz", hash = "sha256:84fe744d023b1084ac2516bb17064cacd41c7f8aabf8e524dd383534941b9301", size = 56951, upload-time = "2025-12-09T18:38:06.355Z" }
+
+[package.optional-dependencies]
+binary = [
+    { name = "pyvips-binary" },
+]
+
+[[package]]
+name = "pyvips-binary"
+version = "8.18.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cffi" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2c/0f/e6bd3e5de90969c5a2cdb333780d79ae5b9a686969e943214fd8debafe64/pyvips_binary-8.18.7.tar.gz", hash = "sha256:ee6b59c6b88494651b18483f52a850ef24883eac4130e8cf6e6d14277506f973", size = 3722, upload-time = "2026-09-28T13:58:06.129Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ad/de/90a1afdd619d50ab427632725284566ef1de982ec4a956e806af0d8972f9/pyvips_binary-8.18.7-cp37-abi3-macosx_10_15_x86_64.whl", hash = "sha256:f7678611d18b7b40e2a90062412b7efc49d436fe21d9bfd4f82ac8e09285693f", size = 8909009, upload-time = "2026-09-28T13:57:48.289Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/b2/5a67537d18853f09b7e896adb2656722f03915db4ede0d9242f1f86fac23/pyvips_binary-8.18.7-cp37-abi3-macosx_11_0_arm64.whl", hash = "sha256:4531cfbda41534b22d2824287ab2dd3aa696bc18bce1abf4560d73c047f4dd81", size = 8018757, upload-time = "2026-09-28T13:57:50.855Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/87/c1d7cad594b39b1907523c7d61f445e45103f12062a3283f7dae92a773b4/pyvips_binary-8.18.7-cp37-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:a30a8b22b21e3063648b11796e75845c8e1cc71b2fb22c5fb1b2dc5ac4ed723d", size = 8213253, upload-time = "2026-09-28T13:57:52.377Z" },
+    { url = "https://files.pythonhosted.org/packages/0e/47/71691171f90cf4949794cd86dcf95b5e9bbcafed058ec5154209da2fab74/pyvips_binary-8.18.7-cp37-abi3-manylinux_2_28_armv7l.manylinux_2_31_armv7l.whl", hash = "sha256:ef4688e2a3599ab7e6dd102ef93700c225935e7c48a7aa8218c59c45b4c64cf9", size = 7933347, upload-time = "2026-09-28T13:57:53.892Z" },
+    { url = "https://files.pythonhosted.org/packages/97/4e/dbdf6444c243b5262257f5b9ded22eb4758aa9b8430e453badda4dc58ac4/pyvips_binary-8.18.7-cp37-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:312046c567abd89ce577ccb0dda8c8cbd9f37d520d5246290cdf8e114e91fbfc", size = 8113278, upload-time = "2026-09-28T13:57:55.535Z" },
+    { url = "https://files.pythonhosted.org/packages/0d/80/8b3cb2f98d2490540902d7ad67d9f2a8bb29905cc12c43aebf8dc2a9932d/pyvips_binary-8.18.7-cp37-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:9ec74d333373faf263000a754413ea58ab44b7c4085e66fdc196bf6fc0e899eb", size = 8253035, upload-time = "2026-09-28T13:57:56.997Z" },
+    { url = "https://files.pythonhosted.org/packages/14/61/d362a395b0631532e99a9f7b62a5e70a6995fd0e51045cffe8e9fa45c852/pyvips_binary-8.18.7-cp37-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:62db93b5c627c6c88db1fdc080c218bcb23787dd406aa463d3dbad681e0d23cc", size = 8159844, upload-time = "2026-09-28T13:57:58.898Z" },
+    { url = "https://files.pythonhosted.org/packages/81/f8/126dd11ee230e14071ce1a59dec935bad3570a86a0fea74ee20aaf528e72/pyvips_binary-8.18.7-cp37-abi3-win32.whl", hash = "sha256:f6594910e8f4db8e004ef35022df740d595a5288c2d999e1bd9ad0b4ba59673a", size = 8312012, upload-time = "2026-09-28T13:58:00.544Z" },
+    { url = "https://files.pythonhosted.org/packages/7a/24/6128202b9a94109f678eb9c2bc048ce622dca50e375e2712c16986f6366d/pyvips_binary-8.18.7-cp37-abi3-win_amd64.whl", hash = "sha256:0c31cdaf88196e01a7a3e4372f3447d06db3c58383c15ff2eeaaa715952b1ec8", size = 8325477, upload-time = "2026-09-28T13:58:02.114Z" },
+    { url = "https://files.pythonhosted.org/packages/ad/42/36aa30f8f7b5c7043e021f5b6b0f86c836332a0c74099d20528855a1e3aa/pyvips_binary-8.18.7-cp37-abi3-win_arm64.whl", hash = "sha256:c6005481208c3c768e1dfba345bfbbcbad886aad9615b15cd62a9dc7ccb0e88b", size = 7616570, upload-time = "2026-09-28T13:58:03.806Z" },
+]
 
 [[package]]
 name = "pywin32"
