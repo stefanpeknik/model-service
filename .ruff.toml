@@ -59,4 +59,5 @@ convention = "google"
 # Pydantic resolves field annotations at runtime.
 runtime-evaluated-base-classes = [
     "pydantic.BaseModel",
+    "model_service.providers.standalone.BuilderRequest",
 ]

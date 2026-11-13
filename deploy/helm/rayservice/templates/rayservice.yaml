@@ -55,25 +55,27 @@ spec:
                   drop: ["ALL"]
     workerGroupSpecs:
 {{- range $workerName := .Values.workers }}
-{{- $workerContent := printf "workers/%s.yaml" $workerName | $.Files.Get | fromYaml }}
+{{- $workerContent := tpl (printf "workers/%s.yaml" $workerName | $.Files.Get) $ | fromYaml }}
       - {{ toYaml $workerContent | nindent 8 | trim }}
 {{- end }}
   serveConfigV2: |
     applications:
-{{- range $appName := .Values.applications }}
-{{ printf "applications/%s.yaml" $appName | $.Files.Get | indent 4 }}
+{{- range $path := .Values.models }}
+{{- $model := tpl (printf "models/%s.yaml" $path | $.Files.Get) $ | fromYaml }}
+{{- if not $model.serve }}{{ fail (printf "models/%s.yaml has no serve block" $path) }}{{ end }}
+      - {{ toYaml $model.serve | nindent 8 | trim }}
 {{- end }}
 {{- range $id, $builder := .Values.builders }}
-    - name: builder-{{ $id }}
-      import_path: model_service.builder_deployment.serve:app
-      route_prefix: /builders/{{ $id }}
-      deployments:
-        - name: BuilderDeployment
-          {{- toYaml $builder.deployment | nindent 10 }}
-          user_config:
-            builder_id: {{ $id }}
-            shared_storage_roots: {{ toJson $.Values.sharedStorageRoots }}
-            {{- with $builder.userConfig }}
-            {{- toYaml . | nindent 12 }}
-            {{- end }}
+      - name: builder-{{ $id }}
+        import_path: model_service.builder_deployment.serve:app
+        route_prefix: /builders/{{ $id }}
+        deployments:
+          - name: BuilderDeployment
+            {{- toYaml $builder.deployment | nindent 12 }}
+            user_config:
+              builder_id: {{ $id }}
+              shared_storage_roots: {{ toJson $.Values.sharedStorageRoots }}
+              {{- with $builder.userConfig }}
+              {{- toYaml . | nindent 14 }}
+              {{- end }}
 {{- end }}

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Annotated
 
-from pydantic import Field, StrictBool
+from pydantic import Field, StrictBool, TypeAdapter
 
 from model_service.contracts.invocation import ExecutionContext, Invocation
 from model_service.contracts.model_declarations import ModelBinding
@@ -19,6 +19,9 @@ class RunRequest:
     invocation: Invocation
     model: ModelBinding
     execution_context: ExecutionContext = field(default_factory=ExecutionContext)
+
+
+RUN_REQUEST: TypeAdapter[RunRequest] = TypeAdapter(RunRequest)
 
 
 class ErrorCode(StrEnum):

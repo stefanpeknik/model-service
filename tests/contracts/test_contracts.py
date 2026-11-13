@@ -3,21 +3,16 @@
 import unittest
 from datetime import UTC, datetime
 
-from pydantic import TypeAdapter, ValidationError
+from pydantic import ValidationError
 
-from model_service.contracts.builder_http import RunRequest
+from model_service.contracts.builder_http import RUN_REQUEST
 from model_service.contracts.invocation import INVOCATION, InputKind
 from model_service.contracts.model_declarations import (
-    ModelBinding,
+    MODEL_BINDING,
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from model_service.contracts.result import BuilderResult, OutputKind
-
-
-RESULT: TypeAdapter[BuilderResult] = TypeAdapter(BuilderResult)
-MODEL_BINDING: TypeAdapter[ModelBinding] = TypeAdapter(ModelBinding)
-RUN_REQUEST: TypeAdapter[RunRequest] = TypeAdapter(RunRequest)
+from model_service.contracts.result import RESULT, OutputKind
 
 
 INVOCATION_BODY = {

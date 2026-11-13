@@ -1,6 +1,9 @@
 # One trained model. To add another, copy this file, change the names and
-# the fields marked below, and list it under `applications:` in the values file.
-- name: prostate-classifier-1
+# the fields marked below, and list it under `models:` in the values file.
+inference:
+  contract: spatial-scores
+serve:
+  name: prostate-classifier-1
   import_path: model_service.model_implementations.binary_classifier:app
   route_prefix: /prostate-classifier-1
   deployments:
@@ -18,7 +21,7 @@
         runtime_env:
           env_vars:
             MLFLOW_TRACKING_URI: http://mlflow.rationai-mlflow:5000
-      # Geometry builders check against the running model: change it with the model.
+      # Geometry the API checks against the running model: change it with the model.
       user_config:
         tile_size: 512
         output_tile_size: 1

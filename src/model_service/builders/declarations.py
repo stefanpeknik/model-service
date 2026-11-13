@@ -1,7 +1,7 @@
 """What a builder declares: the contract it accepts, its inputs, configuration and outputs.
 
 A builder's declaration lives in its package's `spec.py` and imports only
-this module and Pydantic, so callers can validate requests and list builders
+this module and Pydantic, so the API can validate requests and list builders
 without the slide-processing dependencies. The input and output declarations
 are derived from the builder's `BuilderInputs` and `BuilderOutputs` models.
 """
