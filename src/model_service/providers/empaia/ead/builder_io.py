@@ -1,8 +1,8 @@
-"""How builders appear in EMPAIA: the EAD `io` entry of their outputs.
+"""How builders appear in EMPAIA: the EAD `io` entry of their inputs and outputs.
 
-A builder runs EMPAIA jobs only if it is listed in BUILDER_IO, with an entry for
-each of its outputs; its `type` picks the output's publisher. The builders
-themselves know nothing of EMPAIA.
+A builder is offered in EMPAIA only if it is listed in BUILDER_IO, with an entry for
+each of its outputs and for each input an app takes; a reference names
+another input. The builders themselves know nothing of EMPAIA.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ type IoEntry = Mapping[str, JsonValue]
 
 @dataclass(frozen=True, slots=True)
 class BuilderIo:
+    inputs: Mapping[str, IoEntry]
     outputs: Mapping[str, IoEntry]
 
     def output_type(self, name: str) -> str | None:
@@ -39,6 +40,20 @@ class BuilderIo:
 
 BUILDER_IO: dict[str, BuilderIo] = {
     "heatmap": BuilderIo(
+        inputs={
+            "slide": {"type": "wsi"},
+            "region_of_interest": {
+                "type": "rectangle",
+                "reference": "slide",
+                "classes": ["org.empaia.global.v1.classes.roi"],
+            },
+        },
         outputs={"heatmap": {"type": "continuous_pixelmap", "reference": "slide"}},
     ),
 }
+
+
+# Registered builders deliberately not offered in EMPAIA, and why. Every
+# builder is in BUILDER_IO or here; tests/providers/test_empaia_apps.py fails
+# otherwise, so a new builder cannot skip the decision.
+NOT_OFFERED: dict[str, str] = {}

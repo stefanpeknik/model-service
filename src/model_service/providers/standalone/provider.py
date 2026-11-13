@@ -52,6 +52,7 @@ if TYPE_CHECKING:
     from model_service.builders.base import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
     from model_service.contracts.json_values import JsonValue
+    from model_service.deployed_models.catalog import ModelCatalog
     from model_service.providers.provider import ApiContribution
     from model_service.scheduler.public import BeforeMutation, ProviderFinishOutcome
     from model_service.scheduler.settings import SchedulerSettings
@@ -210,12 +211,17 @@ class StandaloneProviderAdapter(ProviderAdapter):
 class StandaloneProvider(Provider):
     """Shared-storage jobs, through the public builder routes the API serves."""
 
-    def api(self, settings: SchedulerSettings) -> ApiContribution:
-        """Contribute the standalone scheduler adapter, with no routes.
+    catalog_block = None
+
+    def api(
+        self, catalog: ModelCatalog, settings: SchedulerSettings
+    ) -> ApiContribution:
+        """Contribute the standalone scheduler adapter, with no routes or background work.
 
         the API's public builder routes submit these jobs.
 
         Args:
+            catalog: Unused.
             settings: Supplies the allowed shared-storage roots.
 
         Returns:
@@ -223,6 +229,7 @@ class StandaloneProvider(Provider):
         """
         from model_service.providers.provider import ApiContribution
 
+        del catalog
         return ApiContribution(
             StandaloneProviderAdapter(
                 SharedStorageAccessFactory(settings.shared_storage_roots)

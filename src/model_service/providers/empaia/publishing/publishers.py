@@ -2,7 +2,8 @@
 
 Each builder output's media type (`OutputSpec`) and EMPAIA type (`io`) are
 declared up front, so the publisher of each output is known before a job runs:
-finish publishes each output with the publisher of its declaration. Publishing is two
+app generation offers only apps whose outputs all have one, and finish
+publishes each output with the publisher of its declaration. Publishing is two
 steps: every output is prepared (read, validated, converted) without a write,
 and only then are they all committed, so an output EMPAIA cannot take never
 leaves the others half published. Supporting a new
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from model_service.builders.declarations import OutputSpec
+    from model_service.contracts.model_declarations import ModelBinding
     from model_service.contracts.result import BuilderOutput
     from model_service.providers.empaia.app_service.gateway import EmpaiaGateway
 
@@ -37,6 +39,18 @@ type Commit = Callable[[], Awaitable[None]]
 
 class OutputPublisher(ABC):
     """Publish one kind of declared output through the gateway's guarded writes."""
+
+    @abstractmethod
+    def accepts(self, model: ModelBinding) -> bool:
+        """Check whether this model's outputs can be published, e.g. by its channel count.
+
+        Args:
+            model: The model whose outputs would be published.
+
+        Returns:
+            True if this publisher can publish them.
+        """
+        ...
 
     @abstractmethod
     async def prepare(
@@ -71,6 +85,17 @@ class PrimitivePublisher(OutputPublisher):
             ValueError: If EMPAIA has no such primitive.
         """
         self._type = PrimitiveType(output_type)
+
+    def accepts(self, model: ModelBinding) -> bool:
+        """Accept every model; a primitive does not depend on it.
+
+        Args:
+            model: Unused.
+
+        Returns:
+            True.
+        """
+        return True
 
     async def prepare(
         self, gateway: EmpaiaGateway, name: str, output: BuilderOutput

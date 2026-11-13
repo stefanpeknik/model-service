@@ -44,7 +44,18 @@ class ModelCatalogTests(unittest.TestCase):
             ),
         )
 
-    def test_an_unknown_block_is_rejected(self) -> None:
+    def test_a_provider_block_is_kept_for_its_provider(self) -> None:
+        document = {**spatial_document(), "listing": {"name": "Prostate"}}
+
+        catalog = ModelCatalog.from_documents([document], ["listing", "other"])
+
+        model_id = next(iter(catalog)).id
+        self.assertEqual(
+            catalog.provider_block("listing"), {model_id: {"name": "Prostate"}}
+        )
+        self.assertEqual(catalog.provider_block("other"), {})
+
+    def test_a_block_no_provider_takes_is_rejected(self) -> None:
         document = {**spatial_document(), "listing": {"name": "Prostate"}}
 
         with self.assertRaises(CatalogError):
