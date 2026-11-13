@@ -2,7 +2,7 @@
 
 - api/: the API process (HTTP routes, wiring). Raw tiles go straight to Ray
   Serve (`POST /<model-id>/`), not through the API.
-- scheduler/: durable executions; it calls builder replicas over
+- scheduler/: durable executions on PostgreSQL; it calls builder replicas over
   HTTP in builder_dispatch.py, which the API's synchronous runs use too.
 - builders/: the whole-slide builders and how to declare one.
 - builder_deployment/: the Ray Serve deployment that hosts a builder.
