@@ -8,7 +8,8 @@ An EAD (EMPAIA App Description) declares an app's inputs, outputs and modes.
   admits the job and publishes its results, gateways.py opens the App Service
   connection for each, mapping.py maps the job onto a builder, inputs.py fetches
   its input files.
-- publishing/: publishers.py turns builder outputs into EMPAIA outputs.
+- publishing/: publishers.py turns builder outputs into EMPAIA outputs;
+  pixelmap.py publishes score grids as pixelmaps.
 - app_service/: the App Service client (interface, HTTP implementation, data).
 - ead/: builder_io.py holds the builders' EAD io entries.
 - settings.py: EMPAIA_* settings.

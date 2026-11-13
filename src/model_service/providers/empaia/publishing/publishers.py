@@ -164,13 +164,18 @@ class PublisherRegistry:
 def default_publishers() -> PublisherRegistry:
     """Build the publishers of the supported EMPAIA types.
 
-    Inline outputs publish as any primitive type.
+    Inline outputs publish as any primitive type, score grids as continuous
+    pixelmaps.
 
     Returns:
         The registry.
     """
+    from model_service.contracts.score_grid import MEDIA_TYPE as SCORE_GRID
+    from model_service.providers.empaia.publishing.pixelmap import ScoreGridPublisher
+
     publishers: dict[PublisherKey, OutputPublisher] = {
         (output_type, None): PrimitivePublisher(output_type)
         for output_type in PrimitiveType
     }
+    publishers["continuous_pixelmap", SCORE_GRID] = ScoreGridPublisher()
     return PublisherRegistry(publishers)

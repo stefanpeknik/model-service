@@ -63,21 +63,24 @@ class PublisherTests(unittest.IsolatedAsyncioTestCase):
                 gateway.post_primitive.assert_not_awaited()
 
     def test_an_output_unlike_its_declaration_is_rejected(self) -> None:
-        inline = OutputSpec(kind=OutputKind.INLINE)
-        artifact = SharedArtifact(
-            path="/shared/heatmap.h5", media_type="application/x-hdf5"
-        )
-
-        with self.assertRaises(EmpaiaGatewayError):
-            PUBLISHERS.publisher_for("score", "float", inline, artifact)
+        for output in (
+            InlineOutput(0.5),
+            SharedArtifact(path="/shared/heatmap.h5", media_type="application/x-hdf5"),
+        ):
+            with (
+                self.subTest(output=output),
+                self.assertRaises(EmpaiaGatewayError),
+            ):
+                PUBLISHERS.publisher_for(
+                    "heatmap", "continuous_pixelmap", HEATMAP, output
+                )
 
     def test_an_output_without_a_known_empaia_type_has_no_publisher(self) -> None:
         inline = OutputSpec(kind=OutputKind.INLINE)
 
         self.assertIsNone(PUBLISHERS.resolve(None, HEATMAP))
         self.assertIsNone(PUBLISHERS.resolve("polygon", inline))
-        self.assertIsNone(PUBLISHERS.resolve("continuous_pixelmap", HEATMAP))
-        self.assertIsNotNone(PUBLISHERS.resolve("float", inline))
+        self.assertIsNotNone(PUBLISHERS.resolve("continuous_pixelmap", HEATMAP))
 
 
 class RectangleTests(unittest.TestCase):
