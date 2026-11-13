@@ -48,6 +48,7 @@ spec:
         - name: api
           image: "{{ .Values.api.image.repository }}:{{ $imageTag }}"
           imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          # Explicit, so code-refresh images built on older bases start the current module.
           command: ["uvicorn", "model_service.api.main:app", "--host", "0.0.0.0", "--port", "8080"]
           ports:
             - name: http
