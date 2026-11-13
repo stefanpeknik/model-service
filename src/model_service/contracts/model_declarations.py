@@ -1,6 +1,6 @@
 """What a model of each inference contract declares about itself.
 
-Builders and model clients rely on it.
+A builder run request carries one; builders and model clients rely on it.
 
 A new kind of model (a new contract) adds a member of `InferenceContract` and its
 `_ModelBinding` subclass here (added to `ModelBinding`); once a

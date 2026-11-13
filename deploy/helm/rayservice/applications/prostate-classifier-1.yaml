@@ -18,7 +18,7 @@
         runtime_env:
           env_vars:
             MLFLOW_TRACKING_URI: http://mlflow.rationai-mlflow:5000
-      # Geometry the model reports in get_config(): change it with the model.
+      # Geometry builders check against the running model: change it with the model.
       user_config:
         tile_size: 512
         output_tile_size: 1

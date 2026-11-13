@@ -5,8 +5,8 @@ resolution-markers = [
     "python_full_version >= '3.15' and sys_platform != 'win32'",
     "python_full_version >= '3.15' and sys_platform == 'win32'",
     "python_full_version == '3.14.*' and sys_platform != 'win32'",
-    "python_full_version == '3.13.*' and sys_platform != 'win32'",
     "python_full_version == '3.14.*' and sys_platform == 'win32'",
+    "python_full_version == '3.13.*' and sys_platform != 'win32'",
     "python_full_version == '3.13.*' and sys_platform == 'win32'",
     "python_full_version < '3.13' and sys_platform != 'win32'",
     "python_full_version < '3.13' and sys_platform == 'win32'",
@@ -1972,11 +1972,13 @@ name = "model-service"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "fastapi" },
     { name = "lz4" },
     { name = "mlflow" },
     { name = "onnxruntime" },
     { name = "pillow" },
     { name = "pydantic" },
+    { name = "pyyaml" },
     { name = "ratiopath" },
     { name = "ray", extra = ["serve"] },
 ]
@@ -1994,11 +1996,13 @@ docs = [
 
 [package.metadata]
 requires-dist = [
+    { name = "fastapi", specifier = ">=0.115.0" },
     { name = "lz4", specifier = ">=4.4.5" },
     { name = "mlflow", specifier = "<3.0" },
     { name = "onnxruntime", specifier = ">=1.23.2" },
     { name = "pillow", specifier = ">=11.3.0" },
     { name = "pydantic", specifier = ">=2.10.0" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "ratiopath", specifier = ">=1.0.3" },
     { name = "ray", extras = ["serve"], specifier = ">=2.58.0" },
 ]

@@ -6,6 +6,8 @@ from enum import StrEnum
 
 
 class FailureCode(StrEnum):
+    DEADLINE_EXCEEDED = "builder_deadline_exceeded"
+    INTERNAL_ERROR = "builder_internal_error"
     INPUT_UNAVAILABLE = "input_unavailable"
     MODEL_UNAVAILABLE = "model_unavailable"
     MODEL_FAILED = "model_failed"
@@ -23,6 +25,10 @@ class UnknownBuilderError(KeyError):
 
 class IncompatibleModelError(InvalidInvocation):
     """The model's inference contract is not the one the builder accepts."""
+
+
+class ContractViolation(RuntimeError):
+    """A builder returned outputs that differ from its declaration."""
 
 
 class BuilderFailure(RuntimeError):

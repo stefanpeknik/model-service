@@ -1,6 +1,6 @@
 """Download model artifacts for model deployment construction.
 
-This model loader is separate from builders/input_access.py, which connects
+This model loader is separate from model_service.providers, which connects
 builders to caller data.
 """
 

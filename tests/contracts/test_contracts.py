@@ -1,11 +1,12 @@
-"""Check the wire format of invocations, results, execution contexts and model bindings."""
+"""Check the wire format of invocations, results, run requests and model bindings."""
 
 import unittest
 from datetime import UTC, datetime
 
 from pydantic import TypeAdapter, ValidationError
 
-from model_service.contracts.invocation import INVOCATION, ExecutionContext, InputKind
+from model_service.contracts.builder_http import RunRequest
+from model_service.contracts.invocation import INVOCATION, InputKind
 from model_service.contracts.model_declarations import (
     ModelBinding,
     SpatialScoresModel,
@@ -16,6 +17,7 @@ from model_service.contracts.result import BuilderResult, OutputKind
 
 RESULT: TypeAdapter[BuilderResult] = TypeAdapter(BuilderResult)
 MODEL_BINDING: TypeAdapter[ModelBinding] = TypeAdapter(ModelBinding)
+RUN_REQUEST: TypeAdapter[RunRequest] = TypeAdapter(RunRequest)
 
 
 INVOCATION_BODY = {
@@ -101,16 +103,27 @@ class BuilderContractTests(unittest.TestCase):
             with self.subTest(invalid=invalid), self.assertRaises(ValidationError):
                 MODEL_BINDING.validate_python(invalid)
 
-    def test_execution_context_rejects_invalid_attempts_and_non_json_secrets(
-        self,
-    ) -> None:
-        for attempt in ("", True, 1):
-            with self.subTest(attempt=attempt), self.assertRaises(ValidationError):
-                ExecutionContext(processing_attempt_id=attempt)  # type: ignore[arg-type]
+    def test_run_request_nests_invocation_model_and_context(self) -> None:
+        body = {
+            "invocation": INVOCATION_BODY,
+            "model": {
+                "id": "virchow2",
+                "contract": "tile-embedding",
+                "tile_size": 224,
+                "mpp": 0.5,
+            },
+            "execution_context": {
+                "processing_attempt_id": "attempt-1",
+                "protected_context": {"credential": "secret"},
+            },
+        }
+        request = RUN_REQUEST.validate_python(body)
+
+        self.assertIsInstance(request.model, TileEmbeddingModel)
+        self.assertNotIn("secret", repr(request.execution_context))
+        self.assertEqual(RUN_REQUEST.dump_python(request, mode="json"), body)
         with self.assertRaises(ValidationError):
-            ExecutionContext(protected_context={"invalid": float("nan")})
-        with self.assertRaises(ValidationError):
-            TypeAdapter(ExecutionContext).validate_python({"unexpected": True})
+            RUN_REQUEST.validate_python({"invocation": INVOCATION_BODY})
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 """A builder invocation: what is run, on which inputs, with which access, by when.
 
-Callers send it to a builder, so the types are strict and JSON-serializable.
+It crosses the process boundary to the Ray builder replica, so the types are
+strict and JSON-serializable.
 """
 
 from __future__ import annotations
@@ -54,6 +55,9 @@ type BuilderInput = Annotated[
 # Which access adapter resolves an invocation's inputs and outputs; each
 # provider names its own, the builder replica holds one adapter per kind.
 type InputAccessKind = str
+
+
+SHARED_STORAGE: InputAccessKind = "shared_storage"
 
 
 @dataclass(frozen=True, slots=True)
