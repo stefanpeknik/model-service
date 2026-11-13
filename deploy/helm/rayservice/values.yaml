@@ -75,3 +75,24 @@ api:
     limits:
       cpu: 1
       memory: 512Mi
+
+# EMPAIA is on when apiUrls lists an AppService. Empty (the default) refuses
+# every EMPAIA job and leaves out all EMPAIA env, volumes, DNS settings and
+# marketplace registration; the rest of this block is then ignored.
+empaia:
+  # AppService URLs that may receive EMPAIA job credentials.
+  apiUrls: []
+  workspaceRoot: /mnt/model-service-executions
+  # Shared by the API and the builder workers: builders write job outputs
+  # there and the API publishes them. Required by the API with apiUrls.
+  workspaceClaim: ""
+  # Slide inputs are linked from the file named by the RationAI direct-access
+  # route. The claim holding the installation's slides, mounted
+  # read-only where its CDS mounts it, since model-service links the absolute
+  # path CDS answers. The API mounts it; worker files include it too.
+  slideVolume:
+    existingClaim: ""
+    mountPath: ""
+  # Extra DNS search domains for pods that call AppService, when the
+  # installation hands out short host names from another namespace.
+  dnsSearches: []
