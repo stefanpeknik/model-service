@@ -1,7 +1,7 @@
 """A builder invocation: what is run, on which inputs, with which access, by when.
 
-It crosses the process boundary to the Ray builder replica, so the types are
-strict and JSON-serializable.
+It crosses every process boundary (API, scheduler database, Ray builder
+replica), so the types are strict and JSON-serializable.
 """
 
 from __future__ import annotations
@@ -104,10 +104,11 @@ type Deadline = Annotated[
 
 @dataclass(frozen=True, slots=True)
 class Invocation:
-    """One request to run a builder.
+    """One request to run a builder; stored durably for scheduled executions.
 
     `resolved_configuration` is None for standalone work, which uses the builder's
-    current defaults when each attempt starts.
+    current defaults when each attempt starts. A provider's admission may resolve
+    it from an external job's configuration.
     """
 
     inputs: Annotated[dict[str, BuilderInput], Field(strict=True)]

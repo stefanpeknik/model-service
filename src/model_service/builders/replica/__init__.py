@@ -4,5 +4,6 @@
 - runner.py: runs one invocation: checks, deadline, cleanup.
 - http_handler.py: answers a run request and maps exceptions to HTTP errors.
 
-Its HTTP format is contracts/builder_http.py.
+Its HTTP format is contracts/builder_http.py; the client that calls it is
+scheduler/builder_dispatch.py.
 """

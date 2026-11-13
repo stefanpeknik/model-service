@@ -44,14 +44,14 @@ class BuilderContext[K: ModelClient[Any], I: BuilderInputs, C: BaseModel]:
     """What one builder run gets: its model, inputs and configuration, typed.
 
     The application checks the model against the builder's contract and its
-    running deployment against its declaration, resolves the inputs to local files
+    running deployment against the catalog, resolves the inputs to local files
     and the configuration with the builder's own classes before building it, so
     a builder can rely on these types without checking them again.
     """
 
     access: InputAccess
-    # The verified client of the model's contract; `model.declaration` is the
-    # model's declaration from the run request.
+    # The verified client of the model's contract; `model.declaration` is its
+    # catalog entry.
     model: K
     inputs: I
     configuration: C

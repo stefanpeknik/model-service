@@ -31,7 +31,7 @@ def client_for(
     """Create the client for a model's contract.
 
     Args:
-        declaration: The model's declaration.
+        declaration: The model's catalog declaration.
         handles: Looks up a deployment handle by model id.
 
     Returns:

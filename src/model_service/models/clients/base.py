@@ -46,7 +46,7 @@ class ModelClient[M: SpatialScoresModel | TileEmbeddingModel](ABC):
         """Bind the client to a model deployment; the handle is looked up on first use.
 
         Args:
-            declaration: The model's declaration.
+            declaration: The model's catalog declaration.
             handles: Looks up a deployment handle by model id; replaceable in tests.
         """
         self.declaration = declaration
@@ -66,7 +66,7 @@ class ModelClient[M: SpatialScoresModel | TileEmbeddingModel](ABC):
                 code=FailureCode.MODEL_CONTRACT_MISMATCH,
                 safe_message=(
                     f"model {self.declaration.id!r} is running with a configuration "
-                    "that differs from its declaration"
+                    "that differs from its catalog declaration"
                 ),
                 retryable=False,
             )

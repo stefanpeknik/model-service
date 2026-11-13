@@ -80,7 +80,7 @@ class BuilderRegistryTests(unittest.TestCase):
 class BuilderWiringTests(unittest.TestCase):
     """A registered builder's pieces must agree; a new builder is checked here.
 
-    `tests/builders/replica/test_deployment_files.py` checks the Helm side.
+    `tests/api/test_deployment_files.py` checks the Helm side.
     """
 
     def test_every_builder_implements_its_declaration(self) -> None:
