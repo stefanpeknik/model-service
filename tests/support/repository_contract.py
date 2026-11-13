@@ -1,0 +1,277 @@
+"""Claim ordering, per-model capacity and fencing shared by both repositories."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
+
+from model_service.contracts.invocation import InputAccessContext, Invocation
+from model_service.contracts.result import BuilderResult
+from model_service.scheduler.internal_state import (
+    Admission,
+    ProcessingRejected,
+    ProcessingSucceeded,
+    StaleWorkClaimError,
+    WorkKind,
+)
+from model_service.scheduler.public import (
+    Priority,
+    SubmissionIdentity,
+)
+
+
+if TYPE_CHECKING:
+    from model_service.scheduler.store.repository import ExecutionRepository
+
+
+class ExecutionRepositoryContract:
+    repository: ExecutionRepository
+
+    async def _advance_time(self, duration: timedelta) -> None:
+        raise NotImplementedError
+
+    async def _admit_execution(
+        self,
+        key: str,
+        model_id: str = "model-a",
+        builder_id: str = "heatmap",
+        priority: int = Priority.NORMAL,
+    ) -> str:
+        deadline = datetime.now(UTC) + timedelta(minutes=5)
+        admitted = await self.repository.admit(
+            Admission(
+                identity=SubmissionIdentity("standalone", key, key),
+                builder_id=builder_id,
+                model_id=model_id,
+                invocation=Invocation(
+                    inputs={},
+                    resolved_configuration=None,
+                    input_access=InputAccessContext(
+                        kind="shared_storage", state={"root": "/shared"}
+                    ),
+                    deadline_at=deadline,
+                    output_path="outputs/requested.tiff",
+                ),
+                protected_context={},
+                deadline_at=deadline,
+                priority=priority,
+            )
+        )
+        return admitted.execution.id
+
+    async def test_due_provider_finish_precedes_older_processing(self) -> None:
+        older_id = await self._admit_execution("older", "older-model")
+        older_claim = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert older_claim is not None
+        await self._advance_time(timedelta(milliseconds=10))
+        newer_id = await self._admit_execution("newer", "newer-model")
+        newer_claim = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert newer_claim is not None
+        assert newer_claim.execution_id == newer_id
+        await self.repository.settle(
+            newer_id, newer_claim.fencing_token, ProcessingSucceeded(BuilderResult({}))
+        )
+        await self.repository.settle(
+            older_id, older_claim.fencing_token, ProcessingRejected(timedelta(0))
+        )
+
+        selected = await self.repository.claim_due("worker", timedelta(seconds=30))
+
+        assert selected is not None
+        assert selected.execution_id == newer_id, selected
+        assert selected.kind is WorkKind.PROVIDER_FINISH
+
+    async def test_higher_priority_is_claimed_first(self) -> None:
+        await self._admit_execution("older")
+        await self._advance_time(timedelta(milliseconds=10))
+        urgent_id = await self._admit_execution("urgent", priority=Priority.HIGH)
+
+        selected = await self.repository.claim_due("worker", timedelta(seconds=30))
+
+        assert selected is not None and selected.execution_id == urgent_id, selected
+        assert (await self.repository.get(urgent_id)).priority == Priority.HIGH
+
+    async def test_a_model_with_urgent_work_is_served_before_older_models(
+        self,
+    ) -> None:
+        await self._admit_execution("older", "older-model")
+        await self._advance_time(timedelta(milliseconds=10))
+        await self._admit_execution("normal", "busy-model")
+        await self._advance_time(timedelta(milliseconds=10))
+        urgent_id = await self._admit_execution(
+            "urgent", "busy-model", priority=Priority.HIGH
+        )
+
+        selected = await self.repository.claim_due("worker", timedelta(seconds=30))
+
+        assert selected is not None and selected.execution_id == urgent_id, selected
+
+    async def test_processing_within_model_orders_by_due_time(self) -> None:
+        older_id = await self._admit_execution("older")
+        older_claim = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert older_claim is not None
+        await self.repository.settle(
+            older_id,
+            older_claim.fencing_token,
+            ProcessingRejected(timedelta(milliseconds=200)),
+        )
+        await self._advance_time(timedelta(milliseconds=10))
+        newer_id = await self._admit_execution("newer")
+        await self._advance_time(timedelta(milliseconds=300))
+
+        selected = await self.repository.claim_due("worker", timedelta(seconds=30))
+
+        assert selected is not None
+        assert selected.execution_id == newer_id, selected
+
+    async def test_provider_finish_orders_by_due_time_before_creation(self) -> None:
+        older_id = await self._admit_execution("older", "older-model")
+        older = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert older is not None
+        await self._advance_time(timedelta(milliseconds=10))
+        newer_id = await self._admit_execution("newer", "newer-model")
+        newer = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert newer is not None
+        await self.repository.settle(
+            newer_id, newer.fencing_token, ProcessingSucceeded(BuilderResult({}))
+        )
+        await self._advance_time(timedelta(milliseconds=10))
+        await self.repository.settle(
+            older_id, older.fencing_token, ProcessingSucceeded(BuilderResult({}))
+        )
+
+        selected = await self.repository.claim_due("worker", timedelta(seconds=30))
+
+        assert selected is not None
+        assert selected.execution_id == newer_id, selected
+        assert selected.kind is WorkKind.PROVIDER_FINISH
+
+    async def test_retry_not_yet_due_does_not_block_new_processing(self) -> None:
+        older_id = await self._admit_execution("older")
+        claim = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert claim is not None
+        await self.repository.settle(
+            older_id, claim.fencing_token, ProcessingRejected(timedelta(minutes=1))
+        )
+        await self._advance_time(timedelta(milliseconds=10))
+        newer_id = await self._admit_execution("newer")
+
+        selected = await self.repository.claim_due("worker", timedelta(seconds=30))
+
+        assert selected is not None
+        assert selected.execution_id == newer_id, selected
+
+    async def test_processing_models_order_by_oldest_eligible_creation(self) -> None:
+        older_id = await self._admit_execution("older", "older-model")
+        older_claim = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert older_claim is not None
+        await self.repository.settle(
+            older_id,
+            older_claim.fencing_token,
+            ProcessingRejected(timedelta(milliseconds=200)),
+        )
+        await self._advance_time(timedelta(milliseconds=10))
+        await self._admit_execution("newer", "newer-model")
+        await self._advance_time(timedelta(milliseconds=300))
+
+        selected = await self.repository.claim_due("worker", timedelta(seconds=30))
+
+        assert selected is not None
+        assert selected.execution_id == older_id, selected
+
+    async def test_model_at_capacity_does_not_block_another_model(self) -> None:
+        await self._admit_execution("active")
+        active = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert active is not None
+        await self._advance_time(timedelta(milliseconds=10))
+        await self._admit_execution("blocked")
+        await self._advance_time(timedelta(milliseconds=10))
+        available_id = await self._admit_execution("available", "another-model")
+
+        selected = await self.repository.claim_due("worker", timedelta(seconds=30))
+
+        assert selected is not None
+        assert selected.execution_id == available_id, selected
+
+    async def test_builders_sharing_a_model_share_its_capacity(self) -> None:
+        await self._admit_execution("active", builder_id="heatmap")
+        active = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert active is not None
+        await self._advance_time(timedelta(milliseconds=10))
+        await self._admit_execution("other-builder", builder_id="other")
+
+        selected = await self.repository.claim_due("worker", timedelta(seconds=30))
+
+        assert selected is None, selected
+
+    async def test_terminal_report_precedes_older_processing(self) -> None:
+        await self._admit_execution("older")
+        await self._advance_time(timedelta(milliseconds=10))
+        cancelled_id = await self._admit_execution("cancelled")
+        await self.repository.request_cancel(cancelled_id)
+
+        selected = await self.repository.claim_due("worker", timedelta(seconds=30))
+
+        assert selected is not None
+        assert selected.execution_id == cancelled_id, selected
+        assert selected.kind is WorkKind.PROVIDER_CANCELLATION_REPORT
+
+    async def test_cancellation_fences_late_processing_result(self) -> None:
+        execution_id = await self._admit_execution("cancelled")
+        claim = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert claim is not None
+        await self.repository.request_cancel(execution_id)
+        try:
+            await self.repository.settle(
+                execution_id,
+                claim.fencing_token,
+                ProcessingSucceeded(BuilderResult({})),
+            )
+        except StaleWorkClaimError:
+            pass
+        else:
+            raise AssertionError("cancelled processing claim accepted a late result")
+        execution = await self.repository.get(execution_id)
+        assert execution.result is None
+        assert execution.work_kind is WorkKind.PROVIDER_CANCELLATION_REPORT
+
+    async def test_a_cancellation_report_survives_a_cancelled_publication(
+        self,
+    ) -> None:
+        execution_id = await self._admit_execution("cancelled-in-finish")
+        processing = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert processing is not None
+        await self.repository.settle(
+            execution_id,
+            processing.fencing_token,
+            ProcessingSucceeded(BuilderResult({})),
+        )
+        finish = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert finish is not None
+        assert finish.kind is WorkKind.PROVIDER_FINISH
+        await self.repository.mark_finish_mutation_started(
+            execution_id, finish.fencing_token
+        )
+        await self.repository.request_cancel(execution_id)
+        report = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert report is not None
+        assert report.kind is WorkKind.PROVIDER_CANCELLATION_REPORT
+
+        # The report's worker dies before it writes anything.
+        await self._advance_time(timedelta(seconds=31))
+        await self.repository.maintain()
+        retried = await self.repository.claim_due("worker", timedelta(seconds=30))
+
+        assert retried is not None, "the cancellation report was dropped"
+        assert retried.execution_id == execution_id
+        assert retried.kind is WorkKind.PROVIDER_CANCELLATION_REPORT
+
+    async def test_get_many_keeps_order_and_skips_unknown_ids(self) -> None:
+        first = await self._admit_execution("first", "model-b")
+        second = await self._admit_execution("second")
+
+        found = await self.repository.get_many(
+            [second, "not-an-id", "00000000-0000-0000-0000-000000000000", first]
+        )
+
+        assert [execution.id for execution in found] == [second, first]

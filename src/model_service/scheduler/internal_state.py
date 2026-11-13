@@ -141,6 +141,14 @@ class ExecutionRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class AdmissionResult:
+    """Pair the admitted record with a flag distinguishing insertion from an idempotent replay."""
+
+    execution: ExecutionRecord
+    created: bool
+
+
+@dataclass(frozen=True, slots=True)
 class WorkClaim:
     """Give a worker the inputs and token for one leased processing or provider attempt."""
 
