@@ -61,10 +61,10 @@ RUN uv pip install --python /home/ray/anaconda3/bin/python --no-cache \
     onnxruntime-gpu tensorrt lz4 ratiopath "mlflow<3.0" torch torchvision \
     "timm>=1.0.0" \
     "huggingface-hub>=0.23.0" "h5py>=3.11,<4" pyvips \
-    "imageio>=2.34.1" "rsa>=4.9" \
+    "imageio>=2.34.1" "pyjwt>=2.15.1,<3" "rsa>=4.9" \
     "httpx>=0.27.0" "pydantic>=2.10.0" "pydantic-settings>=2.10.0,<3" "pyyaml>=6.0.2"
 
-# The EMPAIA SDK, for the App Service client. Its other dependencies are listed
+# Builder replicas load the EMPAIA provider. Its other dependencies are listed
 # above; --no-deps keeps the image's Ray.
 COPY --from=empaia-sdk pyproject.toml README.md LICENSE /opt/empaia-sdk/
 COPY --from=empaia-sdk rationai /opt/empaia-sdk/rationai

@@ -1,4 +1,8 @@
-"""Specify the EMPAIA job boundary, protected credentials, and configurable gateway factory."""
+"""Specify the EMPAIA job boundary, protected credentials, and configurable gateway factory.
+
+Provider admission and finish use this boundary in the scheduler process; input access
+uses it in the builder process.
+"""
 
 from __future__ import annotations
 
@@ -16,6 +20,9 @@ if TYPE_CHECKING:
 
 type MutationGuard = Callable[[], Awaitable[None]]
 
+PROVIDER_NAME = "empaia"
+INPUT_ACCESS_KIND = "empaia"
+
 
 class PrimitiveType(StrEnum):
     """An EMPAIA primitive output type."""
@@ -24,6 +31,29 @@ class PrimitiveType(StrEnum):
     INTEGER = "integer"
     FLOAT = "float"
     STRING = "string"
+
+    def fits(self, value: object) -> bool:
+        """Whether EMPAIA takes this value as a primitive of this type.
+
+        A bool is an int in Python, so it is told apart; a float takes whole
+        numbers; an empty string is refused.
+
+        Args:
+            value: The output's value.
+
+        Returns:
+            Whether the value fits.
+        """
+        if isinstance(value, bool):
+            return self is PrimitiveType.BOOL
+        match self:
+            case PrimitiveType.INTEGER:
+                return isinstance(value, int)
+            case PrimitiveType.FLOAT:
+                return isinstance(value, int | float)
+            case PrimitiveType.STRING:
+                return isinstance(value, str) and bool(value)
+        return False
 
 
 class EmpaiaGatewayError(RuntimeError):
@@ -63,14 +93,34 @@ class EmpaiaJobMode(StrEnum):
     REPORT = "REPORT"
 
 
-class EmpaiaJobContext(BaseModel):
-    """Carry the API origin and job ID with the private job credential; the credential is hidden from repr."""
+class EmpaiaInputState(BaseModel):
+    """Carry the non-secret API origin and job ID used to select provider input access."""
 
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 
     api_url: Annotated[str, Field(min_length=1)]
     job_id: Annotated[str, Field(min_length=1)]
+    # Recorded at admission; nothing depends on it yet. Executions admitted
+    # before it was recorded have none.
+    mode: Annotated[EmpaiaJobMode | None, Field(strict=False)] = None
+
+
+class EmpaiaJobContext(EmpaiaInputState):
+    """Add a private job credential to the public job identity; the credential is hidden from repr."""
+
     credential: Annotated[str, Field(min_length=1, repr=False)]
+
+    def protected_values(self) -> dict[str, JsonValue]:
+        """Extract API origin, job ID, and credential for encrypted durable context and internal dispatch.
+
+        Returns:
+            The values by field name, credential included.
+        """
+        return {
+            "api_url": self.api_url,
+            "job_id": self.job_id,
+            "credential": self.credential,
+        }
 
 
 class EmpaiaGateway(ABC):
@@ -124,7 +174,7 @@ class EmpaiaGateway(ABC):
 
     @abstractmethod
     async def close(self) -> None:
-        """Release the gateway's HTTP resources."""
+        """Release the gateway's HTTP resources after admission, input use, or reporting."""
         ...
 
 
