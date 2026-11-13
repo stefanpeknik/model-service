@@ -8,13 +8,22 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import httpx
+import numpy as np
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 from rationai.empaia import Client
 
+from model_service.contracts.result import SharedArtifact
+from model_service.contracts.score_grid import (
+    MEDIA_TYPE,
+    ScoreGrid,
+    write_score_grid,
+)
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.app_service.http import HttpEmpaiaGateway
 from model_service.providers.empaia.app_service.types import Rectangle, SlideMetadata
+from model_service.providers.empaia.publishing.pixelmap import ScoreGridPublisher
+from tests.support.empaia_fixtures import PIXELMAP_ID, SLIDE_ID, created
 
 
 class RecordingRectangleWriter:
@@ -33,6 +42,26 @@ class RecordingRectangleWriter:
         """Record requested slide/rectangle geometry and create a placeholder mask file."""
         self.calls.append((destination, slide, rectangle))
         destination.touch()
+
+
+# Six levels from 384x256, each half the size of the one before.
+SLIDE = {
+    "id": SLIDE_ID,
+    "extent": {"x": 384, "y": 256, "z": 1},
+    "num_levels": 6,
+    "pixel_size_nm": {"x": 250.0, "y": 250.0},
+    "tile_extent": {"x": 256, "y": 256, "z": 1},
+    "levels": [
+        {
+            "extent": {"x": 384 >> level, "y": 256 >> level, "z": 1},
+            "downsample_factor": float(2**level),
+        }
+        for level in range(6)
+    ],
+    "format": "test",
+    "tissue": None,
+    "stain": None,
+}
 
 
 class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
@@ -227,9 +256,7 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             body = json.loads(request.content) if request.content else None
             requests.append((request.method, request.url.path, body))
             if request.method == "POST":
-                return httpx.Response(
-                    200, json={**body, "id": "11111111-1111-4111-8111-111111111111"}
-                )
+                return httpx.Response(200, json={**body, "id": PIXELMAP_ID})
             return httpx.Response(200, json={})
 
         gateway = HttpEmpaiaGateway(
@@ -345,6 +372,51 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
                 await gateway.materialize_input("slide", directory)
             self.assertFalse(raised.exception.retryable)
             await gateway.close()
+
+    async def test_the_score_grid_publisher_uploads_through_the_sdk(
+        self,
+    ) -> None:
+        uploaded: list[str] = []
+
+        def handle(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/inputs/slide"):
+                return httpx.Response(200, json=SLIDE)
+            if request.method == "POST":
+                body = json.loads(request.content)
+                self.assertEqual(
+                    [level["slide_level"] for level in body["levels"]], [4, 5]
+                )
+                return httpx.Response(200, json=created(body))
+            if request.method == "PUT" and "/pixelmaps/" in request.url.path:
+                uploaded.append(request.url.path)
+                return httpx.Response(204)
+            raise AssertionError((request.method, request.url.path))
+
+        values = np.zeros((1, 4, 6), dtype=np.float32)
+        scored = np.zeros((4, 6), dtype=bool)
+        values[0, 1, 2], scored[1, 2] = 0.75, True
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "heatmap.npz"
+            write_score_grid(
+                path,
+                ScoreGrid(values, scored, 0, (384, 256), 64.0, (0.25, 0.25)),
+            )
+            gateway = HttpEmpaiaGateway(
+                "https://empaia.example",
+                "job-1",
+                "credential",
+                client=await self.appservice(httpx.MockTransport(handle)),
+            )
+            commit = await ScoreGridPublisher().prepare(
+                gateway,
+                "heatmap",
+                SharedArtifact(path=str(path), media_type=MEDIA_TYPE),
+            )
+            await commit()
+            await gateway.close()
+
+        # One tile on each of levels 4 and 5.
+        self.assertEqual(len(uploaded), 2)
 
     async def test_configuration_rejects_ambiguous_sections(self) -> None:
         """Verify configuration rejects ambiguous sections."""

@@ -18,5 +18,6 @@ class EmpaiaSettings(BaseSettings):
     # AppService URLs that may receive EMPAIA job credentials; empty refuses all.
     api_urls: tuple[str, ...] = ()
     workspace_root: Path = Path("/mnt/model-service-executions")
-    # App Service requests; the SDK's 5 s default is too short for some writes.
+    # Creating a pixelmap took 10 s on the EMPAIA test instance; the SDK's 5 s
+    # default turned that into a failed job with an orphaned pixelmap.
     app_service_timeout_seconds: float = Field(default=60, gt=0, allow_inf_nan=False)

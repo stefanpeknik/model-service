@@ -43,6 +43,9 @@ from model_service.providers.empaia.app_service.types import (
 if TYPE_CHECKING:
     from collections.abc import Awaitable
 
+    from rationai.empaia.typing import SlideInfo
+    from rationai.empaia.utils.scalar_output import PixelmapTileSet
+
     from model_service.contracts.json_values import JsonValue
     from model_service.providers.empaia.app_service.gateway import (
         EmpaiaGatewayFactory,
@@ -226,6 +229,46 @@ class HttpEmpaiaGateway(EmpaiaGateway):
     async def close(self) -> None:
         """Close the gateway's HTTP client and release its network resources."""
         await self._client.close()
+
+    async def slide_info(self) -> SlideInfo:
+        """Fetch the slide with every level's downsample factor, as pixelmap tiles need.
+
+        Returns:
+            The job's `slide` input.
+
+        Raises:
+            EmpaiaGatewayError: As `_call` classifies a failed request.
+        """
+        return await self._call(self._client.get_input("slide"))
+
+    async def publish_pixelmap(
+        self, name: str, slide_id: str, tile_sets: tuple[PixelmapTileSet, ...]
+    ) -> None:
+        """Create the pixelmap and upload its levels; failures leave an unknown outcome.
+
+        Args:
+            name: The EMPAIA output key, also the pixelmap's name.
+            slide_id: The slide the pixelmap belongs to.
+            tile_sets: The pyramid levels to upload.
+
+        Raises:
+            EmpaiaGatewayError: Not retryable with an unknown outcome if the SDK gives
+                up on a tile or cannot write its storage directly; otherwise as `_call` classifies a failed request
+                as a mutation.
+        """
+        try:
+            await self._call(
+                self._client.upload_pixelmap_pyramid(
+                    key=name, name=name, wsi_id=slide_id, tile_sets=tile_sets
+                ),
+                mutation=True,
+            )
+        except (RuntimeError, OSError) as error:
+            # The SDK gave up on a tile after its own retries, or could not write
+            # its storage directly; the pixelmap exists.
+            raise EmpaiaGatewayError(
+                "EMPAIA pixelmap upload failed", retryable=False, outcome_unknown=True
+            ) from error
 
     async def _direct_access(self, name: str) -> DirectAccess | None:
         """Query the extension endpoint for the input's path on the slide volume.

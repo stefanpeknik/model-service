@@ -15,6 +15,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 if TYPE_CHECKING:
+    from rationai.empaia.typing import SlideInfo
+    from rationai.empaia.utils.scalar_output import PixelmapTileSet
+
     from model_service.contracts.json_values import JsonValue
 
 
@@ -160,6 +163,18 @@ class EmpaiaGateway(ABC):
         self, name: str, output_type: str, value: JsonValue
     ) -> None:
         """Post one output as a primitive of the given EMPAIA type."""
+        ...
+
+    @abstractmethod
+    async def slide_info(self) -> SlideInfo:
+        """Fetch the job's slide with every level's downsample factor."""
+        ...
+
+    @abstractmethod
+    async def publish_pixelmap(
+        self, name: str, slide_id: str, tile_sets: tuple[PixelmapTileSet, ...]
+    ) -> None:
+        """Create one output pixelmap on the slide and upload its levels."""
         ...
 
     @abstractmethod
