@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Never
 
 from model_service.contracts.failures import InvalidInvocation
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
+from model_service.providers.empaia.ead.apps import VIEWER_CONFIG_KEY
 from model_service.scheduler.public import (
     InvalidScheduleRequestError,
     SchedulingUnavailableError,
@@ -29,6 +30,7 @@ def builder_configuration(
 
     Installation admins may configure an app with keys meant for something
     else; the builder takes only the ones it knows, and the rest are logged.
+    The viewer's settings are expected and meant for the case browser.
 
     Args:
         spec: The builder the job runs.
@@ -42,7 +44,7 @@ def builder_configuration(
         InvalidScheduleRequestError: If the builder rejects a value.
     """
     known = spec.configuration.model_fields
-    if ignored := sorted(configuration.keys() - known.keys()):
+    if ignored := sorted(configuration.keys() - known.keys() - {VIEWER_CONFIG_KEY}):
         logger.warning(
             "EMPAIA job %s: ignoring configuration keys the %s builder "
             "does not take: %s",

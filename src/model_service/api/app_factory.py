@@ -6,6 +6,7 @@ the catalog, scheduler, providers and dispatch into it.
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
@@ -150,8 +151,8 @@ def create_app(
 def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
     """Wire the production API process: catalog, repository, providers, scheduler and API.
 
-    The repository is initialized and the scheduler runs only inside the app
-    lifespan.
+    The repository is initialized, provider background tasks start and the
+    scheduler runs only inside the app lifespan.
 
     Args:
         settings: Process settings; None reads them from the environment.
@@ -166,7 +167,10 @@ def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
     """
     config = settings or SchedulerSettings()
     providers = PROVIDERS
-    catalog = ModelCatalog.from_file(config.model_catalog_path)
+    catalog = ModelCatalog.from_file(
+        config.model_catalog_path,
+        [p.catalog_block for p in providers if p.catalog_block is not None],
+    )
     builder_ids = (
         frozenset(BUILDERS) if config.builder_ids is None else config.builder_ids
     )
@@ -189,7 +193,7 @@ def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
             maximum_backoff=config.maximum_backoff,
         ),
     )
-    contributions = [provider.api(config) for provider in providers]
+    contributions = [provider.api(catalog, config) for provider in providers]
     client = httpx.AsyncClient()
     dispatch = HTTPBuilderDispatch(client, origin=config.ray_serve_origin)
     scheduler = ExecutionScheduler(
@@ -206,11 +210,20 @@ def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        background: list[asyncio.Task[None]] = []
         try:
             await repository.initialize()
+            background = [
+                asyncio.create_task(c.background())
+                for c in contributions
+                if c.background is not None
+            ]
             async with scheduler.running():
                 yield
         finally:
+            for task in background:
+                task.cancel()
+            await asyncio.gather(*background, return_exceptions=True)
             await client.aclose()
             await repository.aclose()
 

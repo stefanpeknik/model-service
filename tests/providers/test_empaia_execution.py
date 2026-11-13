@@ -168,6 +168,9 @@ class ControlledEmpaiaService:
 class RecordingPublisher:
     """Hand each heatmap to the fake gateway, which records it."""
 
+    def accepts(self, model: ModelBinding) -> bool:
+        return True
+
     async def prepare(
         self, gateway: EmpaiaGateway, name: str, output: BuilderOutput
     ) -> Commit:

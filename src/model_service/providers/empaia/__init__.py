@@ -11,6 +11,8 @@ An EAD (EMPAIA App Description) declares an app's inputs, outputs and modes.
 - publishing/: publishers.py turns builder outputs into EMPAIA outputs;
   pixelmap.py publishes score grids as pixelmaps.
 - app_service/: the App Service client (interface, HTTP implementation, data).
-- ead/: builder_io.py holds the builders' EAD io entries.
+- ead/: apps.py generates each builder's app and its EAD; builder_io.py holds
+  the builders' EAD io entries.
+- registration.py, credentials.py: register apps in the marketplace.
 - settings.py: EMPAIA_* settings.
 """
