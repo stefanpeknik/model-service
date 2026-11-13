@@ -6,6 +6,8 @@ from enum import StrEnum
 
 
 class ExecutionStatus(StrEnum):
+    """Where an execution is in its lifecycle."""
+
     QUEUED = "queued"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
@@ -23,6 +25,8 @@ class ExecutionStatus(StrEnum):
 
 
 class ExecutionErrorCode(StrEnum):
+    """Why the scheduler failed an execution, beside builder failures."""
+
     BUILDER_OUTCOME_UNKNOWN = "builder_outcome_unknown"
     PROVIDER_FINISH_OUTCOME_UNKNOWN = "provider_finish_outcome_unknown"
     PROCESSING_ATTEMPTS_EXHAUSTED = "processing_attempts_exhausted"

@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 class HeatmapBuilder(
     Builder[SpatialScoresClient, HeatmapInputs, HeatmapConfiguration, HeatmapOutputs]
 ):
+    """Scores a slide tile by tile and writes the score grid."""
+
     async def run(
         self,
         context: BuilderContext[

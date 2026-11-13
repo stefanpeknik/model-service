@@ -113,6 +113,15 @@ type RouteFactory = Callable[[Scheduler], APIRouter]
 
 @dataclass(frozen=True, slots=True)
 class ApiContribution:
+    """What a provider adds to the API.
+
+    Attributes:
+        adapter: Its scheduler adapter.
+        routes: Its routes, if any.
+        background: Work that runs while the API serves, cancelled when it
+            stops.
+    """
+
     adapter: ProviderAdapter
     routes: RouteFactory | None = None
     # Runs while the API serves and is cancelled when it stops.
@@ -120,6 +129,12 @@ class ApiContribution:
 
 
 class Provider(ABC):
+    """A source of jobs: how they are admitted, read and finished.
+
+    Attributes:
+        catalog_block: The model files' top-level block it reads, if any.
+    """
+
     # The model files' top-level block it reads, if any.
     catalog_block: str | None
 

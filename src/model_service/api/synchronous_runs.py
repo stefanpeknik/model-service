@@ -16,7 +16,15 @@ if TYPE_CHECKING:
 
 
 class SynchronousBuilderService:
+    """Runs a builder with a model while the caller waits."""
+
     def __init__(self, catalog: ModelCatalog, dispatch: HTTPBuilderDispatch) -> None:
+        """Keep the catalog runs are checked against and the dispatch to builders.
+
+        Args:
+            catalog: The model catalog.
+            dispatch: The HTTP client to builder replicas.
+        """
         self._catalog = catalog
         self._dispatch = dispatch
 

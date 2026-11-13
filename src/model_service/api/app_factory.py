@@ -59,6 +59,20 @@ def model_resolver(catalog: ModelCatalog) -> ModelResolver:
     """
 
     def resolve(builder_id: str, model_id: str) -> ModelBinding:
+        """Look up a builder and a model and check the builder accepts the model.
+
+        Args:
+            builder_id: The builder's id.
+            model_id: The model's id.
+
+        Returns:
+            The model's catalog binding.
+
+        Raises:
+            UnknownBuilderError: No builder has that id.
+            UnknownModelError: No model has that id.
+            IncompatibleModelError: The builder does not accept the model's contract.
+        """
         spec = get_builder(builder_id)
         model = catalog.get(model_id)
         spec.check_model(model)
@@ -99,6 +113,15 @@ def create_app(
     async def invalid_request(
         _request: Request, _error: RequestValidationError
     ) -> JSONResponse:
+        """Answer a request that fails validation without echoing its body.
+
+        Args:
+            _request: The rejected request.
+            _error: The validation error.
+
+        Returns:
+            A 422 response with the `invalid_request` error envelope.
+        """
         # Do not echo the body: it may contain provider credentials.
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -113,6 +136,11 @@ def create_app(
 
     @app.get("/healthz")
     async def health() -> JSONResponse:
+        """Report liveness: unhealthy once the scheduler's worker has stopped.
+
+        Returns:
+            200 while the worker runs, 503 after it stopped.
+        """
         # Liveness: an API process whose worker stopped would hold jobs forever.
         if not scheduler.alive:
             return JSONResponse({"status": "worker stopped"}, status_code=503)
@@ -120,6 +148,15 @@ def create_app(
 
     @app.get("/readyz")
     async def readiness() -> dict[str, str]:
+        """Report readiness: whether the execution repository answers.
+
+        Returns:
+            `{"status": "ok"}` when ready.
+
+        Raises:
+            HTTPException: 503 `scheduling_unavailable` when the repository does
+                not answer.
+        """
         try:
             await scheduler.check_ready()
         except SchedulingUnavailableError as error:
@@ -133,6 +170,15 @@ def create_app(
 
     @app.get("/healthz/deployments")
     async def deployment_status(response: Response) -> DeploymentStatus:
+        """Report whether Ray Serve exposes every builder and model route.
+
+        Args:
+            response: The response, set to 503 when routes are missing or Ray
+                Serve is unreachable.
+
+        Returns:
+            The deployment state and any missing routes.
+        """
         if deployment_health is None:
             return DeploymentStatus(DeploymentState.NOT_CONFIGURED)
         result = await deployment_health.check()
@@ -210,6 +256,17 @@ def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        """Run the scheduler and provider background work for the app's lifetime.
+
+        Initializes the repository first, and on shutdown cancels background
+        work and closes the HTTP client and the repository.
+
+        Args:
+            _app: The FastAPI app.
+
+        Yields:
+            Control while the app serves requests.
+        """
         background: list[asyncio.Task[None]] = []
         try:
             await repository.initialize()

@@ -25,6 +25,8 @@ RUN_REQUEST: TypeAdapter[RunRequest] = TypeAdapter(RunRequest)
 
 
 class ErrorCode(StrEnum):
+    """Error codes a builder replica answers with over HTTP."""
+
     INVALID_INVOCATION = "invalid_builder_invocation"
     UNAVAILABLE = "builder_unavailable"
     CONTRACT_VIOLATION = "builder_contract_violation"
@@ -32,6 +34,14 @@ class ErrorCode(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ErrorDetail:
+    """A builder replica's error.
+
+    Attributes:
+        code: Machine-readable error code.
+        message: Message safe to show callers.
+        retryable: Whether the same invocation may succeed later.
+    """
+
     code: Annotated[str, Field(strict=True, min_length=1)]
     message: Annotated[str, Field(strict=True, min_length=1)]
     retryable: StrictBool
@@ -39,4 +49,10 @@ class ErrorDetail:
 
 @dataclass(frozen=True, slots=True)
 class ErrorResponse:
+    """The error body a builder replica returns.
+
+    Attributes:
+        detail: The error.
+    """
+
     detail: ErrorDetail

@@ -35,6 +35,17 @@ MEDIA_TYPE = "application/x-npz"
 
 @dataclass(frozen=True, slots=True)
 class ScoreGrid:
+    """A score grid, as described in the module docstring.
+
+    Attributes:
+        values: float32 scores in 0..1, shaped (channels, rows, columns).
+        scored: bool (rows, columns), whether any tile covered the cell.
+        level: The slide level the scores were computed at.
+        level_size: That level's width and height in pixels.
+        cell_size: Pixels of that level one cell covers along each axis.
+        mpp: Microns per pixel of that level, x and y.
+    """
+
     values: NDArray[np.float32]
     scored: NDArray[np.bool_]
     level: int
