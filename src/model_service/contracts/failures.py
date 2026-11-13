@@ -23,6 +23,10 @@ class UnknownBuilderError(KeyError):
     pass
 
 
+class UnknownModelError(KeyError):
+    pass
+
+
 class IncompatibleModelError(InvalidInvocation):
     """The model's inference contract is not the one the builder accepts."""
 

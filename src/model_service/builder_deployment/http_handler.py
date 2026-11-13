@@ -1,6 +1,6 @@
 """Answer a builder run request and map exceptions to the deployment's HTTP errors.
 
-The format is contracts/builder_http.py.
+The format is contracts/builder_http.py; the public API's is http_common/errors.py.
 """
 
 from __future__ import annotations

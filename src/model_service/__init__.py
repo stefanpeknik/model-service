@@ -1,13 +1,17 @@
-"""RationAI model service: runs pathology models and builders on Ray Serve.
+"""RationAI model service: runs pathology models on Ray Serve behind one API.
 
+- api/: the API process (HTTP routes, wiring). Raw tiles go straight to Ray
+  Serve (`POST /<model-id>/`), not through the API.
+- scheduler/: the API's settings and the client that calls builder replicas over
+  HTTP (builder_dispatch.py).
 - builders/: the whole-slide builders and how to declare one.
 - builder_deployment/: the Ray Serve deployment that hosts a builder.
-- deployed_models/: the clients that call the deployed models and check them
-  (model_clients/).
+- deployed_models/: the deployed models (catalog.py, read from the model YAML) and
+  the clients that call and check them (model_clients/).
 - providers/: where inputs come from and results go: shared storage.
+- http_common/: auth and error mapping of the public API.
 - contracts/: data shapes processes hand each other (invocation, result, failures, model
   declarations, the builder HTTP format, score grid).
 - model_implementations/: the Ray Serve code that serves trained models; each
-  trained model is one file in deploy/helm/rayservice/applications/ naming its
-  implementation.
+  trained model is one file in deploy/helm/rayservice/models/ naming its implementation.
 """

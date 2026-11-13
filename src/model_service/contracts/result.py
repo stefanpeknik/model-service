@@ -6,7 +6,10 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import Field
+from pydantic import (
+    Field,
+    TypeAdapter,
+)
 
 from model_service.contracts.json_values import (
     JsonValue,
@@ -42,3 +45,6 @@ type BuilderOutput = Annotated[
 @dataclass(frozen=True, slots=True)
 class BuilderResult:
     outputs: Annotated[dict[str, BuilderOutput], Field(strict=True)]
+
+
+RESULT: TypeAdapter[BuilderResult] = TypeAdapter(BuilderResult)

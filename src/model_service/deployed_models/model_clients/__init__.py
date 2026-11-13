@@ -1,13 +1,13 @@
 """Call a model deployment the way its inference contract defines, one client per contract.
 
 A builder never talks to Ray itself: the application creates the client for the
-model's contract, checks the running model against its declaration, and
+model's contract, checks the running model against its catalog declaration, and
 hands the builder the verified client as `context.model`. A client calls the
 model through its Ray Serve application handle (tiles stay numpy arrays inside
 Ray) and checks every answer, so all builders of a contract share the same
 failure handling:
 
-- a running model whose `get_config()` differs from its declaration:
+- a running model whose `get_config()` differs from the catalog:
   `model_contract_mismatch`, not retried;
 - a failed model call: `model_failed`, retried;
 - an answer of the wrong shape, type or with non-finite values:
@@ -47,7 +47,7 @@ def client_for(
     """Create the client for a model's contract.
 
     Args:
-        declaration: The model's declaration.
+        declaration: The model's catalog declaration.
         handles: Looks up a deployment handle by model id.
 
     Returns:

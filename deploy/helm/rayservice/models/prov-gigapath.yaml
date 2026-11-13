@@ -1,4 +1,8 @@
-- name: prov-gigapath
+inference:
+  contract: tile-embedding
+  mpp: 0.5  # 20x; the resolution the published encoder was trained at
+serve:
+  name: prov-gigapath
   import_path: model_service.model_implementations.prov_gigapath:app
   route_prefix: /prov-gigapath
   runtime_env:

@@ -1,0 +1,120 @@
+"""Who is calling, and may they do this? Pluggable; nothing is enforced by default.
+
+An `Authenticator` turns a request into a `Principal` or rejects it (401). An
+`Authorizer` decides whether that principal may perform an `Action` (403).
+Both default to letting everyone in.
+"""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from enum import StrEnum
+from typing import Any
+
+from fastapi import Depends, Request
+
+from model_service.http_common.errors import ApiErrorCode, http_error
+
+
+class Action(StrEnum):
+    READ_CATALOG = "read_catalog"
+    RUN = "run"
+
+
+@dataclass(frozen=True, slots=True)
+class Principal:
+    """The caller; `subject` is None for anonymous requests."""
+
+    subject: str | None
+
+
+class AuthenticationError(Exception):
+    """The request carries no acceptable credentials."""
+
+
+class AuthorizationError(Exception):
+    """The principal may not perform the action."""
+
+
+class Authenticator(ABC):
+    @abstractmethod
+    async def authenticate(self, request: Request) -> Principal:
+        """Identify the caller of a request.
+
+        Args:
+            request: The incoming HTTP request.
+
+        Returns:
+            The calling principal.
+
+        Raises:
+            AuthenticationError: If the request carries no acceptable credentials.
+        """
+        ...
+
+
+class Authorizer(ABC):
+    @abstractmethod
+    async def authorize(self, principal: Principal, action: Action) -> None:
+        """Decide whether the principal may perform the action; return to allow.
+
+        Args:
+            principal: The authenticated caller.
+            action: What the caller wants to do.
+
+        Raises:
+            AuthorizationError: If the principal may not perform the action.
+        """
+        ...
+
+
+class AllowAnonymous(Authenticator):
+    async def authenticate(self, request: Request) -> Principal:
+        """Accept every request as anonymous."""
+        return Principal(None)
+
+
+class AllowAll(Authorizer):
+    async def authorize(self, principal: Principal, action: Action) -> None:
+        """Allow every action."""
+        return None
+
+
+@dataclass(frozen=True, slots=True)
+class Access:
+    authenticator: Authenticator = field(default_factory=AllowAnonymous)
+    authorizer: Authorizer = field(default_factory=AllowAll)
+
+    def require(self, action: Action) -> Any:
+        """Make a route dependency that authenticates the caller and authorizes `action`.
+
+        The dependency answers 401 (with `WWW-Authenticate: Bearer`) when
+        authentication fails and 403 when authorization fails.
+
+        Args:
+            action: The action the route performs.
+
+        Returns:
+            A FastAPI `Depends` marker resolving to the caller's `Principal`.
+        """
+
+        async def check(request: Request) -> Principal:
+            try:
+                principal = await self.authenticator.authenticate(request)
+            except AuthenticationError as error:
+                raise http_error(
+                    401,
+                    ApiErrorCode.UNAUTHENTICATED,
+                    "authentication is required",
+                    headers={"WWW-Authenticate": "Bearer"},
+                ) from error
+            try:
+                await self.authorizer.authorize(principal, action)
+            except AuthorizationError as error:
+                raise http_error(
+                    403, ApiErrorCode.FORBIDDEN, "this action is not allowed"
+                ) from error
+            return principal
+
+        return Depends(check)

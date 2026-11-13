@@ -14,6 +14,7 @@ from model_service.contracts.failures import UnknownBuilderError
 
 if TYPE_CHECKING:
     from model_service.builders.declarations import BuilderSpec
+    from model_service.contracts.model_declarations import ModelBinding
 
 
 BUILDERS: dict[str, BuilderSpec] = {spec.id: spec for spec in (HEATMAP,)}
@@ -35,3 +36,15 @@ def get_builder(builder_id: str) -> BuilderSpec:
         return BUILDERS[builder_id]
     except KeyError as error:
         raise UnknownBuilderError(builder_id) from error
+
+
+def compatible_builders(model: ModelBinding) -> list[str]:
+    """List the registered builders that accept a model's contract.
+
+    Args:
+        model: The model binding.
+
+    Returns:
+        IDs of the compatible builders.
+    """
+    return [spec.id for spec in BUILDERS.values() if spec.accepts == model.contract]
