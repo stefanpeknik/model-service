@@ -93,7 +93,10 @@ class BuilderRegistryTests(unittest.TestCase):
 
 
 class BuilderWiringTests(unittest.TestCase):
-    """A registered builder's pieces must agree; a new builder is checked here."""
+    """A registered builder's pieces must agree; a new builder is checked here.
+
+    `tests/builder_deployment/test_deployment_files.py` checks the Helm side.
+    """
 
     def test_every_builder_implements_its_declaration(self) -> None:
         import importlib

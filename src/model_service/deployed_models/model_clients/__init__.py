@@ -1,8 +1,8 @@
 """Call a model deployment the way its inference contract defines, one client per contract.
 
-A builder never talks to Ray itself: it gets the client of the model's contract
-(`client_for`), verified against the running model (`verify`), as
-`context.model`. A client calls the
+A builder never talks to Ray itself: the application creates the client for the
+model's contract, checks the running model against its declaration, and
+hands the builder the verified client as `context.model`. A client calls the
 model through its Ray Serve application handle (tiles stay numpy arrays inside
 Ray) and checks every answer, so all builders of a contract share the same
 failure handling:

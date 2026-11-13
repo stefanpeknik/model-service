@@ -9,6 +9,7 @@ from pydantic import (
     ConfigDict,
     Field,
     TypeAdapter,
+    ValidationError,
 )
 from pydantic import JsonValue as PydanticJsonValue
 
@@ -40,3 +41,19 @@ type NonEmptyString = Annotated[str, Field(strict=True, min_length=1)]
 
 
 type JsonObject = Annotated[dict[str, JsonValue], Field(strict=True)]
+
+
+def is_json_value(value: object) -> bool:
+    """Check whether a value is strict JSON, without NaN or infinities.
+
+    Args:
+        value: Value to check.
+
+    Returns:
+        True when the value is strict JSON.
+    """
+    try:
+        _JSON_VALUE.validate_python(value, strict=True)
+    except ValidationError:
+        return False
+    return True
