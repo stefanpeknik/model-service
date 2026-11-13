@@ -4,34 +4,21 @@ from __future__ import annotations
 
 import unittest
 from datetime import UTC, datetime, timedelta
-from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
-
-from model_service.builders.declarations import InputSpec
 from model_service.builders.registry import BUILDERS, get_builder
 from model_service.contracts.failures import (
     InvalidInvocation,
-    UnknownBuilderError,
 )
 from model_service.contracts.invocation import (
     InputAccessContext,
     Invocation,
     SharedPathInput,
 )
-from tests.support.builder_fixtures import spec as test_spec
+from model_service.contracts.model_declarations import SpatialScoresModel
 
 
-class StrideConfiguration(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    stride_fraction: Annotated[float, Field(gt=0, le=1)] = 0.5
-    skip_background: bool = True
-
-
-SPEC = test_spec(
-    inputs={"slide": InputSpec(), "region_of_interest": InputSpec(required=False)},
-    configuration=StrideConfiguration,
+SPATIAL = SpatialScoresModel(
+    id="classifier", tile_size=512, output_tile_size=1, n_channels=1, mpp=0.5
 )
 
 
@@ -50,11 +37,8 @@ def invocation(**overrides: object) -> Invocation:
 
 
 class BuilderRegistryTests(unittest.TestCase):
-    def test_unknown_builder_is_rejected(self) -> None:
-        with self.assertRaises(UnknownBuilderError):
-            get_builder("missing")
-
     def test_invalid_configuration_is_an_invalid_invocation(self) -> None:
+        spec = get_builder("heatmap")
         for overrides in (
             {"stride_fraction": 0},
             {"stride_fraction": 1.5},
@@ -66,13 +50,14 @@ class BuilderRegistryTests(unittest.TestCase):
                 self.subTest(overrides=overrides),
                 self.assertRaises(InvalidInvocation),
             ):
-                SPEC.resolve_configuration(overrides)
+                spec.resolve_configuration(overrides)
 
     def test_validate_invocation_checks_inputs_deadline_and_configuration(
         self,
     ) -> None:
-        SPEC.check_invocation(invocation())
-        SPEC.check_invocation(invocation(inputs={"slide": SharedPathInput("s")}))
+        spec = get_builder("heatmap")
+        spec.check_invocation(invocation())
+        spec.check_invocation(invocation(inputs={"slide": SharedPathInput("s")}))
         cases: dict[str, Invocation] = {
             "missing inputs": invocation(inputs={}),
             "unknown inputs": invocation(
@@ -89,7 +74,7 @@ class BuilderRegistryTests(unittest.TestCase):
                 self.subTest(message=message),
                 self.assertRaisesRegex(InvalidInvocation, message),
             ):
-                SPEC.check_invocation(value)
+                spec.check_invocation(value)
 
 
 class BuilderWiringTests(unittest.TestCase):

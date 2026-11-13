@@ -12,9 +12,9 @@ import types
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Union, get_args, get_origin
+from typing import TYPE_CHECKING, Annotated, Union, get_args, get_origin
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from model_service.contracts.failures import IncompatibleModelError, InvalidInvocation
 from model_service.contracts.model_declarations import InferenceContract
@@ -95,6 +95,12 @@ class BuilderInputs(BaseModel):
             One path per input the invocation supplied, in field order.
         """
         return tuple(path for path in dict(self).values() if path is not None)
+
+
+# Input and configuration fields builders share.
+Slide = Annotated[Path, Input(media_type="application/vnd.openmicroscopy")]
+RegionOfInterest = Annotated[Path | None, Input(media_type="image/tiff")]
+StrideFraction = Annotated[float, Field(gt=0, le=1, allow_inf_nan=False)]
 
 
 @dataclass(frozen=True, slots=True)

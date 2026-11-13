@@ -1,4 +1,4 @@
-"""Shared fixtures for builder runtime tests: test specs and models."""
+"""Shared fixtures for builder runtime tests: test specs, models and native slides."""
 
 from __future__ import annotations
 
@@ -34,6 +34,8 @@ from model_service.contracts.result import (
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
+
+    import numpy as np
 
     from model_service.builders.base import BuilderContext
     from model_service.contracts.model_declarations import ModelBinding
@@ -179,3 +181,33 @@ def invocation(
     }
     values.update(overrides)
     return Invocation(**values)  # type: ignore[arg-type]
+
+
+def write_slide(
+    path: Path,
+    pixels: np.ndarray,
+    *,
+    mpp: float = 0.5,
+    pyramid: bool = False,
+    tile: int = 128,
+) -> None:
+    """Write an Aperio-style pyramidal TIFF with the given level-0 resolution."""
+    import pyvips
+
+    height, width = pixels.shape[:2]
+    image = pyvips.Image.new_from_array(pixels)
+    image.set_type(
+        pyvips.GValue.gstr_type,
+        "image-description",
+        f"Aperio Image Library v12.0.0\n{width}x{height} |AppMag = 20|MPP = {mpp}",
+    )
+    image.tiffsave(
+        str(path),
+        tile=True,
+        tile_width=tile,
+        tile_height=tile,
+        compression="deflate",
+        xres=1000 / mpp,
+        yres=1000 / mpp,
+        pyramid=pyramid,
+    )
