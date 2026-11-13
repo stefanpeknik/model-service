@@ -37,6 +37,9 @@ extend-ignore = [
     "D107",   # missing docstring in __init__
     "N812",   # lowercase imported as non lowercase
     "TC002", # move third-party into a type-checking block
+    "TC001", # same for first-party: Pydantic and FastAPI read
+    "TC003", # annotations at runtime, which ruff cannot see
+    "N818",  # exceptions named for the outcome (BuilderFailure), not *Error
     "F722", # jaxtyping
     "N801", # class name lowercase
     "N806", # variable with CAPITALIZED name
@@ -51,3 +54,9 @@ lines-after-imports = 2
 
 [lint.pydocstyle]
 convention = "google"
+
+[lint.flake8-type-checking]
+# Pydantic resolves field annotations at runtime.
+runtime-evaluated-base-classes = [
+    "pydantic.BaseModel",
+]

@@ -2,7 +2,7 @@ apiVersion: ray.io/v1
 kind: RayService
 metadata:
   name: {{ .Release.Name }}
-  namespace: {{ .Release.Namespace | default "rationai-jobs-ns" }}
+  namespace: {{ .Release.Namespace }}
 spec:
   rayClusterConfig:
     rayVersion: 2.58.0
@@ -27,8 +27,8 @@ spec:
               type: RuntimeDefault
           containers:
             - name: ray-head
-              image: rayproject/ray:2.58.0-py312
-              imagePullPolicy: Always
+              image: "{{ .Values.rayImage.repository }}:{{ .Values.rayImage.tag }}"
+              imagePullPolicy: {{ .Values.rayImage.pullPolicy }}
               resources:
                 limits:
                   cpu: 0
