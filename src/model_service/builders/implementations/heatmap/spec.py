@@ -47,5 +47,5 @@ SPEC = BuilderSpec(
     input_model=HeatmapInputs,
     output_model=HeatmapOutputs,
     configuration=HeatmapConfiguration,
-    implementation="model_service.builders.heatmap.builder:HeatmapBuilder",
+    implementation="model_service.builders.implementations.heatmap.builder:HeatmapBuilder",
 )

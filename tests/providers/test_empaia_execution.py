@@ -10,9 +10,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
-from model_service.builder_deployment.runner import BuilderApplication
-from model_service.builders.heatmap.spec import HeatmapOutputs
+from model_service.builders.implementations.heatmap.spec import HeatmapOutputs
 from model_service.builders.registry import get_builder
+from model_service.builders.replica.runner import BuilderApplication
 from model_service.contracts.invocation import ExecutionContext, Invocation
 from model_service.contracts.model_declarations import ModelBinding, SpatialScoresModel
 from model_service.contracts.result import BuilderResult, SharedArtifact

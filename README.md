@@ -47,12 +47,13 @@ src/model_service/
   api/                    the public API process: routes/, synchronous runs
   http_common/            auth, error mapping, scheduling calls (API and provider routes)
   scheduler/              durable executions on PostgreSQL (runs inside the API process)
-  builders/               builder contract and the builders: heatmap/, embeddings/
-  builder_deployment/     the Ray Serve app that hosts builders
-  deployed_models/        model catalog and one client per inference contract
+  builders/               builder contract, registry, shared slides/
+  builders/implementations/  the builders: heatmap/, embeddings/
+  builders/replica/       the Ray Serve app that hosts builders
+  models/                 model catalog, one client per contract, MLflow loader
   providers/              where builders read input and publish output: standalone, empaia/
   contracts/              data shapes processes hand each other
-  model_implementations/  inference code served by Ray Serve
+  models/implementations/    inference code served by Ray Serve
 deploy/
   helm/rayservice/models/<id>.yaml   one file per trained model
   images/                            Dockerfiles

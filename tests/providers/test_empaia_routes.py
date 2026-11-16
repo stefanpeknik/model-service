@@ -9,7 +9,7 @@ from httpx import ASGITransport, AsyncClient
 from model_service.api.app_factory import create_app
 from model_service.contracts.failures import UnknownModelError
 from model_service.contracts.model_declarations import SpatialScoresModel
-from model_service.deployed_models.catalog import ModelCatalog
+from model_service.models.catalog import ModelCatalog
 from model_service.providers.empaia.jobs.routes import create_router
 from model_service.scheduler.public import (
     ExecutionError,

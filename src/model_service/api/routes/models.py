@@ -22,7 +22,7 @@ from model_service.http_common.errors import ERRORS, lookup_error
 
 
 if TYPE_CHECKING:
-    from model_service.deployed_models.catalog import ModelCatalog
+    from model_service.models.catalog import ModelCatalog
 
 
 @dataclass(frozen=True, slots=True)

@@ -15,7 +15,7 @@ from model_service.contracts.model_declarations import (
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from model_service.deployed_models.catalog import CatalogError, ModelCatalog
+from model_service.models.catalog import CatalogError, ModelCatalog
 
 
 def spatial_document(model_id: str = "prostate-classifier-1") -> dict[str, object]:
@@ -24,7 +24,7 @@ def spatial_document(model_id: str = "prostate-classifier-1") -> dict[str, objec
         "serve": {
             "name": model_id,
             "route_prefix": f"/{model_id}",
-            "import_path": "model_service.model_implementations.binary_classifier:app",
+            "import_path": "model_service.models.implementations.binary_classifier:app",
             "deployments": [
                 {
                     "name": "BinaryClassifier",
@@ -34,9 +34,7 @@ def spatial_document(model_id: str = "prostate-classifier-1") -> dict[str, objec
                         "n_channels": 1,
                         "mpp": 0.468,
                         "max_batch_size": 64,
-                        "model": {
-                            "_target_": "model_service.model_implementations.artifacts:mlflow"
-                        },
+                        "model": {"_target_": "model_service.models.artifacts:mlflow"},
                     },
                 }
             ],
@@ -54,7 +52,7 @@ def embedding_document(model_id: str = "virchow2") -> dict[str, object]:
         "serve": {
             "name": model_id,
             "route_prefix": f"/{model_id}",
-            "import_path": "model_service.model_implementations.virchow2:app",
+            "import_path": "model_service.models.implementations.virchow2:app",
             "deployments": [
                 {"name": "Virchow2", "user_config": {"tile_size": 224}},
             ],
@@ -227,7 +225,7 @@ class ModelImplementationTests(unittest.TestCase):
 
         import yaml
 
-        from model_service.deployed_models.model_clients import CLIENTS
+        from model_service.models.clients import CLIENTS
 
         self.assertTrue(MODEL_FILES)
         for path in MODEL_FILES:

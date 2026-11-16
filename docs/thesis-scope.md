@@ -16,15 +16,15 @@ and add a trained model with one YAML file.
 | --- | --- | --- |
 | Public API | One HTTP entry point for builders, executions and the model catalog, with auth hooks, capacity checks and health | `src/model_service/api/`, `http_common/` |
 | Durable scheduler | Executions stored in PostgreSQL: queueing until capacity frees, leases, retries, deadlines, cancellation, priorities | `src/model_service/scheduler/` |
-| Builders | Whole-slide outputs as plug-ins: heatmap (score grid) and tile embeddings (HDF5), one Ray Serve app hosting any builder | `builders/`, `builder_deployment/` |
-| Model catalog | One YAML per trained model feeds both Ray Serve and the API; the API refuses to start on an inconsistent file, and each run checks the running model matches its declaration | `deployed_models/catalog.py`, `deploy/helm/rayservice/models/` |
+| Builders | Whole-slide outputs as plug-ins: heatmap (score grid) and tile embeddings (HDF5), one Ray Serve app hosting any builder | `builders/`, `builders/implementations/`, `builders/replica/` |
+| Model catalog | One YAML per trained model feeds both Ray Serve and the API; the API refuses to start on an inconsistent file, and each run checks the running model matches its declaration | `models/catalog.py`, `deploy/helm/rayservice/models/` |
 | EMPAIA provider | Self-registration as an EMPAIA app, JES job execution in STANDALONE and PREPROCESSING modes, publication of primitives and pixelmaps through the EMPAIA SDK | `providers/empaia/`, [EMPAIA integration](architecture/empaia.md) |
 | Tests | About 380 unit and PostgreSQL tests, including a contract test kit every builder runs | `tests/` |
 
 ## Preserved
 
 The inference implementations still do the same maths; they moved from
-the top-level `models/` to `src/model_service/model_implementations/`.
+the top-level `models/` to `src/model_service/models/implementations/`.
 
 - `semantic_segmentation.py`: the maths is unchanged.
 - `virchow2.py`, `prov_gigapath.py`: the HTTP handler was split into

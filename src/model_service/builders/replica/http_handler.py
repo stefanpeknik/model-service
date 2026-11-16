@@ -24,7 +24,7 @@ from model_service.contracts.result import BuilderResult
 
 
 if TYPE_CHECKING:
-    from model_service.builder_deployment.runner import BuilderApplication
+    from model_service.builders.replica.runner import BuilderApplication
 
 
 def error(

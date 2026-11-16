@@ -11,7 +11,7 @@ It does not orchestrate whole-slide processing.
 _Avoid_: Model operation, low-level model call
 
 **Inference implementation**:
-Code in `src/model_service/model_implementations/` that serves one kind of model-ready input and output. It can
+Code in `src/model_service/models/implementations/` that serves one kind of model-ready input and output. It can
 serve any trained model that fits it.
 _Avoid_: Model, when meaning the code rather than a deployment
 

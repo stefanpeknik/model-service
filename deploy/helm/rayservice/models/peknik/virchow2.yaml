@@ -4,7 +4,7 @@ inference:
   summaries: [global, local_mean]
 serve:
   name: virchow2
-  import_path: model_service.model_implementations.virchow2:app
+  import_path: model_service.models.implementations.virchow2:app
   route_prefix: /virchow2
   runtime_env:
     config:

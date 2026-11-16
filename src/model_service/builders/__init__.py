@@ -1,4 +1,6 @@
-"""The whole-slide builders, one package each, and what declaring one takes.
+"""Whole-slide builders: the generic code here, the concrete builders below.
+
+Generic files, which every builder uses:
 
 - base.py: Builder, BuilderContext, BuilderSettings and ReplicaSettings: what a
   builder implements and gets.
@@ -7,5 +9,11 @@
 - registry.py: the registered builders; each builder's spec.py declares it.
   Offering one in EMPAIA also takes an entry in providers/empaia/ead/builder_io.py
   (BUILDER_IO, or NOT_OFFERED with a reason; a test checks).
-- heatmap/, embeddings/: the builders; slides/: slide reading they share.
+- slides/: slide reading the builders share.
+
+Subpackages:
+
+- implementations/: the concrete builders, one package each (heatmap/, embeddings/).
+- replica/: the Ray Serve deployment that hosts a builder; it runs only inside
+  Ray replicas, never in the API process.
 """

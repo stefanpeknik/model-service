@@ -3,7 +3,7 @@
 ## A model that fits an existing implementation: YAML only
 
 Most new models are another trained artifact for an implementation that already
-exists in `src/model_service/model_implementations/`: another binary classifier ONNX, another segmentation model,
+exists in `src/model_service/models/implementations/`: another binary classifier ONNX, another segmentation model,
 another tile encoder. These need no Python and no image rebuild.
 
 1. Copy the closest file in `deploy/helm/rayservice/models/` (for example
@@ -117,14 +117,14 @@ The deployment guide explains how the runtime reads this artifact back during st
 
 Do not start from an empty file. Copy the closest implementation and adapt only model-specific pieces.
 
-- **Binary classification (baseline)**: [`src/model_service/model_implementations/binary_classifier.py`](https://github.com/RationAI/model-service/blob/main/src/model_service/model_implementations/binary_classifier.py)
-- **Semantic segmentation**: [`src/model_service/model_implementations/semantic_segmentation.py`](https://github.com/RationAI/model-service/blob/main/src/model_service/model_implementations/semantic_segmentation.py)
-- **Virchow2 embedding/classification**: [`src/model_service/model_implementations/virchow2.py`](https://github.com/RationAI/model-service/blob/main/src/model_service/model_implementations/virchow2.py)
+- **Binary classification (baseline)**: [`src/model_service/models/implementations/binary_classifier.py`](https://github.com/RationAI/model-service/blob/main/src/model_service/models/implementations/binary_classifier.py)
+- **Semantic segmentation**: [`src/model_service/models/implementations/semantic_segmentation.py`](https://github.com/RationAI/model-service/blob/main/src/model_service/models/implementations/semantic_segmentation.py)
+- **Virchow2 embedding/classification**: [`src/model_service/models/implementations/virchow2.py`](https://github.com/RationAI/model-service/blob/main/src/model_service/models/implementations/virchow2.py)
 Matching model files live in `deploy/helm/rayservice/models/`; the YAML itself is covered in the [Deployment Guide](deployment-guide.md).
 
 ## Python Entrypoint
 
-Create a new file in `src/model_service/model_implementations/` (for example `src/model_service/model_implementations/my_model.py`). The sections below explain what each method does and what belongs inside it.
+Create a new file in `src/model_service/models/implementations/` (for example `src/model_service/models/implementations/my_model.py`). The sections below explain what each method does and what belongs inside it.
 
 ### `__init__`: one-time lightweight setup
 
@@ -216,9 +216,9 @@ async def get_config(self) -> dict[str, Any]:
   }
 ```
 
-The contract's model client (`src/model_service/deployed_models/model_clients.py`) calls it with `await model.get_config.remote()` before each run and fails with `model_contract_mismatch` if the values differ from the model's catalog declaration; keep it cheap and avoid any I/O.
+The contract's model client (`src/model_service/models/clients.py`) calls it with `await model.get_config.remote()` before each run and fails with `model_contract_mismatch` if the values differ from the model's catalog declaration; keep it cheap and avoid any I/O.
 
-A `tile-embedding` model (used by the `tile-embeddings` builder) instead provides `get_config()` returning `tile_size` and `summaries`, and `async def embed(self, tile)`: one CHW uint8 tile in, float32 `(dim,)` (one summary) or `(len(summaries), dim)` out, with the model's own preprocessing and pooling inside. See `src/model_service/model_implementations/virchow2.py`. Builders call these methods by handle. The HTTP `root` route is optional: it is only for posting raw tiles to the model directly, and should call the same methods. `tests/deployed_models/test_catalog.py` fails if a model file's implementation lacks the methods of its contract.
+A `tile-embedding` model (used by the `tile-embeddings` builder) instead provides `get_config()` returning `tile_size` and `summaries`, and `async def embed(self, tile)`: one CHW uint8 tile in, float32 `(dim,)` (one summary) or `(len(summaries), dim)` out, with the model's own preprocessing and pooling inside. See `src/model_service/models/implementations/virchow2.py`. Builders call these methods by handle. The HTTP `root` route is optional: it is only for posting raw tiles to the model directly, and should call the same methods. `tests/models/test_catalog.py` fails if a model file's implementation lacks the methods of its contract.
 
 ### `root`: HTTP request parsing and serialization
 

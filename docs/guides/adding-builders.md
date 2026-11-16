@@ -9,11 +9,11 @@ contract, and any model of that contract can run with it.
 deploy/helm/rayservice/models/<model>.yaml    inference.contract: spatial-scores
         │ catalog (API)                    serve: the Ray application
         ▼
-deployed_models/model_clients.py                     SpatialScoresClient: get_config + predict,
+models/clients.py                     SpatialScoresClient: get_config + predict,
         │ client per contract                 checked answers, failure codes
         ▼
-builders/<builder>/spec.py             accepts=SPATIAL_SCORES, inputs, configuration,
-builders/<builder>/builder.py                 outputs; run(context) → outputs
+builders/implementations/<builder>/spec.py       accepts=SPATIAL_SCORES, inputs, configuration,
+builders/implementations/<builder>/builder.py           outputs; run(context) → outputs
         │ registry.py lists it
         ▼
 deploy/helm/rayservice/values.yaml builders   one Ray application per builder
@@ -30,7 +30,7 @@ Take a builder that traces annotations from a `spatial-scores` model.
 
 ### 1. Declare it
 
-`src/model_service/builders/annotations/spec.py` holds everything the
+`src/model_service/builders/implementations/annotations/spec.py` holds everything the
 API needs: which contract the builder accepts, its inputs, its configuration
 and its outputs. It imports only Pydantic and `builders.spec`, because the
 API loads it without the slide libraries.
@@ -75,7 +75,7 @@ SPEC = BuilderSpec(
 ### 2. Implement it
 
 `builder.py` subclasses `Builder[Client, Inputs, Configuration, Outputs]`. The
-client type is the contract's client from `model_clients.py`.
+client type is the contract's client from `clients.py`.
 
 ```python
 class AnnotationsBuilder(
@@ -126,7 +126,7 @@ a failure code. Anything else becomes a retryable internal error.
 - Add an entry under `builders:` in `deploy/helm/rayservice/values.yaml`, keyed
   by the builder ID, with its Ray deployment options and `userConfig`
   (`num_threads`, `max_concurrent_tasks`). The chart makes it a Ray application
-  at `/builders/<id>` running `builder_deployment.serve:app`, and tells the API it
+  at `/builders/<id>` running `builders.replica.serve:app`, and tells the API it
   exists.
 
 The builder then gets the public routes (`/v1/builders/<id>/models/<m>/run`
@@ -142,7 +142,7 @@ logged.
 
 ### 5. Test it
 
-`tests/builders/<builder>/test_builder.py` subclasses `BuilderContractTests`:
+`tests/builders/implementations/<builder>/test_builder.py` subclasses `BuilderContractTests`:
 
 ```python
 class AnnotationsContractTests(BuilderContractTests, unittest.IsolatedAsyncioTestCase):
@@ -178,7 +178,7 @@ scores.
 
    A model file's `inference` block must then match it (see
    [Adding models](adding-models.md)).
-2. **Write its client** in `src/model_service/deployed_models/model_clients.py`, a
+2. **Write its client** in `src/model_service/models/clients.py`, a
    `ModelClient` subclass. It sets `contract`, and `methods`: the deployment
    methods a model of the contract must have. It also implements:
    - `_matches(running)`: does the `get_config()` result equal the
@@ -188,9 +188,9 @@ scores.
      the answer breaks the contract.
 
    Add the client to `CLIENTS`.
-3. **Implement it in models.** A model implementation in `src/model_service/model_implementations/`
+3. **Implement it in models.** A model implementation in `src/model_service/models/implementations/`
    provides those methods, and its YAML names the contract.
-   `tests/deployed_models/test_catalog.py` fails if a model file's implementation
+   `tests/models/test_catalog.py` fails if a model file's implementation
    lacks a method its contract's client calls.
 
 Then add builders that accept the new contract, as above.

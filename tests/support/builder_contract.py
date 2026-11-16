@@ -14,9 +14,9 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 import numpy as np
 
-from model_service.builder_deployment.runner import BuilderApplication
 from model_service.builders.base import ReplicaSettings
 from model_service.builders.registry import get_builder
+from model_service.builders.replica.runner import BuilderApplication
 from model_service.contracts.failures import (
     BuilderFailure,
     FailureCode,

@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from model_service.contracts.invocation import InputAccessKind
     from model_service.contracts.json_values import JsonValue
     from model_service.contracts.result import BuilderResult
-    from model_service.deployed_models.catalog import ModelCatalog
+    from model_service.models.catalog import ModelCatalog
     from model_service.scheduler.protocols import Scheduler
     from model_service.scheduler.public import (
         BeforeMutation,

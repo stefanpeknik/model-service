@@ -13,7 +13,7 @@ from model_service.contracts.model_declarations import (
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from model_service.deployed_models.model_clients import (
+from model_service.models.clients import (
     CLIENTS,
     SpatialScoresClient,
     TileEmbeddingClient,

@@ -13,10 +13,10 @@ from typing import TYPE_CHECKING, Any, cast
 import httpx
 from fastapi import FastAPI
 
-from model_service.builder_deployment.http_handler import run_http
-from model_service.builder_deployment.runner import BuilderApplication
 from model_service.builders.base import _atomic_artifact as atomic_artifact
 from model_service.builders.declarations import InputSpec
+from model_service.builders.replica.http_handler import run_http
+from model_service.builders.replica.runner import BuilderApplication
 from model_service.contracts.builder_http import RunRequest
 from model_service.contracts.failures import (
     BuilderFailure,

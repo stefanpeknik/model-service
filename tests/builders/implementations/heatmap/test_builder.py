@@ -16,11 +16,11 @@ from unittest.mock import AsyncMock, patch
 
 import numpy as np
 
-from model_service.builder_deployment.runner import BuilderApplication
 from model_service.builders.base import ReplicaSettings
-from model_service.builders.heatmap.builder import HeatmapBuilder
-from model_service.builders.heatmap.processor import build_heatmap
+from model_service.builders.implementations.heatmap.builder import HeatmapBuilder
+from model_service.builders.implementations.heatmap.processor import build_heatmap
 from model_service.builders.registry import get_builder
+from model_service.builders.replica.runner import BuilderApplication
 from model_service.contracts.invocation import SharedPathInput
 from model_service.contracts.model_declarations import SpatialScoresModel
 from model_service.contracts.result import SharedArtifact

@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 
     from model_service.builders.base import BuilderContext
     from model_service.contracts.model_declarations import ModelBinding
-    from model_service.deployed_models.model_clients import HandleLookup
+    from model_service.models.clients import HandleLookup
 
 
 SPATIAL_MODEL = SpatialScoresModel(

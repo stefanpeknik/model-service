@@ -12,9 +12,9 @@ from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
-from model_service.builder_deployment.runner import BuilderApplication
 from model_service.builders.input_access import close_resource
 from model_service.builders.registry import BUILDERS, get_builder
+from model_service.builders.replica.runner import BuilderApplication
 from model_service.contracts.failures import (
     BuilderFailure,
     FailureCode,

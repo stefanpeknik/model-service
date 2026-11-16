@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from datetime import UTC, datetime, timedelta
 
-from model_service.builders.heatmap.spec import HeatmapConfiguration
+from model_service.builders.implementations.heatmap.spec import HeatmapConfiguration
 from model_service.builders.registry import BUILDERS, get_builder
 from model_service.contracts.failures import (
     IncompatibleModelError,

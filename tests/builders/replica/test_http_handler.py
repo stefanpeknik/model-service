@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Never, cast
 
 from fastapi import HTTPException
 
-from model_service.builder_deployment.http_handler import run_http
+from model_service.builders.replica.http_handler import run_http
 from model_service.contracts.builder_http import ErrorCode, RunRequest
 from model_service.contracts.failures import (
     BuilderFailure,
@@ -24,7 +24,7 @@ from model_service.contracts.model_declarations import SpatialScoresModel
 
 
 if TYPE_CHECKING:
-    from model_service.builder_deployment.runner import BuilderApplication
+    from model_service.builders.replica.runner import BuilderApplication
     from model_service.contracts.model_declarations import ModelBinding
 
 

@@ -15,14 +15,14 @@ from fastapi import FastAPI
 
 from model_service.api.app_factory import create_app, model_resolver
 from model_service.api.synchronous_runs import SynchronousBuilderService
-from model_service.builder_deployment.http_handler import run_http
-from model_service.builder_deployment.runner import BuilderApplication
 from model_service.builders.base import ReplicaSettings
-from model_service.builders.embeddings.builder import EmbeddingBuilder
+from model_service.builders.implementations.embeddings.builder import EmbeddingBuilder
 from model_service.builders.registry import get_builder
+from model_service.builders.replica.http_handler import run_http
+from model_service.builders.replica.runner import BuilderApplication
 from model_service.contracts.builder_http import RunRequest
 from model_service.contracts.model_declarations import TileEmbeddingModel
-from model_service.deployed_models.catalog import ModelCatalog
+from model_service.models.catalog import ModelCatalog
 from model_service.providers.standalone.provider import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from model_service.scheduler.builder_dispatch import HTTPBuilderDispatch

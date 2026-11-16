@@ -10,8 +10,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from model_service.builders.embeddings.spec import SPEC as TILE_EMBEDDINGS
-from model_service.builders.heatmap.spec import SPEC as HEATMAP
+from model_service.builders.implementations.embeddings.spec import (
+    SPEC as TILE_EMBEDDINGS,
+)
+from model_service.builders.implementations.heatmap.spec import SPEC as HEATMAP
 from model_service.contracts.failures import UnknownBuilderError
 
 

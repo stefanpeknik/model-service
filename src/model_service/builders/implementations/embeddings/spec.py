@@ -44,5 +44,5 @@ SPEC = BuilderSpec(
     input_model=EmbeddingInputs,
     output_model=EmbeddingOutputs,
     configuration=EmbeddingConfiguration,
-    implementation="model_service.builders.embeddings.builder:EmbeddingBuilder",
+    implementation="model_service.builders.implementations.embeddings.builder:EmbeddingBuilder",
 )

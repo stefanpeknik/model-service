@@ -19,7 +19,7 @@ open ones (05–08) with the smallest mechanism that meets them. Tickets live in
 - Adding a model that fits an existing builder needs Python edits. The
   per-model workflow wrappers (`prostate-heatmap`, `episeg-segmentation`,
   `gigapath-embeddings`, `virchow2-embeddings`) hardcode model names, even though
-  `src/model_service/model_implementations/` and the original heatmap builder were already generic.
+  `src/model_service/models/implementations/` and the original heatmap builder were already generic.
 - The scheduler processes one execution at a time per process, and limits
   capacity per workflow rather than per model.
 - Several correctness and safety gaps exist: caller-chosen storage roots,
@@ -89,12 +89,12 @@ listed in `registry.py`. A builder's `spec.py` declares the contract it
 accepts, its inputs as a `BuilderInputs` model, a Pydantic configuration with
 defaults, and its outputs as a `BuilderOutputs` model; the input and output
 declarations are derived from the two models. The application verifies the
-running model through its contract's client (`model_clients.py`), resolves the
+running model through its contract's client (`clients.py`), resolves the
 inputs to local files and runs the builder with the typed client, inputs and
 configuration. A builder returns its outputs model; the application checks it
 and turns it into the generic `BuilderResult` that is sent and stored, and
 The EMPAIA adapter reads a stored result back as the builder's outputs model.
-[Adding a builder](guides/adding-builders.md) walks through a new one. One Ray application per builder (`builder_deployment.serve:app`, route
+[Adding a builder](guides/adding-builders.md) walks through a new one. One Ray application per builder (`builders.replica.serve:app`, route
 `/builders/<id>`), with the builder ID in `user_config`.
 
 | Builder | Accepts | Inputs | Output | Defaults |
