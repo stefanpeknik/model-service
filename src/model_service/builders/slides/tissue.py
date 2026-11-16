@@ -1,9 +1,8 @@
 """Find tissue on a slide's coarse level so builders can skip empty glass.
 
-Colour saturation separates stained tissue from white glass and from the black
-that transparent regions (e.g. in MIRAX slides) read as. Otsu's method picks the
-threshold per slide, with a floor so a slide of nearly only glass is not split
-into "tissue" by noise. This is a stopgap until QC publishes tissue masks.
+Detection is ratiopath's `tissue_mask` (grayscale, multi-Otsu, closing and
+opening). Transparent regions (e.g. in MIRAX slides) are flattened onto white
+first, so they read as glass. This is a stopgap until QC publishes tissue masks.
 """
 
 from __future__ import annotations
@@ -12,7 +11,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
-from openslide import PROPERTY_NAME_MPP_X, PROPERTY_NAME_MPP_Y
+import pyvips
+from ratiopath.masks.tissue_mask import tissue_mask
+
+from model_service.contracts.failures import InvalidInvocation
 
 
 if TYPE_CHECKING:
@@ -21,13 +23,17 @@ if TYPE_CHECKING:
 
 
 TISSUE_MPP = 8.0
-MIN_SATURATION = 0.05
+# The level is read into memory; a slide without a coarse level would not fit.
 MAX_PIXELS = 64_000_000
 
 
 @dataclass(frozen=True, slots=True)
 class TissueMask:
-    """Tissue pixels of one slide level, which spans the whole slide."""
+    """Tissue pixels of one slide level, which spans the whole slide.
+
+    Attributes:
+        pixels: True where a pixel is tissue.
+    """
 
     pixels: NDArray[np.bool_]
 
@@ -37,97 +43,34 @@ class TissueMask:
         return float(self.pixels.mean())
 
 
-def find_tissue(slide: OpenSlide) -> TissueMask | None:
+def find_tissue(slide: OpenSlide) -> TissueMask:
     """Find tissue on the level closest to `TISSUE_MPP`.
 
-    Uses the coarsest level when the slide lacks an mpp.
-
     Args:
-        slide: Open slide.
+        slide: Open slide with an mpp.
 
     Returns:
-        The tissue mask, or None when the level exceeds `MAX_PIXELS`.
+        The tissue mask.
+
+    Raises:
+        InvalidInvocation: The closest level exceeds `MAX_PIXELS`, or it has too
+            few grey values to threshold (a blank slide).
     """
-    if (
-        PROPERTY_NAME_MPP_X in slide.properties
-        and PROPERTY_NAME_MPP_Y in slide.properties
-    ):
-        level = slide.closest_level(TISSUE_MPP)
-    else:
-        level = slide.level_count - 1
+    level = slide.closest_level(TISSUE_MPP)
     width, height = slide.level_dimensions[level]
     if width * height > MAX_PIXELS:
-        return None
-    rgb = np.asarray(slide.read_region((0, 0), level, (width, height)))[..., :3]
-    return TissueMask(tissue_pixels(rgb))
-
-
-def tissue_pixels(rgb: NDArray[np.uint8]) -> NDArray[np.bool_]:
-    """Classify pixels as tissue by blurred saturation and an Otsu threshold.
-
-    The threshold is at least `MIN_SATURATION`, so a slide of nearly only glass
-    is not split into tissue by noise.
-
-    Args:
-        rgb: RGB image, shaped (height, width, 3).
-
-    Returns:
-        True where a pixel is tissue.
-    """
-    brightest = rgb.max(axis=-1).astype(np.float32)
-    darkest = rgb.min(axis=-1).astype(np.float32)
-    saturation = _box_blur(
-        np.divide(
-            brightest - darkest,
-            brightest,
-            out=np.zeros_like(brightest),
-            where=brightest > 0,
+        raise InvalidInvocation(
+            f"the slide has no level near {TISSUE_MPP} µm/px for tissue detection "
+            f"(closest is {width}x{height} px); run with skip_background=false"
         )
+    rgba = np.asarray(slide.read_region((0, 0), level, (width, height)))
+    image = (
+        pyvips.Image.new_from_array(rgba)
+        .copy(interpretation="srgb")
+        .flatten(background=255)
     )
-    return saturation > max(_otsu(saturation), MIN_SATURATION)
-
-
-def _box_blur(values: NDArray[np.float32]) -> NDArray[np.float32]:
-    """Take the 3x3 mean, so single noisy glass pixels do not pass as tissue.
-
-    Args:
-        values: 2-D array; edges are padded by repetition.
-
-    Returns:
-        The blurred array, same shape.
-    """
-    padded = np.pad(values, 1, mode="edge")
-    height, width = values.shape
-    total = np.zeros_like(values)
-    for dy in range(3):
-        for dx in range(3):
-            total += padded[dy : dy + height, dx : dx + width]
-    total /= 9
-    return total
-
-
-def _otsu(values: NDArray[np.float32]) -> float:
-    """Find the threshold in [0, 1] that best separates two classes of `values`.
-
-    Args:
-        values: Values in [0, 1].
-
-    Returns:
-        The histogram bin center maximizing between-class variance.
-    """
-    histogram, edges = np.histogram(values, bins=256, range=(0.0, 1.0))
-    centers = (edges[:-1] + edges[1:]) / 2
-    weight_low = np.cumsum(histogram)
-    weight_high = weight_low[-1] - weight_low
-    sum_low = np.cumsum(histogram * centers)
-    mean_low = np.divide(
-        sum_low, weight_low, out=np.zeros_like(sum_low), where=weight_low > 0
-    )
-    mean_high = np.divide(
-        sum_low[-1] - sum_low,
-        weight_high,
-        out=np.zeros_like(sum_low),
-        where=weight_high > 0,
-    )
-    between = weight_low * weight_high * (mean_low - mean_high) ** 2
-    return float(centers[int(np.argmax(between))])
+    try:
+        mask = tissue_mask(image, slide.slide_resolution(level))
+    except ValueError as error:  # multi-Otsu cannot split so few grey values
+        raise InvalidInvocation(f"tissue detection failed: {error}") from error
+    return TissueMask(mask.numpy() > 0)

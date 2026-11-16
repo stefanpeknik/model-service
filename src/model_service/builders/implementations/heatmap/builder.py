@@ -51,6 +51,7 @@ class HeatmapBuilder(
                 client=context.model,
                 stride_fraction=context.configuration.stride_fraction,
                 skip_background=context.configuration.skip_background,
+                min_tissue_fraction=context.configuration.min_tissue_fraction,
                 num_threads=self._settings.num_threads,
                 max_concurrent_tasks=self._settings.max_concurrent_tasks,
             )

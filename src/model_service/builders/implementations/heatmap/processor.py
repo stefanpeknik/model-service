@@ -65,6 +65,7 @@ async def build_heatmap(
     client: SpatialScoresClient,
     stride_fraction: float,
     skip_background: bool,
+    min_tissue_fraction: float,
     num_threads: int,
     max_concurrent_tasks: int,
 ) -> None:
@@ -80,11 +81,13 @@ async def build_heatmap(
         client: Client of the model that scores each tile.
         stride_fraction: Stride as a fraction of the tile size.
         skip_background: Whether to skip tiles without tissue.
+        min_tissue_fraction: Share of a tile that must be tissue to be scored.
         num_threads: Threads for slide reads.
         max_concurrent_tasks: Tiles in flight at once.
 
     Raises:
-        InvalidInvocation: The slide or mask is not a readable slide.
+        InvalidInvocation: The slide or mask is not a readable slide, or the
+            slide has no level coarse enough for tissue detection.
     """
     import numpy as np
     from ratiopath.masks.mask_builders import MaskBuilder
@@ -106,6 +109,7 @@ async def build_heatmap(
             mask_path,
             model.mpp,
             skip_background=skip_background,
+            min_tissue_fraction=min_tissue_fraction,
         ) as reader,
         ThreadPoolExecutor(max_workers=num_threads) as executor,
     ):

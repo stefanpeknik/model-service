@@ -14,6 +14,7 @@ from model_service.builders.declarations import (
     RegionOfInterest,
     Slide,
     StrideFraction,
+    TissueFraction,
 )
 from model_service.contracts.model_declarations import InferenceContract
 from model_service.contracts.result import SharedArtifact
@@ -38,6 +39,8 @@ class HeatmapConfiguration(BaseModel):
     Attributes:
         stride_fraction: Tile stride as a fraction of the tile size.
         skip_background: Whether tiles without tissue are skipped (score 0).
+        min_tissue_fraction: Share of a tile that must be tissue to be scored
+            when skipping background; 0 scores any tile with some tissue.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -45,6 +48,7 @@ class HeatmapConfiguration(BaseModel):
     stride_fraction: StrideFraction = 0.5
     # Skip tiles without tissue; they score 0.
     skip_background: bool = True
+    min_tissue_fraction: TissueFraction = 0.0
 
 
 class HeatmapOutputs(BuilderOutputs):

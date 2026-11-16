@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, ClassVar
 from unittest.mock import AsyncMock
 
 import numpy as np
@@ -44,6 +44,8 @@ def fake_handle(config: dict[str, object], score: object = 0.75) -> SimpleNamesp
 
 class HeatmapContractTests(BuilderContractTests, unittest.IsolatedAsyncioTestCase):
     builder_id = "heatmap"
+    # Tissue detection needs a realistic slide; see slides/test_tissue.py.
+    configuration: ClassVar[dict[str, Any]] = {"skip_background": False}
     model = spatial(tile_size=32, output_tile_size=4)
 
 
@@ -52,7 +54,6 @@ class HeatmapBuilderTests(unittest.IsolatedAsyncioTestCase):
         self._directory = TemporaryDirectory()
         self.addCleanup(self._directory.cleanup)
         self.root = Path(self._directory.name)
-        # H&E-like pink everywhere, so the background filter sees tissue.
         pixels = np.empty((64, 96, 3), dtype=np.uint8)
         pixels[...] = (200, 120, 160)
         write_slide(self.root / "slide.tiff", pixels)
@@ -86,7 +87,9 @@ class HeatmapBuilderTests(unittest.IsolatedAsyncioTestCase):
                 "shared_storage",
                 {"root": str(self.root)},
                 inputs=inputs,
-                resolved_configuration=configuration,
+                # Tissue detection needs a realistic slide; see slides/test_tissue.py.
+                resolved_configuration={"skip_background": False}
+                | (configuration or {}),
             ),
             self.model,
         )
@@ -109,29 +112,6 @@ class HeatmapBuilderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(artifact.media_type, "application/x-npz")
         np.testing.assert_allclose(self.scores(artifact), 0.375)
         self.assertEqual(list(self.root.glob(".*")), [])
-
-    async def test_background_tiles_are_skipped_unless_disabled(self) -> None:
-        pixels = np.full((64, 96, 3), 245, dtype=np.uint8)  # white glass
-        pixels[:, :48] = (200, 120, 160)  # tissue on the left half
-        write_slide(self.root / "slide.tiff", pixels)
-        cases = {
-            # Columns x = 0, 16, 32 touch the left half, in 3 rows.
-            "default": ({}, 9),
-            "disabled": ({"skip_background": False}, 15),
-        }
-        for case, (configuration, calls) in cases.items():
-            with self.subTest(case):
-                handle = fake_handle(
-                    self.config, np.full((32, 32), 0.375, dtype=np.float32)
-                )
-                artifact = await self.run_builder(
-                    handle, configuration=configuration, mask=False
-                )
-                self.assertEqual(handle.predict.remote.await_count, calls)
-                scores = self.scores(artifact)
-                np.testing.assert_allclose(scores[:, :48], 0.375)
-                if case == "default":
-                    np.testing.assert_array_equal(scores[:, 64:], 0)
 
     async def test_slide_smaller_than_the_model_tile_is_padded(self) -> None:
         self.model = spatial(tile_size=1024, output_tile_size=1024)

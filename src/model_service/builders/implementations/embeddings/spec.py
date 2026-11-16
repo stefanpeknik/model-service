@@ -14,6 +14,7 @@ from model_service.builders.declarations import (
     RegionOfInterest,
     Slide,
     StrideFraction,
+    TissueFraction,
 )
 from model_service.contracts.model_declarations import InferenceContract
 from model_service.contracts.result import SharedArtifact
@@ -37,11 +38,16 @@ class EmbeddingConfiguration(BaseModel):
 
     Attributes:
         stride_fraction: Tile stride as a fraction of the tile size.
+        skip_background: Whether tiles without tissue are skipped (no row).
+        min_tissue_fraction: Share of a tile that must be tissue to be embedded
+            when skipping background; 0 embeds any tile with some tissue.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     stride_fraction: StrideFraction = 1.0
+    skip_background: bool = False
+    min_tissue_fraction: TissueFraction = 0.0
 
 
 class EmbeddingOutputs(BuilderOutputs):

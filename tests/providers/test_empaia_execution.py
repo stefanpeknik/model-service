@@ -66,6 +66,7 @@ MODEL = SpatialScoresModel(
 DEFAULT_CONFIGURATION: dict[str, JsonValue] = {
     "stride_fraction": 0.5,
     "skip_background": True,
+    "min_tissue_fraction": 0.0,
 }
 
 

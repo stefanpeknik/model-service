@@ -101,6 +101,8 @@ class BuilderInputs(BaseModel):
 Slide = Annotated[Path, Input(media_type="application/vnd.openmicroscopy")]
 RegionOfInterest = Annotated[Path | None, Input(media_type="image/tiff")]
 StrideFraction = Annotated[float, Field(gt=0, le=1, allow_inf_nan=False)]
+# Share of a tile's window that must be tissue for the tile to be read; 0 means any.
+TissueFraction = Annotated[float, Field(ge=0, lt=1, allow_inf_nan=False)]
 
 
 @dataclass(frozen=True, slots=True)

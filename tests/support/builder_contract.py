@@ -64,6 +64,8 @@ def healthy_deployment(model: ModelBinding) -> FakeDeployment:
 
 class BuilderContractTests(_Base):
     builder_id: ClassVar[str]
+    # Configuration every contract run uses, e.g. to turn off tissue detection.
+    configuration: ClassVar[dict[str, Any]] = {}
     # A model of the builder's contract, at 0.5 mpp so the slide is read at level 0.
     model: ClassVar[ModelBinding]
 
@@ -95,7 +97,11 @@ class BuilderContractTests(_Base):
             {"shared_storage": SharedStorageAccessFactory([self.root])},
             model_handles=lambda _model_id: running,  # type: ignore[arg-type, return-value]
         )
-        options = {"inputs": self.inputs(), **invocation_options}
+        options = {
+            "inputs": self.inputs(),
+            "resolved_configuration": self.configuration or None,
+            **invocation_options,
+        }
         return await application.run(
             invocation("shared_storage", {"root": str(self.root)}, **options),
             self.model,

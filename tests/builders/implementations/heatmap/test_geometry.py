@@ -85,6 +85,7 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
             client=predictor,  # type: ignore[arg-type]
             stride_fraction=stride_fraction,
             skip_background=False,
+            min_tissue_fraction=0.0,
             num_threads=1,
             max_concurrent_tasks=2,
         )

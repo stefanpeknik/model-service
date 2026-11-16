@@ -26,13 +26,16 @@ async def build_embeddings(
     *,
     client: TileEmbeddingClient,
     stride_fraction: float,
+    skip_background: bool,
+    min_tissue_fraction: float,
     num_threads: int,
     max_concurrent_tasks: int,
 ) -> None:
     """Embed a slide's grid tiles and write them to an HDF5 file.
 
     Coordinates are tile origins at the slide level closest to the model's mpp.
-    Tiles the mask excludes get no row; rows follow grid order.
+    Tiles the mask or the tissue filter excludes get no row; rows follow grid
+    order.
 
     Args:
         slide_path: Slide to tile.
@@ -40,11 +43,14 @@ async def build_embeddings(
         output_path: HDF5 file to create.
         client: Client of the model that embeds each tile.
         stride_fraction: Stride as a fraction of the tile size.
+        skip_background: Whether to skip tiles without tissue.
+        min_tissue_fraction: Share of a tile that must be tissue to be embedded.
         num_threads: Threads for slide reads.
         max_concurrent_tasks: Tiles in flight at once.
 
     Raises:
-        InvalidInvocation: The slide or mask is not a readable slide.
+        InvalidInvocation: The slide or mask is not a readable slide, or the
+            slide has no level coarse enough for tissue detection.
         BuilderFailure: Feature dimensions change between tiles, or the model
             fails.
     """
@@ -60,7 +66,13 @@ async def build_embeddings(
     tasks: deque[asyncio.Task[tuple[int, int, NDArray[np.float32] | None]]] = deque()
     with (
         open_slide(slide_path, "slide") as slide,
-        TileReader.open(slide, mask_path, model.mpp) as reader,
+        TileReader.open(
+            slide,
+            mask_path,
+            model.mpp,
+            skip_background=skip_background,
+            min_tissue_fraction=min_tissue_fraction,
+        ) as reader,
         ThreadPoolExecutor(max_workers=num_threads) as executor,
         h5py.File(output_path, "w") as output,
     ):

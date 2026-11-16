@@ -1,7 +1,8 @@
 """Read model tiles at the slide level closest to a model's resolution.
 
 With a mask, a tile is read only when its mask window contains a nonzero pixel;
-with a tissue mask, only when its window contains tissue. Reads are synchronous
+with a tissue mask, only when more than `min_tissue_fraction` of its window is
+tissue (any tissue at 0). Reads are synchronous
 and run in the builder's thread pool; x/y are coordinates at the selected slide
 level.
 """
@@ -78,6 +79,7 @@ class TileReader:
         mask: OpenSlide | None,
         mpp: float,
         tissue: TissueMask | None = None,
+        min_tissue_fraction: float = 0.0,
     ) -> None:
         """Pick the slide level for the model and scale mask and tissue to it.
 
@@ -86,10 +88,13 @@ class TileReader:
             mask: Open region-of-interest mask, if any.
             mpp: Model resolution; the closest slide level is read.
             tissue: Tissue mask for skipping background, if any.
+            min_tissue_fraction: Share of a tile's tissue window that must be
+                tissue; 0 reads any tile with some tissue.
         """
         self.slide = slide
         self.level = slide.closest_level(mpp)
         self.tissue = tissue
+        self._min_tissue_fraction = min_tissue_fraction
         self._mask = mask
         if tissue is not None:
             width, height = slide.level_dimensions[self.level]
@@ -111,6 +116,7 @@ class TileReader:
         mpp: float,
         *,
         skip_background: bool = False,
+        min_tissue_fraction: float = 0.0,
     ) -> Iterator[TileReader]:
         """Open a reader, with the mask file and tissue detection when requested.
 
@@ -119,19 +125,21 @@ class TileReader:
             mask_path: Region-of-interest mask file, if any.
             mpp: Model resolution.
             skip_background: Detect tissue and skip tiles without it.
+            min_tissue_fraction: Share of a tile's window that must be tissue.
 
         Yields:
             The reader; the mask is closed on exit.
 
         Raises:
-            InvalidInvocation: The mask is not a readable slide.
+            InvalidInvocation: The mask is not a readable slide, or the slide
+                has no level coarse enough for tissue detection.
         """
         tissue = find_tissue(slide) if skip_background else None
         if mask_path is None:
-            yield cls(slide, None, mpp, tissue)
+            yield cls(slide, None, mpp, tissue, min_tissue_fraction)
             return
         with open_slide(mask_path, "region_of_interest") as mask:
-            yield cls(slide, mask, mpp, tissue)
+            yield cls(slide, mask, mpp, tissue, min_tissue_fraction)
 
     def read(self, x: int, y: int, tile_size: int) -> NDArray[np.uint8] | None:
         """Read one tile unless the tissue or mask window excludes it.
@@ -160,7 +168,7 @@ class TileReader:
         return np.ascontiguousarray(tile.transpose(2, 0, 1))
 
     def _has_tissue(self, tissue: TissueMask, x: int, y: int, tile_size: int) -> bool:
-        """Check whether the tile's window in the tissue mask has tissue.
+        """Check whether enough of the tile's window in the tissue mask is tissue.
 
         Args:
             tissue: The slide's tissue mask.
@@ -169,12 +177,13 @@ class TileReader:
             tile_size: Tile width and height in pixels.
 
         Returns:
-            True when any tissue pixel falls in the window.
+            True when the window's tissue share exceeds the minimum.
         """
         left, top = floor(x * self._tissue_scale_x), floor(y * self._tissue_scale_y)
         right = ceil((x + tile_size) * self._tissue_scale_x)
         bottom = ceil((y + tile_size) * self._tissue_scale_y)
-        return bool(tissue.pixels[top:bottom, left:right].any())
+        window = tissue.pixels[top:bottom, left:right]
+        return window.size > 0 and float(window.mean()) > self._min_tissue_fraction
 
     def _mask_selects(self, mask: OpenSlide, x: int, y: int, tile_size: int) -> bool:
         """Check whether the tile's window in the mask has a nonzero pixel.

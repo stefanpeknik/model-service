@@ -111,12 +111,15 @@ The EMPAIA adapter reads a stored result back as the builder's outputs model.
   setting.
 - `tile-embeddings` reads tiles at the slide level closest to the model's
   `mpp`, and records level, downsample and both resolutions in the HDF5.
-- The heatmap builder skips tiles without tissue (`skip_background`, on by
-  default): a tissue mask from the slide level closest to 8 µm/px, by colour
-  saturation with an Otsu threshold, so white glass and transparent (black)
-  regions are not sent to the model; skipped tiles score 0. It combines with a
-  region-of-interest mask. Slides downloaded over the App API carry that coarse
-  level as a second page. The tile-embeddings builder still processes every tile.
+- Both builders can skip tiles without tissue (`skip_background`: on by default
+  for the heatmap, off for tile-embeddings). The tissue mask is ratiopath's
+  `tissue_mask` (grayscale, multi-Otsu, closing and opening) on the slide level
+  closest to 8 µm/px, with transparent regions flattened onto white so they read
+  as glass. A tile is read when more than `min_tissue_fraction` of its window is
+  tissue (default 0: any tissue). Skipped heatmap tiles score 0; skipped
+  embedding tiles get no row. It combines with a region-of-interest mask. A slide
+  with no level near 8 µm/px, or too uniform to threshold, is refused as invalid
+  input rather than processed unfiltered.
 
 ### Public HTTP
 
