@@ -40,7 +40,7 @@ cancel ────────────────────────�
   maintenance pass (every poll interval) recovers it. Every write checks the
   fencing token, so a stale worker cannot overwrite a newer attempt.
 
-Tests: `tests/test_execution_scheduler.py` (behaviour, in-memory repository),
-`tests/repository_contract.py` (shared by both repositories) and
-`tests/test_postgres_execution_repository.py` (PostgreSQL concurrency and
+Tests: `tests/scheduler/test_execution_scheduler.py` (behaviour, in-memory repository),
+`tests/support/repository_contract.py` (shared by both repositories) and
+`tests/scheduler/test_postgres_execution_repository.py` (PostgreSQL concurrency and
 migrations; set `TEST_POSTGRES_DSN`).

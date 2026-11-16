@@ -41,8 +41,10 @@ and each new training run only changes YAML:
    checkpoint, so the first start after a new checkpoint builds a new one.
 
 A change to the Python implementation needs a new image:
-`deploy/images/Dockerfile.gpu` copies `src/model_service/` into it. Tag it,
-push it and set the image in the values file.
+`deploy/images/Dockerfile.gpu` copies `src/model_service/` into it. It also
+installs the EMPAIA SDK from a named build context, so build it with
+`--build-context empaia-sdk=<SDK checkout>`. Tag it, push it and set the image
+in the values file.
 
 To try the model, call it directly for a quick answer, or schedule a builder
 over many slides and let it queue:

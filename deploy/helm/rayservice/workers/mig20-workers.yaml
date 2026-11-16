@@ -61,6 +61,7 @@ template:
           - name: empaia-workspace
             mountPath: {{ .Values.empaia.workspaceRoot | quote }}
 {{- end }}
+{{- include "model-service.slideVolumeMount" . | nindent 10 }}
     volumes:
       - name: data
         persistentVolumeClaim:
@@ -85,3 +86,4 @@ template:
         persistentVolumeClaim:
           claimName: {{ .Values.empaia.workspaceClaim | quote }}
 {{- end }}
+{{- include "model-service.slideVolume" . | nindent 6 }}

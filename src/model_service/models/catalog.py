@@ -7,8 +7,8 @@ models come from the same files.
 
 Contract parameters the model already reads from its `user_config` are taken
 from there; `inference` declares only what the model does not read itself. Any
-other top-level block belongs to a provider (e.g. `empaia`, how the model is
-offered there): the catalog keeps it for that provider, unread, and rejects a
+other top-level block belongs to a provider (e.g. how that provider offers
+the model): the catalog keeps it for that provider, unread, and rejects a
 block no provider takes.
 """
 

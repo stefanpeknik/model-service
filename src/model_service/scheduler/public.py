@@ -65,7 +65,7 @@ class ExecutionView:
     status: ExecutionStatus
     result: BuilderResult | None = None
     error: ExecutionError | None = None
-    # A failure or cancellation not yet reported to the provider (e.g. EMPAIA).
+    # A failure or cancellation not yet reported to the provider.
     provider_pending: bool = False
 
 

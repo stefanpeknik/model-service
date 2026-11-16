@@ -3,7 +3,7 @@
 An `Authenticator` turns a request into a `Principal` or rejects it (401). An
 `Authorizer` decides whether that principal may perform an `Action`, on the
 execution it names if any (403). The public API and each provider's routes
-get their own `Access`, so a provider's service token (EMPAIA's JES, say) and
+get their own `Access`, so a provider's service token (an external job service's, say) and
 direct users can be checked differently. All default to letting everyone in.
 """
 
@@ -25,7 +25,7 @@ class Action(StrEnum):
     SCHEDULE = "schedule"
     READ_EXECUTION = "read_execution"
     CANCEL_EXECUTION = "cancel_execution"
-    # A job a provider's own route submits, e.g. EMPAIA's JES.
+    # A job a provider's own route submits, e.g. an external job service.
     SUBMIT_PROVIDER_JOB = "submit_provider_job"
 
 

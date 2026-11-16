@@ -41,7 +41,7 @@ class SharedPathInput:
 
 @dataclass(frozen=True, slots=True)
 class ProviderInput:
-    """An input the provider's access adapter materializes, e.g. an EMPAIA input."""
+    """An input the provider's access adapter materializes, e.g. an external job's input."""
 
     name: NonEmptyString
     kind: Literal[InputKind.PROVIDER] = InputKind.PROVIDER
@@ -107,8 +107,8 @@ class Invocation:
     """One request to run a builder; stored durably for scheduled executions.
 
     `resolved_configuration` is None for standalone work, which uses the builder's
-    current defaults when each attempt starts. EMPAIA admission resolves it from
-    the job's configuration.
+    current defaults when each attempt starts. A provider's admission may resolve
+    it from an external job's configuration.
     """
 
     inputs: Annotated[dict[str, BuilderInput], Field(strict=True)]

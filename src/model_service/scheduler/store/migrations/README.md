@@ -1,6 +1,6 @@
 # Execution database migrations
 
-Yoyo owns database creation and upgrades. `../models.py` describes the current
+Yoyo owns database creation and upgrades. `../rows.py` describes the current
 ORM mapping; changing a mapped column alone does not change an existing database.
 Application queries remain ORM-based. SQL here describes schema changes only.
 
@@ -27,7 +27,7 @@ An initialization failure prevents scheduler startup.
 
 ## Change the schema
 
-1. Update the ORM mapping in `../models.py`.
+1. Update the ORM mapping in `../rows.py`.
 2. Add the next numbered migration here, for example
    `0002-add-example-column.sql`. Declare its predecessor and write the upgrade:
 
@@ -43,7 +43,7 @@ An initialization failure prevents scheduler startup.
    as its destination. No `yoyo.ini` or credentials file is required.
 3. Test both a fresh database and a database at the previous revision. Preserve
    records and defaults, check repeated startup, and check failure rollback.
-   `tests/test_postgres_execution_repository.py` has examples. Its
+   `tests/scheduler/test_postgres_execution_repository.py` has examples. Its
    `TEST_POSTGRES_DSN` must point to a disposable local test database.
 
    ```sh

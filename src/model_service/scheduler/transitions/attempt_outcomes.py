@@ -139,7 +139,7 @@ class AttemptOutcomeTransitions:
         """Advance processing or provider work according to its outcome and retry policy.
 
         Backpressure rejections do not count as attempts. A publication that failed or
-        whose outcome is unknown queues a failure report, since an EMPAIA job must not
+        whose outcome is unknown queues a failure report, since an external job must not
         stay open.
 
         Args:
@@ -236,7 +236,7 @@ class AttemptOutcomeTransitions:
                     finish_mutation_started=False,
                 )
             if execution.work_kind is WorkKind.PROVIDER_FINISH:
-                # Tell the provider: an EMPAIA job must not stay open after a
+                # Tell the provider: an external job must not stay open after a
                 # publication that failed or whose outcome is unknown.
                 return terminal_failure(execution, settlement.error, now, report=True)
             return clear_work(execution, now)
