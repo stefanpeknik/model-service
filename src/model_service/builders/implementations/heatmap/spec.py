@@ -20,12 +20,26 @@ from model_service.contracts.result import SharedArtifact
 
 
 class HeatmapInputs(BuilderInputs):
+    """What the heatmap builder reads.
+
+    Attributes:
+        slide: The whole-slide image.
+        region_of_interest: Optional mask; only tiles it covers are scored.
+    """
+
     slide: Slide
     # Only tiles the mask covers are scored.
     region_of_interest: RegionOfInterest = None
 
 
 class HeatmapConfiguration(BaseModel):
+    """How the heatmap builder tiles the slide.
+
+    Attributes:
+        stride_fraction: Tile stride as a fraction of the tile size.
+        skip_background: Whether tiles without tissue are skipped (score 0).
+    """
+
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     stride_fraction: StrideFraction = 0.5
@@ -34,6 +48,12 @@ class HeatmapConfiguration(BaseModel):
 
 
 class HeatmapOutputs(BuilderOutputs):
+    """What the heatmap builder writes.
+
+    Attributes:
+        heatmap: The score grid artifact (`.npz`).
+    """
+
     heatmap: Annotated[
         SharedArtifact,
         # The score grid format, see `contracts/score_grid.py`.

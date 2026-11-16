@@ -66,6 +66,7 @@ def _slide_id(job_id: str) -> str:
 
 
 def _pixelmap_id(job_id: str) -> str:
+    """The heatmap pixelmap's stable UUID for a job."""
     return _stable_id(f"{job_id}-heatmap")
 
 
@@ -464,12 +465,28 @@ async def region(
 
 @functools.cache
 def _file_slide() -> object:
+    """Open the slide named by `MOCK_FILE_SLIDE` once per process."""
     import openslide
 
     return openslide.OpenSlide(os.environ["MOCK_FILE_SLIDE"])
 
 
 def _read_region(level: int, x: int, y: int, width: int, height: int) -> bytes:
+    """Read a region of the file slide as PNG.
+
+    Args:
+        level: Slide level.
+        x: Left edge on that level.
+        y: Top edge on that level.
+        width: Region width in pixels.
+        height: Region height in pixels.
+
+    Returns:
+        The PNG-encoded RGB region.
+
+    Raises:
+        HTTPException: 404 when the slide has no such level.
+    """
     slide = _file_slide()
     if not 0 <= level < slide.level_count:  # type: ignore[attr-defined]
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)

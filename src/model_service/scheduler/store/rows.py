@@ -45,6 +45,8 @@ _RESULT: TypeAdapter[BuilderResult] = TypeAdapter(BuilderResult)
 
 
 class InvocationType(TypeDecorator[Invocation]):
+    """Stores an invocation as JSONB."""
+
     impl = JSONB(none_as_null=True)
     cache_ok = True
 
@@ -81,6 +83,8 @@ class InvocationType(TypeDecorator[Invocation]):
 
 
 class ResultType(TypeDecorator[BuilderResult]):
+    """Stores a builder result as JSONB."""
+
     impl = JSONB(none_as_null=True)
     cache_ok = True
 

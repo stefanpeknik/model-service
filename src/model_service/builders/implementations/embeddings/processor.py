@@ -90,10 +90,24 @@ async def build_embeddings(
         features = None
 
         async def infer(x: int, y: int) -> tuple[int, int, NDArray[np.float32] | None]:
+            """Read and embed one tile.
+
+            Args:
+                x: Tile x on the read level.
+                y: Tile y on the read level.
+
+            Returns:
+                The tile position and its features, or None when it is skipped.
+            """
             tile = await loop.run_in_executor(executor, reader.read, x, y, tile_size)
             return x, y, None if tile is None else await client.embed(tile)
 
         async def append_oldest() -> None:
+            """Wait for the oldest tile and append its row to the table.
+
+            Raises:
+                BuilderFailure: The features differ in shape from earlier tiles.
+            """
             nonlocal features
             # Keep the task registered until it is joined, including on cancellation.
             x, y, result = await tasks[0]

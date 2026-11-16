@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 
 
 class OutgoingCredentials(ABC):
+    """Supplies the `Authorization` header for calls to EMPAIA services."""
+
     @abstractmethod
     async def authorization(self, client: httpx.AsyncClient) -> str | None:
         """Return the `Authorization` header value, or None to send none.
@@ -35,6 +37,8 @@ class OutgoingCredentials(ABC):
 
 
 class NoCredentials(OutgoingCredentials):
+    """Sends no `Authorization` header."""
+
     async def authorization(self, client: httpx.AsyncClient) -> str | None:
         """Send no `Authorization` header.
 
@@ -48,6 +52,8 @@ class NoCredentials(OutgoingCredentials):
 
 
 class ClientCredentials(OutgoingCredentials):
+    """OAuth client-credentials tokens from an OpenID identity provider."""
+
     def __init__(self, idp_url: str, client_id: str, client_secret: str) -> None:
         """Keep the client's credentials; the first call fetches a token.
 

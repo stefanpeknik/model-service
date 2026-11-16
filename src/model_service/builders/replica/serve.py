@@ -66,6 +66,8 @@ def build_application(config: DeploymentSettings) -> BuilderApplication:
 @serve.deployment(num_replicas="auto")
 @serve.ingress(fastapi)
 class BuilderDeployment:
+    """The Ray Serve ingress of one builder, configured through user_config."""
+
     def __init__(self) -> None:
         """Route model-service logs to Serve's handlers; the builder waits for config."""
         self._application: BuilderApplication | None = None

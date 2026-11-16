@@ -19,6 +19,8 @@ if TYPE_CHECKING:
 
 
 class DeploymentState(StrEnum):
+    """Whether Ray Serve exposes the routes the API needs."""
+
     READY = "ready"
     UNREACHABLE = "unreachable"
     MISSING_APPLICATIONS = "missing_applications"
@@ -27,11 +29,20 @@ class DeploymentState(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class DeploymentStatus:
+    """Result of a deployment check.
+
+    Attributes:
+        status: The overall state.
+        missing_routes: Expected route prefixes Ray Serve does not expose.
+    """
+
     status: DeploymentState
     missing_routes: tuple[str, ...] = ()
 
 
 class DeploymentHealth:
+    """Checks Ray Serve exposes the route of every builder and model."""
+
     def __init__(
         self, client: httpx.AsyncClient, *, origin: str, routes: Iterable[str]
     ) -> None:

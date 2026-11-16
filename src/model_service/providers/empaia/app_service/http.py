@@ -377,6 +377,14 @@ def http_gateway_factory(settings: EmpaiaSettings) -> EmpaiaGatewayFactory:
     """
 
     def create(context: EmpaiaJobContext) -> HttpEmpaiaGateway:
+        """Create the SDK-backed gateway for one EMPAIA job.
+
+        Args:
+            context: The job's App Service URL, id and credential.
+
+        Returns:
+            The gateway.
+        """
         return HttpEmpaiaGateway(
             context.api_url,
             context.job_id,

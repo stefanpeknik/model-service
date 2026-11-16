@@ -27,6 +27,8 @@ _ERROR_RESPONSE = TypeAdapter(ErrorResponse)
 
 
 class ConfirmedRejectionError(RuntimeError):
+    """The builder rejected the request before starting work, so a retry is safe."""
+
     def __init__(self, retry_after: timedelta | None = None) -> None:
         """Record a rejection that happened before the builder started work.
 
@@ -38,10 +40,12 @@ class ConfirmedRejectionError(RuntimeError):
 
 
 class UnknownOutcomeError(RuntimeError):
-    pass
+    """The builder may or may not have run; the request was lost in flight."""
 
 
 class RemoteFailureError(RuntimeError):
+    """The builder ran and reported a safe failure."""
+
     def __init__(self, *, code: str, safe_message: str, retryable: bool) -> None:
         """Record a safe failure the builder reported.
 
@@ -57,6 +61,8 @@ class RemoteFailureError(RuntimeError):
 
 
 class HTTPBuilderDispatch:
+    """Sends builder runs to builder replicas over Ray Serve's HTTP proxy."""
+
     def __init__(self, client: httpx.AsyncClient, *, origin: str) -> None:
         """Dispatch builder runs to a Ray Serve origin.
 

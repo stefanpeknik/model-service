@@ -33,6 +33,8 @@ ERROR_AFTER = 3
 
 
 class Marketplace:
+    """The EMPAIA marketplace the apps are registered in."""
+
     def __init__(
         self,
         url: str,

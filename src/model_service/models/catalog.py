@@ -35,6 +35,13 @@ if TYPE_CHECKING:
 
 
 class InferenceDeclaration(BaseModel):
+    """A model file's `inference:` block.
+
+    Attributes:
+        contract: The model's inference contract; other fields are the
+            contract's parameters.
+    """
+
     # Besides the contract, the fields its model class takes from here.
     model_config = ConfigDict(frozen=True, extra="allow")
 
@@ -42,12 +49,26 @@ class InferenceDeclaration(BaseModel):
 
 
 class _ServeDeployment(BaseModel):
+    """The part of a Ray Serve deployment the catalog reads.
+
+    Attributes:
+        user_config: The deployment's user_config.
+    """
+
     model_config = ConfigDict(extra="allow")
 
     user_config: dict[str, object] = Field(default_factory=dict)
 
 
 class _ServeApplication(BaseModel):
+    """The part of a model file's Ray Serve application the catalog reads.
+
+    Attributes:
+        name: The application name, which is the model id.
+        route_prefix: The application's route prefix.
+        deployments: Its deployments; the first one is the model.
+    """
+
     model_config = ConfigDict(extra="allow")
 
     name: Annotated[str, Field(min_length=1, pattern=r"^[A-Za-z0-9._-]+$")]
@@ -56,6 +77,13 @@ class _ServeApplication(BaseModel):
 
 
 class ModelDocument(BaseModel):
+    """One model file; blocks other than these belong to providers.
+
+    Attributes:
+        inference: The model's contract and parameters.
+        serve: Its Ray Serve application.
+    """
+
     # Other blocks are providers'.
     model_config = ConfigDict(extra="allow")
 
@@ -64,7 +92,7 @@ class ModelDocument(BaseModel):
 
 
 class CatalogError(ValueError):
-    pass
+    """The model files do not form a valid catalog."""
 
 
 def model_binding(document: ModelDocument) -> ModelBinding:
@@ -122,6 +150,8 @@ def model_binding(document: ModelDocument) -> ModelBinding:
 
 
 class ModelCatalog:
+    """The deployed models by id, with each provider's blocks from the model files."""
+
     def __init__(
         self,
         models: list[ModelBinding],

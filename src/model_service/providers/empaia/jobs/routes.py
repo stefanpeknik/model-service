@@ -43,6 +43,15 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class EmpaiaExecutionRequest:
+    """The job JES asks model-service to run.
+
+    Attributes:
+        app_api: The job's App Service URL.
+        job_id: The EMPAIA job id.
+        access_token: The job's App Service token.
+        env: Operator-defined container env; unused.
+    """
+
     app_api: Annotated[str, Field(min_length=1)]
     job_id: Annotated[str, Field(min_length=1)]
     access_token: Annotated[str, Field(min_length=1)]
@@ -52,6 +61,13 @@ class EmpaiaExecutionRequest:
 
 @dataclass(frozen=True, slots=True)
 class EmpaiaExecutionStatus:
+    """A job's status, as JES reads it.
+
+    Attributes:
+        status: The execution status.
+        message: Why it failed, when it did.
+    """
+
     status: ExecutionStatus
     message: str | None = None
 
@@ -82,6 +98,22 @@ def create_router(scheduler: Scheduler, access: Access | None = None) -> APIRout
         response: Response,
         idempotency_key: Annotated[str | None, Header()] = None,
     ) -> EmpaiaExecutionStatus:
+        """Admit an EMPAIA job as a builder execution.
+
+        Args:
+            builder_id: The builder the app runs.
+            model_id: The model it uses.
+            body: The job's App Service URL, id and token.
+            response: The response, 201 for a new execution or 200 for a repeat.
+            idempotency_key: Optional; must equal the job id.
+
+        Returns:
+            The execution's status.
+
+        Raises:
+            HTTPException: The key differs from the job id, or the job is invalid
+                or cannot be admitted.
+        """
         if idempotency_key is not None and idempotency_key != body.job_id:
             raise http_error(
                 422,
@@ -113,6 +145,18 @@ def create_router(scheduler: Scheduler, access: Access | None = None) -> APIRout
         dependencies=[access.require(Action.READ_EXECUTION)],
     )
     async def get_status(execution_id: str) -> EmpaiaExecutionStatus:
+        """Get a job's status.
+
+        Args:
+            execution_id: The execution's id.
+
+        Returns:
+            The status as JES reads it.
+
+        Raises:
+            HTTPException: 404 for an unknown execution, 503 when the repository
+                is unavailable.
+        """
         try:
             execution = await scheduler.get(execution_id)
         except SchedulingUnavailableError as error:
@@ -127,6 +171,18 @@ def create_router(scheduler: Scheduler, access: Access | None = None) -> APIRout
         dependencies=[access.require(Action.CANCEL_EXECUTION)],
     )
     async def cancel(execution_id: str) -> EmpaiaExecutionStatus:
+        """Cancel a job.
+
+        Args:
+            execution_id: The execution's id.
+
+        Returns:
+            The status after cancellation.
+
+        Raises:
+            HTTPException: 404 for an unknown execution, 503 when the repository
+                is unavailable.
+        """
         try:
             return remote_status(await scheduler.cancel(execution_id))
         except SchedulingUnavailableError as error:

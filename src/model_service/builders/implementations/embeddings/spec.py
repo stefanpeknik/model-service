@@ -20,18 +20,37 @@ from model_service.contracts.result import SharedArtifact
 
 
 class EmbeddingInputs(BuilderInputs):
+    """What the tile-embeddings builder reads.
+
+    Attributes:
+        slide: The whole-slide image.
+        region_of_interest: Optional mask; only tiles it covers are embedded.
+    """
+
     slide: Slide
     # Only tiles the mask covers get a row.
     region_of_interest: RegionOfInterest = None
 
 
 class EmbeddingConfiguration(BaseModel):
+    """How the tile-embeddings builder tiles the slide.
+
+    Attributes:
+        stride_fraction: Tile stride as a fraction of the tile size.
+    """
+
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     stride_fraction: StrideFraction = 1.0
 
 
 class EmbeddingOutputs(BuilderOutputs):
+    """What the tile-embeddings builder writes.
+
+    Attributes:
+        embeddings: The HDF5 feature table artifact (`.h5`).
+    """
+
     embeddings: Annotated[
         SharedArtifact,
         Artifact(media_type="application/x-hdf5", default_path="embeddings.h5"),

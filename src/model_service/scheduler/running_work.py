@@ -19,6 +19,7 @@ class ActiveWorkRegistry:
     """Map execution IDs to local tasks and the fencing tokens of their current attempts."""
 
     def __init__(self) -> None:
+        """Start with no running work."""
         self._tasks: dict[str, tuple[str, asyncio.Task[Settlement]]] = {}
 
     def register(

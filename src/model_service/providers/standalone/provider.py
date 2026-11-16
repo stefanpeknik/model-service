@@ -63,9 +63,16 @@ STANDALONE_PROVIDER = "standalone"
 
 
 class StandaloneProviderAdapter(ProviderAdapter):
+    """Scheduler adapter for runs whose inputs and outputs are on shared storage."""
+
     name = STANDALONE_PROVIDER
 
     def __init__(self, shared_storage: SharedStorageAccessFactory) -> None:
+        """Keep the shared-storage access that checks requested roots.
+
+        Args:
+            shared_storage: The shared-storage access factory.
+        """
         self._shared_storage = shared_storage
 
     def identify(self, request: ScheduleRequest) -> SubmissionIdentity:

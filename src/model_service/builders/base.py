@@ -145,6 +145,11 @@ class Builder[
     """
 
     def __init__(self, settings: BuilderSettings) -> None:
+        """Keep the builder's deployment settings.
+
+        Args:
+            settings: Settings from the builder's deployment configuration.
+        """
         self._settings = settings
 
     @abstractmethod

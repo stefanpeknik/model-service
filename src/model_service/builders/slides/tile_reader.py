@@ -70,6 +70,8 @@ def select_mask_level(mask: OpenSlide, target_mpp: float | tuple[float, float]) 
 
 
 class TileReader:
+    """Reads model-sized tiles from one slide level, skipping masked-out and background tiles."""
+
     def __init__(
         self,
         slide: OpenSlide,

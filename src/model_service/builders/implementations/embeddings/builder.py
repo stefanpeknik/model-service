@@ -23,6 +23,8 @@ class EmbeddingBuilder(
         TileEmbeddingClient, EmbeddingInputs, EmbeddingConfiguration, EmbeddingOutputs
     ]
 ):
+    """Embeds a slide tile by tile and writes the HDF5 feature table."""
+
     async def run(
         self,
         context: BuilderContext[
