@@ -9,7 +9,7 @@ contract, and any model of that contract can run with it.
 deploy/helm/rayservice/models/<model>.yaml    inference.contract: spatial-scores
         │ catalog (API)                    serve: the Ray application
         ▼
-models/clients.py                     SpatialScoresClient: get_config + predict,
+models/clients/spatial_scores.py      SpatialScoresClient: get_config + predict,
         │ client per contract                 checked answers, failure codes
         ▼
 builders/implementations/<builder>/spec.py       accepts=SPATIAL_SCORES, inputs, configuration,
@@ -75,7 +75,7 @@ SPEC = BuilderSpec(
 ### 2. Implement it
 
 `builder.py` subclasses `Builder[Client, Inputs, Configuration, Outputs]`. The
-client type is the contract's client from `clients.py`.
+client type is the contract's client from `models/clients/`.
 
 ```python
 class AnnotationsBuilder(
@@ -178,7 +178,7 @@ scores.
 
    A model file's `inference` block must then match it (see
    [Adding models](adding-models.md)).
-2. **Write its client** in `src/model_service/models/clients.py`, a
+2. **Write its client** in a new module under `src/model_service/models/clients/`, a
    `ModelClient` subclass. It sets `contract`, and `methods`: the deployment
    methods a model of the contract must have. It also implements:
    - `_matches(running)`: does the `get_config()` result equal the
@@ -187,7 +187,7 @@ scores.
      `model_failed`) and checks the answer, raising `_invalid_output()` when
      the answer breaks the contract.
 
-   Add the client to `CLIENTS`.
+   Add the client to `CLIENTS` in `models/clients/registry.py`.
 3. **Implement it in models.** A model implementation in `src/model_service/models/implementations/`
    provides those methods, and its YAML names the contract.
    `tests/models/test_catalog.py` fails if a model file's implementation

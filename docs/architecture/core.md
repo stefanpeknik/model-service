@@ -32,7 +32,7 @@ behind one public API that can also run builders durably.
 | `deploy/helm/rayservice/models/` | One file per model deployment: an `inference` declaration plus the Ray Serve application. The same file feeds the RayService and the API's catalog. |
 | `src/model_service/builders/` | The builder contract and runtime pieces (input access, atomic output files), shared slide reading (`slides/`) and one package per builder under `implementations/` (`heatmap/`, `embeddings/`: `spec.py`, `builder.py`, `processor.py`), listed in `registry.py`. See [Adding a builder](../guides/adding-builders.md). |
 | `src/model_service/builders/replica/` | The one Ray Serve ingress (`serve.py`) that hosts any builder, and the runner that validates, verifies the model, enforces the deadline and cleans up. |
-| `src/model_service/models/` | The model catalog (`catalog.py`), one model client per inference contract (`clients.py`) and the MLflow loader (`artifacts.py`). |
+| `src/model_service/models/` | The model catalog (`catalog.py`), one model client per inference contract (`clients/`) and the MLflow loader (`artifacts.py`). |
 | `src/model_service/api/` | The API process: public routes, synchronous runs, raw inference proxy, process wiring. |
 | `src/model_service/http_common/` | Auth, HTTP error mapping and scheduling calls shared by the API routes and provider routes. |
 | `src/model_service/contracts/` | Data shapes processes hand each other: invocation, result, failures, score grid, model declarations. |

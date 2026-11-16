@@ -216,7 +216,7 @@ async def get_config(self) -> dict[str, Any]:
   }
 ```
 
-The contract's model client (`src/model_service/models/clients.py`) calls it with `await model.get_config.remote()` before each run and fails with `model_contract_mismatch` if the values differ from the model's catalog declaration; keep it cheap and avoid any I/O.
+The contract's model client (`src/model_service/models/clients/`) calls it with `await model.get_config.remote()` before each run and fails with `model_contract_mismatch` if the values differ from the model's catalog declaration; keep it cheap and avoid any I/O.
 
 A `tile-embedding` model (used by the `tile-embeddings` builder) instead provides `get_config()` returning `tile_size` and `summaries`, and `async def embed(self, tile)`: one CHW uint8 tile in, float32 `(dim,)` (one summary) or `(len(summaries), dim)` out, with the model's own preprocessing and pooling inside. See `src/model_service/models/implementations/virchow2.py`. Builders call these methods by handle. The HTTP `root` route is optional: it is only for posting raw tiles to the model directly, and should call the same methods. `tests/models/test_catalog.py` fails if a model file's implementation lacks the methods of its contract.
 

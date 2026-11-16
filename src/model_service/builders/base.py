@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from model_service.builders.declarations import BuilderInputs, BuilderOutputs
 from model_service.contracts.failures import InvalidInvocation
 from model_service.contracts.result import SharedArtifact
-from model_service.models.clients import ModelClient
+from model_service.models.clients.base import ModelClient
 
 
 if TYPE_CHECKING:

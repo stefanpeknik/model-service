@@ -8,7 +8,7 @@
   builders/implementations/; builders/replica/ is the Ray Serve deployment that
   hosts a builder.
 - models/: the deployed models (catalog.py, read from the model YAML), the
-  clients that call and check them (clients.py) and the MLflow loader
+  clients that call and check them (clients/) and the MLflow loader
   (artifacts.py); models/implementations/ is the Ray Serve code that serves
   trained models, each named by one file in deploy/helm/rayservice/models/.
 - providers/: where inputs come from and results go (standalone, EMPAIA).

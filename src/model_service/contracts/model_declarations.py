@@ -4,9 +4,9 @@ The catalog builds one of these per model file; builders and model clients rely 
 
 A new kind of model (a new contract) edits three places: a member of
 `InferenceContract` and its `_ModelBinding` subclass here (added to
-`MODEL_CLASSES` and `ModelBinding`), and its client in
-models/clients.py (added to `CLIENTS`); tests/models fails if a
-contract has no client. A new model of an existing contract needs none of this.
+`MODEL_CLASSES` and `ModelBinding`), and its client module in models/clients/
+(added to `CLIENTS` in registry.py); tests/models fails if a contract has no
+client. A new model of an existing contract needs none of this.
 """
 
 from __future__ import annotations
