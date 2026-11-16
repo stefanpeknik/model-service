@@ -37,14 +37,14 @@ class StandaloneProvider(Provider):
     ) -> ApiContribution:
         """Contribute the standalone scheduler adapter, with no routes or background work.
 
-        the API's public builder routes submit these jobs.
+        The API's public builder routes submit these jobs.
 
         Args:
             catalog: Unused.
             settings: Supplies the allowed shared-storage roots.
 
         Returns:
-            the API contribution.
+            The API contribution.
         """
         from model_service.providers.provider import ApiContribution
         from model_service.providers.standalone.adapter import (

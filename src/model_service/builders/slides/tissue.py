@@ -1,8 +1,11 @@
 """Find tissue on a slide's coarse level so builders can skip empty glass.
 
 Detection is ratiopath's `tissue_mask` (grayscale, multi-Otsu, closing and
-opening). Transparent regions (e.g. in MIRAX slides) are flattened onto white
-first, so they read as glass. This is a stopgap until QC publishes tissue masks.
+opening) on the level ratiopath's `read_tile` reads, with transparent regions
+(e.g. in MIRAX slides) composited onto white. Multi-Otsu treats only the
+brightest class as glass, so on a slide with little tissue and a large white
+fill, real glass can come out as tissue: filtering then skips less, it never
+drops tissue. This is a stopgap until QC publishes tissue masks.
 """
 
 from __future__ import annotations
@@ -53,8 +56,8 @@ def find_tissue(slide: OpenSlide) -> TissueMask:
         The tissue mask.
 
     Raises:
-        InvalidInvocation: The closest level exceeds `MAX_PIXELS`, or it has too
-            few grey values to threshold (a blank slide).
+        InvalidInvocation: The closest level exceeds `MAX_PIXELS`, or it has
+            fewer than four grey values to threshold.
     """
     level = slide.closest_level(TISSUE_MPP)
     width, height = slide.level_dimensions[level]
@@ -63,14 +66,13 @@ def find_tissue(slide: OpenSlide) -> TissueMask:
             f"the slide has no level near {TISSUE_MPP} µm/px for tissue detection "
             f"(closest is {width}x{height} px); run with skip_background=false"
         )
-    rgba = np.asarray(slide.read_region((0, 0), level, (width, height)))
-    image = (
-        pyvips.Image.new_from_array(rgba)
-        .copy(interpretation="srgb")
-        .flatten(background=255)
-    )
+    rgb = slide.read_tile(0, 0, width, height, level)
+    image = pyvips.Image.new_from_array(rgb).copy(interpretation="srgb")
     try:
         mask = tissue_mask(image, slide.slide_resolution(level))
-    except ValueError as error:  # multi-Otsu cannot split so few grey values
-        raise InvalidInvocation(f"tissue detection failed: {error}") from error
+    except ValueError as error:  # multi-Otsu needs at least four grey values
+        raise InvalidInvocation(
+            "the slide is too uniform for tissue detection; "
+            "run with skip_background=false"
+        ) from error
     return TissueMask(mask.numpy() > 0)

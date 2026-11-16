@@ -43,12 +43,12 @@ An initialization failure prevents scheduler startup.
    as its destination. No `yoyo.ini` or credentials file is required.
 3. Test both a fresh database and a database at the previous revision. Preserve
    records and defaults, check repeated startup, and check failure rollback.
-   `tests/scheduler/test_postgres_execution_repository.py` has examples. Its
+   `tests/api/scheduler/test_postgres_execution_repository.py` has examples. Its
    `TEST_POSTGRES_DSN` must point to a disposable local test database.
 
    ```sh
    UV_CACHE_DIR=.cache/uv uv run --locked --offline python -m unittest \
-     tests.scheduler.test_postgres_execution_repository -v
+     tests.api.scheduler.test_postgres_execution_repository -v
    ```
 
 Never edit or rename an applied migration. Add a new migration instead. SQL

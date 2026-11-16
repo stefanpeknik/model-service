@@ -39,6 +39,7 @@ from model_service.contracts.invocation import (
 )
 from model_service.contracts.result import BuilderResult, SharedArtifact
 from model_service.providers.provider import ProviderAdapter
+from model_service.providers.standalone.provider import STANDALONE_PROVIDER
 from model_service.providers.standalone.shared_storage import (
     ATTEMPTS_DIR,
     ATTEMPTS_KEY,
@@ -50,9 +51,6 @@ from model_service.providers.standalone.shared_storage import (
 if TYPE_CHECKING:
     from model_service.api.scheduler.public import BeforeMutation, ProviderFinishOutcome
     from model_service.contracts.json_values import JsonValue
-
-
-from model_service.providers.standalone.provider import STANDALONE_PROVIDER
 
 
 class StandaloneProviderAdapter(ProviderAdapter):
