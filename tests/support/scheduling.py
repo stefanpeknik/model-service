@@ -4,19 +4,19 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from model_service.api.scheduler.public import PreparedInvocation, SubmissionIdentity
 from model_service.contracts.invocation import InputAccessContext, Invocation
-from model_service.scheduler.public import PreparedInvocation, SubmissionIdentity
 
 
 if TYPE_CHECKING:
     from datetime import datetime, timedelta
 
-    from model_service.contracts.json_values import JsonValue
-    from model_service.scheduler.public import (
+    from model_service.api.scheduler.public import (
         BeforeMutation,
         ProviderFinishOutcome,
         ScheduleRequest,
     )
+    from model_service.contracts.json_values import JsonValue
 
 
 class StandaloneProvider:

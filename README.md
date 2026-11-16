@@ -45,7 +45,7 @@ later standalone run showed its result.
 src/model_service/
   api/                    the public API process: routes/v1/, model catalog, synchronous runs
   api/http/               auth, error mapping, scheduling calls (API and provider routes)
-  scheduler/              durable executions on PostgreSQL (runs inside the API process)
+  api/scheduler/          durable executions on PostgreSQL (runs inside the API process)
   builders/               builder contract, registry, shared slides/
   builders/model_clients/ one client per inference contract
   builders/implementations/  the builders: heatmap/, embeddings/

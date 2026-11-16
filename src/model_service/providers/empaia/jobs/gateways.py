@@ -6,12 +6,12 @@ import logging
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Never
 
-from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
-from model_service.providers.empaia.jobs.mapping import raise_preparation_error
-from model_service.scheduler.public import (
+from model_service.api.scheduler.public import (
     ProviderFinishFailureError,
     SchedulingUnavailableError,
 )
+from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
+from model_service.providers.empaia.jobs.mapping import raise_preparation_error
 
 
 if TYPE_CHECKING:

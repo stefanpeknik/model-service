@@ -26,19 +26,19 @@ from model_service.api.http.errors import (
     unavailable,
 )
 from model_service.api.http.scheduling import submit
-from model_service.providers.empaia.app_service.gateway import PROVIDER_NAME
-from model_service.providers.empaia.jobs.payload import EmpaiaSchedulePayload
-from model_service.scheduler.public import (
+from model_service.api.scheduler.public import (
     ScheduleRequest,
     SchedulingUnavailableError,
     UnknownExecutionError,
 )
-from model_service.scheduler.status import ExecutionStatus
+from model_service.api.scheduler.status import ExecutionStatus
+from model_service.providers.empaia.app_service.gateway import PROVIDER_NAME
+from model_service.providers.empaia.jobs.payload import EmpaiaSchedulePayload
 
 
 if TYPE_CHECKING:
-    from model_service.scheduler.protocols import Scheduler
-    from model_service.scheduler.public import ExecutionView
+    from model_service.api.scheduler.protocols import Scheduler
+    from model_service.api.scheduler.public import ExecutionView
 
 
 @dataclass(frozen=True, slots=True)

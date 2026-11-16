@@ -24,18 +24,18 @@ from model_service.api.http.auth import Access
 from model_service.api.http.errors import ApiErrorCode, http_error
 from model_service.api.model_catalog import ModelCatalog
 from model_service.api.routes.v1 import builders, executions, models
+from model_service.api.scheduler.builder_dispatch import HTTPBuilderDispatch
+from model_service.api.scheduler.execution_scheduler import ExecutionScheduler
+from model_service.api.scheduler.internal_state import RetryPolicy
+from model_service.api.scheduler.public import SchedulingUnavailableError
+from model_service.api.scheduler.settings import SchedulerSettings
+from model_service.api.scheduler.store.postgres.repository import (
+    PostgresExecutionRepository,
+)
+from model_service.api.scheduler.store.protected_context import ProtectedContextCipher
 from model_service.api.synchronous_runs import SynchronousBuilderService
 from model_service.builders.registry import BUILDERS, get_builder
 from model_service.providers.registry import PROVIDERS
-from model_service.scheduler.builder_dispatch import HTTPBuilderDispatch
-from model_service.scheduler.execution_scheduler import ExecutionScheduler
-from model_service.scheduler.internal_state import RetryPolicy
-from model_service.scheduler.public import SchedulingUnavailableError
-from model_service.scheduler.settings import SchedulerSettings
-from model_service.scheduler.store.postgres.repository import (
-    PostgresExecutionRepository,
-)
-from model_service.scheduler.store.protected_context import ProtectedContextCipher
 
 
 if TYPE_CHECKING:
@@ -43,10 +43,10 @@ if TYPE_CHECKING:
 
     from starlette.types import Lifespan
 
+    from model_service.api.scheduler.protocols import Scheduler
+    from model_service.api.scheduler.public import ModelResolver
     from model_service.contracts.model_declarations import ModelBinding
     from model_service.providers.provider import RouteFactory
-    from model_service.scheduler.protocols import Scheduler
-    from model_service.scheduler.public import ModelResolver
 
 
 def model_resolver(catalog: ModelCatalog) -> ModelResolver:

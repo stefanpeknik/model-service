@@ -21,6 +21,14 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
+from model_service.api.scheduler.public import (
+    InvalidScheduleRequestError,
+    PreparedInvocation,
+    ProviderFinishFailureError,
+    ProviderSuccess,
+    ScheduleRequest,
+    SubmissionIdentity,
+)
 from model_service.builders.registry import get_builder
 from model_service.contracts.caller_request import BuilderRequest
 from model_service.contracts.failures import InvalidInvocation
@@ -37,19 +45,11 @@ from model_service.providers.standalone.shared_storage import (
     SharedStorageAccess,
     SharedStorageAccessFactory,
 )
-from model_service.scheduler.public import (
-    InvalidScheduleRequestError,
-    PreparedInvocation,
-    ProviderFinishFailureError,
-    ProviderSuccess,
-    ScheduleRequest,
-    SubmissionIdentity,
-)
 
 
 if TYPE_CHECKING:
+    from model_service.api.scheduler.public import BeforeMutation, ProviderFinishOutcome
     from model_service.contracts.json_values import JsonValue
-    from model_service.scheduler.public import BeforeMutation, ProviderFinishOutcome
 
 
 from model_service.providers.standalone.provider import STANDALONE_PROVIDER

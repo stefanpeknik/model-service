@@ -8,16 +8,16 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from model_service.api.scheduler.public import (
+    ExecutionError,
+    ProviderFailure,
+    ProviderSuccess,
+)
 from model_service.contracts.failures import InvalidInvocation
 from model_service.contracts.invocation import ExecutionContext, SharedPathInput
 from model_service.contracts.result import BuilderResult, SharedArtifact
 from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
-from model_service.scheduler.public import (
-    ExecutionError,
-    ProviderFailure,
-    ProviderSuccess,
-)
 from tests.support.builder_fixtures import invocation
 
 

@@ -12,7 +12,7 @@ from model_service.contracts.failures import UnknownBuilderError, UnknownModelEr
 
 
 if TYPE_CHECKING:
-    from model_service.scheduler.public import SchedulingUnavailableError
+    from model_service.api.scheduler.public import SchedulingUnavailableError
 
 
 class ApiErrorCode(StrEnum):

@@ -18,7 +18,7 @@ from model_service.api.http.errors import (
     http_error,
     unavailable,
 )
-from model_service.scheduler.public import (
+from model_service.api.scheduler.public import (
     ExecutionView,
     SchedulingUnavailableError,
     UnknownExecutionError,
@@ -26,7 +26,7 @@ from model_service.scheduler.public import (
 
 
 if TYPE_CHECKING:
-    from model_service.scheduler.protocols import Scheduler
+    from model_service.api.scheduler.protocols import Scheduler
 
 
 MAX_LOOKUP_IDS = 1000

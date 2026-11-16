@@ -15,6 +15,8 @@ from fastapi import FastAPI
 
 from model_service.api.app_factory import create_app, model_resolver
 from model_service.api.model_catalog import ModelCatalog
+from model_service.api.scheduler.builder_dispatch import HTTPBuilderDispatch
+from model_service.api.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.api.synchronous_runs import SynchronousBuilderService
 from model_service.builders.base import ReplicaSettings
 from model_service.builders.implementations.embeddings.builder import EmbeddingBuilder
@@ -25,8 +27,6 @@ from model_service.contracts.builder_http import RunRequest
 from model_service.contracts.model_declarations import TileEmbeddingModel
 from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
-from model_service.scheduler.builder_dispatch import HTTPBuilderDispatch
-from model_service.scheduler.execution_scheduler import ExecutionScheduler
 from tests.support.builder_contract import BuilderContractTests
 from tests.support.builder_fixtures import write_slide
 from tests.support.memory_repository import InMemoryExecutionRepository

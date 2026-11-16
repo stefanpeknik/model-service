@@ -13,16 +13,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from model_service.builders.registry import get_builder
-from model_service.contracts.invocation import ExecutionContext, Invocation
-from model_service.contracts.model_declarations import (
-    InferenceContract,
-    ModelBinding,
-    SpatialScoresModel,
-    TileEmbeddingModel,
-)
-from model_service.contracts.result import BuilderResult
-from model_service.scheduler.internal_state import (
+from model_service.api.scheduler.internal_state import (
     Admission,
     AdmissionResult,
     ExecutionRecord,
@@ -32,21 +23,30 @@ from model_service.scheduler.internal_state import (
     WorkClaim,
     WorkKind,
 )
-from model_service.scheduler.public import (
+from model_service.api.scheduler.public import (
     ScheduleConflictError,
     UnknownExecutionError,
 )
-from model_service.scheduler.status import ExecutionStatus
-from model_service.scheduler.transitions.common import work_deadline_at
-from model_service.scheduler.transitions.execution_transitions import (
+from model_service.api.scheduler.status import ExecutionStatus
+from model_service.api.scheduler.transitions.common import work_deadline_at
+from model_service.api.scheduler.transitions.execution_transitions import (
     ExecutionTransitions,
 )
+from model_service.builders.registry import get_builder
+from model_service.contracts.invocation import ExecutionContext, Invocation
+from model_service.contracts.model_declarations import (
+    InferenceContract,
+    ModelBinding,
+    SpatialScoresModel,
+    TileEmbeddingModel,
+)
+from model_service.contracts.result import BuilderResult
 
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Mapping
 
-    from model_service.scheduler.public import SubmissionIdentity
+    from model_service.api.scheduler.public import SubmissionIdentity
 
 
 def utc_now() -> datetime:

@@ -16,9 +16,9 @@ from model_service.api.http.auth import (
     Principal,
 )
 from model_service.api.model_catalog import ModelCatalog
+from model_service.api.scheduler.public import ExecutionView
+from model_service.api.scheduler.status import ExecutionStatus
 from model_service.contracts.model_declarations import SpatialScoresModel
-from model_service.scheduler.public import ExecutionView
-from model_service.scheduler.status import ExecutionStatus
 
 
 CATALOG = ModelCatalog(

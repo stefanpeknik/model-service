@@ -5,23 +5,23 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from model_service.contracts.invocation import InputAccessContext, Invocation
-from model_service.contracts.result import BuilderResult
-from model_service.scheduler.internal_state import (
+from model_service.api.scheduler.internal_state import (
     Admission,
     ProcessingRejected,
     ProcessingSucceeded,
     StaleWorkClaimError,
     WorkKind,
 )
-from model_service.scheduler.public import (
+from model_service.api.scheduler.public import (
     Priority,
     SubmissionIdentity,
 )
+from model_service.contracts.invocation import InputAccessContext, Invocation
+from model_service.contracts.result import BuilderResult
 
 
 if TYPE_CHECKING:
-    from model_service.scheduler.store.repository import ExecutionRepository
+    from model_service.api.scheduler.store.repository import ExecutionRepository
 
 
 class ExecutionRepositoryContract:

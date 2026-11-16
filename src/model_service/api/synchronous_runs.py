@@ -11,8 +11,8 @@ from model_service.contracts.invocation import ExecutionContext
 if TYPE_CHECKING:
     from model_service.api.model_catalog import ModelCatalog
     from model_service.api.routes.v1.builders import ImmediateBuilderRequest
+    from model_service.api.scheduler.builder_dispatch import HTTPBuilderDispatch
     from model_service.contracts.result import BuilderResult
-    from model_service.scheduler.builder_dispatch import HTTPBuilderDispatch
 
 
 class SynchronousBuilderService:

@@ -17,10 +17,10 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from model_service.api.model_catalog import ModelCatalog
+    from model_service.api.scheduler.settings import SchedulerSettings
     from model_service.builders.base import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
     from model_service.providers.provider import ApiContribution
-    from model_service.scheduler.settings import SchedulerSettings
 
 
 # The provider name of requests made through the public builder routes.

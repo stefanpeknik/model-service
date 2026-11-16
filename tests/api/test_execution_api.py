@@ -22,6 +22,22 @@ from httpx import (
 from model_service.api.app_factory import create_app, model_resolver
 from model_service.api.health import DeploymentHealth
 from model_service.api.model_catalog import ModelCatalog
+from model_service.api.scheduler.builder_dispatch import (
+    ConfirmedRejectionError,
+    RemoteFailureError,
+    UnknownOutcomeError,
+)
+from model_service.api.scheduler.execution_scheduler import ExecutionScheduler
+from model_service.api.scheduler.public import (
+    ExecutionView,
+    ScheduleRequest,
+    ScheduleResult,
+    SchedulingUnavailableError,
+)
+from model_service.api.scheduler.status import ExecutionStatus
+from model_service.api.scheduler.store.repository import (
+    ExecutionRepositoryUnavailableError,
+)
 from model_service.api.synchronous_runs import SynchronousBuilderService
 from model_service.contracts.model_declarations import (
     SpatialScoresModel,
@@ -30,20 +46,6 @@ from model_service.contracts.model_declarations import (
 from model_service.contracts.result import BuilderResult, InlineOutput, SharedArtifact
 from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
-from model_service.scheduler.builder_dispatch import (
-    ConfirmedRejectionError,
-    RemoteFailureError,
-    UnknownOutcomeError,
-)
-from model_service.scheduler.execution_scheduler import ExecutionScheduler
-from model_service.scheduler.public import (
-    ExecutionView,
-    ScheduleRequest,
-    ScheduleResult,
-    SchedulingUnavailableError,
-)
-from model_service.scheduler.status import ExecutionStatus
-from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
 from tests.support.memory_repository import InMemoryExecutionRepository
 
 
@@ -53,9 +55,9 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
     from starlette.types import Message, Scope
 
+    from model_service.api.scheduler.internal_state import ExecutionRecord
     from model_service.contracts.invocation import ExecutionContext, Invocation
     from model_service.contracts.model_declarations import ModelBinding
-    from model_service.scheduler.internal_state import ExecutionRecord
 
     type Handler = Callable[
         [str, Invocation, ModelBinding, ExecutionContext], Awaitable[BuilderResult]

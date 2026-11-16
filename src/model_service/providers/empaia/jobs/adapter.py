@@ -18,6 +18,18 @@ from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
+from model_service.api.scheduler.public import (
+    InvalidScheduleRequestError,
+    PreparedInvocation,
+    Priority,
+    ProviderCancellation,
+    ProviderFailure,
+    ProviderFinishFailureError,
+    ProviderFinishOutcome,
+    ProviderSuccess,
+    ScheduleRequest,
+    SubmissionIdentity,
+)
 from model_service.builders.registry import get_builder
 from model_service.contracts.invocation import (
     InputAccessContext,
@@ -54,28 +66,16 @@ from model_service.providers.empaia.jobs.payload import (
 )
 from model_service.providers.empaia.publishing.publishers import default_publishers
 from model_service.providers.provider import ProviderAdapter
-from model_service.scheduler.public import (
-    InvalidScheduleRequestError,
-    PreparedInvocation,
-    Priority,
-    ProviderCancellation,
-    ProviderFailure,
-    ProviderFinishFailureError,
-    ProviderFinishOutcome,
-    ProviderSuccess,
-    ScheduleRequest,
-    SubmissionIdentity,
-)
 
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
 
+    from model_service.api.scheduler.public import BeforeMutation
     from model_service.contracts.json_values import JsonValue
     from model_service.providers.empaia.ead.builder_io import BuilderIo
     from model_service.providers.empaia.publishing.publishers import PublisherRegistry
-    from model_service.scheduler.public import BeforeMutation
 
 
 logger = logging.getLogger(__name__)

@@ -7,6 +7,10 @@ from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 from zipfile import BadZipFile
 
+from model_service.api.scheduler.public import (
+    ProviderFinishFailureError,
+    ProviderSuccess,
+)
 from model_service.builders.declarations import OutputSpec
 from model_service.builders.registry import get_builder
 from model_service.contracts.model_declarations import SpatialScoresModel
@@ -31,7 +35,6 @@ from model_service.providers.empaia.publishing.publishers import (
     PublisherRegistry,
     default_publishers,
 )
-from model_service.scheduler.public import ProviderFinishFailureError, ProviderSuccess
 from tests.support.builder_fixtures import outputs_model
 
 

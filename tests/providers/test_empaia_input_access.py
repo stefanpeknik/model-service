@@ -11,6 +11,10 @@ from typing import TYPE_CHECKING, Any
 import httpx
 from fastapi import FastAPI
 
+from model_service.api.scheduler.builder_dispatch import (
+    HTTPBuilderDispatch,
+    RemoteFailureError,
+)
 from model_service.builders.declarations import InputSpec
 from model_service.builders.replica.http_handler import run_http
 from model_service.builders.replica.runner import BuilderApplication
@@ -28,10 +32,6 @@ from model_service.contracts.invocation import (
 from model_service.contracts.result import BuilderResult, InlineOutput
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessFactory
-from model_service.scheduler.builder_dispatch import (
-    HTTPBuilderDispatch,
-    RemoteFailureError,
-)
 from tests.support.builder_fixtures import (
     DECLARED,
     SPATIAL_MODEL,

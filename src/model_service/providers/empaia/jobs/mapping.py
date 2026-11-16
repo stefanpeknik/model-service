@@ -5,13 +5,13 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Never
 
-from model_service.contracts.failures import InvalidInvocation
-from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
-from model_service.providers.empaia.ead.apps import VIEWER_CONFIG_KEY
-from model_service.scheduler.public import (
+from model_service.api.scheduler.public import (
     InvalidScheduleRequestError,
     SchedulingUnavailableError,
 )
+from model_service.contracts.failures import InvalidInvocation
+from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
+from model_service.providers.empaia.ead.apps import VIEWER_CONFIG_KEY
 
 
 if TYPE_CHECKING:

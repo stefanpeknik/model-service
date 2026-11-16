@@ -12,6 +12,16 @@ from typing import TYPE_CHECKING
 
 import jwt
 
+from model_service.api.scheduler.execution_scheduler import ExecutionScheduler
+from model_service.api.scheduler.internal_state import RetryPolicy
+from model_service.api.scheduler.public import (
+    InvalidScheduleRequestError,
+    Priority,
+    ScheduleRequest,
+    SchedulingUnavailableError,
+)
+from model_service.api.scheduler.running_work import ActiveWorkRegistry
+from model_service.api.scheduler.worker import ExecutionWorker
 from model_service.builders.implementations.heatmap.spec import HeatmapOutputs
 from model_service.builders.registry import get_builder
 from model_service.builders.replica.runner import BuilderApplication
@@ -30,16 +40,6 @@ from model_service.providers.empaia.publishing.publishers import (
     Commit,
     PublisherRegistry,
 )
-from model_service.scheduler.execution_scheduler import ExecutionScheduler
-from model_service.scheduler.internal_state import RetryPolicy
-from model_service.scheduler.public import (
-    InvalidScheduleRequestError,
-    Priority,
-    ScheduleRequest,
-    SchedulingUnavailableError,
-)
-from model_service.scheduler.running_work import ActiveWorkRegistry
-from model_service.scheduler.worker import ExecutionWorker
 from tests.support.builder_fixtures import deployments
 from tests.support.memory_repository import InMemoryExecutionRepository
 

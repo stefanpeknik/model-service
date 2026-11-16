@@ -21,6 +21,12 @@ from model_service.api.http.errors import (
     lookup_error,
 )
 from model_service.api.http.scheduling import require_idempotency_key, submit
+from model_service.api.scheduler.builder_dispatch import (
+    ConfirmedRejectionError,
+    RemoteFailureError,
+    UnknownOutcomeError,
+)
+from model_service.api.scheduler.public import ScheduleRequest, ScheduleResult
 from model_service.builders.registry import BUILDERS
 from model_service.contracts.caller_request import BuilderRequest
 from model_service.contracts.failures import (
@@ -34,19 +40,13 @@ from model_service.contracts.json_values import JsonValue
 from model_service.contracts.model_declarations import InferenceContract
 from model_service.contracts.result import BuilderResult
 from model_service.providers.standalone.provider import STANDALONE_PROVIDER
-from model_service.scheduler.builder_dispatch import (
-    ConfirmedRejectionError,
-    RemoteFailureError,
-    UnknownOutcomeError,
-)
-from model_service.scheduler.public import ScheduleRequest, ScheduleResult
 
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
 
+    from model_service.api.scheduler.protocols import Scheduler
     from model_service.api.synchronous_runs import SynchronousBuilderService
-    from model_service.scheduler.protocols import Scheduler
 
 
 class ImmediateBuilderRequest(BuilderRequest):

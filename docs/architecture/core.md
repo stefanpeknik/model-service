@@ -13,7 +13,7 @@ behind one public API that can also run builders durably.
 │  /v1/executions/{id}[/cancel|/result]   /v1/executions/lookup      │
 │  /v1/empaia/builders/{b}/models/{m}  (JES HTTP execution backend)  │
 │  model catalog ◄── ConfigMap from deploy/helm/rayservice/models/   │
-│  execution scheduler (model_service/scheduler/) ◄──► PostgreSQL    │
+│  execution scheduler (model_service/api/scheduler/) ◄──► PostgreSQL    │
 └───────────────┬───────────────────────────────────┬────────────────┘
    builder call │ POST /builders/{b}/               │ raw tiles: POST /{m}/
 ┌───────────────▼───────────────────────────────────▼────────────────┐
@@ -36,7 +36,7 @@ behind one public API that can also run builders durably.
 | `src/model_service/api/` | The API process: public routes, synchronous runs, the model catalog (`model_catalog.py`), process wiring. |
 | `src/model_service/api/http/` | Auth, HTTP error mapping and scheduling calls shared by the API routes and provider routes. |
 | `src/model_service/contracts/` | Data shapes processes hand each other: invocation, result, failures, score grid, model declarations. |
-| `src/model_service/scheduler/` | Durable executions: admission, leases with fencing, retries, deadlines, cancellation, provider finish. PostgreSQL with Yoyo migrations. |
+| `src/model_service/api/scheduler/` | Durable executions: admission, leases with fencing, retries, deadlines, cancellation, provider finish. PostgreSQL with Yoyo migrations. |
 | `src/model_service/providers/` | Providers: standalone (shared storage) and EMPAIA (AppService input and publication). `providers/registry.py` lists them; the API and the builder ingress compose what each contributes and name none of them. |
 
 ### Interfaces
