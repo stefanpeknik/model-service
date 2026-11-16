@@ -13,7 +13,7 @@ flowchart LR
 
   subgraph sg_api["API process (uvicorn: api.main)"]
     api["api<br/>app_factory, synchronous_runs,<br/>raw_inference_proxy"]
-    routes["api.routes<br/>builders · executions · models"]
+    routes["api.routes.v1<br/>builders · executions · models"]
     http_common["http_common<br/>auth · errors · scheduling"]
     subgraph sg_sched["scheduler"]
       scheduler["scheduler<br/>public, execution_scheduler,<br/>worker, builder_dispatch"]
@@ -84,7 +84,7 @@ runtime.
 ```mermaid
 sequenceDiagram
   participant C as Caller / EMPAIA JES
-  participant R as api.routes / empaia.jobs.routes
+  participant R as api.routes.v1 / empaia.jobs.routes
   participant H as http_common.scheduling
   participant S as scheduler (execution_scheduler)
   participant P as provider adapter

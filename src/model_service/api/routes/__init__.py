@@ -1,1 +1,1 @@
-"""Public routes, one module per URL prefix."""
+"""Public routes, one package per API version."""
