@@ -11,7 +11,7 @@ from tempfile import TemporaryDirectory
 from model_service.contracts.failures import InvalidInvocation
 from model_service.contracts.invocation import ExecutionContext, SharedPathInput
 from model_service.contracts.result import BuilderResult, SharedArtifact
-from model_service.providers.standalone.provider import StandaloneProviderAdapter
+from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from model_service.scheduler.public import (
     ExecutionError,

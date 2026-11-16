@@ -28,7 +28,7 @@ from model_service.contracts.model_declarations import (
     TileEmbeddingModel,
 )
 from model_service.contracts.result import BuilderResult, InlineOutput, SharedArtifact
-from model_service.providers.standalone.provider import StandaloneProviderAdapter
+from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from model_service.scheduler.builder_dispatch import (
     ConfirmedRejectionError,

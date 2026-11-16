@@ -23,7 +23,7 @@ from model_service.builders.replica.http_handler import run_http
 from model_service.builders.replica.runner import BuilderApplication
 from model_service.contracts.builder_http import RunRequest
 from model_service.contracts.model_declarations import TileEmbeddingModel
-from model_service.providers.standalone.provider import StandaloneProviderAdapter
+from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from model_service.scheduler.builder_dispatch import HTTPBuilderDispatch
 from model_service.scheduler.execution_scheduler import ExecutionScheduler
