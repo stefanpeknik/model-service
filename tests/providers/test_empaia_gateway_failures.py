@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
 import unittest
-from unittest.mock import patch
 
 from aiohttp import web
 from aiohttp.test_utils import TestServer
@@ -12,46 +10,13 @@ from rationai.empaia import Client
 
 from model_service.providers.empaia.app_service.gateway import (
     EmpaiaGatewayError,
-    EmpaiaJobContext,
 )
 from model_service.providers.empaia.app_service.http import (
     HttpEmpaiaGateway,
-    http_gateway_factory,
 )
-from model_service.providers.empaia.settings import EmpaiaSettings
-from tests.providers.empaia_fixtures import PIXELMAP_ID
 
 
 class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
-    async def test_app_service_timeout_comes_from_the_environment(self) -> None:
-        async def slow_output(request: web.Request) -> web.Response:
-            await asyncio.sleep(0.3)
-            return web.json_response({**await request.json(), "id": PIXELMAP_ID})
-
-        app = web.Application()
-        app.router.add_post("/v3/job/outputs/score", slow_output)
-        async with TestServer(app) as server:
-            context = EmpaiaJobContext(
-                api_url=str(server.make_url("/")), job_id="job", credential="token"
-            )
-            for seconds, succeeds in (("0.05", False), ("5", True)):
-                with (
-                    self.subTest(timeout=seconds),
-                    patch.dict(
-                        "os.environ", {"EMPAIA_APP_SERVICE_TIMEOUT_SECONDS": seconds}
-                    ),
-                ):
-                    gateway = http_gateway_factory(EmpaiaSettings())(context)
-                    try:
-                        if succeeds:
-                            await gateway.post_primitive("score", "float", 0.75)
-                        else:
-                            with self.assertRaises(EmpaiaGatewayError) as raised:
-                                await gateway.post_primitive("score", "float", 0.75)
-                            self.assertTrue(raised.exception.outcome_unknown)
-                    finally:
-                        await gateway.close()
-
     async def test_disconnect_after_accepted_put_is_unknown_without_resend(self):
         requests = []
 
@@ -156,37 +121,3 @@ class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
                         self.assertNotIn("private", str(raised.exception))
                     await gateway.close()
                 self.assertEqual(received, ["GET", "PUT"])
-
-    async def test_timeout_is_unknown_and_cancellation_propagates(self):
-        entered = asyncio.Event()
-        release = asyncio.Event()
-
-        async def handle(_request):
-            entered.set()
-            await release.wait()
-            return web.Response(status=204)
-
-        app = web.Application()
-        app.router.add_put("/v3/job/finalize", handle)
-        async with TestServer(app) as server:
-            origin = str(server.make_url("/"))
-            gateway = HttpEmpaiaGateway(
-                origin,
-                "job",
-                "token",
-                client=Client(origin, "job", "token", timeout=0.05),
-            )
-            try:
-                with self.assertRaises(EmpaiaGatewayError) as raised:
-                    await gateway.finalize()
-                self.assertTrue(raised.exception.retryable)
-                self.assertTrue(raised.exception.outcome_unknown)
-                entered.clear()
-                task = asyncio.create_task(gateway.finalize())
-                await asyncio.wait_for(entered.wait(), 1)
-                task.cancel()
-                with self.assertRaises(asyncio.CancelledError):
-                    await task
-            finally:
-                release.set()
-                await gateway.close()

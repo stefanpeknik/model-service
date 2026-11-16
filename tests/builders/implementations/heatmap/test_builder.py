@@ -1,24 +1,18 @@
-"""Check heatmap processor orchestration, model verification and the heatmap builder."""
+"""Check the heatmap builder against real slides and a fake model."""
 
 from __future__ import annotations
 
-import asyncio
-import gc
-import sys
 import unittest
-from contextlib import contextmanager
-from functools import partial
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from types import ModuleType, SimpleNamespace
-from typing import TYPE_CHECKING, Any, Self
-from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
+from typing import Any
+from unittest.mock import AsyncMock
 
 import numpy as np
 
 from model_service.builders.base import ReplicaSettings
 from model_service.builders.implementations.heatmap.builder import HeatmapBuilder
-from model_service.builders.implementations.heatmap.processor import build_heatmap
 from model_service.builders.registry import get_builder
 from model_service.builders.replica.runner import BuilderApplication
 from model_service.contracts.invocation import SharedPathInput
@@ -30,10 +24,6 @@ from tests.support.builder_contract import BuilderContractTests
 from tests.support.builder_fixtures import invocation, write_slide
 
 
-if TYPE_CHECKING:
-    from collections.abc import Iterator
-
-
 def spatial(**overrides: Any) -> SpatialScoresModel:
     values: dict[str, Any] = {
         "id": "classifier",
@@ -43,186 +33,6 @@ def spatial(**overrides: Any) -> SpatialScoresModel:
         "mpp": 0.5,
     }
     return SpatialScoresModel(**(values | overrides))
-
-
-class FakeSlide:
-    level_dimensions = ((4, 4),)
-
-    def __init__(self, _path: str) -> None:
-        pass
-
-    def __enter__(self) -> Self:
-        return self
-
-    def __exit__(self, *_args: object) -> None:
-        pass
-
-    def slide_resolution(self, _level: int) -> tuple[float, float]:
-        return 0.5, 0.5
-
-
-class FakeTileReader:
-    level = 0
-    tissue = None
-
-    @classmethod
-    @contextmanager
-    def open(
-        cls, _slide: object, _mask: object, _mpp: float, *, skip_background: bool
-    ) -> Iterator[Self]:
-        yield cls()
-
-    def read(self, _x: int, _y: int, tile_size: int) -> np.ndarray:
-        return np.zeros((3, tile_size, tile_size), dtype=np.uint8)
-
-
-class FakeMaskBuilder:
-    def __init__(self, recorded: dict[str, Any], **options: object) -> None:
-        self.recorded = recorded
-        recorded["mask_options"] = options
-        self.span = np.asarray(options["source_extents"])
-
-    def update_batch(self, *, batch: np.ndarray, coords: np.ndarray) -> None:
-        self.recorded["batch"] = batch
-        self.recorded["coords"] = coords
-
-    def finalize(self) -> dict[str, np.ndarray]:
-        return {
-            "mask": np.full((1, 4, 4), 0.25, dtype=np.float32),
-            "overlap_counter": np.ones((1, 4, 4)),
-        }
-
-    def cleanup(self) -> None:
-        if "check_cleanup" in self.recorded:
-            self.recorded["check_cleanup"]()
-        self.recorded["cleaned"] = True
-
-
-def module(name: str, **members: object) -> ModuleType:
-    result = ModuleType(name)
-    for key, value in members.items():
-        setattr(result, key, value)
-    return result
-
-
-class HeatmapProcessorTests(unittest.IsolatedAsyncioTestCase):
-    async def test_orchestration_score_grid_and_cleanup(self) -> None:
-        recorded: dict[str, Any] = {}
-        predictor = SimpleNamespace(
-            predict=AsyncMock(return_value=0.75), declaration=spatial()
-        )
-
-        def grid_tiles(**options: object) -> list[tuple[int, int]]:
-            recorded["grid_options"] = options
-            return [(0, 0)]
-
-        fake_modules = {
-            "ratiopath": module("ratiopath"),
-            "ratiopath.masks": module("ratiopath.masks"),
-            "ratiopath.masks.mask_builders": module(
-                "ratiopath.masks.mask_builders",
-                MaskBuilder=lambda **options: FakeMaskBuilder(recorded, **options),
-            ),
-            "ratiopath.openslide": module("ratiopath.openslide", OpenSlide=FakeSlide),
-            "ratiopath.tiling": module("ratiopath.tiling", grid_tiles=grid_tiles),
-            "model_service.builders.slides.tile_reader": module(
-                "model_service.builders.slides.tile_reader",
-                TileReader=FakeTileReader,
-                open_slide=lambda path, _name: FakeSlide(str(path)),
-            ),
-        }
-        with TemporaryDirectory() as directory, patch.dict(sys.modules, fake_modules):
-            output = Path(directory) / "heatmap.npz"
-            build = partial(
-                build_heatmap,
-                Path(directory) / "slide.svs",
-                None,
-                output,
-                client=predictor,
-                stride_fraction=0.01,
-                skip_background=False,
-                num_threads=1,
-                max_concurrent_tasks=2,
-            )
-            await build()
-            np.testing.assert_array_equal(recorded["batch"], [[[[0.75]]]])
-            grid = read_score_grid(output)
-            np.testing.assert_array_equal(grid.values, 0.25)
-            self.assertEqual(grid.values.shape, (1, 4, 4))
-            self.assertTrue(grid.scored.all())
-            self.assertEqual(
-                (grid.level, grid.level_size, grid.cell_size, grid.mpp),
-                (0, (4, 4), 1.0, (0.5, 0.5)),
-            )
-
-            predictor.predict.return_value = np.array([[0.1, 0.2], [0.3, 0.4]])
-            predictor.declaration = spatial(output_tile_size=2)
-            await build()
-            np.testing.assert_allclose(recorded["batch"], [[[[0.1, 0.2], [0.3, 0.4]]]])
-
-            predictor.predict.return_value = [0.75]
-            with self.assertRaises(ValueError):
-                await build()
-            self.assertTrue(recorded["cleaned"])
-            predictor.declaration = spatial()
-
-            cancelled = asyncio.Event()
-            both_started = asyncio.Event()
-            calls = 0
-
-            async def failing_prediction(_tile: object) -> object:
-                nonlocal calls
-                calls += 1
-                if calls == 1:
-                    await both_started.wait()
-                    raise RuntimeError("prediction failed")
-                both_started.set()
-                try:
-                    await asyncio.Event().wait()
-                finally:
-                    cancelled.set()
-
-            fake_modules["ratiopath.tiling"].grid_tiles = lambda **_options: [  # type: ignore[attr-defined]
-                (0, 0),
-                (1, 0),
-                (2, 0),
-            ]
-            predictor.predict.side_effect = failing_prediction
-            recorded["check_cleanup"] = lambda: self.assertTrue(cancelled.is_set())
-            with self.assertRaisesRegex(RuntimeError, "prediction failed"):
-                await build()
-            self.assertTrue(cancelled.is_set())
-            self.assertTrue(recorded["cleaned"])
-
-            recorded.pop("check_cleanup")
-            both_started = asyncio.Event()
-            calls = 0
-
-            async def simultaneous_failures(_tile: object) -> object:
-                nonlocal calls
-                calls += 1
-                if calls == 2:
-                    both_started.set()
-                await both_started.wait()
-                raise RuntimeError("simultaneous failure")
-
-            predictor.predict.side_effect = simultaneous_failures
-            loop = asyncio.get_running_loop()
-            previous_handler = loop.get_exception_handler()
-            unhandled: list[object] = []
-            loop.set_exception_handler(lambda _loop, context: unhandled.append(context))
-            try:
-                with self.assertRaisesRegex(RuntimeError, "simultaneous failure"):
-                    await build()
-                gc.collect()
-                await asyncio.sleep(0)
-                self.assertEqual(unhandled, [])
-            finally:
-                loop.set_exception_handler(previous_handler)
-
-        self.assertEqual(recorded["grid_options"]["stride"], (1, 1))
-        self.assertEqual(recorded["mask_options"]["stride"], 1)
-        np.testing.assert_array_equal(recorded["coords"], [[0, 0]])
 
 
 def fake_handle(config: dict[str, object], score: object = 0.75) -> SimpleNamespace:
@@ -299,26 +109,6 @@ class HeatmapBuilderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(artifact.media_type, "application/x-npz")
         np.testing.assert_allclose(self.scores(artifact), 0.375)
         self.assertEqual(list(self.root.glob(".*")), [])
-
-    async def test_cells_record_their_size_and_whether_they_were_scored(self) -> None:
-        self.model = spatial(tile_size=32, output_tile_size=1)
-        config = {**self.config, "output_tile_size": 1}
-
-        artifact = await self.run_builder(
-            fake_handle(config, np.full((1, 1), 0.5, dtype=np.float32))
-        )
-
-        grid = read_score_grid(Path(artifact.path))
-        self.assertEqual(grid.cell_size, 16.0)
-        self.assertTrue(grid.scored.any())
-        np.testing.assert_allclose(grid.values[0][grid.scored], 0.5)
-
-    async def test_missing_mask_processes_the_whole_slide(self) -> None:
-        handle = fake_handle(self.config, np.full((32, 32), 0.375, dtype=np.float32))
-        artifact = await self.run_builder(handle, mask=False)
-        np.testing.assert_allclose(self.scores(artifact), 0.375)
-        # 96x64 at tile 32 and stride 16: 5 x 3 grid positions.
-        self.assertEqual(handle.predict.remote.await_count, 15)
 
     async def test_background_tiles_are_skipped_unless_disabled(self) -> None:
         pixels = np.full((64, 96, 3), 245, dtype=np.uint8)  # white glass

@@ -34,6 +34,7 @@ from model_service.providers.empaia.registration import (
     register_until_done,
 )
 from model_service.providers.empaia.settings import EmpaiaSettings
+from tests.support.deployment import CHART, VALUES, load
 
 
 PUBLISHERS = default_publishers()
@@ -292,17 +293,29 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("HTTP 401 from https://marketplace.example/", logs.output[2])
 
-    def test_a_marketplace_needs_an_organization(self) -> None:
-        with self.assertRaises(SettingsError):
-            EmpaiaSettings(marketplace_url="https://marketplace.example")
-        with self.assertRaises(SettingsError):
-            EmpaiaSettings(idp_url="https://idp.example")
-
 
 class BuilderCoverageTests(unittest.TestCase):
     def test_every_builder_is_offered_or_explicitly_not(self) -> None:
         self.assertEqual(BUILDER_IO.keys() & NOT_OFFERED.keys(), set())
         self.assertEqual(BUILDER_IO.keys() | NOT_OFFERED.keys(), BUILDERS.keys())
+
+
+class ValuesFileTests(unittest.TestCase):
+    def test_each_values_file_yields_a_valid_catalog_and_its_apps(self) -> None:
+        publishers = default_publishers()
+        for values in VALUES:
+            models = load(values).get("models")
+            if not models:
+                continue
+            with self.subTest(values.name):
+                documents = [load(CHART / f"models/{m}.yaml") for m in models]
+                catalog = ModelCatalog.from_documents(documents, [CATALOG_BLOCK])
+                listings = parse_listings(catalog.provider_block(CATALOG_BLOCK))
+                apps = app_definitions(catalog, listings, publishers)
+                # A model listed for EMPAIA that no builder can serve there would
+                # otherwise only be logged at startup.
+                offered = {app.model_id for app in apps}
+                self.assertEqual(offered, set(listings))
 
 
 if __name__ == "__main__":

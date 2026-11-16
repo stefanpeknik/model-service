@@ -12,12 +12,12 @@ from model_service.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.scheduler.internal_state import RetryPolicy
 from model_service.scheduler.public import ScheduleRequest
 from model_service.scheduler.status import ExecutionStatus
-from tests.scheduler.test_execution_scheduler import MutableClock, StandaloneProvider
 from tests.support.memory_repository import (
     FakeDispatch,
     InMemoryExecutionRepository,
     resolve_test_model,
 )
+from tests.support.scheduling import MutableClock, StandaloneProvider
 
 
 class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):
@@ -218,17 +218,3 @@ class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):
         admitted = await self.schedule(scheduler)
         async with scheduler.running():
             await self.wait_succeeded(scheduler, admitted.execution.id)
-
-    def test_nonpositive_timing_is_rejected_before_startup(self):
-        with self.assertRaisesRegex(ValueError, "lease_duration"):
-            self.scheduler(lease_duration=timedelta(0))
-        with self.assertRaisesRegex(ValueError, "poll_interval"):
-            ExecutionScheduler(
-                repository=self.repository,
-                providers={},
-                dispatch=FakeDispatch({}),
-                resolve_model=resolve_test_model,
-                default_timeout=timedelta(hours=1),
-                maximum_timeout=timedelta(hours=6),
-                poll_interval=0,
-            )

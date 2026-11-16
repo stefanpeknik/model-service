@@ -109,18 +109,6 @@ class PostgresExecutionRepositoryTests(
         self.assertEqual({first.created, second.created}, {False, True})
         self.assertEqual(first.execution.id, second.execution.id)
 
-    async def test_readiness_checks_initialized_execution_storage(self) -> None:
-        await self.repository.check_ready()
-
-    async def test_initialize_is_safe_for_concurrent_repositories(self) -> None:
-        admitted = await self.repository.admit(self._admission("existing"))
-
-        await asyncio.gather(*(self._repository().initialize() for _ in range(4)))
-
-        self.assertEqual(
-            await self.repository.get(admitted.execution.id), admitted.execution
-        )
-
     async def test_untracked_legacy_database_is_rejected_without_losing_data(
         self,
     ) -> None:

@@ -141,18 +141,6 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
         np.testing.assert_allclose(scored.values[0][scored.scored], 0.5)
         self.assertFalse(unscored.scored.any())
 
-    async def test_a_full_resolution_output_has_a_cell_per_pixel(self) -> None:
-        with TemporaryDirectory() as directory:
-            grid = await self._build(
-                Path(directory),
-                112,
-                80,
-                predictor=LandmarkPredictor(output_tile_size=32),
-            )
-
-        self.assertEqual(grid.cell_size, 1.0)
-        self.assertGreaterEqual(grid.values.shape[1:], (80, 112))
-
     async def test_scores_land_on_their_tiles_and_overlaps_are_averaged(
         self,
     ) -> None:

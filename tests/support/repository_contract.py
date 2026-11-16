@@ -198,7 +198,7 @@ class ExecutionRepositoryContract:
         active = await self.repository.claim_due("worker", timedelta(seconds=30))
         assert active is not None
         await self._advance_time(timedelta(milliseconds=10))
-        await self._admit_execution("other-builder", builder_id="tile-embeddings")
+        await self._admit_execution("other-builder", builder_id="other")
 
         selected = await self.repository.claim_due("worker", timedelta(seconds=30))
 

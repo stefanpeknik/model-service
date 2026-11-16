@@ -17,7 +17,6 @@ from model_service.http_common.auth import (
     Principal,
 )
 from model_service.models.catalog import ModelCatalog
-from model_service.providers.empaia.jobs.routes import create_router
 from model_service.scheduler.public import ExecutionView
 from model_service.scheduler.status import ExecutionStatus
 
@@ -74,7 +73,6 @@ def client(**access: Access) -> AsyncClient:
     app = create_app(
         Scheduler(),  # type: ignore[arg-type]
         catalog=CATALOG,
-        provider_routes=[create_router],
         **access,
     )
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://ms")
@@ -123,14 +121,6 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
                 ("student", Action.CANCEL_EXECUTION, EXECUTION),
             ],
         )
-
-    async def test_the_empaia_route_has_its_own_access(self) -> None:
-        async with client(access=Access(authenticator=BearerToken())) as http:
-            empaia = await http.get(f"/v1/empaia/executions/{EXECUTION}")
-            public = await http.get(f"/v1/executions/{EXECUTION}")
-
-        self.assertEqual(empaia.status_code, 200)
-        self.assertEqual(public.status_code, 401)
 
 
 if __name__ == "__main__":

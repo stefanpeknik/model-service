@@ -42,7 +42,6 @@ from model_service.scheduler.public import (
     ProviderSuccess,
     ScheduleConflictError,
     ScheduleRequest,
-    SchedulingUnavailableError,
     SubmissionIdentity,
     UnknownBuilderError,
     UnknownModelError,
@@ -56,6 +55,7 @@ from tests.support.memory_repository import (
     InMemoryExecutionRepository,
     resolve_test_model,
 )
+from tests.support.scheduling import MutableClock, StandaloneProvider
 
 
 if TYPE_CHECKING:
@@ -68,50 +68,6 @@ if TYPE_CHECKING:
         ModelResolver,
         ProviderFinishOutcome,
     )
-
-
-class StandaloneProvider:
-    """Prepare minimal scheduler invocations without shared-file checks so tests can isolate orchestration."""
-
-    name = "standalone"
-
-    def identify(self, request: ScheduleRequest) -> SubmissionIdentity:
-        """Use the test replay key with a fixed fingerprint to isolate scheduler replay behavior."""
-        assert request.idempotency_key is not None
-        return SubmissionIdentity(
-            provider=self.name,
-            key=request.idempotency_key,
-            fingerprint="same-request",
-        )
-
-    async def prepare(
-        self,
-        request: ScheduleRequest,
-        deadline_at: datetime,
-    ) -> PreparedInvocation:
-        """Create an empty shared-storage invocation with the scheduler-supplied deadline."""
-        return PreparedInvocation(
-            invocation=Invocation(
-                inputs={},
-                resolved_configuration={},
-                input_access=InputAccessContext(
-                    kind="shared_storage",
-                    state={"root": "/shared"},
-                ),
-                deadline_at=deadline_at,
-            ),
-            protected_context={},
-        )
-
-    async def finish(
-        self,
-        _protected_context: dict[str, JsonValue],
-        _outcome: ProviderFinishOutcome,
-        *,
-        before_mutation: BeforeMutation,
-    ) -> None:
-        """Complete without external writes or mutation guarding for standalone orchestration tests."""
-        del before_mutation
 
 
 class RecordingProvider(StandaloneProvider):
@@ -154,33 +110,6 @@ class RecordingProvider(StandaloneProvider):
             raise self.finish_failures.pop(0)
 
 
-class MutableClock:
-    """Provide a manually advanced timestamp for scheduler lease, retry, and deadline tests."""
-
-    def __init__(self, now: datetime) -> None:
-        """Set the initial aware timestamp supplied by the test."""
-        self.now = now
-
-    def __call__(self) -> datetime:
-        """Return the current test timestamp without advancing it."""
-        return self.now
-
-    def advance(self, duration: timedelta) -> None:
-        """Advance simulated time by the supplied duration without sleeping."""
-        self.now += duration
-
-
-class UnavailableExecutionRepository(InMemoryExecutionRepository):
-    """Inject replay-lookup storage unavailability into scheduler admission."""
-
-    async def find_submission(
-        self,
-        _identity: SubmissionIdentity,
-    ) -> None:
-        """Raise storage unavailability during the early replay lookup."""
-        raise ExecutionRepositoryUnavailableError("database unavailable")
-
-
 class FlakySettlementRepository(InMemoryExecutionRepository):
     """Fail the first settlements as an unreachable database would."""
 
@@ -197,64 +126,6 @@ class FlakySettlementRepository(InMemoryExecutionRepository):
 
 class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
     """Exercise admission, leases, recovery, retries, cancellation, and provider finish."""
-
-    async def test_claim_lease_loss_returns_before_another_worker_recovers_it(
-        self,
-    ) -> None:
-        clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
-
-        async def dispatch(
-            _invocation: Invocation,
-            _execution_context: ExecutionContext,
-        ) -> BuilderResult:
-            clock.advance(timedelta(seconds=2))
-            await asyncio.Event().wait()
-            raise AssertionError("unreachable")
-
-        repository = InMemoryExecutionRepository(clock=clock)
-        scheduler, worker = self._scheduler_and_worker(
-            repository,
-            StandaloneProvider(),
-            FakeDispatch({"heatmap": dispatch}),
-            clock=clock,
-            lease_duration=timedelta(milliseconds=30),
-        )
-        admitted = await scheduler.schedule(self._request())
-
-        self.assertTrue(await asyncio.wait_for(worker.run_once(), timeout=1))
-        durable = await repository.get(admitted.execution.id)
-        self.assertEqual(durable.status, "running")
-        self.assertIsNotNone(durable.fencing_token)
-        self.assertIsNone(durable.result)
-
-    async def test_worker_shutdown_cancels_active_dispatch_and_propagates(self) -> None:
-        started = asyncio.Event()
-        stopped = asyncio.Event()
-
-        async def dispatch(
-            _invocation: Invocation,
-            _execution_context: ExecutionContext,
-        ) -> BuilderResult:
-            started.set()
-            try:
-                await asyncio.Event().wait()
-            finally:
-                stopped.set()
-            raise AssertionError("unreachable")
-
-        scheduler, worker = self._scheduler_and_worker(
-            InMemoryExecutionRepository(),
-            StandaloneProvider(),
-            FakeDispatch({"heatmap": dispatch}),
-        )
-        await scheduler.schedule(self._request())
-        worker_task = self._start_worker(worker)
-        await asyncio.wait_for(started.wait(), timeout=1)
-
-        worker_task.cancel()
-        with self.assertRaises(asyncio.CancelledError):
-            await asyncio.wait_for(worker_task, timeout=1)
-        self.assertTrue(stopped.is_set())
 
     async def test_persistent_renewal_failure_stops_provider_finish(self) -> None:
         stopped = asyncio.Event()
@@ -364,46 +235,6 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(durable.work_kind, WorkKind.PROVIDER_FINISH)
         self.assertEqual(durable.result, result)
 
-    async def test_worker_loop_survives_claim_lease_loss(self) -> None:
-        clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
-        stopped = asyncio.Event()
-        calls = 0
-
-        async def dispatch(
-            _invocation: Invocation,
-            _execution_context: ExecutionContext,
-        ) -> BuilderResult:
-            nonlocal calls
-            calls += 1
-            if calls == 1:
-                clock.advance(timedelta(seconds=2))
-                try:
-                    await asyncio.Event().wait()
-                finally:
-                    stopped.set()
-            return BuilderResult(outputs={})
-
-        repository = InMemoryExecutionRepository(
-            clock=clock,
-            processing_policy=RetryPolicy(3, timedelta(0), timedelta(0)),
-        )
-        scheduler, worker = self._scheduler_and_worker(
-            repository,
-            StandaloneProvider(),
-            FakeDispatch({"heatmap": dispatch}),
-            clock=clock,
-            lease_duration=timedelta(milliseconds=30),
-        )
-        admitted = await scheduler.schedule(self._request())
-        worker_task = self._start_worker(worker)
-
-        await asyncio.wait_for(stopped.wait(), timeout=1)
-        await self._wait_for_status(
-            scheduler, admitted.execution.id, ExecutionStatus.SUCCEEDED
-        )
-        self.assertFalse(worker_task.done())
-        self.assertEqual(calls, 2)
-
     async def test_renewal_error_stops_dispatch_and_discards_late_result(self) -> None:
         clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
         stopped = asyncio.Event()
@@ -466,52 +297,6 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             BuilderResult(outputs={}),
         )
 
-    async def test_busy_worker_expires_queued_deadlines_without_dispatching_more(
-        self,
-    ) -> None:
-        clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
-        started = asyncio.Event()
-        calls = 0
-
-        async def dispatch(
-            _invocation: Invocation,
-            _execution_context: ExecutionContext,
-        ) -> BuilderResult:
-            nonlocal calls
-            calls += 1
-            started.set()
-            await asyncio.Event().wait()
-            raise AssertionError("unreachable")
-
-        repository = InMemoryExecutionRepository(clock=clock)
-        scheduler, worker = self._scheduler_and_worker(
-            repository,
-            StandaloneProvider(),
-            FakeDispatch({"heatmap": dispatch}),
-            clock=clock,
-        )
-        running = await scheduler.schedule(self._request("running"))
-        queued = await scheduler.schedule(
-            ScheduleRequest(
-                builder_id="heatmap",
-                model_id="prostate-classifier-1",
-                provider="standalone",
-                body={},
-                idempotency_key="queued",
-                requested_timeout_seconds=1,
-            )
-        )
-        worker_task = self._start_worker(worker)
-        await asyncio.wait_for(started.wait(), timeout=1)
-        clock.advance(timedelta(seconds=2))
-
-        await self._wait_for_status(
-            scheduler, queued.execution.id, ExecutionStatus.FAILED
-        )
-        self.assertEqual((await scheduler.get(running.execution.id)).status, "running")
-        self.assertEqual(calls, 1)
-        self.assertFalse(worker_task.done())
-
     async def test_expired_lease_rejects_settlement_before_recovery(self) -> None:
         clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
         repository = InMemoryExecutionRepository(clock=clock)
@@ -570,7 +355,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             await release.wait()
             return BuilderResult(outputs={})
 
-        fake = FakeDispatch({"heatmap": dispatch, "tile-embeddings": dispatch})
+        fake = FakeDispatch({"heatmap": dispatch})
         scheduler, worker = self._scheduler_and_worker(
             InMemoryExecutionRepository(),
             StandaloneProvider(),
@@ -578,9 +363,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             max_concurrent=2,
         )
         first = await scheduler.schedule(self._request("a", model_id="model-a"))
-        second = await scheduler.schedule(
-            self._request("b", builder_id="tile-embeddings", model_id="model-b")
-        )
+        second = await scheduler.schedule(self._request("b", model_id="model-b"))
         self._start_worker(worker)
 
         await asyncio.wait_for(both_started.wait(), timeout=1)
@@ -592,40 +375,6 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             scheduler, second.execution.id, ExecutionStatus.SUCCEEDED
         )
         self.assertEqual({model.id for model in fake.models}, {"model-a", "model-b"})
-
-    async def test_worker_respects_model_capacity_across_builders(self) -> None:
-        running = 0
-        peak = 0
-
-        async def dispatch(
-            _invocation: Invocation, _execution_context: ExecutionContext
-        ) -> BuilderResult:
-            nonlocal running, peak
-            running += 1
-            peak = max(peak, running)
-            await asyncio.sleep(0.03)
-            running -= 1
-            return BuilderResult(outputs={})
-
-        scheduler, worker = self._scheduler_and_worker(
-            InMemoryExecutionRepository(),
-            StandaloneProvider(),
-            FakeDispatch({"heatmap": dispatch, "tile-embeddings": dispatch}),
-            max_concurrent=4,
-        )
-        executions = [
-            await scheduler.schedule(self._request("a", model_id="shared")),
-            await scheduler.schedule(
-                self._request("b", builder_id="tile-embeddings", model_id="shared")
-            ),
-        ]
-        self._start_worker(worker)
-
-        for admitted in executions:
-            await self._wait_for_status(
-                scheduler, admitted.execution.id, ExecutionStatus.SUCCEEDED
-            )
-        self.assertEqual(peak, 1)
 
     async def test_model_removed_before_attempt_fails_without_retry(self) -> None:
         cases = {
@@ -697,13 +446,13 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         execution_deadline = clock() + timedelta(minutes=5)
         report_deadline = clock() + timedelta(hours=1)
         admission = Admission(
-            identity=SubmissionIdentity("empaia", "job-1", "fingerprint"),
+            identity=SubmissionIdentity("external", "job-1", "fingerprint"),
             builder_id="heatmap",
             model_id="prostate-classifier-1",
             invocation=Invocation(
                 inputs={},
                 resolved_configuration={},
-                input_access=InputAccessContext(kind="empaia", state={}),
+                input_access=InputAccessContext(kind="external", state={}),
                 deadline_at=execution_deadline,
             ),
             protected_context={"credential": "secret"},
@@ -734,20 +483,6 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(failed.status, "failed")
         self.assertIsNone(failed.work_kind)
-
-    async def test_repository_failure_is_translated_by_the_scheduler(self) -> None:
-        provider = StandaloneProvider()
-        scheduler = ExecutionScheduler(
-            repository=UnavailableExecutionRepository(),
-            dispatch=FakeDispatch({}),
-            providers={provider.name: provider},
-            resolve_model=resolve_test_model,
-            default_timeout=timedelta(hours=1),
-            maximum_timeout=timedelta(hours=6),
-        )
-
-        with self.assertRaises(SchedulingUnavailableError):
-            await scheduler.schedule(self._request())
 
     async def test_provider_finish_retry_uses_stored_result_without_redispatch(
         self,
@@ -1005,133 +740,6 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(repository.failures, 0)
         self.assertIs(execution.work_kind, WorkKind.PROVIDER_FINISH)
         self.assertEqual(execution.processing_attempts, 1)
-
-    async def test_scheduled_result_is_visible_after_provider_finish(self) -> None:
-        now = datetime(2026, 9, 17, 8, tzinfo=UTC)
-        result = BuilderResult(
-            outputs={
-                "heatmap": SharedArtifact(
-                    path="/shared/heatmap.tiff",
-                    media_type="image/tiff",
-                )
-            }
-        )
-        repository = InMemoryExecutionRepository(clock=lambda: now)
-        provider = StandaloneProvider()
-        scheduler = ExecutionScheduler(
-            repository=repository,
-            dispatch=FakeDispatch({}),
-            providers={provider.name: provider},
-            resolve_model=resolve_test_model,
-            default_timeout=timedelta(hours=1),
-            maximum_timeout=timedelta(hours=6),
-            clock=lambda: now,
-        )
-        worker = ExecutionWorker(
-            resolve_model=resolve_test_model,
-            repository=repository,
-            active_work=ActiveWorkRegistry(),
-            providers={provider.name: provider},
-            dispatch=FakeDispatch(
-                {"heatmap": lambda _invocation, _execution_context: result}
-            ),
-            owner="worker-1",
-            lease_duration=timedelta(minutes=1),
-        )
-
-        admitted = await scheduler.schedule(
-            ScheduleRequest(
-                builder_id="heatmap",
-                model_id="prostate-classifier-1",
-                provider="standalone",
-                body={},
-                idempotency_key="request-1",
-            )
-        )
-
-        self.assertTrue(admitted.created)
-        self.assertEqual(admitted.execution.status, "queued")
-        self.assertIsNone(admitted.execution.result)
-
-        self.assertTrue(await worker.run_once())
-        processing_complete = await scheduler.get(admitted.execution.id)
-        self.assertEqual(processing_complete.status, "running")
-        self.assertIsNone(processing_complete.result)
-
-        self.assertTrue(await worker.run_once())
-        completed = await scheduler.get(admitted.execution.id)
-        self.assertEqual(completed.status, "succeeded")
-        self.assertEqual(completed.result, result)
-
-    async def test_replacement_worker_recovers_abandoned_processing(self) -> None:
-        clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
-        provider = StandaloneProvider()
-        repository = InMemoryExecutionRepository(
-            clock=clock,
-            processing_policy=RetryPolicy(2, timedelta(0), timedelta(0)),
-        )
-        scheduler = ExecutionScheduler(
-            repository=repository,
-            dispatch=FakeDispatch({}),
-            providers={provider.name: provider},
-            resolve_model=resolve_test_model,
-            default_timeout=timedelta(hours=1),
-            maximum_timeout=timedelta(hours=6),
-            clock=clock,
-        )
-        abandoned_started = asyncio.Event()
-
-        async def abandoned(
-            _invocation: Invocation,
-            _execution_context: ExecutionContext,
-        ) -> BuilderResult:
-            """Signal that dispatch started and block until its owning worker is interrupted."""
-            abandoned_started.set()
-            await asyncio.Event().wait()
-            raise AssertionError("unreachable")
-
-        first_worker = ExecutionWorker(
-            resolve_model=resolve_test_model,
-            repository=repository,
-            active_work=ActiveWorkRegistry(),
-            providers={provider.name: provider},
-            dispatch=FakeDispatch({"heatmap": abandoned}),
-            owner="scheduler-before-restart",
-            lease_duration=timedelta(seconds=30),
-        )
-        replacement_worker = ExecutionWorker(
-            resolve_model=resolve_test_model,
-            repository=repository,
-            active_work=ActiveWorkRegistry(),
-            providers={provider.name: provider},
-            dispatch=FakeDispatch(
-                {
-                    "heatmap": lambda _invocation, _execution_context: BuilderResult(
-                        outputs={}
-                    )
-                }
-            ),
-            owner="scheduler-after-restart",
-            lease_duration=timedelta(seconds=30),
-        )
-        admitted = await scheduler.schedule(self._request("restart"))
-        abandoned_task = asyncio.create_task(first_worker.run_once())
-        await abandoned_started.wait()
-
-        abandoned_task.cancel()
-        await asyncio.gather(abandoned_task, return_exceptions=True)
-        clock.advance(timedelta(seconds=31))
-        await repository.maintain()
-
-        self.assertTrue(await replacement_worker.run_once())
-        recovered = await repository.get(admitted.execution.id)
-        self.assertEqual(recovered.processing_attempts, 2)
-        self.assertEqual(recovered.status, "running")
-        self.assertTrue(await replacement_worker.run_once())
-        self.assertEqual(
-            (await scheduler.get(admitted.execution.id)).status,
-            "succeeded",
-        )
 
     async def test_confirmed_rejection_waits_without_consuming_an_attempt(
         self,

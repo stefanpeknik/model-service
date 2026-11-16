@@ -21,7 +21,7 @@ class ProtectedContextCipherTests(unittest.TestCase):
         )
         context = {
             "credential": "secret-job-token",
-            "installation": "test-empaia",
+            "installation": "test-installation",
         }
 
         encrypted = cipher.encrypt(context)

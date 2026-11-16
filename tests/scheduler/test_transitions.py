@@ -29,13 +29,13 @@ def publishing():
     deadline = NOW + timedelta(minutes=5)
     admitted = TRANSITIONS.admission.admit(
         Admission(
-            identity=SubmissionIdentity("empaia", "job", "job"),
+            identity=SubmissionIdentity("external", "job", "job"),
             builder_id="heatmap",
             model_id="model",
             invocation=Invocation(
                 inputs={},
                 resolved_configuration=None,
-                input_access=InputAccessContext(kind="empaia", state={}),
+                input_access=InputAccessContext(kind="external", state={}),
                 deadline_at=deadline,
             ),
             protected_context={},

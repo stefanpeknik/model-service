@@ -54,12 +54,6 @@ class EmptyConfiguration(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
-class StrideConfiguration(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    stride_fraction: float = 0.5
-
-
 def spec(
     *,
     inputs: Mapping[str, InputSpec] | None = None,

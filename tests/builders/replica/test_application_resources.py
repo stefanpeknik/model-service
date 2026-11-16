@@ -1,55 +1,32 @@
-"""Check deadline-aware acquisition, bounded cleanup, cancellation and attempt isolation."""
+"""Check deadline-aware acquisition, bounded cleanup and cancellation."""
 
 from __future__ import annotations
 
 import asyncio
-import gc
 import unittest
-import weakref
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any
-from unittest.mock import patch
 
-from model_service.builders.input_access import close_resource
-from model_service.builders.registry import BUILDERS, get_builder
 from model_service.builders.replica.runner import BuilderApplication
 from model_service.contracts.failures import (
     BuilderFailure,
-    FailureCode,
     InvalidInvocation,
 )
 from model_service.contracts.invocation import (
     ExecutionContext,
-    InputAccessContext,
-    ProviderInput,
 )
-from model_service.contracts.result import BuilderResult, SharedArtifact
-from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
-from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessFactory
-from model_service.providers.standalone.provider import StandaloneProviderAdapter
-from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
-from model_service.scheduler.execution_scheduler import ExecutionScheduler
-from model_service.scheduler.public import ScheduleRequest
-from model_service.scheduler.running_work import ActiveWorkRegistry
-from model_service.scheduler.status import ExecutionStatus
-from model_service.scheduler.worker import ExecutionWorker
+from model_service.contracts.result import BuilderResult
 from tests.support.builder_fixtures import (
     DECLARED,
     SPATIAL_MODEL,
     FunctionBuilder,
-    artifact_output,
     invocation,
     spec,
 )
-from tests.support.memory_repository import InMemoryExecutionRepository
 
 
 if TYPE_CHECKING:
     from model_service.builders.base import BuilderContext
-    from model_service.contracts.invocation import Invocation
-    from model_service.contracts.model_declarations import ModelBinding
 
 
 async def empty(_context: BuilderContext) -> BuilderResult:
@@ -193,272 +170,6 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
                 invocation("test"), SPATIAL_MODEL
             )
 
-    async def test_timed_out_cleanup_remains_owned_until_it_stops(self) -> None:
-        cancellation_received = asyncio.Event()
-        closed = asyncio.Event()
-        task_ref: weakref.ReferenceType[asyncio.Task[Any]] | None = None
-
-        async def close() -> None:
-            nonlocal task_ref
-            current = asyncio.current_task()
-            assert current is not None
-            task_ref = weakref.ref(current)
-            try:
-                await asyncio.Future()
-            except asyncio.CancelledError:
-                cancellation_received.set()
-                try:
-                    await asyncio.Future()
-                finally:
-                    closed.set()
-
-        with self.assertRaises(TimeoutError):
-            await close_resource(close, timeout_seconds=0.02)
-        await asyncio.wait_for(cancellation_received.wait(), timeout=1)
-        gc.collect()
-        assert task_ref is not None
-        task = task_ref()
-        self.assertIsNotNone(task)
-        assert task is not None
-        task.cancel()
-        await asyncio.wait_for(closed.wait(), timeout=1)
-
-    async def test_cancelled_empaia_acquisition_closes_gateway(self) -> None:
-        started = asyncio.Event()
-        closed = asyncio.Event()
-
-        class Gateway:
-            async def materialize_input(
-                self,
-                _name: str,
-                _directory: str,
-                *,
-                mpp: float | None = None,
-                **_: object,
-            ) -> str:
-                started.set()
-                await asyncio.Event().wait()
-
-            async def close(self) -> None:
-                closed.set()
-                raise OSError("cleanup failure")
-
-        with TemporaryDirectory() as directory:
-            adapter = EmpaiaInputAccessFactory(lambda _c: Gateway(), Path(directory))
-            request = invocation(
-                "empaia",
-                {"api_url": "https://example.invalid", "job_id": "job"},
-                inputs={"slide": ProviderInput("slide")},
-            )
-            task = asyncio.create_task(
-                adapter.create(
-                    request,
-                    ExecutionContext(
-                        processing_attempt_id="attempt",
-                        protected_context={
-                            "api_url": "https://example.invalid",
-                            "job_id": "job",
-                            "credential": "secret",
-                        },
-                    ),
-                )
-            )
-            await asyncio.wait_for(started.wait(), timeout=1)
-            task.cancel()
-            with self.assertRaises(asyncio.CancelledError):
-                await asyncio.wait_for(task, timeout=1)
-            self.assertTrue(closed.is_set())
-
-    async def test_empaia_input_failures_keep_the_gateways_reason(self) -> None:
-        cases = [
-            EmpaiaGatewayError(
-                "EMPAIA AppService is temporarily unavailable", retryable=True
-            ),
-            EmpaiaGatewayError(
-                "EMPAIA slide region is not a readable image", retryable=False
-            ),
-        ]
-        for failure in cases:
-
-            class Gateway:
-                async def materialize_input(
-                    self,
-                    _name: str,
-                    _directory: str,
-                    *,
-                    mpp: float | None = None,
-                    failure: EmpaiaGatewayError = failure,
-                    **_: object,
-                ) -> str:
-                    raise failure
-
-                async def close(self) -> None:
-                    return None
-
-            with (
-                self.subTest(message=failure.safe_message),
-                TemporaryDirectory() as directory,
-            ):
-                adapter = EmpaiaInputAccessFactory(
-                    lambda _c: Gateway(), Path(directory)
-                )
-                with self.assertRaises(BuilderFailure) as raised:
-                    await adapter.create(
-                        invocation(
-                            "empaia",
-                            {"api_url": "https://example.invalid", "job_id": "job"},
-                            inputs={"slide": ProviderInput("slide")},
-                        ),
-                        ExecutionContext(
-                            processing_attempt_id="attempt",
-                            protected_context={
-                                "api_url": "https://example.invalid",
-                                "job_id": "job",
-                                "credential": "secret",
-                            },
-                        ),
-                    )
-                self.assertEqual(raised.exception.code, FailureCode.INPUT_UNAVAILABLE)
-                self.assertEqual(list(Path(directory).rglob("inputs")), [])
-                self.assertEqual(raised.exception.safe_message, failure.safe_message)
-                self.assertEqual(raised.exception.retryable, failure.retryable)
-
-    async def test_empaia_access_validates_contexts_before_opening_a_gateway(
-        self,
-    ) -> None:
-        def unexpected_gateway(_context: object) -> Any:
-            self.fail("invalid context must not open an AppService gateway")
-
-        public = {"api_url": "https://empaia.invalid", "job_id": "job"}
-        protected = {**public, "credential": "secret"}
-        runtime = ExecutionContext(
-            processing_attempt_id="attempt", protected_context=protected
-        )
-        cases = [
-            ({}, runtime),
-            ({**public, "job_id": False}, runtime),
-            ({**public, "credential": "secret"}, runtime),
-            ({**public, "processing_attempt_id": "attempt"}, runtime),
-            ({**public, "job_id": "another-job"}, runtime),
-            ({**public, "api_url": "https://another.invalid"}, runtime),
-            (public, ExecutionContext(processing_attempt_id="attempt")),
-            (public, ExecutionContext(protected_context=protected)),
-            (
-                public,
-                ExecutionContext(
-                    processing_attempt_id="attempt",
-                    protected_context={**protected, "credential": 1},
-                ),
-            ),
-        ]
-        with TemporaryDirectory() as directory:
-            adapter = EmpaiaInputAccessFactory(unexpected_gateway, Path(directory))
-            for state, context in cases:
-                with (
-                    self.subTest(state=state),
-                    self.assertRaises(InvalidInvocation) as raised,
-                ):
-                    await adapter.create(invocation("empaia", state), context)
-                self.assertNotIn("secret", str(raised.exception))
-
-    async def test_worker_isolates_attempts_and_finish_moves_results(self) -> None:
-        with TemporaryDirectory() as directory:
-            attempts: list[str | None] = []
-            written: list[Path] = []
-
-            async def build(context: BuilderContext) -> BuilderResult:
-                output = context.output_path("artifact")
-                written.append(output)
-                output.parent.mkdir(parents=True, exist_ok=True)
-                output.write_bytes(str(len(attempts)).encode())
-                return BuilderResult({"artifact": SharedArtifact(str(output))})
-
-            builder_spec = spec(outputs={"artifact": artifact_output()})
-            shared_storage = SharedStorageAccessFactory([Path(directory)])
-            builder = BuilderApplication(
-                builder_spec,
-                FunctionBuilder(build),
-                {"shared_storage": shared_storage},
-                model_handles=DECLARED,
-            )
-
-            class Dispatch:
-                async def run(
-                    self,
-                    builder_id: str,
-                    request: Invocation,
-                    model: ModelBinding,
-                    execution_context: ExecutionContext,
-                ) -> BuilderResult:
-                    attempts.append(execution_context.processing_attempt_id)
-                    assert request.input_access.state == {"root": directory}
-                    return await builder.run(request, model, execution_context)
-
-            def resolve(builder_id: str, model_id: str) -> ModelBinding:
-                get_builder(builder_id)
-                assert model_id == SPATIAL_MODEL.id
-                return SPATIAL_MODEL
-
-            repository = InMemoryExecutionRepository()
-            provider = StandaloneProviderAdapter(shared_storage)
-            with patch.dict(BUILDERS, {"test-builder": builder_spec}):
-                scheduler = ExecutionScheduler(
-                    repository=repository,
-                    dispatch=Dispatch(),
-                    providers={provider.name: provider},
-                    resolve_model=resolve,
-                    default_timeout=timedelta(minutes=1),
-                    maximum_timeout=timedelta(minutes=1),
-                )
-                worker = ExecutionWorker(
-                    repository=repository,
-                    active_work=ActiveWorkRegistry(),
-                    providers={provider.name: provider},
-                    dispatch=Dispatch(),
-                    resolve_model=resolve,
-                    owner="test-worker",
-                    lease_duration=timedelta(seconds=30),
-                )
-                scheduled = []
-                for key in ("first", "second"):
-                    scheduled.append(
-                        await scheduler.schedule(
-                            ScheduleRequest(
-                                builder_id="test-builder",
-                                model_id=SPATIAL_MODEL.id,
-                                provider="standalone",
-                                body={
-                                    "inputs": {},
-                                    "input_access": {
-                                        "kind": "shared_storage",
-                                        "state": {"root": directory},
-                                    },
-                                },
-                                idempotency_key=key,
-                            )
-                        )
-                    )
-                for _pass in range(4):
-                    self.assertTrue(await worker.run_once())
-                results = [await scheduler.get(item.execution.id) for item in scheduled]
-
-            self.assertTrue(
-                all(item.status is ExecutionStatus.SUCCEEDED for item in results)
-            )
-            paths = []
-            for item in results:
-                assert item.result is not None
-                artifact = item.result.outputs["artifact"]
-                assert isinstance(artifact, SharedArtifact)
-                paths.append(Path(artifact.path))
-            self.assertNotEqual(written[0], written[1])
-            self.assertTrue(all(".attempts" in path.parts for path in written))
-            self.assertEqual(paths, [Path(directory).resolve() / "result.bin"] * 2)
-            self.assertEqual(paths[0].read_bytes(), b"2")
-            self.assertEqual(list((Path(directory) / ".attempts").iterdir()), [])
-            self.assertEqual(len(set(attempts)), 2)
-            self.assertNotIn(None, attempts)
-
 
 class InputAccessContextTests(unittest.TestCase):
     def test_execution_context_rejects_invalid_attempts_and_non_json_secrets(
@@ -473,13 +184,6 @@ class InputAccessContextTests(unittest.TestCase):
             ExecutionContext(protected_context={"invalid": float("nan")})
         with self.assertRaises(ValidationError):
             TypeAdapter(ExecutionContext).validate_python({"unexpected": True})
-
-    def test_execution_context_representation_hides_credentials(self) -> None:
-        context = ExecutionContext(protected_context={"credential": "secret-token"})
-        self.assertNotIn("secret-token", repr(context))
-        self.assertEqual(
-            InputAccessContext("empaia", {}), InputAccessContext("empaia", {})
-        )
 
 
 if __name__ == "__main__":

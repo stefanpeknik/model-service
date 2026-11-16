@@ -16,8 +16,8 @@ from httpx import ASGITransport, AsyncClient, MockTransport, Request, Response
 from model_service.api.app_factory import build_api_process
 from model_service.models.catalog import CatalogError
 from model_service.scheduler.settings import SchedulerSettings
-from tests.models.test_catalog import embedding_document, spatial_document
 from tests.support.memory_repository import InMemoryExecutionRepository
+from tests.support.model_documents import embedding_document, spatial_document
 
 
 class RuntimeTestCase(unittest.IsolatedAsyncioTestCase):

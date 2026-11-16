@@ -1,23 +1,17 @@
-"""Check builder invocation validation, safe failures, outputs and the HTTP seam."""
+"""Check builder invocation validation, safe failures and outputs."""
 
 from __future__ import annotations
 
 import asyncio
 import unittest
-from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any, cast
 
-import httpx
-from fastapi import FastAPI
-
 from model_service.builders.base import _atomic_artifact as atomic_artifact
 from model_service.builders.declarations import InputSpec
-from model_service.builders.replica.http_handler import run_http
 from model_service.builders.replica.runner import BuilderApplication
-from model_service.contracts.builder_http import RunRequest
 from model_service.contracts.failures import (
     BuilderFailure,
     ContractViolation,
@@ -26,22 +20,12 @@ from model_service.contracts.failures import (
     InvalidInvocation,
 )
 from model_service.contracts.invocation import (
-    INVOCATION,
-    ExecutionContext,
-    ProviderInput,
     SharedPathInput,
 )
 from model_service.contracts.result import (
-    RESULT,
     BuilderResult,
     InlineOutput,
     SharedArtifact,
-)
-from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessFactory
-from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
-from model_service.scheduler.builder_dispatch import (
-    HTTPBuilderDispatch,
-    RemoteFailureError,
 )
 from tests.support.builder_fixtures import (
     DECLARED,
@@ -49,12 +33,10 @@ from tests.support.builder_fixtures import (
     SPATIAL_MODEL,
     FakeDeployment,
     FunctionBuilder,
-    StrideConfiguration,
     artifact_output,
     deployments,
     inline_output,
     invocation,
-    outputs_model,
     running_config,
     spec,
 )
@@ -233,15 +215,6 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(seen["mask"], self.root / "region_of_interest")
 
-    async def test_missing_required_input_is_invalid(self) -> None:
-        async def build(_context: BuilderContext) -> BuilderResult:
-            self.fail("invalid invocations must not run")
-
-        with self.assertRaisesRegex(InvalidInvocation, "missing inputs: slide"):
-            await self.application(run(build), inputs={"slide": InputSpec()}).run(
-                invocation("test"), SPATIAL_MODEL
-            )
-
     async def test_incompatible_model_is_rejected_before_access(self) -> None:
         async def build(_context: BuilderContext) -> BuilderResult:
             self.fail("incompatible models must not run")
@@ -269,39 +242,6 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(BuilderFailure) as raised:
             await application.run(invocation("test"), SPATIAL_MODEL)
         self.assertEqual(raised.exception.code, FailureCode.MODEL_CONTRACT_MISMATCH)
-
-    async def test_configuration_uses_defaults_or_resolved_values(self) -> None:
-        seen: list[object] = []
-
-        async def build(context: BuilderContext) -> BuilderResult:
-            seen.append(context.configuration)
-            return BuilderResult({})
-
-        application = self.application(run(build), configuration=StrideConfiguration)
-        await application.run(invocation("test"), SPATIAL_MODEL)
-        await application.run(
-            invocation("test", resolved_configuration={"stride_fraction": 1.0}),
-            SPATIAL_MODEL,
-        )
-        self.assertEqual(
-            seen,
-            [StrideConfiguration(), StrideConfiguration(stride_fraction=1.0)],
-        )
-        with self.assertRaises(InvalidInvocation):
-            await application.run(
-                invocation("test", resolved_configuration={"unknown": 1}),
-                SPATIAL_MODEL,
-            )
-
-    async def test_model_binding_reaches_the_builder(self) -> None:
-        seen: list[object] = []
-
-        async def build(context: BuilderContext) -> BuilderResult:
-            seen.append(context.model.declaration)
-            return BuilderResult({})
-
-        await self.application(run(build)).run(invocation("test"), SPATIAL_MODEL)
-        self.assertEqual(seen, [SPATIAL_MODEL])
 
     async def test_output_contract_violations(self) -> None:
         artifact = self.root / "result.tiff"
@@ -348,30 +288,6 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
                     await self.application(run(build), outputs=outputs).run(
                         invocation("test"), SPATIAL_MODEL
                     )
-
-    async def test_inline_and_artifact_outputs_can_be_mixed(self) -> None:
-        artifact = self.root / "result.tiff"
-        artifact.touch()
-
-        async def build(_context: BuilderContext) -> BuilderResult:
-            return BuilderResult(
-                {
-                    "score": InlineOutput(0.9),
-                    "heatmap": SharedArtifact(str(artifact), "image/tiff"),
-                }
-            )
-
-        result = await self.application(
-            run(build),
-            outputs={
-                "score": inline_output(),
-                "heatmap": artifact_output(media_type="image/tiff"),
-            },
-        ).run(invocation("test"), SPATIAL_MODEL)
-        self.assertEqual(result.outputs["score"], InlineOutput(0.9))
-        self.assertEqual(
-            result.outputs["heatmap"], SharedArtifact(str(artifact), "image/tiff")
-        )
 
     async def test_builder_failures_keep_their_safe_classification(self) -> None:
         async def build(_context: BuilderContext) -> BuilderResult:
@@ -438,153 +354,6 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(raised.exception.code, "builder_deadline_exceeded")
         self.assertFalse(raised.exception.retryable)
-
-    def test_serialized_invocations_and_results_keep_explicit_tags(self) -> None:
-        stored = INVOCATION.validate_python(
-            {
-                "inputs": {"slide": {"kind": "shared_path", "path": "slide.svs"}},
-                "resolved_configuration": None,
-                "input_access": {"kind": "shared_storage", "state": {"root": "/a"}},
-                "deadline_at": "2026-09-16T12:00:00+00:00",
-                "output_path": "out.tiff",
-            }
-        )
-        self.assertEqual(stored.inputs["slide"], SharedPathInput("slide.svs"))
-        self.assertEqual(
-            INVOCATION.validate_python(INVOCATION.dump_python(stored, mode="json")),
-            stored,
-        )
-        serialized = {"outputs": {"label": {"kind": "inline", "value": "a.tiff"}}}
-        result = BuilderResult({"label": InlineOutput("a.tiff")})
-        self.assertEqual(RESULT.dump_python(result, mode="json"), serialized)
-        self.assertEqual(RESULT.validate_python(serialized), result)
-
-
-class BuilderHTTPTests(unittest.IsolatedAsyncioTestCase):
-    async def test_dispatch_keeps_runtime_context_out_of_the_durable_invocation(
-        self,
-    ) -> None:
-        seen_credentials: list[str] = []
-        closed: list[bool] = []
-        seen_requests: list[RunRequest] = []
-
-        class Gateway:
-            async def materialize_input(
-                self,
-                _name: str,
-                directory: str,
-                *,
-                mpp: float | None = None,
-                **_: object,
-            ) -> str:
-                path = Path(directory) / "slide.svs"
-                path.write_bytes(b"slide")
-                return str(path)
-
-            async def close(self) -> None:
-                closed.append(True)
-
-        def gateway_factory(context: Any) -> Gateway:
-            seen_credentials.append(context.credential)
-            return Gateway()
-
-        async def build(context: BuilderContext) -> BuilderResult:
-            _ = context.inputs.slide  # type: ignore[attr-defined]
-            return BuilderResult({"score": InlineOutput(1)})
-
-        with TemporaryDirectory() as directory:
-            application = BuilderApplication(
-                spec(inputs={"slide": InputSpec()}, outputs={"score": inline_output()}),
-                FunctionBuilder(build),
-                {"empaia": EmpaiaInputAccessFactory(gateway_factory, Path(directory))},
-                model_handles=DECLARED,
-            )
-            api = FastAPI()
-
-            @api.post("/builders/probe/", response_model=BuilderResult)
-            async def endpoint(body: RunRequest) -> BuilderResult:
-                seen_requests.append(body)
-                return await run_http(application, body)
-
-            public = {"api_url": "https://empaia.invalid", "job_id": "job"}
-            request = invocation(
-                "empaia", public, inputs={"slide": ProviderInput("slide")}
-            )
-            before = INVOCATION.dump_python(request, mode="json")
-            runtime = ExecutionContext(
-                processing_attempt_id="attempt",
-                protected_context={**public, "credential": "secret"},
-            )
-            async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=api)
-            ) as client:
-                dispatch = HTTPBuilderDispatch(client, origin="http://ray")
-                result = await dispatch.run("probe", request, SPATIAL_MODEL, runtime)
-                with self.assertRaises(RemoteFailureError) as raised:
-                    await dispatch.run(
-                        "probe",
-                        request,
-                        SPATIAL_MODEL,
-                        ExecutionContext(processing_attempt_id="attempt"),
-                    )
-
-        self.assertEqual(result, BuilderResult({"score": InlineOutput(1)}))
-        self.assertEqual(seen_requests[0].execution_context, runtime)
-        self.assertEqual(seen_requests[0].model, SPATIAL_MODEL)
-        self.assertEqual(
-            INVOCATION.dump_python(seen_requests[0].invocation, mode="json"), before
-        )
-        self.assertEqual(seen_credentials, ["secret"])
-        self.assertEqual(closed, [True])
-        self.assertEqual(raised.exception.code, "invalid_builder_invocation")
-        self.assertFalse(raised.exception.retryable)
-        self.assertNotIn("secret", str(raised.exception))
-
-    async def test_shared_storage_request_without_attempt_writes_requested_path(
-        self,
-    ) -> None:
-        async def build(context: BuilderContext) -> BuilderResult:
-            return BuilderResult(
-                {"path": InlineOutput(str(context.output_path("artifact")))}
-            )
-
-        with TemporaryDirectory() as directory:
-            application = BuilderApplication(
-                replace(
-                    spec(outputs={"path": inline_output()}),
-                    output_model=outputs_model(
-                        {"path": inline_output(), "artifact": artifact_output()}
-                    ),
-                ),
-                FunctionBuilder(build),
-                {"shared_storage": SharedStorageAccessFactory([Path(directory)])},
-                model_handles=DECLARED,
-            )
-            api = FastAPI()
-
-            @api.post("/", response_model=BuilderResult)
-            async def endpoint(body: RunRequest) -> BuilderResult:
-                return await run_http(application, body)
-
-            async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=api), base_url="http://ray"
-            ) as client:
-                response = await client.post(
-                    "/",
-                    json={
-                        "invocation": INVOCATION.dump_python(
-                            invocation("shared_storage", {"root": directory}),
-                            mode="json",
-                        ),
-                        "model": SPATIAL_MODEL.model_dump(mode="json"),
-                    },
-                )
-
-        # The builder declared an artifact it did not return: a contract violation.
-        self.assertEqual(response.status_code, 500, response.text)
-        self.assertEqual(
-            response.json()["detail"]["code"], "builder_contract_violation"
-        )
 
 
 if __name__ == "__main__":

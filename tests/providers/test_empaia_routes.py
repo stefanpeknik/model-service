@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import unittest
 
+from fastapi import Request
 from httpx import ASGITransport, AsyncClient
 
 from model_service.api.app_factory import create_app
 from model_service.contracts.failures import UnknownModelError
 from model_service.contracts.model_declarations import SpatialScoresModel
+from model_service.http_common.auth import Access, AuthenticationError, Principal
 from model_service.models.catalog import ModelCatalog
 from model_service.providers.empaia.jobs.routes import create_router
 from model_service.scheduler.public import (
@@ -197,6 +199,26 @@ class EmpaiaRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(scheduler.cancelled, ["execution-1", "other"])
         self.assertEqual(unknown_get.status_code, 404)
         self.assertEqual(unknown_delete.status_code, 404)
+
+    async def test_the_empaia_routes_have_their_own_access(self) -> None:
+        class Nobody:
+            async def authenticate(self, request: Request) -> Principal:
+                raise AuthenticationError
+
+        app = create_app(
+            ScriptedScheduler(view(ExecutionStatus.QUEUED)),  # type: ignore[arg-type]
+            catalog=ModelCatalog([PROSTATE]),
+            access=Access(authenticator=Nobody()),
+            provider_routes=[create_router],
+        )
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://ms"
+        ) as http:
+            empaia = await http.get("/v1/empaia/executions/execution-1")
+            public = await http.get("/v1/executions/execution-1")
+
+        self.assertEqual(empaia.status_code, 200)
+        self.assertEqual(public.status_code, 401)
 
 
 if __name__ == "__main__":

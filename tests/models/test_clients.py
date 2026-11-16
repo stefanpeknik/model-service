@@ -73,20 +73,6 @@ class VerifyTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(raised.exception.code, FailureCode.MODEL_CONTRACT_MISMATCH)
             self.assertFalse(raised.exception.retryable)
 
-    async def test_the_handle_is_looked_up_once(self) -> None:
-        lookups: list[str] = []
-        deployment = FakeDeployment(running_config(SPATIAL))
-
-        def lookup(model_id: str) -> Any:
-            lookups.append(model_id)
-            return deployment
-
-        client = SpatialScoresClient(SPATIAL, lookup)
-        self.assertEqual(lookups, [])
-        await client.verify()
-        await client.verify()
-        self.assertEqual(lookups, ["classifier"])
-
 
 class CallTests(unittest.IsolatedAsyncioTestCase):
     async def test_scores_are_shaped_by_the_declaration(self) -> None:

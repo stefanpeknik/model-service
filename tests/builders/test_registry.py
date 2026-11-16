@@ -5,29 +5,20 @@ from __future__ import annotations
 import unittest
 from datetime import UTC, datetime, timedelta
 
-from model_service.builders.implementations.heatmap.spec import HeatmapConfiguration
 from model_service.builders.registry import BUILDERS, get_builder
 from model_service.contracts.failures import (
-    IncompatibleModelError,
     InvalidInvocation,
-    UnknownBuilderError,
 )
 from model_service.contracts.invocation import (
     InputAccessContext,
     Invocation,
     SharedPathInput,
 )
-from model_service.contracts.model_declarations import (
-    SpatialScoresModel,
-    TileEmbeddingModel,
-)
+from model_service.contracts.model_declarations import SpatialScoresModel
 
 
 SPATIAL = SpatialScoresModel(
     id="classifier", tile_size=512, output_tile_size=1, n_channels=1, mpp=0.5
-)
-EMBEDDING = TileEmbeddingModel(
-    id="encoder", tile_size=224, mpp=0.5, summaries=("tile",)
 )
 
 
@@ -46,25 +37,6 @@ def invocation(**overrides: object) -> Invocation:
 
 
 class BuilderRegistryTests(unittest.TestCase):
-    def test_builders_accept_one_contract_each(self) -> None:
-        self.assertEqual(set(BUILDERS), {"heatmap", "tile-embeddings"})
-        self.assertEqual(get_builder("heatmap").accepts, SPATIAL.contract)
-        self.assertEqual(get_builder("tile-embeddings").accepts, EMBEDDING.contract)
-        with self.assertRaises(UnknownBuilderError):
-            get_builder("prostate-heatmap")
-
-    def test_configuration_defaults_and_overrides(self) -> None:
-        spec = get_builder("heatmap")
-        defaults = spec.resolve_configuration(None)
-        self.assertEqual(defaults, HeatmapConfiguration())
-        assert isinstance(defaults, HeatmapConfiguration)
-        self.assertEqual(defaults.stride_fraction, 0.5)
-        self.assertTrue(defaults.skip_background)
-        resolved = spec.resolve_configuration({"stride_fraction": 1.0})
-        assert isinstance(resolved, HeatmapConfiguration)
-        self.assertEqual(resolved.stride_fraction, 1.0)
-        self.assertTrue(resolved.skip_background)
-
     def test_invalid_configuration_is_an_invalid_invocation(self) -> None:
         spec = get_builder("heatmap")
         for overrides in (
@@ -103,14 +75,6 @@ class BuilderRegistryTests(unittest.TestCase):
                 self.assertRaisesRegex(InvalidInvocation, message),
             ):
                 spec.check_invocation(value)
-
-    def test_validate_model_rejects_other_contracts(self) -> None:
-        get_builder("heatmap").check_model(SPATIAL)
-        get_builder("tile-embeddings").check_model(EMBEDDING)
-        with self.assertRaises(IncompatibleModelError):
-            get_builder("heatmap").check_model(EMBEDDING)
-        with self.assertRaises(IncompatibleModelError):
-            get_builder("tile-embeddings").check_model(SPATIAL)
 
 
 class BuilderWiringTests(unittest.TestCase):

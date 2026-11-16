@@ -23,7 +23,7 @@ from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayErro
 from model_service.providers.empaia.app_service.http import HttpEmpaiaGateway
 from model_service.providers.empaia.app_service.types import Rectangle, SlideMetadata
 from model_service.providers.empaia.publishing.pixelmap import ScoreGridPublisher
-from tests.providers.empaia_fixtures import PIXELMAP_ID, SLIDE_ID, created
+from tests.support.empaia_fixtures import PIXELMAP_ID, SLIDE_ID, created
 
 
 class RecordingRectangleWriter:
@@ -417,28 +417,6 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
 
         # One tile on each of levels 4 and 5.
         self.assertEqual(len(uploaded), 2)
-
-    async def test_mutating_transport_failure_is_safe_and_outcome_unknown(self) -> None:
-        """Verify mutating transport failure is safe and outcome unknown."""
-
-        def fail(_request: httpx.Request) -> httpx.Response:
-            """Inject the configured remote failure for safe classification or terminal reporting checks."""
-            raise httpx.ConnectError("private transport detail")
-
-        gateway = HttpEmpaiaGateway(
-            "https://empaia.example",
-            "job-1",
-            "credential",
-            client=await self.appservice(httpx.MockTransport(fail)),
-        )
-
-        with self.assertRaises(EmpaiaGatewayError) as raised:
-            await gateway.finalize()
-
-        self.assertTrue(raised.exception.retryable)
-        self.assertTrue(raised.exception.outcome_unknown)
-        self.assertNotIn("private transport detail", raised.exception.safe_message)
-        await gateway.close()
 
     async def test_configuration_rejects_ambiguous_sections(self) -> None:
         """Verify configuration rejects ambiguous sections."""

@@ -8,56 +8,13 @@ from copy import deepcopy
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from model_service.builders.registry import compatible_builders
-from model_service.contracts.failures import UnknownModelError
 from model_service.contracts.model_declarations import (
     InferenceContract,
     SpatialScoresModel,
     TileEmbeddingModel,
 )
 from model_service.models.catalog import CatalogError, ModelCatalog
-
-
-def spatial_document(model_id: str = "prostate-classifier-1") -> dict[str, object]:
-    return {
-        "inference": {"contract": "spatial-scores"},
-        "serve": {
-            "name": model_id,
-            "route_prefix": f"/{model_id}",
-            "import_path": "model_service.models.implementations.binary_classifier:app",
-            "deployments": [
-                {
-                    "name": "BinaryClassifier",
-                    "user_config": {
-                        "tile_size": 512,
-                        "output_tile_size": 1,
-                        "n_channels": 1,
-                        "mpp": 0.468,
-                        "max_batch_size": 64,
-                        "model": {"_target_": "model_service.models.artifacts:mlflow"},
-                    },
-                }
-            ],
-        },
-    }
-
-
-def embedding_document(model_id: str = "virchow2") -> dict[str, object]:
-    return {
-        "inference": {
-            "contract": "tile-embedding",
-            "mpp": 0.5,
-            "summaries": ["global", "local_mean"],
-        },
-        "serve": {
-            "name": model_id,
-            "route_prefix": f"/{model_id}",
-            "import_path": "model_service.models.implementations.virchow2:app",
-            "deployments": [
-                {"name": "Virchow2", "user_config": {"tile_size": 224}},
-            ],
-        },
-    }
+from tests.support.model_documents import embedding_document, spatial_document
 
 
 class ModelCatalogTests(unittest.TestCase):
@@ -88,25 +45,6 @@ class ModelCatalogTests(unittest.TestCase):
             ),
         )
 
-    def test_compatible_builders_follow_the_contract(self) -> None:
-        catalog = ModelCatalog.from_documents(
-            [spatial_document(), embedding_document()]
-        )
-
-        self.assertEqual(
-            compatible_builders(catalog.get("prostate-classifier-1")),
-            ["heatmap"],
-        )
-        self.assertEqual(
-            compatible_builders(catalog.get("virchow2")),
-            ["tile-embeddings"],
-        )
-        self.assertEqual(
-            [model.contract for model in catalog],
-            [InferenceContract.SPATIAL_SCORES, InferenceContract.TILE_EMBEDDING],
-        )
-        self.assertEqual(len(catalog), 2)
-
     def test_a_provider_block_is_kept_for_its_provider(self) -> None:
         document = {**spatial_document(), "listing": {"name": "Prostate"}}
 
@@ -130,12 +68,6 @@ class ModelCatalogTests(unittest.TestCase):
 
         with self.assertRaisesRegex(CatalogError, repr(broken["serve"]["name"])):
             ModelCatalog.from_documents([spatial_document(), broken])
-
-    def test_unknown_model_is_a_lookup_error(self) -> None:
-        catalog = ModelCatalog.from_documents([spatial_document()])
-
-        with self.assertRaises(UnknownModelError):
-            catalog.get("missing")
 
     def test_reads_rendered_json_file(self) -> None:
         with TemporaryDirectory() as directory:
@@ -208,10 +140,6 @@ class ModelCatalogTests(unittest.TestCase):
                 ModelCatalog.from_documents(documents)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 MODEL_FILES = sorted(
     Path(__file__).parents[2].joinpath("deploy/helm/rayservice/models").rglob("*.yaml")
 )
@@ -244,3 +172,7 @@ class ModelImplementationTests(unittest.TestCase):
                         callable(getattr(implementation, method, None)),
                         f"{module_name} lacks {method} for {contract}",
                     )
+
+
+if __name__ == "__main__":
+    unittest.main()

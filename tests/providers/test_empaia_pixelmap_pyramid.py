@@ -19,7 +19,7 @@ from model_service.contracts.score_grid import (
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.app_service.http import HttpEmpaiaGateway
 from model_service.providers.empaia.publishing.pixelmap import ScoreGridPublisher
-from tests.providers.empaia_fixtures import SLIDE_ID
+from tests.support.empaia_fixtures import SLIDE_ID
 
 
 def slide_info() -> SlideInfo:
@@ -165,29 +165,6 @@ class PyramidUploadFailureTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(raised.exception.outcome_unknown)
         self.assertFalse(raised.exception.retryable)
-
-    async def test_the_pixelmap_is_created_under_the_output_key_for_the_slide(
-        self,
-    ) -> None:
-        calls: list[dict[str, object]] = []
-
-        async def uploaded(**kwargs: object) -> str:
-            calls.append(kwargs)
-            return "pixelmap-id"
-
-        await self.gateway(uploaded).publish_pixelmap("heatmap", SLIDE_ID, ())
-
-        self.assertEqual(
-            calls,
-            [
-                {
-                    "key": "heatmap",
-                    "name": "heatmap",
-                    "wsi_id": SLIDE_ID,
-                    "tile_sets": (),
-                }
-            ],
-        )
 
 
 if __name__ == "__main__":

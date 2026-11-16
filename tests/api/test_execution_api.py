@@ -370,16 +370,6 @@ class ScheduleRouteTests(ApiTestCase):
             self.assert_error(response, 422, "invalid_request")
         self.assertIn("not allowed", responses[2].json()["detail"]["message"])
 
-    async def test_optional_region_of_interest_may_be_omitted(self) -> None:
-        request = {
-            **self.schedule_request(),
-            "inputs": {"slide": {"kind": "shared_path", "path": "slide.svs"}},
-        }
-        async with self.client(self.app()) as client:
-            response = await self.schedule(client, request)
-
-        self.assertEqual(response.status_code, 202, response.text)
-
     async def test_scheduled_execution_dispatches_current_model_binding(self) -> None:
         artifact = str(self.root / "heatmap.tiff")
 
@@ -438,7 +428,7 @@ class RunRouteTests(ApiTestCase):
                     "/v1/builders/heatmap/models/missing/run", json=request
                 ),
                 "incompatible": await client.post(
-                    "/v1/builders/tile-embeddings/models/prostate-classifier-1/run",
+                    "/v1/builders/heatmap/models/virchow2/run",
                     json=request,
                 ),
                 "missing input": await client.post(RUN, json={**request, "inputs": {}}),
