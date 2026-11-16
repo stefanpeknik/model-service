@@ -14,7 +14,7 @@ until a GPU frees up.
   file and a `helm upgrade`; no Python. See [Add a model](#add-a-model).
 - **EMPAIA:** model-service registers itself as an EMPAIA app and runs EMPAIA
   jobs. On the EMPAIA test instance a prostate heatmap job finishes in 49 s
-  warm, 101 s with a cold GPU, and the preprocessing result shows in the case browser
+  warm, 101 s with a cold GPU, and the result shows in the case browser
   ([run record](docs/operations/empaia-score-grid-2026-10-31.md)).
 - **Status (2026-11):** running on the RationAI test namespace beside the
   EMPAIA test instance; not yet in production.
@@ -35,10 +35,9 @@ Dated records of live runs, newest first (all in
 - [2026-10-14](docs/operations/core-acceptance-2026-10-14.md): core API and
   scheduler acceptance.
 
-Pending check: a standalone (region-of-interest) result completed but the EMPAIA
-case browser did not show it. Its maintainers reported a fix on 2026-11-11 (a
-small bug and an outdated case-browser version); a new standalone run should
-confirm it.
+Both EMPAIA modes run live. A standalone (region-of-interest) result first did
+not show in the case browser; its maintainers fixed that on 2026-11-11, and a
+later standalone run showed its result.
 
 ## Layout
 
