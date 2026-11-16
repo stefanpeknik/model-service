@@ -21,13 +21,13 @@ from httpx import (
 
 from model_service.api.app_factory import create_app, model_resolver
 from model_service.api.health import DeploymentHealth
+from model_service.api.model_catalog import ModelCatalog
 from model_service.api.synchronous_runs import SynchronousBuilderService
 from model_service.contracts.model_declarations import (
     SpatialScoresModel,
     TileEmbeddingModel,
 )
 from model_service.contracts.result import BuilderResult, InlineOutput, SharedArtifact
-from model_service.models.catalog import ModelCatalog
 from model_service.providers.standalone.provider import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from model_service.scheduler.builder_dispatch import (

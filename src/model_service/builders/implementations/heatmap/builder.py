@@ -11,7 +11,7 @@ from model_service.builders.implementations.heatmap.spec import (
     HeatmapInputs,
     HeatmapOutputs,
 )
-from model_service.models.clients.spatial_scores import SpatialScoresClient
+from model_service.builders.model_clients.spatial_scores import SpatialScoresClient
 
 
 if TYPE_CHECKING:

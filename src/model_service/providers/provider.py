@@ -28,12 +28,12 @@ if TYPE_CHECKING:
 
     from fastapi import APIRouter
 
+    from model_service.api.model_catalog import ModelCatalog
     from model_service.builders.base import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
     from model_service.contracts.invocation import InputAccessKind
     from model_service.contracts.json_values import JsonValue
     from model_service.contracts.result import BuilderResult
-    from model_service.models.catalog import ModelCatalog
     from model_service.scheduler.protocols import Scheduler
     from model_service.scheduler.public import (
         BeforeMutation,

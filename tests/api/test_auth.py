@@ -15,8 +15,8 @@ from model_service.api.http.auth import (
     AuthorizationError,
     Principal,
 )
+from model_service.api.model_catalog import ModelCatalog
 from model_service.contracts.model_declarations import SpatialScoresModel
-from model_service.models.catalog import ModelCatalog
 from model_service.scheduler.public import ExecutionView
 from model_service.scheduler.status import ExecutionStatus
 

@@ -89,7 +89,7 @@ listed in `registry.py`. A builder's `spec.py` declares the contract it
 accepts, its inputs as a `BuilderInputs` model, a Pydantic configuration with
 defaults, and its outputs as a `BuilderOutputs` model; the input and output
 declarations are derived from the two models. The application verifies the
-running model through its contract's client (`models/clients/`), resolves the
+running model through its contract's client (`builders/model_clients/`), resolves the
 inputs to local files and runs the builder with the typed client, inputs and
 configuration. A builder returns its outputs model; the application checks it
 and turns it into the generic `BuilderResult` that is sent and stored, and

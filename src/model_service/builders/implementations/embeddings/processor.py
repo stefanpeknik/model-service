@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     import numpy as np
     from numpy.typing import NDArray
 
-    from model_service.models.clients.tile_embedding import TileEmbeddingClient
+    from model_service.builders.model_clients.tile_embedding import TileEmbeddingClient
 
 
 async def build_embeddings(

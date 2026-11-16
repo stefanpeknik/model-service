@@ -8,12 +8,12 @@ from copy import deepcopy
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from model_service.api.model_catalog import CatalogError, ModelCatalog
 from model_service.contracts.model_declarations import (
     InferenceContract,
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from model_service.models.catalog import CatalogError, ModelCatalog
 from tests.support.model_documents import embedding_document, spatial_document
 
 
@@ -153,7 +153,7 @@ class ModelImplementationTests(unittest.TestCase):
 
         import yaml
 
-        from model_service.models.clients.registry import CLIENTS
+        from model_service.builders.model_clients.registry import CLIENTS
 
         self.assertTrue(MODEL_FILES)
         for path in MODEL_FILES:

@@ -22,7 +22,7 @@ from model_service.contracts.model_declarations import (
 
 
 if TYPE_CHECKING:
-    from model_service.models.catalog import ModelCatalog
+    from model_service.api.model_catalog import ModelCatalog
 
 
 @dataclass(frozen=True, slots=True)

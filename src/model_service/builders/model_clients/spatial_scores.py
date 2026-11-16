@@ -6,11 +6,11 @@ from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
+from model_service.builders.model_clients.base import ModelClient
 from model_service.contracts.model_declarations import (
     InferenceContract,
     SpatialScoresModel,
 )
-from model_service.models.clients.base import ModelClient
 
 
 if TYPE_CHECKING:

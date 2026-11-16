@@ -7,15 +7,15 @@ from typing import Any
 
 import numpy as np
 
+from model_service.builders.model_clients.registry import CLIENTS, client_for
+from model_service.builders.model_clients.spatial_scores import SpatialScoresClient
+from model_service.builders.model_clients.tile_embedding import TileEmbeddingClient
 from model_service.contracts.failures import BuilderFailure, FailureCode
 from model_service.contracts.model_declarations import (
     InferenceContract,
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from model_service.models.clients.registry import CLIENTS, client_for
-from model_service.models.clients.spatial_scores import SpatialScoresClient
-from model_service.models.clients.tile_embedding import TileEmbeddingClient
 from tests.support.builder_fixtures import FakeDeployment, running_config
 
 

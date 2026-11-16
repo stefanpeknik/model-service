@@ -49,10 +49,10 @@ from model_service.scheduler.public import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from model_service.api.model_catalog import ModelCatalog
     from model_service.builders.base import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
     from model_service.contracts.json_values import JsonValue
-    from model_service.models.catalog import ModelCatalog
     from model_service.providers.provider import ApiContribution
     from model_service.scheduler.public import BeforeMutation, ProviderFinishOutcome
     from model_service.scheduler.settings import SchedulerSettings

@@ -30,10 +30,10 @@ behind one public API that can also run builders durably.
 | --- | --- |
 | `src/model_service/models/implementations/` | Inference implementations (binary classifier, segmentation, Virchow2, Prov-GigaPath). Each serves any trained model that fits it; the trained model is chosen in YAML. |
 | `deploy/helm/rayservice/models/` | One file per model deployment: an `inference` declaration plus the Ray Serve application. The same file feeds the RayService and the API's catalog. |
-| `src/model_service/builders/` | The builder contract and runtime pieces (input access, atomic output files), shared slide reading (`slides/`) and one package per builder under `implementations/` (`heatmap/`, `embeddings/`: `spec.py`, `builder.py`, `processor.py`), listed in `registry.py`. See [Adding a builder](../guides/adding-builders.md). |
+| `src/model_service/builders/` | The builder contract and runtime pieces (input access, atomic output files), shared slide reading (`slides/`), one model client per inference contract (`model_clients/`) and one package per builder under `implementations/` (`heatmap/`, `embeddings/`: `spec.py`, `builder.py`, `processor.py`), listed in `registry.py`. See [Adding a builder](../guides/adding-builders.md). |
 | `src/model_service/builders/replica/` | The one Ray Serve ingress (`serve.py`) that hosts any builder, and the runner that validates, verifies the model, enforces the deadline and cleans up. |
-| `src/model_service/models/` | The model catalog (`catalog.py`), one model client per inference contract (`clients/`) and the MLflow loader (`artifacts.py`). |
-| `src/model_service/api/` | The API process: public routes, synchronous runs, raw inference proxy, process wiring. |
+| `src/model_service/models/` | The MLflow loader (`artifacts.py`) the model files name as `_target_`. |
+| `src/model_service/api/` | The API process: public routes, synchronous runs, the model catalog (`model_catalog.py`), process wiring. |
 | `src/model_service/api/http/` | Auth, HTTP error mapping and scheduling calls shared by the API routes and provider routes. |
 | `src/model_service/contracts/` | Data shapes processes hand each other: invocation, result, failures, score grid, model declarations. |
 | `src/model_service/scheduler/` | Durable executions: admission, leases with fencing, retries, deadlines, cancellation, provider finish. PostgreSQL with Yoyo migrations. |

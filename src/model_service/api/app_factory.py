@@ -22,10 +22,10 @@ from model_service.api.health import (
 )
 from model_service.api.http.auth import Access
 from model_service.api.http.errors import ApiErrorCode, http_error
+from model_service.api.model_catalog import ModelCatalog
 from model_service.api.routes.v1 import builders, executions, models
 from model_service.api.synchronous_runs import SynchronousBuilderService
 from model_service.builders.registry import BUILDERS, get_builder
-from model_service.models.catalog import ModelCatalog
 from model_service.providers.registry import PROVIDERS
 from model_service.scheduler.builder_dispatch import HTTPBuilderDispatch
 from model_service.scheduler.execution_scheduler import ExecutionScheduler

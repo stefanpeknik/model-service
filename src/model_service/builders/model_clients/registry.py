@@ -7,16 +7,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from model_service.builders.model_clients.base import ModelClient, ray_handle
+from model_service.builders.model_clients.spatial_scores import SpatialScoresClient
+from model_service.builders.model_clients.tile_embedding import TileEmbeddingClient
 from model_service.contracts.failures import BuilderFailure, FailureCode
 from model_service.contracts.model_declarations import InferenceContract
-from model_service.models.clients.base import ModelClient, ray_handle
-from model_service.models.clients.spatial_scores import SpatialScoresClient
-from model_service.models.clients.tile_embedding import TileEmbeddingClient
 
 
 if TYPE_CHECKING:
+    from model_service.builders.model_clients.base import HandleLookup
     from model_service.contracts.model_declarations import ModelBinding
-    from model_service.models.clients.base import HandleLookup
 
 
 CLIENTS: dict[InferenceContract, type[ModelClient[Any]]] = {

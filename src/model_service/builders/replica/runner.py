@@ -21,6 +21,8 @@ from pydantic import ValidationError
 from model_service.builders.base import BuilderContext
 from model_service.builders.declarations import BuilderInputs, BuilderOutputs
 from model_service.builders.input_access import close_resource
+from model_service.builders.model_clients.base import ray_handle
+from model_service.builders.model_clients.registry import client_for
 from model_service.contracts.failures import (
     BuilderFailure,
     ContractViolation,
@@ -30,8 +32,6 @@ from model_service.contracts.failures import (
 from model_service.contracts.invocation import ExecutionContext
 from model_service.contracts.json_values import is_json_value
 from model_service.contracts.result import BuilderResult, InlineOutput, SharedArtifact
-from model_service.models.clients.base import ray_handle
-from model_service.models.clients.registry import client_for
 
 
 if TYPE_CHECKING:
@@ -40,9 +40,9 @@ if TYPE_CHECKING:
     from model_service.builders.base import Builder
     from model_service.builders.declarations import BuilderSpec
     from model_service.builders.input_access import InputAccess, InputAccessFactory
+    from model_service.builders.model_clients.base import HandleLookup
     from model_service.contracts.invocation import InputAccessKind, Invocation
     from model_service.contracts.model_declarations import ModelBinding
-    from model_service.models.clients.base import HandleLookup
 
 
 logger = logging.getLogger(__name__)

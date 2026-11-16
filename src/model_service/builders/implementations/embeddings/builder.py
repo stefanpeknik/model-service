@@ -11,7 +11,7 @@ from model_service.builders.implementations.embeddings.spec import (
     EmbeddingInputs,
     EmbeddingOutputs,
 )
-from model_service.models.clients.tile_embedding import TileEmbeddingClient
+from model_service.builders.model_clients.tile_embedding import TileEmbeddingClient
 
 
 if TYPE_CHECKING:
