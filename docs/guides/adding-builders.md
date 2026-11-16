@@ -170,7 +170,7 @@ A contract is needed when a model takes or returns something no existing client
 describes, for example a whole region instead of a tile, or a mask instead of
 scores.
 
-1. **Declare its models.** In `src/model_service/builders/contracts.py`:
+1. **Declare its models.** In `src/model_service/contracts/model_declarations.py`:
    - add a value to `InferenceContract`;
    - add a model declaration class with the fields builders need, such as
      `tile_size` and `mpp`;
