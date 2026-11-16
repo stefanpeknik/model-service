@@ -74,6 +74,3 @@ Measured on the EMPAIA test instance, a prostate slide with 2,553 tissue tiles
 scores in 34–35 s (23 ms read and 70 ms model per tile, tiles in flight
 concurrently); the whole EMPAIA job takes 49 s warm and 101 s with a cold GPU
 ([record](operations/empaia-score-grid-2026-10-31.md)).
-
-## Open
-
