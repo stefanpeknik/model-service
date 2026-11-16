@@ -2,7 +2,7 @@ inference:
   contract: spatial-scores
 serve:
   name: episeg-1
-  import_path: model_service.models.implementations.semantic_segmentation:app
+  import_path: model_service.inference.implementations.semantic_segmentation:app
   route_prefix: /episeg-1
   deployments:
     - name: SemanticSegmentation
@@ -31,5 +31,5 @@ serve:
         trt_cache_path: /mnt/cache/trt_cache/episeg-1/b8
         trt_builder_optimization_level: 3
         model:
-          _target_: model_service.models.artifacts:mlflow
+          _target_: model_service.inference.artifacts:mlflow
           artifact_uri: mlflow-artifacts:/10/39f821ed5b964c71a603cc6db196f9fd/artifacts/checkpoints/epoch=19-step=32020/model.onnx/model.onnx

@@ -8,9 +8,9 @@
 - builders/: generic builder code and slides/; the concrete builders in
   builders/implementations/; builders/model_clients/ call and check the models;
   builders/replica/ is the Ray Serve deployment that hosts a builder.
-- models/: the MLflow loader (artifacts.py); models/implementations/ is the Ray
-  Serve code that serves trained models, each named by one file in
-  deploy/helm/rayservice/models/.
+- inference/: the Ray Serve code that serves trained models
+  (inference/implementations/, each named by one file in
+  deploy/helm/rayservice/models/) and the MLflow loader (artifacts.py).
 - providers/: where inputs come from and results go (standalone, EMPAIA).
 - api/http/: auth, error mapping and scheduling calls the API and provider routes share.
 - contracts/: data shapes processes hand each other (invocation, result, failures, model

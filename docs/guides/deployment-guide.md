@@ -30,7 +30,7 @@ Before deployment, confirm:
 
 ## Step 1: Prepare the Python Entry Point
 
-If you still need to export the model or upload it to MLflow, do that first in [Adding New Models](adding-models.md). Once the artifact exists, create the model class in `src/model_service/models/implementations/` and wire `__init__`, `reconfigure`, `predict`, and `root` as described there.
+If you still need to export the model or upload it to MLflow, do that first in [Adding New Models](adding-models.md). Once the artifact exists, create the model class in `src/model_service/inference/implementations/` and wire `__init__`, `reconfigure`, `predict`, and `root` as described there.
 
 ## Step 2: Create or Update App Definition
 
@@ -56,7 +56,7 @@ serve:
         n_channels: 1
         mpp: 0.468
         model:
-          _target_: model_service.models.artifacts:mlflow
+          _target_: model_service.inference.artifacts:mlflow
           artifact_uri: mlflow-artifacts:/...
 ```
 

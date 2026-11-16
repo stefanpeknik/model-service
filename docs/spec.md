@@ -19,7 +19,7 @@ open ones (05–08) with the smallest mechanism that meets them. Tickets live in
 - Adding a model that fits an existing builder needs Python edits. The
   per-model workflow wrappers (`prostate-heatmap`, `episeg-segmentation`,
   `gigapath-embeddings`, `virchow2-embeddings`) hardcode model names, even though
-  `src/model_service/models/implementations/` and the original heatmap builder were already generic.
+  `src/model_service/inference/implementations/` and the original heatmap builder were already generic.
 - The scheduler processes one execution at a time per process, and limits
   capacity per workflow rather than per model.
 - Several correctness and safety gaps exist: caller-chosen storage roots,

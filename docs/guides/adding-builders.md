@@ -188,7 +188,7 @@ scores.
      the answer breaks the contract.
 
    Add the client to `CLIENTS` in `builders/model_clients/registry.py`.
-3. **Implement it in models.** A model implementation in `src/model_service/models/implementations/`
+3. **Implement it in models.** A model implementation in `src/model_service/inference/implementations/`
    provides those methods, and its YAML names the contract.
    `tests/api/test_model_catalog.py` fails if a model file's implementation
    lacks a method its contract's client calls.

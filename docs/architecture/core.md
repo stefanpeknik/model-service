@@ -28,11 +28,11 @@ behind one public API that can also run builders durably.
 
 | Package | Owns |
 | --- | --- |
-| `src/model_service/models/implementations/` | Inference implementations (binary classifier, segmentation, Virchow2, Prov-GigaPath). Each serves any trained model that fits it; the trained model is chosen in YAML. |
+| `src/model_service/inference/implementations/` | Inference implementations (binary classifier, segmentation, Virchow2, Prov-GigaPath). Each serves any trained model that fits it; the trained model is chosen in YAML. |
 | `deploy/helm/rayservice/models/` | One file per model deployment: an `inference` declaration plus the Ray Serve application. The same file feeds the RayService and the API's catalog. |
 | `src/model_service/builders/` | The builder contract and runtime pieces (input access, atomic output files), shared slide reading (`slides/`), one model client per inference contract (`model_clients/`) and one package per builder under `implementations/` (`heatmap/`, `embeddings/`: `spec.py`, `builder.py`, `processor.py`), listed in `registry.py`. See [Adding a builder](../guides/adding-builders.md). |
 | `src/model_service/builders/replica/` | The one Ray Serve ingress (`serve.py`) that hosts any builder, and the runner that validates, verifies the model, enforces the deadline and cleans up. |
-| `src/model_service/models/` | The MLflow loader (`artifacts.py`) the model files name as `_target_`. |
+| `src/model_service/inference/` | The MLflow loader (`artifacts.py`) the model files name as `_target_`. |
 | `src/model_service/api/` | The API process: public routes, synchronous runs, the model catalog (`model_catalog.py`), process wiring. |
 | `src/model_service/api/http/` | Auth, HTTP error mapping and scheduling calls shared by the API routes and provider routes. |
 | `src/model_service/contracts/` | Data shapes processes hand each other: invocation, result, failures, score grid, model declarations. |

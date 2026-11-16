@@ -24,7 +24,7 @@ and add a trained model with one YAML file.
 ## Preserved
 
 The inference implementations still do the same maths; they moved from
-the top-level `models/` to `src/model_service/models/implementations/`.
+the top-level `models/` to `src/model_service/inference/implementations/`.
 
 - `semantic_segmentation.py`: the maths is unchanged.
 - `virchow2.py`, `prov_gigapath.py`: the HTTP handler was split into

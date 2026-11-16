@@ -1,4 +1,6 @@
-"""Models: the generic code here, the Ray Serve model code below.
+"""Inference: the Ray Serve code that serves trained models, and its MLflow loader.
+
+It runs only inside Ray model replicas and imports nothing else from model_service.
 
 Generic files:
 

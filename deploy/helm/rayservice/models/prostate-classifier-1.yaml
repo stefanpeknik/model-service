@@ -24,7 +24,7 @@ empaia:
             params: {threshold: 65, opacity: 0.5, color: "#ffff00"}
 serve:
   name: prostate-classifier-1
-  import_path: model_service.models.implementations.binary_classifier:app
+  import_path: model_service.inference.implementations.binary_classifier:app
   route_prefix: /prostate-classifier-1
   deployments:
     - name: BinaryClassifier
@@ -57,5 +57,5 @@ serve:
         trt_builder_optimization_level: 3
         # The checkpoint; a new training run changes this line.
         model:
-          _target_: model_service.models.artifacts:mlflow
+          _target_: model_service.inference.artifacts:mlflow
           artifact_uri: mlflow-artifacts:/65/aebc892f526047249b972f200bef4381/artifacts/checkpoints/epoch=0-step=6972/prostate_model_norm.onnx

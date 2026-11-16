@@ -9,7 +9,7 @@ def spatial_document(model_id: str = "prostate-classifier-1") -> dict[str, objec
         "serve": {
             "name": model_id,
             "route_prefix": f"/{model_id}",
-            "import_path": "model_service.models.implementations.binary_classifier:app",
+            "import_path": "model_service.inference.implementations.binary_classifier:app",
             "deployments": [
                 {
                     "name": "BinaryClassifier",
@@ -19,7 +19,9 @@ def spatial_document(model_id: str = "prostate-classifier-1") -> dict[str, objec
                         "n_channels": 1,
                         "mpp": 0.468,
                         "max_batch_size": 64,
-                        "model": {"_target_": "model_service.models.artifacts:mlflow"},
+                        "model": {
+                            "_target_": "model_service.inference.artifacts:mlflow"
+                        },
                     },
                 }
             ],
@@ -37,7 +39,7 @@ def embedding_document(model_id: str = "virchow2") -> dict[str, object]:
         "serve": {
             "name": model_id,
             "route_prefix": f"/{model_id}",
-            "import_path": "model_service.models.implementations.virchow2:app",
+            "import_path": "model_service.inference.implementations.virchow2:app",
             "deployments": [
                 {"name": "Virchow2", "user_config": {"tile_size": 224}},
             ],
