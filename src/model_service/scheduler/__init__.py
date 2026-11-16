@@ -15,16 +15,3 @@
 - store/: persistence: postgres/ (one operations class per concern over a shared
   PostgresDatabase), rows.py, migrate.py and migrations/.
 """
-
-from model_service.scheduler.public import (
-    ExecutionView,
-    ScheduleRequest,
-    ScheduleResult,
-)
-
-
-__all__ = [
-    "ExecutionView",
-    "ScheduleRequest",
-    "ScheduleResult",
-]

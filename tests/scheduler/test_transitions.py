@@ -11,7 +11,9 @@ from model_service.contracts.result import BuilderResult
 from model_service.scheduler.internal_state import Admission, RetryPolicy, WorkKind
 from model_service.scheduler.public import SubmissionIdentity
 from model_service.scheduler.status import ExecutionErrorCode, ExecutionStatus
-from model_service.scheduler.transitions import ExecutionTransitions
+from model_service.scheduler.transitions.execution_transitions import (
+    ExecutionTransitions,
+)
 
 
 NOW = datetime(2026, 11, 2, tzinfo=UTC)

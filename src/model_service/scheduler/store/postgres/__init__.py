@@ -4,14 +4,7 @@ Row locks protect record changes; per-model advisory locks serialize capacity ch
 Each operation runs in its own transaction on a pooled connection, and database time
 governs leases.
 
-PostgresExecutionRepository delegates to one operations object per concern
-(admission, claims, settlement, maintenance), each built over the shared
-PostgresDatabase.
+PostgresExecutionRepository (repository.py) delegates to one operations object
+per concern (admission, claims, settlement, maintenance), each built over the
+shared PostgresDatabase (base.py).
 """
-
-from model_service.scheduler.store.postgres.repository import (
-    PostgresExecutionRepository,
-)
-
-
-__all__ = ["PostgresExecutionRepository"]

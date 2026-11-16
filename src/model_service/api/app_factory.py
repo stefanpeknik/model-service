@@ -32,7 +32,9 @@ from model_service.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.scheduler.internal_state import RetryPolicy
 from model_service.scheduler.public import SchedulingUnavailableError
 from model_service.scheduler.settings import SchedulerSettings
-from model_service.scheduler.store.postgres import PostgresExecutionRepository
+from model_service.scheduler.store.postgres.repository import (
+    PostgresExecutionRepository,
+)
 from model_service.scheduler.store.protected_context import ProtectedContextCipher
 
 

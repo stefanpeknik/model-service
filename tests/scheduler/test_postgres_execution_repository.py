@@ -50,7 +50,9 @@ from model_service.scheduler.public import (
     UnknownExecutionError,
 )
 from model_service.scheduler.store.migrate import MIGRATIONS_DIRECTORY
-from model_service.scheduler.store.postgres import PostgresExecutionRepository
+from model_service.scheduler.store.postgres.repository import (
+    PostgresExecutionRepository,
+)
 from model_service.scheduler.store.protected_context import ProtectedContextCipher
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
 from model_service.scheduler.store.rows import ExecutionRow

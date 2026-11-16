@@ -30,7 +30,9 @@ from model_service.scheduler.public import (
 from model_service.scheduler.store.migrate import initialize_execution_schema
 from model_service.scheduler.store.repository import ExecutionRepositoryUnavailableError
 from model_service.scheduler.store.rows import DEFAULT_SCHEMA, ExecutionRow
-from model_service.scheduler.transitions import ExecutionTransitions
+from model_service.scheduler.transitions.execution_transitions import (
+    ExecutionTransitions,
+)
 
 
 if TYPE_CHECKING:
