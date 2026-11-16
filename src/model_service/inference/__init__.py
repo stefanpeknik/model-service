@@ -8,8 +8,7 @@ Generic files:
 
 Subpackages:
 
-- implementations/: the Ray Serve code that serves trained models; it runs only
-  inside Ray replicas.
+- implementations/: one module per kind of model.
 
 What a model of each contract declares is contracts/model_declarations.py.
 """

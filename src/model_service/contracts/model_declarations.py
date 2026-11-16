@@ -6,7 +6,8 @@ A new kind of model (a new contract) edits three places: a member of
 `InferenceContract` and its `_ModelBinding` subclass here (added to
 `MODEL_CLASSES` and `ModelBinding`), and its client module in
 builders/model_clients/ (added to `CLIENTS` in registry.py);
-tests/api/test_model_catalog.py fails if a contract has no client. A new model of an existing contract needs none of this.
+tests/builders/model_clients/test_clients.py fails if a contract has no
+client. A new model of an existing contract needs none of this.
 """
 
 from __future__ import annotations
