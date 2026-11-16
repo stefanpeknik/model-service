@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, Annotated
 from fastapi import APIRouter, HTTPException
 from pydantic import Field
 
-from model_service.http_common.auth import Access, Action
-from model_service.http_common.errors import (
+from model_service.api.http.auth import Access, Action
+from model_service.api.http.errors import (
     ERRORS,
     ApiErrorCode,
     http_error,

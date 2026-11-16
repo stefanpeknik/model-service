@@ -13,6 +13,14 @@ from typing import TYPE_CHECKING, Annotated
 from fastapi import APIRouter, Depends, Request, Response, status
 from pydantic import Field
 
+from model_service.api.http.auth import Access, Action
+from model_service.api.http.errors import (
+    ERRORS,
+    ApiErrorCode,
+    http_error,
+    lookup_error,
+)
+from model_service.api.http.scheduling import require_idempotency_key, submit
 from model_service.builders.registry import BUILDERS
 from model_service.contracts.caller_request import BuilderRequest
 from model_service.contracts.failures import (
@@ -25,14 +33,6 @@ from model_service.contracts.invocation import Deadline
 from model_service.contracts.json_values import JsonValue
 from model_service.contracts.model_declarations import InferenceContract
 from model_service.contracts.result import BuilderResult
-from model_service.http_common.auth import Access, Action
-from model_service.http_common.errors import (
-    ERRORS,
-    ApiErrorCode,
-    http_error,
-    lookup_error,
-)
-from model_service.http_common.scheduling import require_idempotency_key, submit
 from model_service.providers.standalone.provider import STANDALONE_PROVIDER
 from model_service.scheduler.builder_dispatch import (
     ConfirmedRejectionError,

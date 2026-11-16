@@ -8,14 +8,14 @@ from fastapi import Request
 from httpx import ASGITransport, AsyncClient
 
 from model_service.api.app_factory import create_app
-from model_service.contracts.model_declarations import SpatialScoresModel
-from model_service.http_common.auth import (
+from model_service.api.http.auth import (
     Access,
     Action,
     AuthenticationError,
     AuthorizationError,
     Principal,
 )
+from model_service.contracts.model_declarations import SpatialScoresModel
 from model_service.models.catalog import ModelCatalog
 from model_service.scheduler.public import ExecutionView
 from model_service.scheduler.status import ExecutionStatus

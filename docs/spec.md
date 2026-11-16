@@ -138,7 +138,7 @@ Incompatible pair: 422 `incompatible_model`. Model temporarily down: durable
 requests queue; synchronous requests get 503.
 
 Authentication and authorization are interfaces with allow-everyone defaults
-(`src/model_service/http_common/auth.py`); no implementation is chosen yet. Every
+(`src/model_service/api/http/auth.py`); no implementation is chosen yet. Every
 route except the health checks asks an `Authenticator` for the caller's
 `Principal` (401 `unauthenticated` when it refuses) and an `Authorizer` whether
 that principal may perform the route's `Action`, given the execution ID in the

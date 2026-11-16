@@ -12,7 +12,7 @@
   (artifacts.py); models/implementations/ is the Ray Serve code that serves
   trained models, each named by one file in deploy/helm/rayservice/models/.
 - providers/: where inputs come from and results go (standalone, EMPAIA).
-- http_common/: auth, error mapping and scheduling calls the API and provider routes share.
+- api/http/: auth, error mapping and scheduling calls the API and provider routes share.
 - contracts/: data shapes processes hand each other (invocation, result, failures, model
   declarations, the builder HTTP format, score grid).
 """

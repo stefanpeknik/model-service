@@ -14,7 +14,7 @@ and add a trained model with one YAML file.
 
 | Area | What it gives | Where |
 | --- | --- | --- |
-| Public API | One HTTP entry point for builders, executions and the model catalog, with auth hooks, capacity checks and health | `src/model_service/api/`, `http_common/` |
+| Public API | One HTTP entry point for builders, executions and the model catalog, with auth hooks, capacity checks and health | `src/model_service/api/` (incl. `api/http/`) |
 | Durable scheduler | Executions stored in PostgreSQL: queueing until capacity frees, leases, retries, deadlines, cancellation, priorities | `src/model_service/scheduler/` |
 | Builders | Whole-slide outputs as plug-ins: heatmap (score grid) and tile embeddings (HDF5), one Ray Serve app hosting any builder | `builders/`, `builders/implementations/`, `builders/replica/` |
 | Model catalog | One YAML per trained model feeds both Ray Serve and the API; the API refuses to start on an inconsistent file, and each run checks the running model matches its declaration | `models/catalog.py`, `deploy/helm/rayservice/models/` |

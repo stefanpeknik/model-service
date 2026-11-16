@@ -34,7 +34,7 @@ behind one public API that can also run builders durably.
 | `src/model_service/builders/replica/` | The one Ray Serve ingress (`serve.py`) that hosts any builder, and the runner that validates, verifies the model, enforces the deadline and cleans up. |
 | `src/model_service/models/` | The model catalog (`catalog.py`), one model client per inference contract (`clients/`) and the MLflow loader (`artifacts.py`). |
 | `src/model_service/api/` | The API process: public routes, synchronous runs, raw inference proxy, process wiring. |
-| `src/model_service/http_common/` | Auth, HTTP error mapping and scheduling calls shared by the API routes and provider routes. |
+| `src/model_service/api/http/` | Auth, HTTP error mapping and scheduling calls shared by the API routes and provider routes. |
 | `src/model_service/contracts/` | Data shapes processes hand each other: invocation, result, failures, score grid, model declarations. |
 | `src/model_service/scheduler/` | Durable executions: admission, leases with fencing, retries, deadlines, cancellation, provider finish. PostgreSQL with Yoyo migrations. |
 | `src/model_service/providers/` | Providers: standalone (shared storage) and EMPAIA (AppService input and publication). `providers/registry.py` lists them; the API and the builder ingress compose what each contributes and name none of them. |
