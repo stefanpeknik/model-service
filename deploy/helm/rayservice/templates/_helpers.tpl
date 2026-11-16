@@ -56,3 +56,26 @@ dnsConfig:
 {{- end }}
 {{- end }}
 {{- end }}
+
+{{/*
+Ray logs go to the container's stdout/stderr, where the cluster's log collector
+picks them up, instead of files under /tmp/ray. Serve still writes its own
+rotating JSON files; the rotation settings bound those. The event-stats dumps
+would otherwise flood stdout every minute.
+*/}}
+{{- define "model-service.rayLogEnv" -}}
+- name: RAY_LOG_TO_STDERR
+  value: "1"
+- name: RAY_SERVE_LOG_TO_STDERR
+  value: "1"
+- name: RAY_event_stats_print_interval_ms
+  value: "-1"
+{{ include "model-service.rayLogRotationEnv" . }}
+{{- end -}}
+
+{{- define "model-service.rayLogRotationEnv" -}}
+- name: RAY_ROTATION_MAX_BYTES
+  value: "10485760"
+- name: RAY_ROTATION_BACKUP_COUNT
+  value: "1"
+{{- end -}}

@@ -32,6 +32,7 @@ template:
             memory: 20Gi
             nvidia.com/mig-2g.20gb: 1
         env:
+          {{- include "model-service.rayLogEnv" . | nindent 10 }}
           {{- include "peknik.proxyEnv" . | nindent 10 }}
           - name: MLFLOW_TRACKING_USERNAME
             valueFrom:

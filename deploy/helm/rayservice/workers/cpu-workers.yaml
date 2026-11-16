@@ -22,6 +22,7 @@ template:
             cpu: 8
             memory: 16Gi
         env:
+          {{- include "model-service.rayLogEnv" . | nindent 10 }}
           - name: HTTPS_PROXY
             value: http://proxy.ics.muni.cz:3128
 {{- include "model-service.empaiaEnv" . | nindent 10 }}

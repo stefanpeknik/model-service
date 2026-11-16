@@ -27,6 +27,7 @@ template:
             cpu: 8
             memory: 24Gi
         env:
+          {{- include "model-service.rayLogEnv" . | nindent 10 }}
           - name: HTTPS_PROXY
             value: http://proxy.ics.muni.cz:3128
           - name: HF_TOKEN

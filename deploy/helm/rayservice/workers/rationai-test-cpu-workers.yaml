@@ -29,6 +29,7 @@ template:
             ephemeral-storage: 40Gi
             memory: 10Gi
         env:
+          {{- include "model-service.rayLogEnv" . | nindent 10 }}
           {{- include "peknik.proxyEnv" . | nindent 10 }}
           # Working files (score sums, libvips spills) stay on the node's disk.
           - name: TMPDIR
