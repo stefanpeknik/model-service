@@ -21,6 +21,8 @@ WORKDIR /app
 ARG SOURCE_REVISION
 LABEL org.opencontainers.image.revision=${SOURCE_REVISION}
 COPY src/model_service model_service
+# The lock's snapshot of the SDK's dependencies must still satisfy the SDK.
+RUN python -c "import model_service.api.app_factory"
 
 RUN groupadd --gid 10001 api \
     && useradd --uid 10001 --gid api --no-create-home \

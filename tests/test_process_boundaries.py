@@ -42,6 +42,10 @@ class ProcessBoundaryTests(unittest.TestCase):
             under(
                 modules,
                 "ray",
+                "torch",
+                "ratiopath",
+                "pyvips",
+                "openslide",
                 "model_service.builders.replica",
                 "model_service.builders.model_clients",
                 "model_service.inference",
