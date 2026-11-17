@@ -71,7 +71,7 @@ api:
   replicas: 2
   image:
     repository: cerit.io/stefanpeknik/model-service-api
-    tag: empaia-32
+    tag: empaia-33
     pullPolicy: IfNotPresent
   database:
     existingSecret: model-service-db
