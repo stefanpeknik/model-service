@@ -109,6 +109,8 @@ class BuilderView:
         inputs: Its inputs by name.
         outputs: Its outputs by name.
         configuration: Its configuration defaults.
+        configuration_schema: The JSON Schema of the `configuration` a request
+            may send: each setting's type, limits, default and description.
     """
 
     id: str
@@ -116,6 +118,7 @@ class BuilderView:
     inputs: dict[str, BuilderInputView]
     outputs: dict[str, BuilderOutputView]
     configuration: dict[str, JsonValue]
+    configuration_schema: dict[str, JsonValue]
 
 
 def create_router(
@@ -143,7 +146,8 @@ def create_router(
         """List the registered builders.
 
         Returns:
-            Every builder with its inputs, outputs and configuration defaults.
+            Every builder with its inputs, outputs, configuration defaults and
+            the schema of the settings a request may change.
         """
         return [
             BuilderView(
@@ -158,6 +162,7 @@ def create_router(
                     for name, item in spec.outputs.items()
                 },
                 configuration=spec.configuration().model_dump(mode="json"),
+                configuration_schema=spec.configuration.model_json_schema(),
             )
             for spec in BUILDERS.values()
         ]

@@ -65,7 +65,7 @@ class BuilderRegistryTests(unittest.TestCase):
             ),
             "timezone": invocation(deadline_at=datetime.now() + timedelta(minutes=1)),
             "future": invocation(deadline_at=datetime.now(UTC) - timedelta(seconds=1)),
-            "configuration is invalid": invocation(
+            "invalid settings: stride_fraction": invocation(
                 configuration={"stride_fraction": 2}
             ),
         }

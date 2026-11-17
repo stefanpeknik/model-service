@@ -51,7 +51,7 @@ class HeatmapConfiguration(BaseModel):
         Field(
             description=(
                 "Whether tiles without tissue are skipped; they score 0. "
-                "Skipping is faster and ignores empty glass."
+                "Skipping is faster and ignores empty glass. On by default."
             )
         ),
     ] = True

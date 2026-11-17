@@ -221,7 +221,18 @@ class Trigger(BaseModel):
 
 
 class EmpaiaListing(BaseModel):
-    """How a model appears in EMPAIA; the `empaia` block of its model file."""
+    """How a model appears in EMPAIA; the `empaia` block of its model file.
+
+    Attributes:
+        name: The model's part of each app name, `<name> <builder>`.
+        name_short: The short app name.
+        description: What the model finds; each mode adds a sentence.
+        modes: The job modes its apps offer.
+        viewer: The case browser's display settings, by builder ID.
+        triggers: The slides EMPAIA preprocesses with its apps.
+        parameters: By builder ID, the settings users set per standalone job;
+            their type and description come from the builder.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

@@ -34,8 +34,7 @@ class BuilderRequest(BaseModel):
         JsonObject | None,
         Field(
             description="Settings that differ from the builder's defaults, by "
-            "name; GET /v1/builders lists each builder's settings with their "
-            "defaults."
+            "name; GET /v1/builders gives each builder's configuration_schema."
         ),
     ] = None
     output_path: Annotated[str, Field(strict=True, min_length=1)] | None = None

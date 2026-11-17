@@ -274,6 +274,10 @@ class CatalogRouteTests(ApiTestCase):
             {"heatmap": {"kind": "shared_artifact", "media_type": "application/x-npz"}},
         )
         self.assertEqual(heatmap["configuration"]["stride_fraction"], 0.5)
+        # What a caller may send as `configuration`, described as in EMPAIA.
+        stride = heatmap["configuration_schema"]["properties"]["stride_fraction"]
+        self.assertEqual((stride["type"], stride["exclusiveMinimum"]), ("number", 0))
+        self.assertIn("share of the tile size", stride["description"])
         self.assertEqual(builders["tile-embeddings"]["accepts"], "tile-embedding")
 
 

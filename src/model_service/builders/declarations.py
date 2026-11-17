@@ -323,15 +323,14 @@ class BuilderSpec:
         Raises:
             InvalidInvocation: The overrides are invalid; the message names each
                 field and the rule it breaks, e.g. "stride_fraction: Input should
-                be greater than 0", but not the values, which may come from callers.
+                be greater than 0". It is kept short, as EMPAIA shows only 255
+                characters, and carries no values, only the names a caller sent.
         """
         try:
             return self.configuration.model_validate(dict(overrides or {}))
         except ValidationError as error:
-            # Pydantic's messages state the rule, never the input value.
+            # Pydantic's messages state the rule, not the value.
             problems = "; ".join(
                 f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in error.errors()
             )
-            raise InvalidInvocation(
-                f"{self.id} configuration is invalid: {problems}"
-            ) from error
+            raise InvalidInvocation(f"invalid settings: {problems}") from error

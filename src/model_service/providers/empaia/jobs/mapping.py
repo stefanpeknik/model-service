@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def builder_configuration(
+def known_settings(
     spec: BuilderSpec, configuration: dict[str, JsonValue], job_id: str
 ) -> dict[str, JsonValue]:
     """Take the settings of a job's app configuration the builder knows.

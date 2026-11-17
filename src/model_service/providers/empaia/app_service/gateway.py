@@ -151,7 +151,18 @@ class EmpaiaGateway(ABC):
 
     @abstractmethod
     async def get_primitive_input(self, name: str) -> JsonValue:
-        """Fetch the value of the job's named primitive input, e.g. a parameter."""
+        """Fetch the value of the job's named primitive input, e.g. a parameter.
+
+        Args:
+            name: The EMPAIA input key.
+
+        Returns:
+            The primitive's value.
+
+        Raises:
+            EmpaiaGatewayError: If the input is not a primitive or the request
+                fails.
+        """
         ...
 
     @abstractmethod

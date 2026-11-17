@@ -108,10 +108,15 @@ type Deadline = Annotated[
 class Invocation:
     """One request to run a builder; stored durably for scheduled executions.
 
-    `configuration` holds the settings that differ from the builder's defaults,
-    e.g. a caller's or an EMPAIA job's; None for none. Each attempt applies it
-    over the builder's current defaults, so a value the builder rejects fails
-    the attempt rather than admission.
+    Attributes:
+        inputs: The builder's inputs, by name.
+        configuration: The settings that differ from the builder's defaults,
+            e.g. a caller's or an EMPAIA job's; None for none. Each attempt
+            applies them over the builder's current defaults, so a value the
+            builder rejects fails the attempt rather than admission.
+        input_access: How the builder reaches its inputs.
+        deadline_at: When the execution must finish.
+        output_path: Where the single artifact output is written, if set.
     """
 
     inputs: Annotated[dict[str, BuilderInput], Field(strict=True)]

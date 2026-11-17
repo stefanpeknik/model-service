@@ -55,8 +55,8 @@ from model_service.providers.empaia.jobs.gateways import (
 )
 from model_service.providers.empaia.jobs.inputs import job_workspace
 from model_service.providers.empaia.jobs.mapping import (
-    builder_configuration,
     job_inputs,
+    known_settings,
     raise_preparation_error,
 )
 from model_service.providers.empaia.jobs.payload import (
@@ -160,11 +160,10 @@ class EmpaiaProviderAdapter(ProviderAdapter):
         Fetches the configuration, and for a standalone job the values of its
         app's parameters, which win over it; records the job's mode, creates
         provider input references, and separates public job state from protected
-        credentials.
-        Configuration keys the builder does not take are dropped and logged, except
-        the viewer's; the values are left for the attempt to check. Optional inputs
-        are taken only if the job has them. Deadlines are capped at credential
-        expiry.
+        credentials. Configuration keys the builder does not take are dropped and
+        logged, except the viewer's; the values are left for the attempt to
+        check. Optional inputs are taken only if the job has them. Deadlines are
+        capped at credential expiry.
 
         Args:
             request: The schedule request; its body is the EMPAIA schedule payload.
@@ -205,9 +204,8 @@ class EmpaiaProviderAdapter(ProviderAdapter):
             except EmpaiaGatewayError as error:
                 raise_preparation_error(error)
             spec = get_builder(request.builder_id)
-            configuration = builder_configuration(spec, configuration, context.job_id)
+            configuration = known_settings(spec, configuration, context.job_id)
             if mode is EmpaiaJobMode.STANDALONE:
-                # The user's values for this job win over the app's settings.
                 for name in self._parameters.get(
                     (request.builder_id, request.model_id), ()
                 ):

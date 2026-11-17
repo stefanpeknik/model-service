@@ -51,7 +51,7 @@ class EmbeddingConfiguration(BaseModel):
         Field(
             description=(
                 "Whether tiles without tissue are skipped; they get no row. "
-                "Skipping is faster and leaves empty glass out of the table."
+                "Skipping is faster and leaves empty glass out of the table. On by default."
             )
         ),
     ] = True
