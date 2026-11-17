@@ -273,7 +273,8 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
         async with self.scheduler.running():
             admitted = await client.post(
                 "/v1/builders/tile-embeddings/models/encoder/schedule",
-                json=self.body(scheduled=True),
+                json=self.body(scheduled=True)
+                | {"configuration": {"skip_background": False}},
                 headers={"Idempotency-Key": "key-1"},
             )
             self.assertEqual(admitted.status_code, 202, admitted.text)
@@ -286,6 +287,15 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(view["status"], "succeeded", view)
         self.assertEqual(view["model_id"], "encoder")
+        # Provenance: every setting it ran with, not only the one sent.
+        self.assertEqual(
+            view["configuration"],
+            {
+                "stride_fraction": 1.0,
+                "skip_background": False,
+                "min_tissue_fraction": 0.0,
+            },
+        )
         path = Path(view["result"]["outputs"]["embeddings"]["path"])
         self.assertNotIn(".attempts", path.parts)
         self.assertTrue(path.is_file())

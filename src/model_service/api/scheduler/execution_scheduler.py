@@ -347,6 +347,7 @@ class ExecutionScheduler:
             builder_id=execution.builder_id,
             model_id=execution.model_id,
             status=execution.status,
+            configuration=execution.invocation.configuration,
             result=(
                 execution.result
                 if execution.status is ExecutionStatus.SUCCEEDED

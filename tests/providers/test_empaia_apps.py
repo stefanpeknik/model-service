@@ -149,6 +149,16 @@ class AppDefinitionTests(unittest.TestCase):
         )
         self.assertEqual(app.ead["modes"]["preprocessing"]["inputs"], ["slide"])
         self.assertEqual(app.parameters, ("min_tissue_fraction", "skip_background"))
+        # The case browser may pre-fill its form from the builder's defaults.
+        self.assertIn(VIEWER_CONFIG_KEY, app.ead["configuration"]["global"])
+        viewer = json.loads(app.global_configuration[VIEWER_CONFIG_KEY])
+        self.assertEqual(
+            viewer["inputs"],
+            {
+                "min_tissue_fraction": {"default": 0.0},
+                "skip_background": {"default": True},
+            },
+        )
 
     def test_the_viewer_settings_are_declared_and_given_to_each_app(self) -> None:
         models = catalog("prostate-classifier-1")

@@ -105,7 +105,7 @@ class ViewerShader(_ViewerEntry):
 
 
 class ViewerInput(_ViewerEntry):
-    """How the viewer shows an app input.
+    """How the viewer shows an app input; a parameter's entry also has its `default`.
 
     Attributes:
         target: The input the entry applies to.
@@ -141,6 +141,24 @@ class ViewerConfig(BaseModel):
 
     inputs: dict[str, ViewerInput] = Field(default_factory=dict)
     outputs: dict[str, ViewerOutput] = Field(default_factory=dict)
+
+    def with_input_defaults(self, defaults: Mapping[str, JsonValue]) -> ViewerConfig:
+        """Add a `default` to the entries of inputs the user fills in, e.g. parameters.
+
+        The case browser may pre-fill its job form from them; the job still
+        sends every value explicitly.
+
+        Args:
+            defaults: The default value of each input, by io key.
+
+        Returns:
+            A copy with the defaults set; other entries are unchanged.
+        """
+        inputs = dict(self.inputs)
+        for key, value in defaults.items():
+            entry = inputs.get(key, ViewerInput()).model_dump(exclude_none=True)
+            inputs[key] = ViewerInput.model_validate({**entry, "default": value})
+        return self.model_copy(update={"inputs": inputs})
 
     def for_io(self, keys: Iterable[str]) -> str:
         """Serialize the configuration value for an app with these io keys.
@@ -566,7 +584,13 @@ def app_definitions(
                 continue
             ead = generate_ead(spec, builder_io, model.id, listing)
             configuration = {}
-            if (viewer := listing.viewer.get(spec.id)) is not None:
+            viewer = listing.viewer.get(spec.id)
+            if parameters := listing.parameters.get(spec.id, ()):
+                defaults = spec.with_defaults()
+                viewer = (viewer or ViewerConfig()).with_input_defaults(
+                    {name: defaults[name] for name in parameters}
+                )
+            if viewer is not None:
                 configuration[VIEWER_CONFIG_KEY] = viewer.for_io(ead["io"])
             apps.append(
                 AppDefinition(
@@ -666,7 +690,8 @@ def generate_ead(
             for mode, names in mode_inputs.items()
         },
     }
-    if spec.id in listing.viewer:
+    # The viewer's configuration also carries the parameters' defaults.
+    if spec.id in listing.viewer or parameters:
         ead["configuration"] = {
             "global": {
                 VIEWER_CONFIG_KEY: {

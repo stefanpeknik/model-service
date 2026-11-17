@@ -302,9 +302,7 @@ class CopyInputsBuilder:
 class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
     """Exercise EMPAIA admission, publication retry boundaries, and credential-limited deadlines."""
 
-    async def test_an_unconfigured_app_leaves_every_setting_to_the_builder(
-        self,
-    ) -> None:
+    async def test_a_job_records_every_setting_it_runs_with(self) -> None:
         now = datetime.now(UTC)
         service = ControlledEmpaiaService()
         service.configuration = {}
@@ -317,7 +315,8 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         scheduled = await scheduler.schedule(self._request(now, "credential"))
         execution = await repository.get(scheduled.execution.id)
 
-        self.assertEqual(execution.invocation.configuration, {})
+        # Provenance: the builder's defaults, fixed when the job is accepted.
+        self.assertEqual(execution.invocation.configuration, DEFAULT_CONFIGURATION)
         self.assertEqual(execution.builder_id, "heatmap")
         self.assertEqual(execution.model_id, MODEL.id)
 

@@ -161,8 +161,8 @@ class EmpaiaProviderAdapter(ProviderAdapter):
         app's parameters, which win over it; records the job's mode, creates
         provider input references, and separates public job state from protected
         credentials. Configuration keys the builder does not take are dropped and
-        logged, except the viewer's; the values are left for the attempt to
-        check. Optional inputs are taken only if the job has them. Deadlines are
+        logged, except the viewer's. The stored settings name every setting
+        the job runs with, defaults included; the attempt checks the values. Optional inputs are taken only if the job has them. Deadlines are
         capped at credential expiry.
 
         Args:
@@ -214,6 +214,7 @@ class EmpaiaProviderAdapter(ProviderAdapter):
                     except EmpaiaGatewayError as error:
                         raise_preparation_error(error)
             names = await job_inputs(spec, gateway)
+        configuration = spec.with_defaults(configuration)
         effective_deadline = min(deadline_at, credential_expires_at)
         invocation = Invocation(
             inputs={name: ProviderInput(name=name) for name in names},

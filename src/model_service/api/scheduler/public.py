@@ -73,6 +73,7 @@ class ExecutionView:
         builder_id: The builder it runs.
         model_id: The model the builder uses.
         status: Its status.
+        configuration: Every setting the builder runs with, fixed at admission.
         result: The builder's result, once succeeded.
         error: Why it failed, once failed.
         provider_pending: A failure or cancellation not yet reported to the
@@ -83,6 +84,7 @@ class ExecutionView:
     builder_id: str
     model_id: str
     status: ExecutionStatus
+    configuration: dict[str, JsonValue] | None = None
     result: BuilderResult | None = None
     error: ExecutionError | None = None
     # A failure or cancellation not yet reported to the provider.

@@ -79,6 +79,14 @@ RUN = "/v1/builders/heatmap/models/prostate-classifier-1/run"
 SCHEDULE = "/v1/builders/heatmap/models/prostate-classifier-1/schedule"
 
 
+# Every heatmap setting at its default: what a run without configuration records.
+HEATMAP_DEFAULTS = {
+    "stride_fraction": 0.5,
+    "skip_background": True,
+    "min_tissue_fraction": 0.0,
+}
+
+
 class FakeDispatch:
     """Record dispatched calls and delegate to a test handler."""
 
@@ -303,6 +311,7 @@ class ScheduleRouteTests(ApiTestCase):
                 "builder_id": "heatmap",
                 "model_id": "prostate-classifier-1",
                 "status": "queued",
+                "configuration": HEATMAP_DEFAULTS,
                 "result": None,
                 "error": None,
                 "provider_pending": False,
@@ -398,7 +407,7 @@ class ScheduleRouteTests(ApiTestCase):
         [(builder_id, invocation, model, context)] = self.dispatch.calls
         self.assertEqual(builder_id, "heatmap")
         self.assertEqual(model, PROSTATE)
-        self.assertIsNone(invocation.configuration)
+        self.assertEqual(invocation.configuration, HEATMAP_DEFAULTS)
         self.assertIsNotNone(context.processing_attempt_id)
 
 

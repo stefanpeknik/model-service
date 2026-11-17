@@ -309,6 +309,26 @@ class BuilderSpec:
                 f"builder {self.id!r} ({self.accepts})"
             )
 
+    def with_defaults(
+        self, overrides: Mapping[str, JsonValue] | None = None
+    ) -> dict[str, JsonValue]:
+        """Name every setting a run will use: the current defaults, then the overrides.
+
+        Admission stores this, so an execution records what it runs with and a
+        retry after a deploy that changes a default runs the same. The values
+        are not checked here; `resolve_configuration` checks them per attempt.
+
+        Args:
+            overrides: Settings that differ from the defaults; none keeps them.
+
+        Returns:
+            Every setting by name, as JSON.
+        """
+        return {
+            **self.configuration().model_dump(mode="json"),
+            **dict(overrides or {}),
+        }
+
     def resolve_configuration(
         self, overrides: Mapping[str, JsonValue] | None = None
     ) -> BaseModel:

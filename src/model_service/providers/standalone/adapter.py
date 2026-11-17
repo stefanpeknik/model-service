@@ -111,7 +111,7 @@ class StandaloneProviderAdapter(ProviderAdapter):
     async def prepare(
         self, request: ScheduleRequest, deadline_at: datetime
     ) -> PreparedInvocation:
-        """Check inputs exist now; processing settings are chosen per attempt.
+        """Check the request and its inputs, and fix the settings the run uses.
 
         Args:
             request: The schedule request; its body is a `BuilderRequest`.
@@ -119,8 +119,8 @@ class StandaloneProviderAdapter(ProviderAdapter):
                 before it.
 
         Returns:
-            The invocation, with the root and a fresh attempts directory name as
-            protected context.
+            The invocation, naming every setting it runs with, and the root and
+            a fresh attempts directory name as protected context.
 
         Raises:
             InvalidScheduleRequestError: If the body is invalid, the invocation fails
@@ -134,8 +134,9 @@ class StandaloneProviderAdapter(ProviderAdapter):
                 "schedule request body is invalid"
             ) from error
         invocation = body.invocation(deadline_at)
+        spec = get_builder(request.builder_id)
         try:
-            get_builder(request.builder_id).check_invocation(
+            spec.check_invocation(
                 invocation,
                 now=deadline_at - timedelta(microseconds=1),
             )
@@ -149,7 +150,9 @@ class StandaloneProviderAdapter(ProviderAdapter):
         except InvalidInvocation as error:
             raise InvalidScheduleRequestError(str(error)) from error
         return PreparedInvocation(
-            invocation=invocation,
+            invocation=replace(
+                invocation, configuration=spec.with_defaults(invocation.configuration)
+            ),
             protected_context={"root": str(root), ATTEMPTS_KEY: uuid4().hex},
         )
 
