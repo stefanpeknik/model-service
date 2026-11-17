@@ -60,8 +60,10 @@ dnsConfig:
 {{/*
 Ray logs go to the container's stdout/stderr, where the cluster's log collector
 picks them up, instead of files under /tmp/ray. Serve still writes its own
-rotating JSON files; the rotation settings bound those. The event-stats dumps
-would otherwise flood stdout every minute.
+rotating JSON files; the rotation settings bound those. The event-stats and
+GCS debug-state dumps would otherwise fill stdout every minute; they are put
+off to once a day. Not -1: Ray 2.58's GCS then dumps in a tight loop
+(gcs_server.cc schedules it without the -1 check the raylet has).
 */}}
 {{- define "model-service.rayLogEnv" -}}
 - name: RAY_LOG_TO_STDERR
@@ -69,7 +71,7 @@ would otherwise flood stdout every minute.
 - name: RAY_SERVE_LOG_TO_STDERR
   value: "1"
 - name: RAY_event_stats_print_interval_ms
-  value: "-1"
+  value: "86400000"
 {{ include "model-service.rayLogRotationEnv" . }}
 {{- end -}}
 
