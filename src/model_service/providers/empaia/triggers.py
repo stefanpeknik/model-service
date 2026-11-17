@@ -89,7 +89,10 @@ class PreprocessingTriggers:
                 await self._align(client, headers, wanted)
 
     async def _align(
-        self, client: httpx.AsyncClient, headers: dict[str, str], wanted: set[TriggerKey]
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        wanted: set[TriggerKey],
     ) -> bool:
         """Delete owned triggers that are unwanted or duplicate, then create missing ones.
 
