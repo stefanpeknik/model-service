@@ -46,7 +46,8 @@ class EmbeddingConfiguration(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     stride_fraction: StrideFraction = 1.0
-    skip_background: bool = False
+    # Skip tiles without tissue; they get no row.
+    skip_background: bool = True
     min_tissue_fraction: TissueFraction = 0.0
 
 

@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import unittest
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import httpx
 import numpy as np
@@ -20,6 +21,9 @@ from model_service.api.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.api.synchronous_runs import SynchronousBuilderService
 from model_service.builders.base import ReplicaSettings
 from model_service.builders.implementations.embeddings.builder import EmbeddingBuilder
+from model_service.builders.implementations.embeddings.spec import (
+    EmbeddingConfiguration,
+)
 from model_service.builders.registry import get_builder
 from model_service.builders.replica.http_handler import run_http
 from model_service.builders.replica.runner import BuilderApplication
@@ -83,8 +87,22 @@ class FakeEmbeddingDeployment:
 
 
 @unittest.skipUnless(HAS_NATIVE, "libvips or h5py is unavailable")
+class WithoutTissueFilter(EmbeddingConfiguration):
+    """Defaults with the tissue filter off.
+
+    Tissue detection needs a realistic slide; see slides/test_tissue.py.
+    """
+
+    skip_background: bool = False
+
+
+# These tests run through the public API, which takes no configuration.
+SPEC = replace(get_builder("tile-embeddings"), configuration=WithoutTissueFilter)
+
+
 class EmbeddingContractTests(BuilderContractTests, unittest.IsolatedAsyncioTestCase):
     builder_id = "tile-embeddings"
+    configuration: ClassVar[dict[str, Any]] = {"skip_background": False}
     model = TileEmbeddingModel(
         id="encoder", tile_size=TILE, mpp=0.5, summaries=("global", "mean")
     )
@@ -116,7 +134,7 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
         storage = SharedStorageAccessFactory([self.root])
         settings = ReplicaSettings(num_threads=1, max_concurrent_tasks=3)
         application = BuilderApplication(
-            get_builder("tile-embeddings"),
+            SPEC,
             EmbeddingBuilder(settings),
             {"shared_storage": storage},
             model_handles=lambda _model_id: self.model,  # type: ignore[arg-type, return-value]
