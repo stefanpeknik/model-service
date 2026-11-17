@@ -18,6 +18,7 @@ from model_service.contracts.score_grid import ScoreGrid, write_score_grid
 
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     import numpy as np
@@ -68,10 +69,12 @@ async def build_heatmap(
     min_tissue_fraction: float,
     num_threads: int,
     max_concurrent_tasks: int,
+    report_progress: Callable[[float], None],
 ) -> None:
     """Score a slide's grid tiles and write the averaged score grid.
 
-    Overlapping tile scores are averaged; progress is logged every minute.
+    Overlapping tile scores are averaged; progress is logged every minute and
+    reported as the share of grid positions done.
     Tile size, output geometry and mpp come from the model's declaration.
 
     Args:
@@ -84,6 +87,7 @@ async def build_heatmap(
         min_tissue_fraction: Share of a tile that must be tissue to be scored.
         num_threads: Threads for slide reads.
         max_concurrent_tasks: Tiles in flight at once.
+        report_progress: Takes the share of grid positions done.
 
     Raises:
         InvalidInvocation: The slide or mask is not a readable slide, or the
@@ -136,7 +140,14 @@ async def build_heatmap(
             else f"tissue on {reader.tissue.fraction:.0%} of the slide",
         )
         started = last_report = time.monotonic()
-        submitted = 0
+        submitted = finished = 0
+        positions = list(
+            grid_tiles(
+                slide_extent=(max(extent_x, tile_size), max(extent_y, tile_size)),
+                tile_extent=(tile_size, tile_size),
+                stride=(stride, stride),
+            )
+        )
         reads = _StageTiming()
         predictions = _StageTiming()
 
@@ -164,27 +175,25 @@ async def build_heatmap(
                     x: Tile x on the read level.
                     y: Tile y on the read level.
                 """
+                nonlocal finished
                 tile, read_seconds = await loop.run_in_executor(
                     executor, timed_read, x, y
                 )
-                if tile is None:
-                    return
-                reads.add(read_seconds)
-                began = time.perf_counter()
-                prediction = await client.predict(tile)
-                predictions.add(time.perf_counter() - began)
-                batch = np.asarray(prediction, dtype=np.float32).reshape(
-                    1, n_channels, output_tile_size, output_tile_size
-                )
-                mask_builder.update_batch(
-                    batch=batch, coords=np.array([[y, x]], dtype=np.int64)
-                )
+                if tile is not None:
+                    reads.add(read_seconds)
+                    began = time.perf_counter()
+                    prediction = await client.predict(tile)
+                    predictions.add(time.perf_counter() - began)
+                    batch = np.asarray(prediction, dtype=np.float32).reshape(
+                        1, n_channels, output_tile_size, output_tile_size
+                    )
+                    mask_builder.update_batch(
+                        batch=batch, coords=np.array([[y, x]], dtype=np.int64)
+                    )
+                finished += 1
+                report_progress(finished / len(positions))
 
-            for x, y in grid_tiles(
-                slide_extent=(max(extent_x, tile_size), max(extent_y, tile_size)),
-                tile_extent=(tile_size, tile_size),
-                stride=(stride, stride),
-            ):
+            for x, y in positions:
                 if len(tasks) >= max_concurrent_tasks:
                     done, tasks = await asyncio.wait(
                         tasks, return_when=asyncio.FIRST_COMPLETED

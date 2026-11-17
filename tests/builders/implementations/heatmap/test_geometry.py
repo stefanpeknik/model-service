@@ -88,6 +88,7 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
             min_tissue_fraction=0.0,
             num_threads=1,
             max_concurrent_tasks=2,
+            report_progress=lambda _fraction: None,
         )
         grid = read_score_grid(output)
         self.assertEqual((grid.level, grid.level_size), (0, (width, height)))

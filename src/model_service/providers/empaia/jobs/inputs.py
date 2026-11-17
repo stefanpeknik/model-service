@@ -121,6 +121,17 @@ class EmpaiaInputAccess(InputAccess):
             return False
         return path.is_file()
 
+    async def report_progress(self, fraction: float) -> None:
+        """Report the run's progress to the job, for the viewer to show.
+
+        Args:
+            fraction: Share of the work done, from 0 to 1.
+
+        Raises:
+            EmpaiaGatewayError: The App Service did not take it.
+        """
+        await self._gateway.report_progress(fraction)
+
     async def aclose(self) -> None:
         """Close the gateway and delete materialized inputs.
 

@@ -235,6 +235,17 @@ class HttpEmpaiaGateway(EmpaiaGateway):
         """
         await self._call(self._client.put_finalize(), mutation=True)
 
+    async def report_progress(self, fraction: float) -> None:
+        """PUT the job's progress.
+
+        Args:
+            fraction: Share of the work done, from 0 to 1.
+
+        Raises:
+            EmpaiaGatewayError: As `_call` classifies a failed request.
+        """
+        await self._call(self._client.put_progress(fraction))
+
     async def report_failure(self, message: str) -> None:
         """PUT a guarded failure request with the safe user message truncated to 255 characters.
 

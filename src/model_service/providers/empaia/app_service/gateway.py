@@ -199,6 +199,15 @@ class EmpaiaGateway(ABC):
         ...
 
     @abstractmethod
+    async def report_progress(self, fraction: float) -> None:
+        """Report how far the job got, which the viewer shows while it runs.
+
+        Args:
+            fraction: Share of the work done, from 0 to 1.
+        """
+        ...
+
+    @abstractmethod
     async def report_failure(self, message: str) -> None:
         """Report a safe failure or cancellation message to the external job."""
         ...

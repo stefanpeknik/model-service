@@ -3,7 +3,8 @@
 The application checks the invocation and the model against the builder's
 declaration, verifies the running model through its contract's client, opens the
 inputs through the provider's access adapter, runs the builder before the
-deadline, checks its outputs and always closes the access.
+deadline while passing its progress to the access, checks its outputs and
+always closes the access.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from model_service.builders.declarations import BuilderInputs, BuilderOutputs
 from model_service.builders.input_access import close_resource
 from model_service.builders.model_clients.base import ray_handle
 from model_service.builders.model_clients.registry import client_for
+from model_service.builders.replica.progress import reporting_progress
 from model_service.contracts.failures import (
     BuilderFailure,
     ContractViolation,
@@ -58,6 +60,7 @@ class BuilderApplication:
         access_adapters: Mapping[InputAccessKind, InputAccessFactory],
         *,
         cleanup_timeout_seconds: float = 10,
+        progress_interval_seconds: float = 10,
         model_handles: HandleLookup = ray_handle,
     ) -> None:
         """Bind a builder to its declaration and access adapters.
@@ -67,6 +70,8 @@ class BuilderApplication:
             builder: Builder implementation to run.
             access_adapters: Adapter per input access kind an invocation may name.
             cleanup_timeout_seconds: Time allowed for closing the input access.
+            progress_interval_seconds: Time between two progress updates sent
+                to the provider.
             model_handles: Looks up a model's deployment handle by id; replaceable
                 in tests.
         """
@@ -74,6 +79,7 @@ class BuilderApplication:
         self._builder = builder
         self._access_adapters = dict(access_adapters)
         self._cleanup_timeout_seconds = cleanup_timeout_seconds
+        self._progress_interval_seconds = progress_interval_seconds
         self._model_handles = model_handles
 
     async def run(
@@ -122,17 +128,22 @@ class BuilderApplication:
                     access = await self._create_access(
                         invocation, execution_context or ExecutionContext(), model
                     )
-                    outputs = await self._builder.run(
-                        BuilderContext(
-                            access=access,
-                            model=client,
-                            inputs=self._resolve_inputs(invocation, access),
-                            configuration=self._spec.resolve_configuration(
-                                invocation.configuration
-                            ),
-                            output_paths=self._output_paths(invocation),
+                    async with reporting_progress(
+                        access.report_progress,
+                        interval_seconds=self._progress_interval_seconds,
+                    ) as report_progress:
+                        outputs = await self._builder.run(
+                            BuilderContext(
+                                access=access,
+                                model=client,
+                                inputs=self._resolve_inputs(invocation, access),
+                                configuration=self._spec.resolve_configuration(
+                                    invocation.configuration
+                                ),
+                                output_paths=self._output_paths(invocation),
+                                report_progress=report_progress,
+                            )
                         )
-                    )
                     result = self._validate_result(outputs, access)
             except TimeoutError as error:
                 if not timeout.expired():

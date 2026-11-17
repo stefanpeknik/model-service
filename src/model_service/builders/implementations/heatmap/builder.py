@@ -54,5 +54,6 @@ class HeatmapBuilder(
                 min_tissue_fraction=context.configuration.min_tissue_fraction,
                 num_threads=self._settings.num_threads,
                 max_concurrent_tasks=self._settings.max_concurrent_tasks,
+                report_progress=context.report_progress,
             )
         return HeatmapOutputs(heatmap=heatmap)

@@ -47,8 +47,9 @@ if TYPE_CHECKING:
 
 
 class FixedAccess:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, sent: list[float] | None = None) -> None:
         self._root = root
+        self.sent = [] if sent is None else sent
 
     def input_path(self, name: str) -> Path:
         return self._root / name
@@ -63,6 +64,9 @@ class FixedAccess:
             return False
         return path.is_file()
 
+    async def report_progress(self, fraction: float) -> None:
+        self.sent.append(fraction)
+
     async def aclose(self) -> None:
         return None
 
@@ -71,11 +75,13 @@ class FixedAccessAdapter:
     def __init__(self, root: Path, access: type[FixedAccess] = FixedAccess) -> None:
         self._root = root
         self._access = access
+        # The progress every access it created sent, in order.
+        self.sent: list[float] = []
 
     def create(
         self, _invocation: object, _context: object, _model: object
     ) -> FixedAccess:
-        return self._access(self._root)
+        return self._access(self._root, self.sent)
 
 
 class FailingCloseAccess(FixedAccess):
@@ -354,6 +360,61 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(raised.exception.code, "builder_deadline_exceeded")
         self.assertFalse(raised.exception.retryable)
+
+
+class ProgressTests(unittest.IsolatedAsyncioTestCase):
+    """A builder's progress reaches its provider, throttled, and only while it runs."""
+
+    async def asyncSetUp(self) -> None:
+        directory = TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.adapter = FixedAccessAdapter(Path(directory.name))
+
+    def application(self, function: Any) -> BuilderApplication:
+        return BuilderApplication(
+            spec(),
+            run(function),
+            {"test": self.adapter},
+            model_handles=DECLARED,
+            progress_interval_seconds=0.01,
+        )
+
+    async def sent(self, count: int) -> None:
+        while len(self.adapter.sent) < count:
+            await asyncio.sleep(0.001)
+
+    async def test_the_latest_progress_is_sent_once_it_moved(self) -> None:
+        async def build(context: BuilderContext) -> BuilderResult:
+            # Reported between two sends: only the latest goes out.
+            for fraction in (0.1, 0.2, 0.3):
+                context.report_progress(fraction)
+            await self.sent(1)
+            # Less than a percentage point is not worth a send.
+            context.report_progress(0.305)
+            await asyncio.sleep(0.05)
+            context.report_progress(0.6)
+            await self.sent(2)
+            return BuilderResult({})
+
+        await asyncio.wait_for(
+            self.application(build).run(invocation("test"), SPATIAL_MODEL), timeout=2
+        )
+
+        self.assertEqual(self.adapter.sent, [0.3, 0.6])
+
+    async def test_nothing_is_sent_after_the_run_ends(self) -> None:
+        reporters = []
+
+        async def build(context: BuilderContext) -> BuilderResult:
+            reporters.append(context.report_progress)
+            context.report_progress(0.5)
+            return BuilderResult({})
+
+        await self.application(build).run(invocation("test"), SPATIAL_MODEL)
+        reporters[0](0.9)
+        await asyncio.sleep(0.05)
+
+        self.assertEqual(self.adapter.sent, [])
 
 
 if __name__ == "__main__":

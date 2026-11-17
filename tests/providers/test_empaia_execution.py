@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import unittest
@@ -52,6 +53,7 @@ from tests.support.memory_repository import InMemoryExecutionRepository
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
+    from model_service.api.scheduler.public import ExecutionView
     from model_service.builders.base import BuilderContext
     from model_service.contracts.json_values import JsonValue
     from model_service.contracts.result import BuilderOutput
@@ -155,13 +157,16 @@ def over_http(application: BuilderApplication) -> HTTPBuilderDispatch:
 
 
 def copy_inputs_application(
-    service: ControlledEmpaiaService, directory: str
+    service: ControlledEmpaiaService,
+    directory: str,
+    builder: CopyInputsBuilder | HalfwayBuilder | None = None,
 ) -> BuilderApplication:
     return BuilderApplication(
         get_builder("heatmap"),
-        CopyInputsBuilder(),
+        builder or CopyInputsBuilder(),
         {"empaia": EmpaiaInputAccessFactory(service.gateway, Path(directory))},
         model_handles=deployments(MODEL),
+        progress_interval_seconds=0.001,
     )
 
 
@@ -185,6 +190,10 @@ class ControlledEmpaiaService:
         self.mode = EmpaiaJobMode.STANDALONE
         self.finalized = False
         self.failures: list[str] = []
+        # Progress the job reported, and how often reporting it failed.
+        self.progress: list[float] = []
+        self.progress_failures = 0
+        self.reject_progress = False
 
     def gateway(self, context: EmpaiaJobContext) -> FakeGateway:
         """Construct a job gateway backed by shared observable test state."""
@@ -275,6 +284,13 @@ class FakeGateway:
             raise self._service.finalize_failures.pop(0)
         self._service.finalized = True
 
+    async def report_progress(self, fraction: float) -> None:
+        """Record the progress, or refuse it like an App Service that rejects it."""
+        if self._service.reject_progress:
+            self._service.progress_failures += 1
+            raise EmpaiaGatewayError("EMPAIA rejected the progress", retryable=False)
+        self._service.progress.append(fraction)
+
     async def report_failure(self, message: str) -> None:
         """Await the mutation guard and record the reported safe terminal message."""
         if self._before_mutation is not None:
@@ -297,6 +313,20 @@ class CopyInputsBuilder:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(slide + b"|" + roi)
         return HeatmapOutputs(heatmap=SharedArtifact(path=str(output)))
+
+
+class HalfwayBuilder:
+    """Report being half done, wait until EMPAIA heard of it or refused it, then copy."""
+
+    def __init__(self, service: ControlledEmpaiaService) -> None:
+        self._service = service
+        self._copy = CopyInputsBuilder()
+
+    async def run(self, context: BuilderContext) -> BuilderResult:
+        context.report_progress(0.5)
+        while not (self._service.progress or self._service.progress_failures):
+            await asyncio.sleep(0.001)
+        return await self._copy.run(context)
 
 
 class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
@@ -546,6 +576,44 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         (message,) = service.failures
         self.assertIn("stride_fraction", message)
         self.assertIn("greater than 0", message)
+
+    async def test_the_viewer_is_told_how_far_a_job_got(self) -> None:
+        completed, service = await self._run_halfway_job()
+
+        self.assertEqual(service.progress, [0.5])
+        self.assertEqual(completed.status, "succeeded")
+
+    async def test_a_job_whose_progress_empaia_refuses_still_succeeds(self) -> None:
+        with self.assertLogs("model_service.builders.replica", "WARNING") as logs:
+            completed, service = await self._run_halfway_job(reject_progress=True)
+
+        self.assertGreater(service.progress_failures, 0)
+        self.assertEqual(completed.status, "succeeded")
+        self.assertTrue(service.finalized)
+        self.assertIn("progress could not be sent", logs.output[0])
+
+    async def _run_halfway_job(
+        self, *, reject_progress: bool = False
+    ) -> tuple[ExecutionView, ControlledEmpaiaService]:
+        now = datetime.now(UTC)
+        service = ControlledEmpaiaService()
+        service.reject_progress = reject_progress
+        provider = EmpaiaProviderAdapter(
+            service.gateway, allowed_api_urls=(API_URL,), publishers=PUBLISHERS
+        )
+        repository = InMemoryExecutionRepository(clock=lambda: now)
+        scheduler = scheduler_for(repository, provider, now)
+        with TemporaryDirectory() as directory:
+            application = copy_inputs_application(
+                service, directory, HalfwayBuilder(service)
+            )
+            worker = worker_for(repository, provider, over_http(application))
+            admitted = await scheduler.schedule(self._request(now, "credential"))
+
+            await asyncio.wait_for(worker.run_once(), timeout=5)
+            await worker.run_once()
+            completed = await scheduler.get(admitted.execution.id)
+        return completed, service
 
     async def test_known_preacceptance_publication_failure_retries_result_only(
         self,

@@ -2,7 +2,8 @@
 
 A provider's access adapter turns an invocation's provider-specific inputs into
 local files for one run, and says where outputs go; builders see only the
-resulting paths. close_resource closes an access, or anything it holds, within
+resulting paths. An access may also pass the run's progress on to its
+provider. close_resource closes an access, or anything it holds, within
 a timeout; cleanup tasks stay referenced until they finish and their exceptions
 are consumed, so cancelling the caller never leaks a half-closed resource.
 """
@@ -23,7 +24,7 @@ if TYPE_CHECKING:
 
 
 class InputAccess(ABC):
-    """Resolves one invocation's inputs and outputs to local files."""
+    """A provider's handle on one attempt: its files, and where its progress goes."""
 
     @abstractmethod
     def input_path(self, name: str) -> Path:
@@ -60,6 +61,15 @@ class InputAccess(ABC):
             True when the path is a file inside the access's visible output area.
         """
         ...
+
+    async def report_progress(self, fraction: float) -> None:  # noqa: B027
+        """Pass the run's progress to the provider; a no-op unless it overrides this.
+
+        The runner throttles the calls; a failure is logged and ignored.
+
+        Args:
+            fraction: Share of the work done, from 0 to 1.
+        """
 
     @abstractmethod
     async def aclose(self) -> None:

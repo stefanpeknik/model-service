@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 import numpy as np
 
 from model_service.builders.base import ReplicaSettings
+from model_service.builders.input_access import InputAccess
 from model_service.builders.registry import get_builder
 from model_service.builders.replica.runner import BuilderApplication
 from model_service.contracts.failures import (
@@ -86,16 +87,35 @@ class BuilderContractTests(_Base):
     async def run_builder(
         self,
         deployment: FakeDeployment | None = None,
+        *,
+        progress: list[float] | None = None,
         **invocation_options: Any,
     ) -> BuilderResult:
+        """Run the builder as a replica would.
+
+        Args:
+            deployment: The model's deployment; a healthy one by default.
+            progress: Collects every progress update sent, with no wait between
+                them; none is collected when omitted.
+            **invocation_options: Overrides of the invocation's fields.
+
+        Returns:
+            The builder's result.
+        """
         module_name, _, class_name = self.spec.implementation.partition(":")
         implementation = getattr(importlib.import_module(module_name), class_name)
         running = deployment or healthy_deployment(self.model)
+        storage = SharedStorageAccessFactory([self.root])
         application = BuilderApplication(
             self.spec,
             implementation(ReplicaSettings(num_threads=1, max_concurrent_tasks=2)),
-            {"shared_storage": SharedStorageAccessFactory([self.root])},
+            {
+                "shared_storage": storage
+                if progress is None
+                else _RecordingProgress(storage, progress)
+            },
             model_handles=lambda _model_id: running,  # type: ignore[arg-type, return-value]
+            progress_interval_seconds=0,
         )
         options = {
             "inputs": self.inputs(),
@@ -111,6 +131,15 @@ class BuilderContractTests(_Base):
         """Files besides the inputs, e.g. temporary or partial artifacts."""
         inputs = {self.root / "slide.tiff"}
         return [p for p in self.root.rglob("*") if p.is_file() and p not in inputs]
+
+    async def test_progress_rises_while_the_builder_works(self) -> None:
+        sent: list[float] = []
+
+        await self.run_builder(progress=sent)
+
+        self.assertTrue(sent, "no progress was reported")
+        self.assertEqual(sent, sorted(sent))
+        self.assertTrue(all(0 < fraction <= 1 for fraction in sent), sent)
 
     async def test_outputs_are_the_declared_ones_at_their_default_paths(self) -> None:
         result = await self.run_builder()
@@ -186,3 +215,37 @@ class BuilderContractTests(_Base):
         self.assertEqual(raised.exception.code, FailureCode.MODEL_FAILED)
         self.assertTrue(raised.exception.retryable)
         self.assertEqual(self.leftovers(), [])
+
+
+class _RecordingProgress:
+    """Shared storage access whose progress updates are collected."""
+
+    def __init__(self, factory: SharedStorageAccessFactory, sent: list[float]) -> None:
+        self._factory = factory
+        self._sent = sent
+
+    def create(self, *arguments: Any) -> InputAccess:
+        return _RecordingAccess(self._factory.create(*arguments), self._sent)
+
+
+class _RecordingAccess(InputAccess):
+    """Another access, with the progress it is sent collected."""
+
+    def __init__(self, access: InputAccess, sent: list[float]) -> None:
+        self._access = access
+        self._sent = sent
+
+    def input_path(self, name: str) -> Path:
+        return self._access.input_path(name)
+
+    def output_path(self, relative_path: str) -> Path:
+        return self._access.output_path(relative_path)
+
+    def is_visible_artifact(self, path: Path) -> bool:
+        return self._access.is_visible_artifact(path)
+
+    async def report_progress(self, fraction: float) -> None:
+        self._sent.append(fraction)
+
+    async def aclose(self) -> None:
+        await self._access.aclose()

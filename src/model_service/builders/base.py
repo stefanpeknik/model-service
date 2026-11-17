@@ -22,7 +22,7 @@ from model_service.contracts.result import SharedArtifact
 
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping
+    from collections.abc import Callable, Iterator, Mapping
 
     from model_service.builders.input_access import InputAccess
 
@@ -44,7 +44,7 @@ class ReplicaSettings(BuilderSettings):
 
 @dataclass(frozen=True, slots=True)
 class BuilderContext[K: ModelClient[Any], I: BuilderInputs, C: BaseModel]:
-    """What one builder run gets: its model, inputs and configuration, typed.
+    """What one builder run gets: its typed model, inputs and configuration.
 
     The application checks the model against the builder's contract and its
     running deployment against the catalog, resolves the inputs to local files
@@ -59,6 +59,9 @@ class BuilderContext[K: ModelClient[Any], I: BuilderInputs, C: BaseModel]:
     inputs: I
     configuration: C
     output_paths: Mapping[str, str]
+    # Takes the share of the work done, 0 to 1; cheap enough to call per tile,
+    # never raises. The application throttles what reaches the provider.
+    report_progress: Callable[[float], None]
 
     def output_path(self, output: str) -> Path:
         """Return where to write a declared artifact output.

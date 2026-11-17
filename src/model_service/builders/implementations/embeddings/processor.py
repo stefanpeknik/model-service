@@ -11,6 +11,7 @@ from model_service.contracts.failures import BuilderFailure, FailureCode
 
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     import numpy as np
@@ -30,6 +31,7 @@ async def build_embeddings(
     min_tissue_fraction: float,
     num_threads: int,
     max_concurrent_tasks: int,
+    report_progress: Callable[[float], None],
 ) -> None:
     """Embed a slide's grid tiles and write them to an HDF5 file.
 
@@ -47,6 +49,7 @@ async def build_embeddings(
         min_tissue_fraction: Share of a tile that must be tissue to be embedded.
         num_threads: Threads for slide reads.
         max_concurrent_tasks: Tiles in flight at once.
+        report_progress: Takes the share of grid positions done.
 
     Raises:
         InvalidInvocation: The slide or mask is not a readable slide, or the
@@ -100,6 +103,14 @@ async def build_embeddings(
             "coordinates", shape=(0, 2), maxshape=(None, 2), dtype="int64"
         )
         features = None
+        finished = 0
+        positions = list(
+            grid_tiles(
+                slide_extent=(max(width, tile_size), max(height, tile_size)),
+                tile_extent=(tile_size, tile_size),
+                stride=(stride, stride),
+            )
+        )
 
         async def infer(x: int, y: int) -> tuple[int, int, NDArray[np.float32] | None]:
             """Read and embed one tile.
@@ -120,10 +131,12 @@ async def build_embeddings(
             Raises:
                 BuilderFailure: The features differ in shape from earlier tiles.
             """
-            nonlocal features
+            nonlocal features, finished
             # Keep the task registered until it is joined, including on cancellation.
             x, y, result = await tasks[0]
             tasks.popleft()
+            finished += 1
+            report_progress(finished / len(positions))
             if result is None:
                 return
             if features is None:
@@ -146,11 +159,7 @@ async def build_embeddings(
             features[count] = result
 
         try:
-            for x, y in grid_tiles(
-                slide_extent=(max(width, tile_size), max(height, tile_size)),
-                tile_extent=(tile_size, tile_size),
-                stride=(stride, stride),
-            ):
+            for x, y in positions:
                 if len(tasks) >= max_concurrent_tasks:
                     await append_oldest()
                 tasks.append(asyncio.create_task(infer(x, y)))

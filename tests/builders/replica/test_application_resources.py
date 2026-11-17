@@ -39,6 +39,13 @@ def application(builder: Any, adapter: Any, **options: Any) -> BuilderApplicatio
     )
 
 
+class QuietAccess:
+    """An access whose provider takes no progress, as most fakes here."""
+
+    async def report_progress(self, fraction: float) -> None:
+        del fraction
+
+
 class Adapter:
     def __init__(self, access: Any) -> None:
         self._access = access
@@ -75,7 +82,7 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(cancelled.is_set())
 
     async def test_cleanup_failure_preserves_primary_failure(self) -> None:
-        class Access:
+        class Access(QuietAccess):
             async def aclose(self) -> None:
                 raise OSError("cleanup failure")
 
@@ -107,7 +114,7 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.Event().wait()
             raise AssertionError
 
-        class Access:
+        class Access(QuietAccess):
             async def aclose(self) -> None:
                 closing.set()
                 await release_close.wait()
@@ -132,7 +139,7 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
     async def test_cleanup_is_bounded(self) -> None:
         close_cancelled = asyncio.Event()
 
-        class Access:
+        class Access(QuietAccess):
             async def aclose(self) -> None:
                 try:
                     await asyncio.Event().wait()
@@ -152,7 +159,7 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.wait_for(close_cancelled.wait(), timeout=1)
 
     async def test_resource_self_cancellation_is_a_cleanup_failure(self) -> None:
-        class Access:
+        class Access(QuietAccess):
             async def aclose(self) -> None:
                 raise asyncio.CancelledError
 
