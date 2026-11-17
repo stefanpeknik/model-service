@@ -7,7 +7,9 @@ then becomes one app with the listed modes. In standalone mode it takes all
 of the builder's EMPAIA inputs (e.g. a region of interest); in preprocessing
 mode only the required ones, because EMPAIA starts it with a slide alone. The
 app's image is `http::<target>/builders/<builder>/models/<model>`,
-which JES hands to model-service.
+which JES hands to model-service. Builder settings the model file lists as
+parameters become standalone inputs the user fills in per job; their type and
+description come from the builder's configuration.
 """
 
 from __future__ import annotations
@@ -54,6 +56,13 @@ logger = logging.getLogger(__name__)
 
 # EAD names allow letters, digits, spaces, `-` and `_`.
 _TEXT = r"^[a-zA-Z0-9_\s\-]+$"
+# The EMPAIA primitive type of each builder setting type a parameter may have.
+_PARAMETER_TYPES: dict[object, str] = {
+    bool: "bool",
+    int: "integer",
+    float: "float",
+    str: "string",
+}
 
 
 class AppMode(StrEnum):
@@ -228,20 +237,67 @@ class EmpaiaListing(BaseModel):
     # The slides EMPAIA preprocesses with the model's apps; registration keeps
     # the installation's preprocessing triggers in line with them.
     triggers: tuple[Trigger, ...] = ()
+    # Per builder ID, the settings users set per standalone job; the rest run
+    # at the builder's defaults.
+    parameters: dict[str, tuple[str, ...]] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def _triggers_need_preprocessing(self) -> Self:
-        """Reject triggers for a model that does not run in preprocessing mode.
+    def _modes_take_triggers_and_parameters(self) -> Self:
+        """Reject triggers or parameters for a mode the model does not run in.
 
         Returns:
             The listing, unchanged.
 
         Raises:
-            ValueError: If triggers are listed without the preprocessing mode.
+            ValueError: If triggers are listed without the preprocessing mode, or
+                parameters without the standalone mode.
         """
         if self.triggers and AppMode.PREPROCESSING not in self.modes:
             raise ValueError("triggers need the preprocessing mode")
+        if any(self.parameters.values()) and AppMode.STANDALONE not in self.modes:
+            raise ValueError("parameters need the standalone mode")
         return self
+
+    @field_validator("parameters")
+    @classmethod
+    def _settings_users_can_set(
+        cls, parameters: dict[str, tuple[str, ...]]
+    ) -> dict[str, tuple[str, ...]]:
+        """Accept only described, single-valued settings of registered builders.
+
+        Args:
+            parameters: The parameter names, by builder ID.
+
+        Returns:
+            The parameters, unchanged.
+
+        Raises:
+            ValueError: If a builder is not registered, or a name is repeated, is
+                not one of its settings, has no description, is not a bool,
+                integer, float or string, or is also an input or output name.
+        """
+        for builder_id, names in parameters.items():
+            spec = BUILDERS.get(builder_id)
+            if spec is None:
+                raise ValueError(f"parameters name unknown builder {builder_id!r}")
+            if len(set(names)) != len(names):
+                raise ValueError(f"{builder_id} parameters repeat a name")
+            for name in names:
+                setting = spec.configuration.model_fields.get(name)
+                if setting is None:
+                    raise ValueError(f"{builder_id} has no setting {name!r}")
+                if setting.annotation not in _PARAMETER_TYPES:
+                    raise ValueError(
+                        f"{builder_id} setting {name!r} is not a bool, integer, "
+                        "float or string"
+                    )
+                if not setting.description:
+                    raise ValueError(
+                        f"{builder_id} setting {name!r} has no description to show"
+                    )
+                if name in spec.inputs or name in spec.outputs:
+                    raise ValueError(f"{builder_id} parameter {name!r} is also io")
+        return parameters
 
     @field_validator("viewer")
     @classmethod
@@ -301,6 +357,7 @@ class AppDefinition:
         global_configuration: Values for the EAD's `configuration.global`,
             set when the app is registered.
         triggers: The slides EMPAIA preprocesses with the app.
+        parameters: The builder settings users set per standalone job.
     """
 
     builder_id: str
@@ -310,6 +367,7 @@ class AppDefinition:
     # Values for the EAD's `configuration.global`, set when the app is registered.
     global_configuration: dict[str, str] = field(default_factory=dict)
     triggers: tuple[Trigger, ...] = ()
+    parameters: tuple[str, ...] = ()
 
     def image(self, target: str) -> str:
         """Build the app's image reference, which JES hands to model-service.
@@ -507,6 +565,7 @@ def app_definitions(
                     ead,
                     configuration,
                     listing.triggers,
+                    listing.parameters.get(spec.id, ()),
                 )
             )
     return apps
@@ -520,8 +579,9 @@ def generate_ead(
 ) -> dict[str, Any]:
     """Build and schema-validate the EAD of one app, with every listed mode.
 
-    Standalone mode takes every input both the builder and `io` have;
-    preprocessing mode only the required ones, as EMPAIA starts it with a slide.
+    Standalone mode takes every input both the builder and `io` have, and the
+    listed parameters; preprocessing mode only the required inputs, as EMPAIA
+    starts it with a slide.
 
     Args:
         spec: The builder.
@@ -561,6 +621,13 @@ def generate_ead(
                 raise ValueError(f"{name!r} references unknown input {target!r}")
             entry["reference"] = f"io.{target}"
         io[name] = entry
+    parameters = listing.parameters.get(spec.id, ())
+    settings = spec.configuration.model_fields
+    for name in parameters:
+        io[name] = {
+            "type": _PARAMETER_TYPES[settings[name].annotation],
+            "description": settings[name].description,
+        }
     ead = {
         "$schema": EAD_SCHEMA_URL,
         "name": f"{listing.name} {spec.id}",
@@ -578,7 +645,13 @@ def generate_ead(
         },
         "io": io,
         "modes": {
-            mode.value: {"inputs": names, "outputs": list(outputs)}
+            mode.value: {
+                "inputs": [
+                    *names,
+                    *(parameters if mode is AppMode.STANDALONE else ()),
+                ],
+                "outputs": list(outputs),
+            }
             for mode, names in mode_inputs.items()
         },
     }

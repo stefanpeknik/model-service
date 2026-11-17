@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from model_service.builders.declarations import (
     Artifact,
@@ -46,8 +46,15 @@ class HeatmapConfiguration(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     stride_fraction: StrideFraction = 0.5
-    # Skip tiles without tissue; they score 0.
-    skip_background: bool = True
+    skip_background: Annotated[
+        bool,
+        Field(
+            description=(
+                "Whether tiles without tissue are skipped; they score 0. "
+                "Skipping is faster and ignores empty glass."
+            )
+        ),
+    ] = True
     min_tissue_fraction: TissueFraction = 0.0
 
 

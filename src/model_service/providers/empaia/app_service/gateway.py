@@ -150,6 +150,11 @@ class EmpaiaGateway(ABC):
         ...
 
     @abstractmethod
+    async def get_primitive_input(self, name: str) -> JsonValue:
+        """Fetch the value of the job's named primitive input, e.g. a parameter."""
+        ...
+
+    @abstractmethod
     async def materialize_input(
         self,
         name: str,

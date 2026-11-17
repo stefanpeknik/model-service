@@ -97,12 +97,37 @@ class BuilderInputs(BaseModel):
         return tuple(path for path in dict(self).values() if path is not None)
 
 
-# Input and configuration fields builders share.
+# Input and configuration fields builders share. A setting's description is
+# what users read: in the public API's schema, and in EMPAIA's job form when a
+# model file lists it as a parameter.
 Slide = Annotated[Path, Input(media_type="application/vnd.openmicroscopy")]
 RegionOfInterest = Annotated[Path | None, Input(media_type="image/tiff")]
-StrideFraction = Annotated[float, Field(gt=0, le=1, allow_inf_nan=False)]
-# Share of a tile's window that must be tissue for the tile to be read; 0 means any.
-TissueFraction = Annotated[float, Field(ge=0, lt=1, allow_inf_nan=False)]
+StrideFraction = Annotated[
+    float,
+    Field(
+        gt=0,
+        le=1,
+        allow_inf_nan=False,
+        description=(
+            "How far apart tiles are, as a share of the tile size: above 0, up "
+            "to 1. 1 places tiles side by side; 0.5 overlaps them by half, for "
+            "a finer result that takes about four times as long."
+        ),
+    ),
+]
+TissueFraction = Annotated[
+    float,
+    Field(
+        ge=0,
+        lt=1,
+        allow_inf_nan=False,
+        description=(
+            "How much of a tile must be tissue for it to be analysed, when "
+            "background is skipped: from 0 up to but not including 1. 0 "
+            "analyses every tile with any tissue; 0.5 needs at least half."
+        ),
+    ),
+]
 
 
 @dataclass(frozen=True, slots=True)

@@ -95,6 +95,7 @@ class EmpaiaProviderAdapter(ProviderAdapter):
         workspace_root: Path | None = None,
         publishers: PublisherRegistry | None = None,
         io: Mapping[str, BuilderIo] = BUILDER_IO,
+        parameters: Mapping[tuple[str, str], tuple[str, ...]] | None = None,
     ) -> None:
         """Only `allowed_api_urls` origins or path prefixes receive job credentials; none, no job.
 
@@ -106,8 +107,11 @@ class EmpaiaProviderAdapter(ProviderAdapter):
                 removes nothing.
             publishers: The output publishers; `default_publishers()` if omitted.
             io: The EAD io entries, by builder ID.
+            parameters: The settings each app takes as standalone inputs, by
+                builder and model ID.
         """
         self._gateway_factory = gateway_factory
+        self._parameters = parameters or {}
         self._publishers = publishers or default_publishers()
         self._io = io
         self._allowed_api_urls = tuple(url.rstrip("/") for url in allowed_api_urls)
@@ -153,8 +157,10 @@ class EmpaiaProviderAdapter(ProviderAdapter):
     ) -> PreparedInvocation:
         """Admit an EMPAIA job as an invocation of provider inputs.
 
-        Fetches the configuration, records the job's mode, creates provider input
-        references, and separates public job state from protected credentials.
+        Fetches the configuration, and for a standalone job the values of its
+        app's parameters, which win over it; records the job's mode, creates
+        provider input references, and separates public job state from protected
+        credentials.
         Configuration keys the builder does not take are dropped and logged, except
         the viewer's; the values are left for the attempt to check. Optional inputs
         are taken only if the job has them. Deadlines are capped at credential
@@ -200,6 +206,15 @@ class EmpaiaProviderAdapter(ProviderAdapter):
                 raise_preparation_error(error)
             spec = get_builder(request.builder_id)
             configuration = builder_configuration(spec, configuration, context.job_id)
+            if mode is EmpaiaJobMode.STANDALONE:
+                # The user's values for this job win over the app's settings.
+                for name in self._parameters.get(
+                    (request.builder_id, request.model_id), ()
+                ):
+                    try:
+                        configuration[name] = await gateway.get_primitive_input(name)
+                    except EmpaiaGatewayError as error:
+                        raise_preparation_error(error)
             names = await job_inputs(spec, gateway)
         effective_deadline = min(deadline_at, credential_expires_at)
         invocation = Invocation(

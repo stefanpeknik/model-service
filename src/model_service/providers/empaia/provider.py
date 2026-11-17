@@ -94,6 +94,9 @@ class EmpaiaProvider(Provider):
                 allowed_api_urls=empaia.api_urls,
                 workspace_root=empaia.workspace_root,
                 publishers=publishers,
+                parameters={
+                    (app.builder_id, app.model_id): app.parameters for app in apps
+                },
             ),
             routes=create_router,
             # In the background: the API serves while the marketplace is down.

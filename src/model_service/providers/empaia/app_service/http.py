@@ -153,6 +153,26 @@ class HttpEmpaiaGateway(EmpaiaGateway):
             raise
         return True
 
+    async def get_primitive_input(self, name: str) -> JsonValue:
+        """GET a primitive input and return its value.
+
+        Args:
+            name: The EMPAIA input key.
+
+        Returns:
+            The primitive's value.
+
+        Raises:
+            EmpaiaGatewayError: Not retryable if the input is not a primitive;
+                otherwise as `_call` classifies a failed request.
+        """
+        value = await self._call(self._client.get_input_data(name))
+        if not isinstance(value, dict) or value.get("type") not in PrimitiveType:
+            raise EmpaiaGatewayError.invalid(
+                f"EMPAIA input {name!r} is not a primitive"
+            )
+        return value.get("value")
+
     async def materialize_input(
         self,
         name: str,

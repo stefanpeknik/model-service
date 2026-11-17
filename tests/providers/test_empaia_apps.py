@@ -119,6 +119,37 @@ class AppDefinitionTests(unittest.TestCase):
         self.assertNotIn("region_of_interest", app.ead["io"])
         self.assertEqual(list(app.ead["modes"]), ["preprocessing"])
 
+    def test_listed_parameters_become_standalone_inputs_described_by_the_builder(
+        self,
+    ) -> None:
+        listing = EmpaiaListing(
+            name="Prostate cancer",
+            name_short="ProstHM",
+            description="Finds things.",
+            modes=(AppMode.STANDALONE, AppMode.PREPROCESSING),
+            parameters={"heatmap": ("min_tissue_fraction", "skip_background")},
+        )
+        models = catalog("prostate-classifier-1")
+
+        (app,) = app_definitions(models, {"prostate-classifier-1": listing}, PUBLISHERS)
+
+        settings = get_builder("heatmap").configuration.model_fields
+        self.assertEqual(
+            app.ead["io"]["min_tissue_fraction"],
+            {
+                "type": "float",
+                "description": settings["min_tissue_fraction"].description,
+            },
+        )
+        self.assertEqual(app.ead["io"]["skip_background"]["type"], "bool")
+        # EMPAIA starts preprocessing with the slide alone, so it runs on defaults.
+        self.assertEqual(
+            app.ead["modes"]["standalone"]["inputs"],
+            ["slide", "region_of_interest", "min_tissue_fraction", "skip_background"],
+        )
+        self.assertEqual(app.ead["modes"]["preprocessing"]["inputs"], ["slide"])
+        self.assertEqual(app.parameters, ("min_tissue_fraction", "skip_background"))
+
     def test_the_viewer_settings_are_declared_and_given_to_each_app(self) -> None:
         models = catalog("prostate-classifier-1")
 
@@ -159,10 +190,20 @@ class AppDefinitionTests(unittest.TestCase):
                         "modes": ["standalone"],
                         "triggers": [{"tissue": "ANY", "stain": "ANY"}],
                     },
+                    "unknown-setting": {
+                        **valid,
+                        "modes": ["standalone"],
+                        "parameters": {"heatmap": ["treshold"]},
+                    },
+                    # Preprocessing jobs have no form to fill in.
+                    "parameters-without-standalone": {
+                        **valid,
+                        "parameters": {"heatmap": ["stride_fraction"]},
+                    },
                 }
             )
         self.assertEqual(list(parsed), ["good"])
-        self.assertEqual(len(logs.output), 4)
+        self.assertEqual(len(logs.output), 6)
 
     def test_viewer_entries_for_io_an_app_lacks_are_left_out(self) -> None:
         listing = EmpaiaListing(

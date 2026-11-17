@@ -179,6 +179,9 @@ class ControlledEmpaiaService:
         self.finalize_failures: list[EmpaiaGatewayError] = []
         self.close_failures: list[EmpaiaGatewayError] = []
         self.absent_inputs: set[str] = set()
+        # The values of the job's primitive inputs, by key.
+        self.primitives: dict[str, JsonValue] = {}
+        self.primitive_reads: list[str] = []
         self.mode = EmpaiaJobMode.STANDALONE
         self.finalized = False
         self.failures: list[str] = []
@@ -237,6 +240,11 @@ class FakeGateway:
     async def has_input(self, name: str) -> bool:
         """Report the job's inputs; all of them unless a test removes one."""
         return name not in self._service.absent_inputs
+
+    async def get_primitive_input(self, name: str) -> JsonValue:
+        """Record the read and return the job's value for the primitive input."""
+        self._service.primitive_reads.append(name)
+        return self._service.primitives[name]
 
     async def materialize_input(
         self,
@@ -331,6 +339,41 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(execution.invocation.configuration, DEFAULT_CONFIGURATION)
         self.assertIn("viewer_colormap", logs.output[0])
+
+    async def test_a_standalone_jobs_parameters_override_the_apps_settings(
+        self,
+    ) -> None:
+        now = datetime.now(UTC)
+        service = ControlledEmpaiaService()
+        service.primitives = {"min_tissue_fraction": 0.3}
+        repository = InMemoryExecutionRepository(clock=lambda: now)
+        provider = EmpaiaProviderAdapter(
+            service.gateway,
+            allowed_api_urls=(API_URL,),
+            publishers=PUBLISHERS,
+            parameters={("heatmap", MODEL.id): ("min_tissue_fraction",)},
+        )
+        scheduler = scheduler_for(repository, provider, now)
+
+        standalone = await scheduler.schedule(self._request(now, "credential"))
+        service.mode = EmpaiaJobMode.PREPROCESSING
+        preprocessing = await scheduler.schedule(
+            self._request(now, "credential", job_id="job-2")
+        )
+
+        settings = [
+            (await repository.get(scheduled.execution.id)).invocation.configuration
+            for scheduled in (standalone, preprocessing)
+        ]
+        self.assertEqual(
+            settings,
+            [
+                DEFAULT_CONFIGURATION | {"min_tissue_fraction": 0.3},
+                # Preprocessing jobs have no parameters: EMPAIA starts them alone.
+                DEFAULT_CONFIGURATION,
+            ],
+        )
+        self.assertEqual(service.primitive_reads, ["min_tissue_fraction"])
 
     async def test_optional_inputs_the_job_lacks_are_left_out(self) -> None:
         now = datetime.now(UTC)
