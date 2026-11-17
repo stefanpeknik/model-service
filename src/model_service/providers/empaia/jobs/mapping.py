@@ -9,7 +9,6 @@ from model_service.api.scheduler.public import (
     InvalidScheduleRequestError,
     SchedulingUnavailableError,
 )
-from model_service.contracts.failures import InvalidInvocation
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.ead.apps import VIEWER_CONFIG_KEY
 
@@ -26,11 +25,13 @@ logger = logging.getLogger(__name__)
 def builder_configuration(
     spec: BuilderSpec, configuration: dict[str, JsonValue], job_id: str
 ) -> dict[str, JsonValue]:
-    """Resolve a job's app configuration into the builder's configuration.
+    """Take the settings of a job's app configuration the builder knows.
 
     Installation admins may configure an app with keys meant for something
     else; the builder takes only the ones it knows, and the rest are logged.
-    The viewer's settings are expected and meant for the case browser.
+    The viewer's settings are expected and meant for the case browser. The
+    values are not checked here: the attempt checks them, so a bad one ends
+    the job with a message for the user (EMPAIA's failure endpoint).
 
     Args:
         spec: The builder the job runs.
@@ -38,10 +39,7 @@ def builder_configuration(
         job_id: The job, for the log.
 
     Returns:
-        The builder's resolved configuration, as JSON.
-
-    Raises:
-        InvalidScheduleRequestError: If the builder rejects a value.
+        The settings the builder takes, as given.
     """
     known = spec.configuration.model_fields
     if ignored := sorted(configuration.keys() - known.keys() - {VIEWER_CONFIG_KEY}):
@@ -52,11 +50,7 @@ def builder_configuration(
             spec.id,
             ", ".join(ignored),
         )
-    taken = {k: v for k, v in configuration.items() if k in known}
-    try:
-        return spec.resolve_configuration(taken).model_dump(mode="json")
-    except InvalidInvocation as error:
-        raise InvalidScheduleRequestError(str(error)) from error
+    return {k: v for k, v in configuration.items() if k in known}
 
 
 async def job_inputs(spec: BuilderSpec, gateway: EmpaiaGateway) -> list[str]:

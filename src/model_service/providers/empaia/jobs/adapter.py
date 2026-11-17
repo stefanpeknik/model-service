@@ -13,6 +13,7 @@ import json
 import logging
 import shutil
 from copy import deepcopy
+from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
@@ -152,11 +153,12 @@ class EmpaiaProviderAdapter(ProviderAdapter):
     ) -> PreparedInvocation:
         """Admit an EMPAIA job as an invocation of provider inputs.
 
-        Fetches and resolves configuration, records the job's mode, creates provider
-        input references, and separates public job state from protected credentials.
+        Fetches the configuration, records the job's mode, creates provider input
+        references, and separates public job state from protected credentials.
         Configuration keys the builder does not take are dropped and logged, except
-        the viewer's. Optional inputs are taken only if the job has them. Deadlines
-        are capped at credential expiry.
+        the viewer's; the values are left for the attempt to check. Optional inputs
+        are taken only if the job has them. Deadlines are capped at credential
+        expiry.
 
         Args:
             request: The schedule request; its body is the EMPAIA schedule payload.
@@ -169,8 +171,8 @@ class EmpaiaProviderAdapter(ProviderAdapter):
         Raises:
             InvalidScheduleRequestError: If the payload is invalid, the API URL is not
                 allowed, the credential has no valid expiry, the configuration is not
-                JSON or not valid for the builder, the invocation fails validation, or
-                the App Service rejects a request.
+                JSON, the invocation fails validation, or the App Service rejects a
+                request.
             SchedulingUnavailableError: If the gateway cannot be created or closed, or
                 the App Service is temporarily unavailable.
         """
@@ -212,8 +214,10 @@ class EmpaiaProviderAdapter(ProviderAdapter):
             deadline_at=effective_deadline,
         )
         try:
+            # Settings are left to the attempt, which reports a bad one to the
+            # user through EMPAIA's failure endpoint instead of refusing the job.
             spec.check_invocation(
-                invocation,
+                replace(invocation, configuration=None),
                 now=effective_deadline - timedelta(microseconds=1),
             )
         except (TypeError, ValueError) as error:

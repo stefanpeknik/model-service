@@ -10,8 +10,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
+import httpx
 import jwt
+from fastapi import FastAPI
 
+from model_service.api.scheduler.builder_dispatch import HTTPBuilderDispatch
 from model_service.api.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.api.scheduler.internal_state import RetryPolicy
 from model_service.api.scheduler.public import (
@@ -24,7 +27,9 @@ from model_service.api.scheduler.running_work import ActiveWorkRegistry
 from model_service.api.scheduler.worker import ExecutionWorker
 from model_service.builders.implementations.heatmap.spec import HeatmapOutputs
 from model_service.builders.registry import get_builder
+from model_service.builders.replica.http_handler import run_http
 from model_service.builders.replica.runner import BuilderApplication
+from model_service.contracts.builder_http import RunRequest
 from model_service.contracts.invocation import ExecutionContext, Invocation
 from model_service.contracts.model_declarations import ModelBinding, SpatialScoresModel
 from model_service.contracts.result import BuilderResult, SharedArtifact
@@ -120,17 +125,33 @@ def scheduler_for(
 def worker_for(
     repository: InMemoryExecutionRepository,
     provider: EmpaiaProviderAdapter,
-    run: Handler,
+    run: Handler | HTTPBuilderDispatch,
 ) -> ExecutionWorker:
     return ExecutionWorker(
         repository=repository,
         active_work=ActiveWorkRegistry(),
         providers={provider.name: provider},
-        dispatch=Dispatch({"heatmap": run}),
+        dispatch=run
+        if isinstance(run, HTTPBuilderDispatch)
+        else Dispatch({"heatmap": run}),
         resolve_model=resolve_model,
         owner="worker-1",
         lease_duration=timedelta(minutes=1),
     )
+
+
+def over_http(application: BuilderApplication) -> HTTPBuilderDispatch:
+    """Dispatch to the application through the replica's HTTP handler, as in production."""
+    replica = FastAPI()
+
+    @replica.post("/builders/heatmap/", response_model=None)
+    async def run(body: RunRequest):  # type: ignore[no-untyped-def]
+        return await run_http(application, body)
+
+    client = httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=replica), base_url="http://ray"
+    )
+    return HTTPBuilderDispatch(client, origin="http://ray")
 
 
 def copy_inputs_application(
@@ -273,7 +294,9 @@ class CopyInputsBuilder:
 class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
     """Exercise EMPAIA admission, publication retry boundaries, and credential-limited deadlines."""
 
-    async def test_builder_defaults_fill_missing_empaia_configuration(self) -> None:
+    async def test_an_unconfigured_app_leaves_every_setting_to_the_builder(
+        self,
+    ) -> None:
         now = datetime.now(UTC)
         service = ControlledEmpaiaService()
         service.configuration = {}
@@ -286,7 +309,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         scheduled = await scheduler.schedule(self._request(now, "credential"))
         execution = await repository.get(scheduled.execution.id)
 
-        self.assertEqual(execution.invocation.configuration, DEFAULT_CONFIGURATION)
+        self.assertEqual(execution.invocation.configuration, {})
         self.assertEqual(execution.builder_id, "heatmap")
         self.assertEqual(execution.model_id, MODEL.id)
 
@@ -452,8 +475,10 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
 
-    async def test_invalid_configuration_is_rejected_before_admission(self) -> None:
-        """Verify invalid configuration is rejected before admission."""
+    async def test_an_invalid_setting_ends_the_job_with_a_message_naming_it(
+        self,
+    ) -> None:
+        # EMPAIA's contract: the job runs and reports what the user must fix.
         now = datetime.now(UTC)
         service = ControlledEmpaiaService()
         service.configuration["stride_fraction"] = 0
@@ -462,13 +487,23 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
             service.gateway, allowed_api_urls=(API_URL,), publishers=PUBLISHERS
         )
         scheduler = scheduler_for(repository, provider, now)
+        with TemporaryDirectory() as directory:
+            worker = worker_for(
+                repository,
+                provider,
+                over_http(copy_inputs_application(service, directory)),
+            )
 
-        request = self._request(now, "credential")
-        with self.assertRaises(InvalidScheduleRequestError):
-            await scheduler.schedule(request)
+            admitted = await scheduler.schedule(self._request(now, "credential"))
+            await worker.run_once()
+            await worker.run_once()
+            failed = await scheduler.get(admitted.execution.id)
 
-        self.assertEqual(service.configuration_reads, 1)
-        self.assertIsNone(await repository.find_submission(provider.identify(request)))
+        self.assertEqual(failed.status, "failed")
+        self.assertEqual(service.materialized, [], "no input is fetched")
+        (message,) = service.failures
+        self.assertIn("stride_fraction", message)
+        self.assertIn("greater than 0", message)
 
     async def test_known_preacceptance_publication_failure_retries_result_only(
         self,

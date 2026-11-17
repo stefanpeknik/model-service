@@ -296,14 +296,17 @@ class BuilderSpec:
             The validated configuration.
 
         Raises:
-            InvalidInvocation: The overrides are invalid; the message names the
-                fields only, since values may come from callers.
+            InvalidInvocation: The overrides are invalid; the message names each
+                field and the rule it breaks, e.g. "stride_fraction: Input should
+                be greater than 0", but not the values, which may come from callers.
         """
         try:
             return self.configuration.model_validate(dict(overrides or {}))
         except ValidationError as error:
-            # Field names only: values may come from callers.
-            fields = sorted({".".join(map(str, e["loc"])) for e in error.errors()})
+            # Pydantic's messages state the rule, never the input value.
+            problems = "; ".join(
+                f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in error.errors()
+            )
             raise InvalidInvocation(
-                f"{self.id} configuration is invalid: {', '.join(fields)}"
+                f"{self.id} configuration is invalid: {problems}"
             ) from error
