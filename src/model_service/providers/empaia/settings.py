@@ -32,6 +32,8 @@ class MarketplaceTarget:
     jes_target: str
     # None: requests carry no Authorization.
     client: MarketplaceClient | None
+    # None: preprocessing triggers are left alone.
+    mds_url: str | None = None
 
 
 class EmpaiaSettings(BaseSettings):
@@ -46,6 +48,8 @@ class EmpaiaSettings(BaseSettings):
             for no registration.
         organization_id: The organization that owns the apps.
         jes_target: model-service's name in JES's HTTP targets.
+        mds_url: Medical Data Service whose preprocessing triggers follow the
+            registered apps; None leaves triggers alone.
         idp_url: Identity provider for marketplace client credentials.
         client_id: The OAuth client id.
         client_secret: The OAuth client secret.
@@ -66,6 +70,9 @@ class EmpaiaSettings(BaseSettings):
     marketplace_url: str | None = None
     organization_id: str | None = None
     jes_target: str = "model-service"
+    # Medical Data Service whose preprocessing triggers follow the registered
+    # apps; it takes the marketplace's client credentials.
+    mds_url: str | None = None
     # Client credentials for the marketplace; without them, no Authorization.
     idp_url: str | None = None
     client_id: str | None = None
@@ -85,8 +92,9 @@ class EmpaiaSettings(BaseSettings):
             The settings, with `marketplace` set when a marketplace URL is.
 
         Raises:
-            ValueError: If a marketplace URL has no organization ID, or an identity
-                provider URL lacks the client ID or secret.
+            ValueError: If a marketplace URL has no organization ID, a Medical
+                Data Service URL has no marketplace, or an identity provider URL
+                lacks the client ID or secret.
         """
         client = None
         if self.idp_url is not None:
@@ -95,12 +103,18 @@ class EmpaiaSettings(BaseSettings):
                     "EMPAIA_CLIENT_ID and EMPAIA_CLIENT_SECRET go with EMPAIA_IDP_URL"
                 )
             client = MarketplaceClient(self.idp_url, self.client_id, self.client_secret)
+        if self.mds_url is not None and self.marketplace_url is None:
+            raise ValueError("EMPAIA_MDS_URL goes with EMPAIA_MARKETPLACE_URL")
         if self.marketplace_url is not None:
             if not self.organization_id:
                 raise ValueError(
                     "EMPAIA_ORGANIZATION_ID is required with a marketplace"
                 )
             self._marketplace = MarketplaceTarget(
-                self.marketplace_url, self.organization_id, self.jes_target, client
+                self.marketplace_url,
+                self.organization_id,
+                self.jes_target,
+                client,
+                self.mds_url,
             )
         return self

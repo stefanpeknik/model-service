@@ -1,8 +1,8 @@
 """The EMPAIA provider, composed for the API and for builder replicas.
 
 It serves JES's remote execution routes, runs App Service jobs, and registers
-apps for the models whose files have an `empaia` block. Its settings come from
-`EMPAIA_*` (`EmpaiaSettings`).
+apps, with their preprocessing triggers, for the models whose files have an
+`empaia` block. Its settings come from `EMPAIA_*` (`EmpaiaSettings`).
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from model_service.builders.base import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
     from model_service.providers.empaia.registration import Marketplace
+    from model_service.providers.empaia.triggers import PreprocessingTriggers
 
 
 # The model files' block it reads: how a model is offered in EMPAIA.
@@ -41,7 +42,8 @@ class EmpaiaProvider(Provider):
 
         Apps come from the models whose file has an `empaia` block. Registration runs
         in the background, and only when a marketplace is configured, so the API
-        serves while the marketplace is down.
+        serves while the marketplace is down; it aligns the preprocessing
+        triggers too when a Medical Data Service is configured.
 
         Args:
             catalog: The deployed models and their `empaia` blocks.
@@ -73,12 +75,13 @@ class EmpaiaProvider(Provider):
         apps = app_definitions(
             catalog, parse_listings(catalog.provider_block(CATALOG_BLOCK)), publishers
         )
-        marketplace = _marketplace(empaia)
+        registration = _registration(empaia)
 
         async def register() -> None:
             """Register the apps until done, when a marketplace is configured."""
-            if marketplace is not None and apps:
-                await register_until_done(marketplace, apps)
+            if registration is not None and apps:
+                marketplace, triggers = registration
+                await register_until_done(marketplace, apps, triggers)
 
         return ApiContribution(
             adapter=EmpaiaProviderAdapter(
@@ -117,16 +120,19 @@ class EmpaiaProvider(Provider):
         }
 
 
-def _marketplace(settings: EmpaiaSettings) -> Marketplace | None:
-    """Build the marketplace client the settings describe.
+def _registration(
+    settings: EmpaiaSettings,
+) -> tuple[Marketplace, PreprocessingTriggers | None] | None:
+    """Build the marketplace and trigger clients the settings describe.
 
-    It uses client credentials when an identity provider is set, otherwise none.
+    Both use client credentials when an identity provider is set, otherwise none.
 
     Args:
         settings: The EMPAIA settings.
 
     Returns:
-        The marketplace, or None without a marketplace URL and organization ID.
+        The marketplace and, with a Medical Data Service URL, its triggers; None
+        without a marketplace URL and organization ID.
     """
     from model_service.providers.empaia.credentials import (
         ClientCredentials,
@@ -134,6 +140,7 @@ def _marketplace(settings: EmpaiaSettings) -> Marketplace | None:
         OutgoingCredentials,
     )
     from model_service.providers.empaia.registration import Marketplace
+    from model_service.providers.empaia.triggers import PreprocessingTriggers
 
     target = settings.marketplace
     if target is None:
@@ -145,13 +152,22 @@ def _marketplace(settings: EmpaiaSettings) -> Marketplace | None:
             target.client.client_id,
             target.client.client_secret.get_secret_value(),
         )
-    return Marketplace(
+    marketplace = Marketplace(
         target.url,
         target.organization_id,
         target.jes_target,
         credentials,
         timeout=settings.app_service_timeout_seconds,
     )
+    triggers = None
+    if target.mds_url is not None:
+        triggers = PreprocessingTriggers(
+            target.mds_url,
+            f"model-service:{target.jes_target}",
+            credentials,
+            timeout=settings.app_service_timeout_seconds,
+        )
+    return marketplace, triggers
 
 
 PROVIDER = EmpaiaProvider()

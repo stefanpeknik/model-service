@@ -18,7 +18,7 @@ import time
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from jsonschema import Draft7Validator
@@ -29,10 +29,12 @@ from pydantic import (
     JsonValue,
     ValidationError,
     field_validator,
+    model_validator,
 )
 
 from model_service.builders.registry import BUILDERS
 from model_service.providers.empaia.ead.builder_io import BUILDER_IO
+from model_service.providers.empaia.tags import ANY, STAINS, TISSUES
 
 
 if TYPE_CHECKING:
@@ -159,6 +161,56 @@ class ViewerConfig(BaseModel):
         )
 
 
+class Trigger(BaseModel):
+    """Slides whose preprocessing runs the model's apps: one tissue and stain pair.
+
+    Attributes:
+        tissue: An EMPAIA tissue tag, e.g. `PROSTATE`, or `ANY`.
+        stain: An EMPAIA stain tag, e.g. `H_AND_E`, or `ANY`.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    tissue: str
+    stain: str
+
+    @field_validator("tissue")
+    @classmethod
+    def _known_tissue(cls, tissue: str) -> str:
+        """Reject a tissue EMPAIA has no tag for; a slide never carries it.
+
+        Args:
+            tissue: The tissue tag.
+
+        Returns:
+            The tag, unchanged.
+
+        Raises:
+            ValueError: If it is not an EMPAIA tissue tag.
+        """
+        if tissue not in TISSUES:
+            raise ValueError(f"{tissue!r} is not an EMPAIA tissue tag")
+        return tissue
+
+    @field_validator("stain")
+    @classmethod
+    def _known_stain(cls, stain: str) -> str:
+        """Reject a stain EMPAIA has no tag for; a slide never carries it.
+
+        Args:
+            stain: The stain tag.
+
+        Returns:
+            The tag, unchanged.
+
+        Raises:
+            ValueError: If it is not an EMPAIA stain tag.
+        """
+        if stain not in STAINS:
+            raise ValueError(f"{stain!r} is not an EMPAIA stain tag")
+        return stain
+
+
 class EmpaiaListing(BaseModel):
     """How a model appears in EMPAIA; the `empaia` block of its model file."""
 
@@ -173,6 +225,23 @@ class EmpaiaListing(BaseModel):
     # Viewer settings per builder ID, since each builder is its own app with its
     # own outputs; entries for io keys an app lacks are left out of its value.
     viewer: dict[str, ViewerConfig] = Field(default_factory=dict)
+    # The slides EMPAIA preprocesses with the model's apps; registration keeps
+    # the installation's preprocessing triggers in line with them.
+    triggers: tuple[Trigger, ...] = ()
+
+    @model_validator(mode="after")
+    def _triggers_need_preprocessing(self) -> Self:
+        """Reject triggers for a model that does not run in preprocessing mode.
+
+        Returns:
+            The listing, unchanged.
+
+        Raises:
+            ValueError: If triggers are listed without the preprocessing mode.
+        """
+        if self.triggers and AppMode.PREPROCESSING not in self.modes:
+            raise ValueError("triggers need the preprocessing mode")
+        return self
 
     @field_validator("viewer")
     @classmethod
@@ -231,6 +300,7 @@ class AppDefinition:
         ead: The app's EAD.
         global_configuration: Values for the EAD's `configuration.global`,
             set when the app is registered.
+        triggers: The slides EMPAIA preprocesses with the app.
     """
 
     builder_id: str
@@ -239,6 +309,7 @@ class AppDefinition:
     ead: dict[str, Any]
     # Values for the EAD's `configuration.global`, set when the app is registered.
     global_configuration: dict[str, str] = field(default_factory=dict)
+    triggers: tuple[Trigger, ...] = ()
 
     def image(self, target: str) -> str:
         """Build the app's image reference, which JES hands to model-service.
@@ -267,7 +338,7 @@ class AppDefinition:
         version = namespace[namespace.rfind(".") - 2 :]
         now = int(time.time())
         common = {
-            "portal_app_id": stable_id("empaia-portal-app", namespace),
+            "portal_app_id": self.portal_app_id,
             "creator_id": organization_id,
             "created_at": now,
         }
@@ -297,8 +368,8 @@ class AppDefinition:
                     },
                     "media": {"peek": [], "banner": [], "workflow": [], "manual": []},
                     "tags": {
-                        "tissues": [],
-                        "stains": [],
+                        "tissues": _tags(TISSUES, (t.tissue for t in self.triggers)),
+                        "stains": _tags(STAINS, (t.stain for t in self.triggers)),
                         "indications": [],
                         "analysis": [],
                         "clearances": [],
@@ -325,6 +396,33 @@ class AppDefinition:
     def app_id(self) -> str:
         """The ID EMPAIA jobs name the app by."""
         return stable_id("empaia-app", self.ead["namespace"])
+
+    @property
+    def portal_app_id(self) -> str:
+        """The ID the marketplace lists the app by, and triggers name it by."""
+        return stable_id("empaia-portal-app", self.ead["namespace"])
+
+
+def _tags(names: Mapping[str, dict[str, str]], ids: Iterable[str]) -> list[Any]:
+    """Build a portal app's tag list, without `ANY`, which says nothing there.
+
+    Args:
+        names: The tag group's names per language, by tag ID.
+        ids: The tag IDs, repeats allowed.
+
+    Returns:
+        One marketplace tag per distinct ID, in first-seen order.
+    """
+    return [
+        {
+            "name": tag,
+            "tag_translations": [
+                {"lang": lang, "text": text} for lang, text in names[tag].items()
+            ],
+        }
+        for tag in dict.fromkeys(ids)
+        if tag != ANY
+    ]
 
 
 def stable_id(kind: str, namespace: str) -> str:
@@ -402,7 +500,14 @@ def app_definitions(
             if (viewer := listing.viewer.get(spec.id)) is not None:
                 configuration[VIEWER_CONFIG_KEY] = viewer.for_io(ead["io"])
             apps.append(
-                AppDefinition(spec.id, model.id, listing.modes, ead, configuration)
+                AppDefinition(
+                    spec.id,
+                    model.id,
+                    listing.modes,
+                    ead,
+                    configuration,
+                    listing.triggers,
+                )
             )
     return apps
 

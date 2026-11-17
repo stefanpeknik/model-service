@@ -101,6 +101,10 @@ spec:
               value: {{ required "empaia.marketplace.organizationId is required with a marketplace url" .organizationId | quote }}
             - name: EMPAIA_JES_TARGET
               value: {{ .jesTarget | quote }}
+            {{- if .mdsUrl }}
+            - name: EMPAIA_MDS_URL
+              value: {{ .mdsUrl | quote }}
+            {{- end }}
             {{- if .idpUrl }}
             - name: EMPAIA_IDP_URL
               value: {{ .idpUrl | quote }}

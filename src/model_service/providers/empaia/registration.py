@@ -4,7 +4,8 @@ It posts to the routes of the marketplace mock EMPAIA test installations run
 (`/v1/custom-mock/portal-apps`, then the app's global configuration, such as
 the case browser's viewer settings); a production marketplace lists apps through its
 portal's review instead. App IDs derive from the EAD namespace, so registering
-again replaces an app and every API replica may do it.
+again replaces an app and every API replica may do it. With a Medical Data
+Service configured, the apps' preprocessing triggers follow (triggers.py).
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
 
     from model_service.providers.empaia.credentials import OutgoingCredentials
     from model_service.providers.empaia.ead.apps import AppDefinition
+    from model_service.providers.empaia.triggers import PreprocessingTriggers
 
 
 logger = logging.getLogger(__name__)
@@ -110,10 +112,11 @@ class Marketplace:
 async def register_until_done(
     marketplace: Marketplace,
     apps: Sequence[AppDefinition],
+    triggers: PreprocessingTriggers | None = None,
     *,
     retry_seconds: float = RETRY_SECONDS,
 ) -> None:
-    """Keep trying until every app is registered; failures are logged, not raised.
+    """Keep trying until every app and its triggers are registered; failures are logged, not raised.
 
     HTTP, token, `KeyError` and `ValueError` failures are retried; anything else
     propagates.
@@ -121,12 +124,16 @@ async def register_until_done(
     Args:
         marketplace: The marketplace to register in.
         apps: The apps to register.
+        triggers: The preprocessing triggers to align with the apps; None
+            leaves triggers alone.
         retry_seconds: The wait between attempts.
     """
     failures = 0
     while True:
         try:
             await marketplace.register(apps)
+            if triggers is not None:
+                await triggers.ensure(apps)
             return
         except (httpx.HTTPError, jwt.InvalidTokenError, KeyError, ValueError) as error:
             failures += 1

@@ -101,6 +101,7 @@ empaia:
   marketplace:
     url: http://test-core-marketplace:10010
     organizationId: 1a305195-6b85-45bd-85f3-1f96a1a5684c
+    mdsUrl: http://test-mds-medical-data:10006
     idpUrl: https://login.aai.lifescience-ri.eu/oidc/
     clientId: da06f769-aa96-49ce-a4ee-0cc28194db14
     existingSecret: mds-secret

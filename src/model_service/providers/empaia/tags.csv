@@ -1,0 +1,490 @@
+TAG_GROUP;TAG_NAME_ID;EN;DE
+TISSUE;SKIN;Skin;Haut
+TISSUE;NAIL;Nail;Nagel
+TISSUE;SOFT_TISSUE;Soft tissue;Weichteilgewebe
+TISSUE;BONE_AND_CARTILAGE;Bone and cartilage;Knochen und Knorpel
+TISSUE;CENTRAL_NERVOUS_SYSTEM;Central Nervous System;Zentralnervensystem
+TISSUE;MUSCLE_TENDON;Muscle, Tendon;Muskel, Sehne
+TISSUE;BONE_MARROW;Bone Marrow;Knochenmark
+TISSUE;LYMPH_NODE;Lymph node;Lymphknoten
+TISSUE;SPLEEN;Spleen;Milz
+TISSUE;ADRENAL_GLAND_AND_PARAGANGLIA;Adrenal gland/Paraganglia;Nebenniere/Paraganglien
+TISSUE;ANUS_AND_PERIANAL;Anus/Perianal;Anus/Perianal
+TISSUE;APPENDIX;Appendix;Appendix
+TISSUE;BLADDER_AND_URETER_AND_RENAL_PELVIS;Bladder/Ureter/Renal Pelvis;Harnblase/Ureter/Nierenbecken
+TISSUE;BREAST;Breast;Brust
+TISSUE;CERVIX;Cervix;Cervix
+TISSUE;COLON;Colon;Colon
+TISSUE;EAR;Ear;Ohr
+TISSUE;ESOPHAGUS;Esophagus;Esophagus
+TISSUE;EYE;Eye;Auge
+TISSUE;OVARY;Ovary;Eierstock
+TISSUE;FALLOPIAN_TUBES;Fallopian tubes;Eileiter
+TISSUE;UTERUS;Uterus;Uterus
+TISSUE;GALLBLADDER;Gallbladder;Gallenblase
+TISSUE;LIVER;Liver;Leber
+TISSUE;HEART;Heart;Herz
+TISSUE;KIDNEY;Kidney;Niere
+TISSUE;UPPER_RESPIRATORY_TRACT;Upper respiratory tract;Obere Atemwege
+TISSUE;LUNG_AND_LOWER_RESPIRATORY_TRACT;Lung/lower respiratory tract;Lunge/untere Atemwege
+TISSUE;ORAL_CAVITY_AND_OROPHARYNX;Oral Cavity/Oropharynx;Oropharynx
+TISSUE;MANDIBLE_AND_MAXILLA;Mandible/maxilla;Mandibula/Maxilla
+TISSUE;MEDIASTINUM;Mediastinum;Mediastinum
+TISSUE;NASAL_CAVITY_AND_NASOPHARYNX;Nasal Cavity/Nasopharynx;Nasenhöhle/Nasopharynx
+TISSUE;PANCREAS;Pancreas;Pankreas
+TISSUE;PLEURA_AND_PERITONEUM;Pleura/Peritoneum;Pleura/Peritoneum
+TISSUE;PLACENTA;Placenta;Plazenta
+TISSUE;PROSTATE;Prostate;Prostata
+TISSUE;PENIS;Penis;Penis
+TISSUE;TESTIS_AND_EPIDIDYMIS;Testis/Epididymis;Hoden/Nebenhoden
+TISSUE;VULVA_AND_VAGINA;Vulva/vagina;Vulva/Vagina
+TISSUE;SALIVARY_GLANDS;Salivary glands;Speicheldrüsen
+TISSUE;SMALL_INTESTINE;Small intestine;Dünndarm
+TISSUE;STOMACH;Stomach;Magen
+TISSUE;THYROID_AND_PARATHYROID;Thyroid/Parathyroid;Schilddrüse/Nebenschilddrüse
+TISSUE;VARIOUS;Various;Sonstige
+TISSUE;ANY;Any;Beliebig
+INDICATION;MELANOMA;Melanoma;Melanom
+INDICATION;SKIN_TUMOR_AND_NON_MELANOMA;Skin tumor, non-melanoma;Hauttumor, nicht pigmentiert
+INDICATION;HODGKIN_LYMPHOMA;Hodgkin Lymphoma;Hodgkin Lymphom
+INDICATION;NON_HODGKIN_LYMPHOMA;Non-Hodgkin Lymphoma;Non-Hodgkin Lymphom
+INDICATION;LUNG_CANCER_AND_OTHER;Lung cancer, other;Lungenkrebs, sonstige
+INDICATION;SMALL_CELL_LUNG_CARCINOMA;Small cell lung carcinoma (SCLC);Kleinzelliges Bronchialkarzinom (SCLC)
+INDICATION;NON_SMALL_CELL_LUNG_CARCINOMA;Non-small cell lung carcinoma (NSCLC);Nicht-kleinzelliges Bronchialkarzinom (NSCLC)
+INDICATION;BREAST_CANCER_NST_IDC;Breast cancer (NST/IDC);Mammakarzinom (NST/IDC)
+INDICATION;PROSTATE_CANCER;Prostate cancer;Prostatakarzinom
+INDICATION;COLON_ADENOCARCINOMA;Colon Adenocarcinoma;Adenokarzinom (Colon)
+INDICATION;PAPILLARY_THYROID_CARCINOMA;Papillary thyroid carcinoma;Papilläres Schilddrüsenkarzinom
+INDICATION;HER2_GENE_AMPLIFICATION_STATUS;HER2 gene amplification status;HER2 Genamplifikations-Status
+INDICATION;ICCR_DCIS_LCIS_LGL;Ductal Carcinoma In Situ (DCIS), Variants of Lobular Carcinoma In Situ (LCIS) and Low Grade Lesions [ICCR];Duktales Carcinoma in situ (DCIS), Varianten des lobulären Carcinoma in situ (LCIS) und niedriggradige Läsionen [ICCR]
+INDICATION;ICCR_CARCINOMA_OF_BREAST;Invasive Carcinoma of the Breast [ICCR];Invasives Mammakarzinom [ICCR]
+INDICATION;ICCR_CARCINOMA_OF_BREAST_NEOADJUVANT_THERAPY;Invasive Carcinoma of the Breast in the Setting of Neoadjuvant Therapy [ICCR];Invasives Mammakarzinom im Rahmen einer neoadjuvanten Therapie [ICCR]
+INDICATION;ICCR_LYMPH_NODES_FOR_BREAST_TUMOUR;Lymph Nodes for Breast Tumours [ICCR];Lymphknoten bei Brusttumoren [ICCR]
+INDICATION;ICCR_TUMOURS_OF_CNS;Tumours of the Central Nervous System (CNS) [ICCR];Tumoren des Zentralnervensystems (ZNS) [ICCR]
+INDICATION;ICCR_CARCINOMAS_OF_EXOCRINE_PANCREAS;Carcinomas of the Exocrine Pancreas [ICCR];Karzinome des exokrinen Pankreas [ICCR]
+INDICATION;ICCR_CARCINOMAS_OF_OESOPHAGUS;Carcinomas of the Oesophagus [ICCR];Karzinome der Speiseröhre [ICCR]
+INDICATION;ICCR_CARCINOMAS_OF_STOMACH;Carcinomas of the Stomach [ICCR];Karzinome des Magens [ICCR]
+INDICATION;ICCR_COLORECTAL_CANCERS;Colorectal Cancers [ICCR];Kolorektale Karzinome [ICCR]
+INDICATION;ICCR_ICC_PCC_HCC;Intrahepatic Cholangiocarcinoma (ICC), Perihilar Cholangiocarcinoma (PCC) and Hepatocellular Carcinoma (HCC) [ICCR];Intrahepatisches Cholangiokarzinom (ICC), perihilares Cholangiokarzinom (PCC) und hepatozelluläres Karzinom (HCC) [ICCR]
+INDICATION;ICCR_CARCINOMAS_OF_ADRENAL_CORTEX;Carcinomas of the Adrenal Cortex [ICCR];Karzinome der Nebennierenrinde [ICCR]
+INDICATION;ICCR_CARCINOMAS_OF_THYROID;Carcinomas of the Thyroid [ICCR];Karzinome der Schilddrüse [ICCR]
+INDICATION;ICCR_PARATHYROID_CARCINOMAS_AND_NEOPLASMS;Parathyroid Carcinomas and Atypical Parathyroid Neoplasms [ICCR];Nebenschilddrüsenkarzinome und atypische Nebenschilddrüsenneoplasien [ICCR]
+INDICATION;ICCR_PHAEOCHROMOCYTOMA_AND_PARAGANGLIOMA;Phaeochromocytoma and Paraganglioma [ICCR];Phäochromozytom und Paragangliom [ICCR]
+INDICATION;ICCR_CARCINOMAS_OF_CERVIX;Carcinomas of the Cervix [ICCR];Karzinome des Gebärmutterhalses [ICCR]
+INDICATION;ICCR_CARCINOMAS_OF_VAGINA;Carcinomas of the Vagina [ICCR];Karzinome der Vagina [ICCR]
+INDICATION;ICCR_CARCINOMAS_OF_VULVA;Carcinomas of the Vulva [ICCR];Karzinome der Vulva [ICCR]
+INDICATION;ICCR_ENDOMETRIAL_CANCERS;Endometrial Cancers [ICCR];Endometriumkarzinome [ICCR]
+INDICATION;ICCR_GESTATIONAL_TROPHOBLASTIC_NEOPLASIAS;Gestational Trophoblastic Neoplasias [ICCR];Trophoblastische Neoplasien im Mutterleib [ICCR]
+INDICATION;ICCR_OVARY_FALLOPIAN_TUBE_PERITONEAL_CARCINOMAS;Ovary, Fallopian Tube and Primary Peritoneal Carcinomas [ICCR];Eierstock-, Eileiter- und primäre Peritonealkarzinome [ICCR]
+INDICATION;ICCR_UTERINE_MESENCHYMAL_TUMOURS;Uterine Malignant and Potentially Malignant Mesenchymal Tumours [ICCR];Bösartige und potenziell bösartige Mesenchymtumoren der Gebärmutter [ICCR]
+INDICATION;ICCR_CARCINOMAS_OF_HYPOPHARYNX_LARYNX_TRACHEA;Carcinomas of the Hypopharynx, Larynx and Trachea [ICCR];Karzinome des Hypopharynx, des Larynx und der Trachea [ICCR]
+INDICATION;ICCR_CARCINOMAS_OF_ORAL_CAVITY;Carcinomas of the Oral Cavity [ICCR];Karzinome der Mundhöhle [ICCR]
+INDICATION;ICCR_CARCINOMAS_OF_MAJOR_SALIVARY_GLAND;Carcinomas of the Major Salivary Glands [ICCR];Karzinome der großen Speicheldrüsen [ICCR]
+INDICATION;ICCR_CARCINOMAS_OF_NASAL_CAVITY_PARANASAL_SINUSES;Carcinomas of the Nasal Cavity and Paranasal Sinuses [ICCR];Karzinome der Nasenhöhle und der Nasennebenhöhlen [ICCR]
+INDICATION;ICCR_CARCINOMAS_OF_NASOPHARYNX_OROPHARYNX;Carcinomas of the Nasopharynx and Oropharynx [ICCR];Karzinome des Nasopharynx und Oropharynx [ICCR]
+INDICATION;ICCR_EAR_AND_TEMPORAL_BONE_TUMOURS;Ear and Temporal Bone Tumours [ICCR];Ohr- und Schläfenknochentumore [ICCR]
+INDICATION;ICCR_MALIGNANT_ODONTOGENIC_TUMOURS;Malignant Odontogenic Tumours [ICCR];Bösartige odontogene Tumore [ICCR]
+INDICATION;ICCR_MUCOSAL_MELANOMAS_OF_HEAD_NECK;Mucosal Melanomas of the Head and Neck [ICCR];Schleimhautmelanome im Kopf- und Halsbereich [ICCR]
+INDICATION;ICCR_LYMPH_NODES_FOR_HEAD_NECK_CARCINOMAS_MELANOMAS;Lymph Nodes for Carcinomas and Melanomas of the Head and Neck [ICCR];Lymphknoten bei Karzinomen und Melanomen im Kopf- und Halsbereich [ICCR]
+INDICATION;ICCR_HEPATOBLASTOMA;Hepatoblastoma [ICCR];Hepatoblastom [ICCR]
+INDICATION;ICCR_NEUROBLASTOMA;Neuroblastoma [ICCR];Neuroblastom [ICCR]
+INDICATION;ICCR_PAEDIATRIC_RENAL_TUMOURS;Paediatric Renal Tumours [ICCR];Pädiatrische Nierentumore [ICCR]
+INDICATION;ICCR_PAEDIATRIC_RHABDOMYOSARCOMA;Paediatric Rhabdomyosarcoma [ICCR];Pädiatrisches Rhabdomyosarkom [ICCR]
+INDICATION;ICCR_INVASIVE_MELANOMA;Invasive Melanoma [ICCR];Invasives Melanom [ICCR]
+INDICATION;ICCR_MERKEL_CELL_CARCINOMA;Merkel Cell Carcinoma [ICCR];Merkelzellkarzinom [ICCR]
+INDICATION;ICCR_GASTROINTESTINAL_STROMAL_TUMOUR;Gastrointestinal Stromal Tumour [ICCR];Gastrointestinaler Stromatumor [ICCR]
+INDICATION;ICCR_PRIMARY_TUMOUR_IN_BONE;Primary Tumour in Bone [ICCR];Primärer Knochentumor [ICCR]
+INDICATION;ICCR_SOFT_TISSUE_SARCOMA;Soft Tissue Sarcoma [ICCR];Weichteilsarkom [ICCR]
+INDICATION;ICCR_LUNG_CANCERS;Lung Cancers [ICCR];Krebserkrankungen der Lunge [ICCR]
+INDICATION;ICCR_MESOTHELIOMA_IN_PLEURA_PERICARDIUM_PERITONEUM;Mesothelioma in the Pleura, Pericardium and Peritoneum [ICCR];Mesotheliom in Pleura, Perikard und Peritoneum [ICCR]
+INDICATION;ICCR_NEOPLASMS_OF_HEART_PERICARDIUM_GREAT_VESSELS;Neoplasms of the Heart, Pericardium and Great Vessels [ICCR];Neoplasien des Herzens, des Herzbeutels und der großen Gefäße [ICCR]
+INDICATION;ICCR_THYMIC_EPITHELIAL_TUMOURS;Thymic Epithelial Tumours [ICCR];Thymusepithelialtumoren [ICCR]
+INDICATION;ICCR_CARCINOMAS_OF_BLADDER;Carcinomas of the Bladder [ICCR];Karzinome der Harnblase [ICCR]
+INDICATION;ICCR_CARCINOMAS_OF_PENIS;Carcinomas of the Penis [ICCR];Karzinome des Penis [ICCR]
+INDICATION;ICCR_CARCINOMAS_OF_RENAL_PELVIS_URETER;Carcinomas of the Renal Pelvis and Ureter [ICCR];Karzinome des Nierenbeckens und des Harnleiters [ICCR]
+INDICATION;ICCR_CARCINOMAS_OF_URETHRA;Carcinomas of the Urethra [ICCR];Karzinome der Harnröhre [ICCR]
+INDICATION;ICCR_INVASIVE_CARCINOMAS_OF_RENAL_TUBULAR_ORIGIN;Invasive Carcinomas of Renal Tubular Origin [ICCR];Invasive Karzinome renal-tubulären Ursprungs [ICCR]
+INDICATION;ICCR_LYMPH_NODES_FOR_TESTIS_NEOPLASIA;Neoplasia of the Testis in Retroperitoneal Lymphnodes [ICCR];Hodenneoplasie in retroperitonealen Lymphknoten [ICCR]
+INDICATION;ICCR_NEOPLASIA_OF_TESTIS;Neoplasia of the Testis [ICCR];Hodenneoplasie [ICCR]
+INDICATION;ICCR_PROSTATE_CANCERS;Prostate Cancers [ICCR];Prostatakarzinome [ICCR]
+INDICATION;ICCR_NEOPLASMS_OF_RENAL_TUBULAR_ORIGIN;Neoplasms of Renal Tubular Origin [ICCR];Neoplasien renalen tubulären Ursprungs [ICCR]
+INDICATION;ICCR_URINARY_TRACT_CARCINOMAS;Urinary Tract Carcinomas [ICCR];Harntraktkarzinome [ICCR]
+ANALYSIS;QUANTIFICATION;Quantification;Quantifizierung
+ANALYSIS;DETECTION;Detection;Detektion
+ANALYSIS;SEGMENTATION;Segmentation;Segmentierung
+ANALYSIS;CLASSIFICATION;Classification;Klassifizierung
+ANALYSIS;GRADING;Grading;Gradierung
+ANALYSIS;MOLECULAR_PREDICTION;Molecular Prediction;Molekulare Prädiktion
+ANALYSIS;PROGNOSTIC_PREDICTION;Prognostic Prediction;Prognostische Prädiktion
+ANALYSIS;QA;QA;Qualitätssicherung
+STAIN;H_AND_E;H&E;H&E
+STAIN;ACTIN;Actin;Actin
+STAIN;CK_AE1_AND_AE3;CK AE1/AE3;CK AE1/AE3
+STAIN;ALCIAN_BLUE;Alcian Blue;Alcianblau
+STAIN;ALK;ALK;ALK
+STAIN;ALKALINE_PHOSPHATASE;Alkaline Phosphatase;Alkalische Phosphatase
+STAIN;ALPHA_1_ANTITRYPSIN;Alpha-1-antitrypsin;Alpha-1-antitrypsin
+STAIN;AFP;AFP;AFP
+STAIN;AMACR;AMACR;AMACR
+STAIN;AMYLOID_BETA_APP;Amyloid beta/APP;Amyloid beta/APP
+STAIN;ANDROGEN_RECEPTOR;Androgen Receptor;Androgen Receptor
+STAIN;ATRX;ATRX;ATRX
+STAIN;BCL2;BCL2;BCL2
+STAIN;BCL6;BCL6;BCL6
+STAIN;BEREP4;BerEP4;BerEP4
+STAIN;BETA_CATENIN;Beta Catenin;Beta Catenin
+STAIN;BRAF;BRAF;BRAF
+STAIN;C_MET;c-MET;c-MET
+STAIN;CA125;CA125;CA125
+STAIN;E_CADHERIN;E-cadherin;E-cadherin
+STAIN;CALCITONIN;Calcitonin;Calcitonin
+STAIN;CALDESMON;Caldesmon;Caldesmon
+STAIN;CALPONIN;Calponin;Calponin
+STAIN;CALRETININ;Calretinin;Calretinin
+STAIN;CAM5.2;CAM5.2;CAM5.2
+STAIN;CAIX;CAIX;CAIX
+STAIN;CD117/KIT;CD117/KIT;CD117/KIT
+STAIN;CDX2;CDX2;CDX2
+STAIN;CEA;CEA;CEA
+STAIN;CHROMOGRANIN;Chromogranin;Chromogranin
+STAIN;CMV;CMV;CMV
+STAIN;CONGO_RED;Congo Red;Kongorot
+STAIN;RHODAMINE;Rhodamine;Rhodamin
+STAIN;CYCLIN_D1;Cyclin D1;Cyclin D1
+STAIN;CK7;CK7;CK7
+STAIN;CK19;CK19;CK19
+STAIN;34BETAE12;34betaE12;34betaE12
+STAIN;D2_40;D2-40;D2-40
+STAIN;DESMIN;Desmin;Desmin
+STAIN;DIFF_QUICK;Diff-Quick;Diff-Quick
+STAIN;DOG1;DOG1;DOG1
+STAIN;SMAD4;SMAD4;SMAD4
+STAIN;EBER;EBER;EBER
+STAIN;EGFR;EGFR;EGFR
+STAIN;EMA;EMA;EMA
+STAIN;EPCAM;EpCAM;EpCAM
+STAIN;EBV;EBV;EBV
+STAIN;ER;ER;ER
+STAIN;ETV6_NTRX3;ETV6- NTRX3;ETV6- NTRX3
+STAIN;EWSR1;EWSR1;EWSR1
+STAIN;FACTOR_VIII;Factor VIII;Factor VIII
+STAIN;FONTANA_MASSON;Fontana-Masson;Fontana-Masson
+STAIN;GASTRIN;Gastrin;Gastrin
+STAIN;GATA3;GATA3;GATA3
+STAIN;GCDFP_15;GCDFP-15;GCDFP-15
+STAIN;GFAP;GFAP;GFAP
+STAIN;GIEMSA;Giemsa;Giemsa
+STAIN;GLUT1;GLUT1;GLUT1
+STAIN;GLUTAMINE_SYNTHETASE;glutamine synthetase;Glutaminsynthetase
+STAIN;GLYPICAN_3;glypican 3;glypican 3
+STAIN;GMS;GMS;GMS
+STAIN;GRAM;Gram;Gram
+STAIN;HCG;hCG;hCG
+STAIN;HELICOBACTER_PYLORI;Helicobacter pylori;Helicobacter pylori
+STAIN;HEPPAR1;HepPar1;HepPar1
+STAIN;HER2;HER2;HER2
+STAIN;HHV8;HHV8;HHV8
+STAIN;HMB45;HMB45;HMB45
+STAIN;IDH1;IDH1;IDH1
+STAIN;IGG;IgG;IgG
+STAIN;IGG4;IgG4;IgG4
+STAIN;IL8;IL8;IL8
+STAIN;INIBIN_A;Inibin A;Inibin A
+STAIN;INIBIN_B;Inibin B;Inibin B
+STAIN;INI1;INI1;INI1
+STAIN;INSM1;INSM1;INSM1
+STAIN;KAPPA;Kappa;Kappa
+STAIN;KI67;Ki67;Ki67
+STAIN;KRAS;KRAS;KRAS
+STAIN;LAMBDA;Lambda;Lambda
+STAIN;LAMININ;Laminin;Laminin
+STAIN;LUXOL_FAST_BLUE;Luxol fast blue;Luxol fast blue
+STAIN;MALT1;MALT1;MALT1
+STAIN;MAMMAGLOBIN;Mammaglobin;Mammaglobin
+STAIN;MDM2;MDM2;MDM2
+STAIN;MELANA;MelanA;MelanA
+STAIN;MIB1;MIB1;MIB1
+STAIN;MLH1;MLH1;MLH1
+STAIN;MOC31;MOC31;MOC31
+STAIN;MOVAT;Movat;Movat
+STAIN;MSA;MSA;MSA
+STAIN;MSH1;MSH1;MSH1
+STAIN;MSH2;MSH2;MSH2
+STAIN;MSH6;MSH6;MSH6
+STAIN;MUC1;MUC1;MUC1
+STAIN;MUC2;MUC2;MUC2
+STAIN;MUC3;MUC3;MUC3
+STAIN;MUC4;MUC4;MUC4
+STAIN;MUC5AC;MUC5AC;MUC5AC
+STAIN;MUC6;MUC6;MUC6
+STAIN;MUM1;MUM1;MUM1
+STAIN;MYB;MYB;MYB
+STAIN;MYC;MYC;MYC
+STAIN;MYELOPEROXIDASE;Myeloperoxidase;Myeloperoxidase
+STAIN;MYOD1;MyoD1;MyoD1
+STAIN;MYOGENIN;Myogenin;Myogenin
+STAIN;MYOSIN;Myosin;Myosin
+STAIN;NAPSIN_A;Napsin A;Napsin A
+STAIN;NEUROFILAMENT;Neurofilament;Neurofilamente
+STAIN;NEURON_SPECIFIC_ENOLASE;neuron specific enolase;Neuronenspezifische Enolase
+STAIN;NF1;NF1;NF1
+STAIN;NF2;NF2;NF2
+STAIN;NKX3.1;NKX3.1;NKX3.1
+STAIN;NRAS;NRAS;NRAS
+STAIN;NTRK;NTRK;NTRK
+STAIN;OCT3_AND_4;OCT3/4;OCT3/4
+STAIN;OIL_RED_O;Oil Red O;Oil Red O
+STAIN;P16;p16;p16
+STAIN;P40;p40;p40
+STAIN;P53;p53;p53
+STAIN;P63;p63;p63
+STAIN;P120;p120;p120
+STAIN;P504S;P504S;P504S
+STAIN;PAN_TRK;Pan-TRK;Pan-TRK
+STAIN;PAP;PAP;PAP
+STAIN;PARP;PARP;PARP
+STAIN;PAS;PAS;PAS
+STAIN;PAX5;PAX5;PAX5
+STAIN;PAX8;PAX8;PAX8
+STAIN;PD_1;PD-1;PD-1
+STAIN;PDL1;PDL1;PDL1
+STAIN;PECAM1;PECAM1;PECAM1
+STAIN;PENTACHROME;Pentachrome;Pentachrom
+STAIN;PHOSPHOHISTONE_H3;phosphohistone H3;Phosphohiston-H3
+STAIN;PIK3CA;PIK3CA;PIK3CA
+STAIN;PLAP;PLAP;PLAP
+STAIN;PMS2;PMS2;PMS2
+STAIN;PODOPLANIN;Podoplanin;Podoplanin
+STAIN;PR;PR;PR
+STAIN;PROLACTIN;Prolactin;Prolactin
+STAIN;PSA;PSA;PSA
+STAIN;PSAP;PSAP;PSAP
+STAIN;PSMA;PSMA;PSMA
+STAIN;PTEN;PTEN;PTEN
+STAIN;PTH;PTH;PTH
+STAIN;RCC;RCC;RCC
+STAIN;RB;Rb;Rb
+STAIN;RET;RET;RET
+STAIN;RETICULIN;Reticulin;Retikulin
+STAIN;ROS1;ROS1;ROS1
+STAIN;S100;S100;S100
+STAIN;SALL4;SALL4;SALL4
+STAIN;SERUM_AMYLOID_A_SSA;serum amyloid A/SSA;serum amyloid A/SSA
+STAIN;SF1;SF1;SF1
+STAIN;SIRIUS_RED;Sirius red;Pikro-Siriusrot
+STAIN;SMARCA4;SMARCA4;SMARCA4
+STAIN;SMMHC;SMMHC;SMMHC
+STAIN;SOMATOSTATIN;Somatostatin;Somatostatin
+STAIN;SOX2;SOX2;SOX2
+STAIN;SOX9;SOX9;SOX9
+STAIN;SOX10;SOX10;SOX10
+STAIN;SOX11;SOX11;SOX11
+STAIN;STAT3;STAT3;STAT3
+STAIN;STAT6;STAT6;STAT6
+STAIN;SUDAN_BLACK;Sudan Black;Sudanschwarz
+STAIN;SV40;SV40;SV40
+STAIN;SYNAPTOPHYSIN;Synaptophysin;Synaptophysin
+STAIN;TDT;TdT;TdT
+STAIN;TERT;TERT;TERT
+STAIN;THYROGLOBULIN;Thyroglobulin;Thyroglobulin
+STAIN;TOLUIDINE_BLUE;Toluidine blue;Toluidinblau
+STAIN;TOXOPLASMA;Toxoplasma;Toxoplasma
+STAIN;TREPONEMA;Treponema;Treponema
+STAIN;TRICHROME;Trichrome;Trichrom
+STAIN;TRYPSIN;Trypsin;Trypsin
+STAIN;TTF1;TTF1;TTF1
+STAIN;TSH;TSH;TSH
+STAIN;TYROSINASE;Tyrosinase;Tyrosinase
+STAIN;UROPLAKIN_II;Uroplakin II;Uroplakin II
+STAIN;UROPLAKIN_III;Uroplakin III;Uroplakin III
+STAIN;VHL;VHL;VHL
+STAIN;VIMENTIN;Vimentin;Vimentin
+STAIN;VWF;vWF;vWF
+STAIN;VZW;VZW;VZW
+STAIN;WARTHIN_STARRY;Warthin-Starry;Warthin-Starry
+STAIN;WT1;WT1;WT1
+STAIN;ZIEHL_NEELSEN;Ziehl-Neelsen;Ziehl-Neelsen
+STAIN;VERHOOEF;Verhooef;Verhooef
+STAIN;DAPI;DAPI;DAPI
+STAIN;CEN17;CEN17;CEN17
+STAIN;HES;HE Saffron;HE Safran
+STAIN;HER2_FISH;HER2 FISH;HER2 FISH
+STAIN;HER2_DUAL_ISH;HER2 Dual ISH;HER2 Dual ISH
+STAIN;WRIGHT;Wright's stain;Wright-Färbung
+STAIN;LIU;Liu's stain;Liu-Färbung
+STAIN;CD_3;CD3;CD3
+STAIN;CD_X;CDX;CDX
+STAIN;ANY;Any;Beliebig
+CLEARANCE;CE_IVD;CE IVD;CE IVD
+CLEARANCE;CE_IVDR;CE IVDR;CE IVDR
+CLEARANCE;FDA_IVD;FDA IVD;FDA IVD
+CLEARANCE;UKCA;UKCA;UKCA
+CLEARANCE;ANVISA_IVD;ANVISA IVD;ANVISA IVD
+CLEARANCE;KFDA_IVD;KFDA IVD;KFDA IVD
+CLEARANCE;CFDA_IVD;CFDA IVD;CFDA IVD
+CLEARANCE;MFDS_IVD;MFDS IVD;MFDS IVD
+CLEARANCE;RUO;Research use only;Nur für Forschung
+IMAGE_TYPE;ROI;Region of Interest (ROI);Region of Interest (ROI)
+IMAGE_TYPE;WSI;Whole Slide Image (WSI);Whole Slide Image (WSI)
+IMAGE_TYPE;CAMERA;Camera;Kamera
+PROCEDURE;BIOPSY;Biopsy;Biopsie
+PROCEDURE;SMEAR;Smear;Abstrich
+PROCEDURE;RESECTION;Resection;Resektat
+PROCEDURE;PNEUMONECTOMY;Pneumonectomy (e.g. extrapleural pneumonectomy (EPP));Pneumonektomie (z. B. extrapleurale Pneumonektomie (EPP))
+PROCEDURE;SLEEVE_RESECTION;Sleeve resection (e.g. cartilaginous portion of canal, including tympanic membrane);Hülsenresektion (z. B. knorpeliger Teil des Gehörgangs, einschließlich Trommelfell)
+PROCEDURE;LOBECTOMY;Lobectomy (including right, extended right and total left lobectomy);Lobektomie (einschließlich rechter, erweiterter rechter und vollständiger linker Lobektomie)
+PROCEDURE;WEDGE_RESECTION;Wedge resection;Keilresektion
+PROCEDURE;SEGMENTECTOMY;Segmentectomy (medial and left lateral);Segmentektomie (medial und linksseitiger)
+PROCEDURE;BILOBECTOMY;Bilobectomy;Bilobektomie
+PROCEDURE;CYSTECTOMY;Cystectomy (partial, simple and radical);Zystektomie (partiell, einfach und radikal)
+PROCEDURE;ORCHIDECTOMY;Orchidectomy/orchiectomy (partial and radical);Orchidektomie/Orchiektomie (teilweise und radikal)
+PROCEDURE;CORE_BIOPSY_RESECTION;Core biopsy resection;Resektion durch Kernbiopsie
+PROCEDURE;LYMPHADENECTOMY;Surgically removed ipsilateral lymph nodes (including (non-)sentinel lymph node biopsy,  axillary lymph node dissections/exsisions, retroperitoneal lymphadenectomy other regional lymph node(s) biopsy);Chirurgisch entfernte ipsilaterale Lymphknoten (einschließlich (Nicht-)Sentinel-Lymphknoten-Biopsie, Axillar-Lymphknoten-Dissektionen/-Schnitte, Retroperitoneale Lymphadenektomie, Biopsie anderer regionaler Lymphknoten)
+PROCEDURE;MASTECTOMY;Mastectomy (partial and total);Mastektomie (teilweise und total)
+PROCEDURE;WHIPPLE_PANCREATUDUODENECTOMY;Whipple pancreatoduodenectomy;Whipple-Pankreatoduodenektomie
+PROCEDURE;PHARYNGO_LARYNGO_OESOPHAGECTOMY;Pharyngo-laryngo-oesophagectomy;Pharyngo-Laryngo-Ösophagektomie, Ösophagektomie/Ösophagogastrektomie
+PROCEDURE;OESOPHAGOGASTRECTOMY;Oesophagogastrectomy/oesophagectomy;Ösophagogastrektomie
+PROCEDURE;GASTRECTOMY;Gastrectomy (subtotal distal and total);Gastrektomie (subtotal distal oder total)
+PROCEDURE;COLECTOMY;Colectomy (total, transverse and sigmoid);Kolektomie (total, transversal und sigmoid)
+PROCEDURE;POLYPECTOMY;Polypectomy;Polypektomie
+PROCEDURE;HEPATECTOMY;Hepatectomy;Hepatektomie
+PROCEDURE;ADRENALECTOMY;Adrenalectomy (partial, total, open and laproscopic);Adrenalektomie (teilweise, vollständig, offen und laproskopisch)
+PROCEDURE;THYROIDECTOMY;Thyroidectomy (near total and total);Thyreoidektomie (nahezu vollständiger und vollständiger)
+PROCEDURE;PARATHYROIDECTOMY;Parathyroidectomy (single gland/en bloc with thyroid lobe);Parathyreoidektomie (Einzeldrüse/en bloc mit Schilddrüsenlappen)
+PROCEDURE;HEMITHYROIDECTOMY;Hemithyroidectomy;Hemithyreoidektomie
+PROCEDURE;TRACHELECTOMY;Trachelectomy;Trachelektomie
+PROCEDURE;VAGINECTOMY;Vaginectomy (partial and total);Vaginektomie (teilweise und vollständig)
+PROCEDURE;VULVECTOMY;Vulvectomy (partial and total);Vulvektomie (teilweise und total)
+PROCEDURE;WIDE_LOCAL_EXCISION;Wide local excision;Breite lokale Exzision
+PROCEDURE;HYSTERECTOMY;Hysterectomy (simple, radical and simple supracervical/subtotal);Hysterektomie (einfach, radikal und einfach suprazervikal/subtotal)
+PROCEDURE;PELVIC_EXENTERATION;Pelvic exenteration;Beckenexenteration
+PROCEDURE;SALPINGECTOMY;Salpingectomy;Salpingektomie
+PROCEDURE;SALPINGO_OOPHORECTOMY;Salpingo-oophorectomy;Salpingo-Oophorektomie
+PROCEDURE;GLOSSECTOMY;Glossectomy (including hemiglossectomy);Glossektomie (einschließlich Hämiglossektomie)
+PROCEDURE;OMENTECTOMY;Omentectomy;Omentektomie
+PROCEDURE;OVARIAN_CYSTECTOMY;Ovarian cystectomy;Ovarialzystektomie
+PROCEDURE;OOPHORECTOMY;Oophorectomy;Oophorektomie
+PROCEDURE;MYOMECTOMY;Myomectomy;Myomektomie
+PROCEDURE;CRANIOFACIAL_RESECTION;Craniofacial resection (open and endoscopic);Kraniofaziale Resektion (offen und endoskopisch)
+PROCEDURE;MAXILLECTOMY;Maxillectomy (partial and radical);Maxillektomie (teilweise und radikal)
+PROCEDURE;NEPHROURETERECTOMY;Nephroureterectomy;Nephroureterektomie
+PROCEDURE;TRANSORAL_RESECTIONS;Transoral laser microsurgical resection (TLM) and transoral robotic surgical (TORS) resection;Transorale mikrochirurgische Laserresektion (TLM) und transorale robotergestützte chirurgische (TORS) Resektion
+PROCEDURE;NASOPHARYNGECTOMY;Nasopharyngectomy;Nasopharyngektomie
+PROCEDURE;PAROTIDECTOMY;Parotidectomy;Parotidektomie
+PROCEDURE;TEMPORAL_BONE_RESECTION;Temporal bone resection (including subtotal, radical and lateral temporal bone resection (sleeve and middle ear));Schläfenbeinresektion (einschließlich subtotaler, radikaler und lateraler Schläfenbeinresektion (Hülse und Mittelohr))
+PROCEDURE;DEBULKING_CURRETAGE;Debulking and curretage;Ausschabung und Kürretage
+PROCEDURE;URETHRECTOMY;Urethrectomy (partial and radical);Urethrektomie (partiell und vollständig)
+PROCEDURE;URETERECTOMY;Ureterectomy (partial and radical);Ureterektomie (partiell und vollständig)
+PROCEDURE;LARYNGECTOMY;Laryngectomy (partial);Laryngektomie (teilweise)
+PROCEDURE;NECK_DISSECTIONS;Neck dissections (including selective and comprehensive neck dissection);Neck-Dissections (einschließlich selektiven und umfassenden Neck-Dissections)
+PROCEDURE;PENECTOMY;Penectomy;Penektomie
+PROCEDURE;ENUCLEATION;Enucleation;Enukleation
+PROCEDURE;NEPHRECTOMY;Nephrectomy (partial, total, simple and radical);Nephrektomie (partiell, total, einfach und radikal)
+PROCEDURE;INTRALESIONAL_RESECTION;Intralesional resection;Intraläsionale Resektion
+PROCEDURE;AMPUTATION;Amputation;Amputation
+PROCEDURE;TRANSURETHRAL_RESECTION;Transurethral resection;Transurethrale Resektion
+PROCEDURE;SIMPLE_PROSTATECTOMY;Prostatectomy (suprapubic, simple and open);Prostatektomie (suprapubische, einfache und offene)
+PROCEDURE;RADICAL_PROSTATECTOMY;Prostatectomy (radical);Prostatektomie (radikale)
+PROCEDURE;PLEURECTOMY;Pleurectomy/Decortication (including partial and extended);Pleurektomie/Dekortikation (auch partiell und erweitert)
+PROCEDURE;EXPLANTATION;Explantation;Explantation
+PROCEDURE;THYMECTOMY;Thymectomy (complete, partial and extended);Thymektomie (vollständig, teilweise and erweitert)
+PROCEDURE;GLANSECTOMY;Glansectomy;Glansektomie
+PROCEDURE;CIRCUMCISION;Circumcision;Beschneidung
+PROCEDURE;PERITONEAL_SMEAR;Peritoneal washings/fluid;Peritonealspülungen/-flüssigkeit
+PROCEDURE;SURGICAL_BIOPSY;Surgical biopsy;Operative Biopsie
+PROCEDURE;CRYOBIOPSY;Cryobiopsy;Kryobiopsie
+PROCEDURE;BRONCHOSCOPIC_BIOPSY;Bronchoscopic forceps biopsy;Bronchoskopische Zangenbiopsie
+PROCEDURE;IGP_BIOPSY;Image guided percutaneous biopsy;Bildgesteuerte perkutane Biopsie
+PROCEDURE;ENDOVASCULAR_BIOPSY;Endovascular biopsy;Endovaskulare Biopsie
+PROCEDURE;VATS_BIOPSY;Video-assisted thoracoscopic surgery (VATS) biopsy;Video-assistierte thorakoskopische Chirurgie (VATS) Biopsie
+PROCEDURE;BONE_MARROW_BIOPSY;Bone marrow aspiration and biopsy;Knochenmarkspunktion und -biopsie
+PROCEDURE;FINE_NEEDLE_BIOPSY;Fine needle aspiration (FNA) biopsy;Feinnadelaspirationbiopsie (FNA)
+PROCEDURE;PERITONEAL_BIOPSY;Peritoneal biopsy;Peritonealbiopsie
+PROCEDURE;EXCISIONAL_BIOPSY;Excisional biopsy;Exzisionsbiopsie
+PROCEDURE;INCISIONAL_BIOPSY;Incisional biopsy;Inzisionsbiopsie
+PROCEDURE;ENDOSCOPIC_BIOPSY;Endoscopic biopsy;Endoskopische Biopsie
+PROCEDURE;CORE_NEEDLE_BIOPSY;Core needle biopsy;Kernnadelbiopsie
+PROCEDURE;ENDOSCOPIC_RESECTIONS;Endoscopic resection (ER) (including endoscopic mucosal resection (EMR), endoscopic submucosal dissection (ESD), transanal endoscopic microsurgery (TEMS), transanal minimally invasive surgery (TAMIS), endoscopic full thickness resection (EFTR) and endoscopic endonasal resection (EER));Endoskopische Resektion (ER) (einschließlich endoskopischer Mukosaresektion (EMR), endoskopischer submuköser Dissektion (ESD), transanaler endoskopischer Mikrochirurgie (TEMS), transanaler minimalinvasiver Chirurgie (TAMIS), endoskopischer Vollresektion (EFTR) und endoskopischer endonasaler Resektion (EER))
+PROCEDURE;STEREOTACTIC_BIOPSY;Stereotactic biopsy;Stereotaktische Biopsie
+PROCEDURE;OPEN_BIOPSY;Open biopsy;Offene Biopsie
+PROCEDURE;LUMPECTOMY;Lumpectomy;Lumpektomie
+PROCEDURE;QUADRANTECTOMY;Quadrantectomy;Quadrantektomie
+PROCEDURE;PYLORUS_PANCEATODUODENECTOMY;Pylorus-preserving pancreatoduodenectomy;Pylorus-erhaltende Pankreatoduodenektomie
+PROCEDURE;PANCREATECTOMY;Pancreatectomy (subtotal, total and distal);Pankreatektomie (teilweise, total und distale)
+PROCEDURE;PROCTOCOLECTOMY;Proctocolectomy;Proktokolektomie
+PROCEDURE;HEMICOLECTOMY;Hemicolectomy (left, right and extended right);Hemikolektomie (linker, rechter und erweiterter rechter)
+PROCEDURE;ANTERIOR_RESECTION_LOW;Anterior resection (low);Anteriore Resektion (niedrig)
+PROCEDURE;HARTMANNS_PROCEDURE;Hartmann’s procedure;Verfahren nach Hartmann
+PROCEDURE;ABDOMINOPERINEAL_RESECTION;Abdominoperineal resection;Abdominoperineale Resektion
+PROCEDURE;ISTHMUSECTOMY;Isthmusectomy;Isthmusektomie
+PROCEDURE;LOOP_AND_CONE_EXCISIONS;Loop/cone excisions;Schlingen-/Keilexzisionen
+PROCEDURE;EXENTERATIONS;Exenterations;Exenterationen
+PROCEDURE;BUCCAL_MUCOSA_RESECTION;Resection of buccal mucosa;Resektion der Wangenschleimhaut
+PROCEDURE;MANDIBULECTOMY;Mandibulectomy;Mandibulektomie
+PROCEDURE;PALATECTOMY;Palatectomy;Gaumenektomie
+PROCEDURE;LIP_RESECTION;Resection of lip;Resektion der Lippe
+PROCEDURE;EXT_AUDITORY_CANAL_RESECTION;Radical external auditory canal resection;Radikale Resektion des äußeren Gehörganges
+PROCEDURE;MASTOIDECTOMY;Mastoidectomy;Mastoidektomie
+PROCEDURE;PETROSECTOMY;Petrosectomy;Petrosektomie
+PROCEDURE;CYSTOPROSTATECTOMY;Cystoprostatectomy;Zystoprostatektomie
+PROCEDURE;DIVERTICULECTOMY;Diverticulectomy;Divertikulektomie
+PROCEDURE;PUNCH_TECHNIQUE;Punch technique;Punch-Technik
+PROCEDURE;SHAVE_TECHNIQUE;Shave technique (superficial);Shave-Technik (oberflächlich)
+PROCEDURE;DEEP_SHAVE_TECHNIQUE;Saucerization/scoop/deep shave technique;Saucerization/Scoop/Tiefenrasur-Technik
+PROCEDURE;FUSIFORM_EXCISION;Fusiform/ellipitical/disc (full-thickness) excision;Fusiforme/ellipsenförmige/scheibenförmige (vollflächige) Exzision
+SCANNER;LEICA_APERIO_GT450;Leica Aperio GT 450/DX;Leica Aperio GT 450/DX
+SCANNER;LEICA_APERIO_AT2;Leica Aperio AT2;Leica Aperio AT2
+SCANNER;LEICA_APERIO_CS2;Leica Aperio CS2;Leica Aperio CS2
+SCANNER;LEICA_APERIO_LV1;Leica Aperio LV1 IVD;Leica Aperio LV1 IVD
+SCANNER;HAMAMATSU_NANOZOOMER_SQ;Hamamatsu NanoZoomer-SQ;Hamamatsu NanoZoomer-SQ
+SCANNER;HAMAMATSU_NANOZOOMER_S60;Hamamatsu NanoZoomer S60;Hamamatsu NanoZoomer S60
+SCANNER;HAMAMATSU_NANOZOOMER_S210;Hamamatsu NanoZoomer S210;Hamamatsu NanoZoomer S210
+SCANNER;HAMAMATSU_NANOZOOMER_S360;Hamamatsu NanoZoomer S360;Hamamatsu NanoZoomer S360
+SCANNER;HAMAMATSU_NANOZOOMER_2_HT;Hamamatsu NanoZoomer 2.0-HT;Hamamatsu NanoZoomer 2.0-HT
+SCANNER;3DHISTECH_PANNORAMIC_SCAN_II;3DHistech Pannoramic SCAN II;3DHistech Pannoramic SCAN II
+SCANNER;3DHISTECH_PANNORAMIC_MIDI_II;3DHistech Pannoramic Midi II;3DHistech Pannoramic Midi II
+SCANNER;3DHISTECH_PANNORAMIC_FLASH_DESK_II_DX;3DHistech Pannoramic Flash DESK II DX/DW;3DHistech Pannoramic Flash DESK II DX/DW
+SCANNER;3DHISTECH_PANNORAMIC_250_FLASH_III_DX;3DHistech Pannoramic 250 Flash III DX;3DHistech Pannoramic 250 Flash III DX
+SCANNER;3DHISTECH_PANNORAMIC_300_FLASH_DX;3DHistech Pannoramic 300 Flash DX;3DHistech Pannoramic 300 Flash DX
+SCANNER;3DHISTECH_PANNORAMIC_480_DX;3DHistech Pannormaic 480 DX;3DHistech Pannormaic 480 DX
+SCANNER;3DHISTECH_PANNORAMIC_1000_FLASH_DX;3DHistech Pannoramic 1000 Flash DX;3DHistech Pannoramic 1000 Flash DX
+SCANNER;3DHISTECH_PANNORAMIC_CONFOCAL;3DHistech Pannoramic Confocal;3DHistech Pannoramic Confocal
+SCANNER;OLYMPUS_SLIDEVIEW_VS200;Olympus SLIDEVIEW VS200;Olympus SLIDEVIEW VS200
+SCANNER;OLYMPUS_VS210;Olympus VS120;Olympus VS120
+SCANNER;OLYMPUS_SIS_SLIDE;Olympus SIS .slide;Olympus SIS .slide
+SCANNER;ROCHE_VENTANA_ISCAN;Roche Ventana iScan HAT;Roche Ventana iScan HAT
+SCANNER;ROCHE_VENTANA_DP200;Roche Ventana DP 200;Roche Ventana DP 200
+SCANNER;PHILIPS_INTELLI_SITE_SG20;Philips IntelliSite SG20;Philips IntelliSite SG20
+SCANNER;PHILIPS_INTELLI_SITE_SG60;Philips IntelliSite SG60;Philips IntelliSite SG60
+SCANNER;PHILIPS_INTELLI_SITE_SG300;Philips IntelliSite SG300;Philips IntelliSite SG300
+SCANNER;HURON_TISSUESCOPE_IQ;Huron TissueScope iQ;Huron TissueScope iQ
+SCANNER;HURON_TISSUESCOPE_LE;Huron TissueScope LE;Huron TissueScope LE
+SCANNER;HURON_TISSUESCOPE_LE120;Huron TissueScope LE120;Huron TissueScope LE120
+SCANNER;TRESTLE_MED_MICROSCOPY;Trestle MedMicroscopy;Trestle MedMicroscopy
+SCANNER;ZEISS_AXIOSCAN_7;Zeiss Axioscan 7;Zeiss Axioscan 7
+SCANNER;ZEISS_AXIOSCAN_Z1;Zeiss Axioscan Z1;Zeiss Axioscan Z1
+SCANNER;ZEISS_MIRAX_SCAN_MIDI;Zeiss Mirax Scan/Midi;Zeiss Mirax Scan/Midi
+SCANNER;NICON_ECLIPSE_E600;Nikon Eclipse E600 FN;Nikon Eclipse E600 FN
+SCANNER;NICON_ECLIPSE_TI2;Nikon Eclipse Ti2;Nikon Eclipse Ti2
+SCANNER;PRECIPOINT_FRITZ;PreciPoint Fritz;PreciPoint Fritz
+SCANNER;PRECIPOINT_M8;PreciPoint M8;PreciPoint M8
+SCANNER;PRECIPOINT_O8;PreciPoint O8;PreciPoint O8
+SCANNER;GRUNDIUM_OCTUS_20;Grundium Octus 20;Grundium Octus 20
+SCANNER;GRUNDIUM_OCTUS_40;Grundium Octus 40;Grundium Octus 40
+SCANNER;TISSUEGNOSTICS_TISSUE_FAXS;TissueGnostics TissueFAXS SPECTRA SL;TissueGnostics TissueFAXS SPECTRA SL
+SCANNER;KEYENCE_SLIDE_SCANNING_MICROSCOPE;Keyence Slide Scanning Microscope;Keyence Slide Scanning Microscope
+SCANNER;INSPIRATA_OPTRA_SCAN;Inspirata OptraScan;Inspirata OptraScan
+SCANNER;BIOIMAGER_BIOSCAN_40K;BioImager BioScan-40k;BioImager BioScan-40k
+SCANNER;ARGOS_6X;Argos 6X;Argos 6X
+SCANNER;ARGOS_SINGLE_SCANNER;Argos Single Scanner;Argos Single Scanner
+SCANNER;DMETRIX_DX40;DMetrix DX40;DMetrix DX40
+SCANNER;SYNCHROSCOPY_SYNCRO_SCAN;Syncroscopy SyncroScan;Syncroscopy SyncroScan
+SCANNER;MOTIC_EASY_SCAN_ONE;Motic EasyScan One;Motic EasyScan One
+SCANNER;MOTIC_EASY_SCAN_PRO;Motic EasyScan Pro;Motic EasyScan Pro
+SCANNER;MOTIC_EASY_SCAN_INFINITY;Motic EasyScan Infinity;Motic EasyScan Infinity
+SCANNER;PERKINELMER_SCAN_RI;PerkinElmer ScanRI;PerkinElmer ScanRI
+SCANNER;OPTRASCAN_OS_SIA;OptraScan OS-SiA;OptraScan OS-SiA
+SCANNER;OPTRASCAN_OS_FLI;OptraScan OS-Fli;OptraScan OS-Fli
+SCANNER;KFPRO_002;KF-PRO-002;KF-PRO-002
+SCANNER;KFPRO_005;KF-PRO-005;KF-PRO-005
+SCANNER;KFPRO_020;KF-PRO-020;KF-PRO-020

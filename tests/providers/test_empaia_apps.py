@@ -16,7 +16,10 @@ from pydantic import ValidationError as SettingsError
 
 from model_service.api.model_catalog import ModelCatalog
 from model_service.builders.registry import BUILDERS, get_builder
-from model_service.providers.empaia.credentials import ClientCredentials
+from model_service.providers.empaia.credentials import (
+    ClientCredentials,
+    NoCredentials,
+)
 from model_service.providers.empaia.ead.apps import (
     VIEWER_CONFIG_KEY,
     AppMode,
@@ -34,6 +37,7 @@ from model_service.providers.empaia.registration import (
     register_until_done,
 )
 from model_service.providers.empaia.settings import EmpaiaSettings
+from model_service.providers.empaia.triggers import PreprocessingTriggers
 from tests.support.deployment import CHART, VALUES, load
 
 
@@ -91,6 +95,14 @@ class AppDefinitionTests(unittest.TestCase):
             app.image("model-service"),
             "http::model-service/builders/heatmap/models/prostate-classifier-1",
         )
+        # Its triggers' tags list the app under them in the marketplace.
+        tags = app.portal_app("model-service", "org-1")["active_app_views"]["v3"][
+            "tags"
+        ]
+        self.assertEqual(
+            (tags["tissues"][0]["name"], tags["stains"][0]["name"]),
+            ("PROSTATE", "H_AND_E"),
+        )
 
     def test_a_preprocessing_only_app_leaves_out_the_region_of_interest(self) -> None:
         listing = EmpaiaListing(
@@ -136,10 +148,20 @@ class AppDefinitionTests(unittest.TestCase):
                     "good": valid,
                     "typo": {**valid, "mods": ["preprocessing"]},
                     "unknown-builder": {**valid, "viewer": {"heatmapp": {}}},
+                    # A tag no slide carries would never trigger anything.
+                    "unknown-tissue": {
+                        **valid,
+                        "triggers": [{"tissue": "PROSTRATE", "stain": "H_AND_E"}],
+                    },
+                    "triggers-without-preprocessing": {
+                        **valid,
+                        "modes": ["standalone"],
+                        "triggers": [{"tissue": "ANY", "stain": "ANY"}],
+                    },
                 }
             )
         self.assertEqual(list(parsed), ["good"])
-        self.assertEqual(len(logs.output), 2)
+        self.assertEqual(len(logs.output), 4)
 
     def test_viewer_entries_for_io_an_app_lacks_are_left_out(self) -> None:
         listing = EmpaiaListing(
@@ -277,10 +299,12 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
         settings = EmpaiaSettings(
             marketplace_url="https://marketplace.example", organization_id="org-1"
         )
-        from model_service.providers.empaia.provider import _marketplace
+        from model_service.providers.empaia.provider import _registration
 
-        marketplace = _marketplace(settings)
-        assert marketplace is not None
+        registration = _registration(settings)
+        assert registration is not None
+        marketplace, triggers = registration
+        self.assertIsNone(triggers, "no Medical Data Service, no triggers")
         marketplace._transport = httpx.MockTransport(handle)
 
         with self.assertLogs("model_service.providers.empaia.registration") as logs:
@@ -292,6 +316,77 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
             [r.levelname for r in logs.records][:3], ["WARNING", "WARNING", "ERROR"]
         )
         self.assertIn("HTTP 401 from https://marketplace.example/", logs.output[2])
+
+    def test_a_medical_data_service_needs_a_marketplace(self) -> None:
+        with self.assertRaises(SettingsError):
+            EmpaiaSettings(mds_url="http://mds.example")
+
+
+class TriggerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_triggers_follow_the_apps_and_leave_others_alone(self) -> None:
+        models = catalog("prostate-classifier-1")
+        (app,) = app_definitions(models, listings(models), PUBLISHERS)
+        ours = "model-service:model-service"
+        existing = [
+            # Someone else's trigger for a listed pair already covers it.
+            {"id": "t1", "creator_id": "admin", "portal_app_id": app.portal_app_id,
+             "tissue": "PROSTATE", "stain": "H_AND_E"},
+            # Ours, no longer listed, and our duplicate of a covered pair.
+            {"id": "t2", "creator_id": ours, "portal_app_id": app.portal_app_id,
+             "tissue": "BREAST", "stain": "H_AND_E"},
+            {"id": "t3", "creator_id": ours, "portal_app_id": app.portal_app_id,
+             "tissue": "PROSTATE", "stain": "H_AND_E"},
+            # Someone else's, not listed: never touched.
+            {"id": "t4", "creator_id": "admin", "portal_app_id": "other",
+             "tissue": "LUNG", "stain": "ANY"},
+        ]  # fmt: skip
+        calls: list[tuple[str, str, object]] = []
+
+        def handle(request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content) if request.content else None
+            calls.append((request.method, request.url.path, body))
+            if request.method == "GET":
+                return httpx.Response(
+                    200, json={"item_count": len(existing), "items": existing}
+                )
+            return httpx.Response(200 if request.method == "DELETE" else 201)
+
+        triggers = PreprocessingTriggers(
+            "http://mds.example",
+            ours,
+            NoCredentials(),
+            transport=httpx.MockTransport(handle),
+        )
+
+        await triggers.ensure([app])
+        self.assertEqual(
+            calls[1:],
+            [
+                ("DELETE", "/v3/preprocessing-triggers/t2", None),
+                ("DELETE", "/v3/preprocessing-triggers/t3", None),
+            ],
+        )
+
+        # Once the others are gone, the listed pair is created as ours.
+        del existing[:3]
+        calls.clear()
+        await triggers.ensure([app])
+        self.assertEqual(
+            calls[1:],
+            [
+                (
+                    "POST",
+                    "/v3/preprocessing-triggers",
+                    {
+                        "creator_id": ours,
+                        "creator_type": "USER",
+                        "portal_app_id": app.portal_app_id,
+                        "tissue": "PROSTATE",
+                        "stain": "H_AND_E",
+                    },
+                )
+            ],
+        )
 
 
 class BuilderCoverageTests(unittest.TestCase):

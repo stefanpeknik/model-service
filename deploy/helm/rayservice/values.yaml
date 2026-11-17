@@ -121,6 +121,10 @@ empaia:
     organizationId: ""
     # model-service's name in the installation's JES_HTTP_TARGETS.
     jesTarget: model-service
+    # The installation's Medical Data Service: the API keeps the preprocessing
+    # triggers the model files list there, with these client credentials.
+    # Empty: triggers are left alone.
+    mdsUrl: ""
     # Client credentials for the marketplace, from a Secret; empty idpUrl: none.
     idpUrl: ""
     clientId: ""
