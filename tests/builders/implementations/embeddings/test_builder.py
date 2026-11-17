@@ -225,6 +225,33 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(self.model.calls, 4)
 
+    async def test_a_caller_sets_the_builders_settings_per_run(self) -> None:
+        client = await self.client(("tile",))
+
+        response = await client.post(
+            "/v1/builders/tile-embeddings/models/encoder/run",
+            json=self.body() | {"configuration": {"stride_fraction": 0.5}},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        path = response.json()["outputs"]["embeddings"]["path"]
+        with h5py.File(path) as output:
+            self.assertEqual(output.attrs["stride"], 16)
+
+    async def test_a_setting_the_builder_rejects_is_refused_with_its_rule(
+        self,
+    ) -> None:
+        client = await self.client(("tile",))
+
+        response = await client.post(
+            "/v1/builders/tile-embeddings/models/encoder/run",
+            json=self.body() | {"configuration": {"stride_fraction": 0}},
+        )
+
+        self.assertEqual(response.status_code, 422, response.text)
+        self.assertIn("stride_fraction: Input should be greater than 0", response.text)
+        self.assertEqual(self.model.calls, 0)
+
     async def test_summaries_are_stored_per_tile(self) -> None:
         client = await self.client(("global", "local_mean"))
 

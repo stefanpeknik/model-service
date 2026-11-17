@@ -324,9 +324,6 @@ class ScheduleRouteTests(ApiTestCase):
             key_in_body = await self.schedule(
                 client, {**body, "idempotency_key": "request-1"}, key=None
             )
-            settings = await self.schedule(
-                client, {**body, "configuration": {"stride_fraction": 0.25}}
-            )
             bad_timeout = await self.schedule(
                 client, {**body, "requested_timeout_seconds": 0}
             )
@@ -339,7 +336,6 @@ class ScheduleRouteTests(ApiTestCase):
             empty_key,
             no_key,
             key_in_body,
-            settings,
             bad_timeout,
             provider,
         ):
