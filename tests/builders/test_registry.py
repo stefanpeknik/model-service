@@ -28,7 +28,7 @@ def invocation(**overrides: object) -> Invocation:
             "slide": SharedPathInput("slide.tiff"),
             "region_of_interest": SharedPathInput("mask.tiff"),
         },
-        "resolved_configuration": None,
+        "configuration": None,
         "input_access": InputAccessContext("shared_storage", {"root": "/data"}),
         "deadline_at": datetime.now(UTC) + timedelta(minutes=1),
     }
@@ -66,7 +66,7 @@ class BuilderRegistryTests(unittest.TestCase):
             "timezone": invocation(deadline_at=datetime.now() + timedelta(minutes=1)),
             "future": invocation(deadline_at=datetime.now(UTC) - timedelta(seconds=1)),
             "configuration is invalid": invocation(
-                resolved_configuration={"stride_fraction": 2}
+                configuration={"stride_fraction": 2}
             ),
         }
         for message, value in cases.items():

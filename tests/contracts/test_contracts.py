@@ -20,7 +20,7 @@ INVOCATION_BODY = {
         "slide": {"kind": "shared_path", "path": "slide.svs"},
         "region_of_interest": {"kind": "provider", "name": "region_of_interest"},
     },
-    "resolved_configuration": None,
+    "configuration": None,
     "input_access": {"kind": "shared_storage", "state": {"root": "/mnt/data"}},
     "deadline_at": datetime(2026, 1, 1, tzinfo=UTC).isoformat(),
     "output_path": None,

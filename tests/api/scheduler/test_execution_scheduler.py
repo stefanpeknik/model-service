@@ -453,7 +453,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             model_id="prostate-classifier-1",
             invocation=Invocation(
                 inputs={},
-                resolved_configuration={},
+                configuration={},
                 input_access=InputAccessContext(kind="external", state={}),
                 deadline_at=execution_deadline,
             ),
@@ -1077,7 +1077,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             )
             valid_request = self._standalone_request(root)
             invalid_body = dict(valid_request.body)
-            invalid_body["resolved_configuration"] = {"output_path": "heatmap.tiff"}
+            invalid_body["configuration"] = {"output_path": "heatmap.tiff"}
             invalid_request = ScheduleRequest(
                 builder_id=valid_request.builder_id,
                 model_id=valid_request.model_id,

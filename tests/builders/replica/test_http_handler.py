@@ -81,7 +81,7 @@ class BuilderHttpTests(unittest.IsolatedAsyncioTestCase):
         request = RunRequest(
             invocation=Invocation(
                 inputs={},
-                resolved_configuration=None,
+                configuration=None,
                 input_access=InputAccessContext(kind="test", state={}),
                 deadline_at=datetime.now(UTC),
             ),

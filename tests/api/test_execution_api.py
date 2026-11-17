@@ -398,7 +398,7 @@ class ScheduleRouteTests(ApiTestCase):
         [(builder_id, invocation, model, context)] = self.dispatch.calls
         self.assertEqual(builder_id, "heatmap")
         self.assertEqual(model, PROSTATE)
-        self.assertIsNone(invocation.resolved_configuration)
+        self.assertIsNone(invocation.configuration)
         self.assertIsNotNone(context.processing_attempt_id)
 
 
@@ -414,7 +414,7 @@ class RunRouteTests(ApiTestCase):
         [(builder_id, invocation, model, context)] = self.dispatch.calls
         self.assertEqual(builder_id, "heatmap")
         self.assertEqual(model, PROSTATE)
-        self.assertIsNone(invocation.resolved_configuration)
+        self.assertIsNone(invocation.configuration)
         self.assertEqual(invocation.output_path, "outputs/heatmap.tiff")
         self.assertIsNone(context.processing_attempt_id)
 

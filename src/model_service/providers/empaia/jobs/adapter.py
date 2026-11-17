@@ -202,7 +202,7 @@ class EmpaiaProviderAdapter(ProviderAdapter):
         effective_deadline = min(deadline_at, credential_expires_at)
         invocation = Invocation(
             inputs={name: ProviderInput(name=name) for name in names},
-            resolved_configuration=deepcopy(configuration),
+            configuration=deepcopy(configuration),
             input_access=InputAccessContext(
                 kind=INPUT_ACCESS_KIND,
                 state=EmpaiaInputState(

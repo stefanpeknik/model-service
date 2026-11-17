@@ -180,7 +180,7 @@ def invocation(
 ) -> Invocation:
     values: dict[str, object] = {
         "inputs": {},
-        "resolved_configuration": None,
+        "configuration": None,
         "input_access": InputAccessContext(kind, state or {}),
         "deadline_at": datetime.now(UTC) + timedelta(minutes=1),
     }

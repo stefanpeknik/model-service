@@ -264,8 +264,8 @@ class BuilderSpec:
             if item.required and name not in invocation.inputs
         }:
             raise InvalidInvocation(f"missing inputs: {', '.join(sorted(missing))}")
-        if invocation.resolved_configuration is not None:
-            self.resolve_configuration(invocation.resolved_configuration)
+        if invocation.configuration is not None:
+            self.resolve_configuration(invocation.configuration)
         if invocation.output_path is not None and self.placeable_output is None:
             raise InvalidInvocation(f"{self.id} has no artifact output to place")
 

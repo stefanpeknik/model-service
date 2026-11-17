@@ -42,7 +42,7 @@ class StandaloneProvider:
         return PreparedInvocation(
             invocation=Invocation(
                 inputs={},
-                resolved_configuration={},
+                configuration={},
                 input_access=InputAccessContext(
                     kind="shared_storage",
                     state={"root": "/shared"},

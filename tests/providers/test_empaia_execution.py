@@ -286,9 +286,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         scheduled = await scheduler.schedule(self._request(now, "credential"))
         execution = await repository.get(scheduled.execution.id)
 
-        self.assertEqual(
-            execution.invocation.resolved_configuration, DEFAULT_CONFIGURATION
-        )
+        self.assertEqual(execution.invocation.configuration, DEFAULT_CONFIGURATION)
         self.assertEqual(execution.builder_id, "heatmap")
         self.assertEqual(execution.model_id, MODEL.id)
 
@@ -308,9 +306,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
             scheduled = await scheduler.schedule(self._request(now, "credential"))
         execution = await repository.get(scheduled.execution.id)
 
-        self.assertEqual(
-            execution.invocation.resolved_configuration, DEFAULT_CONFIGURATION
-        )
+        self.assertEqual(execution.invocation.configuration, DEFAULT_CONFIGURATION)
         self.assertIn("viewer_colormap", logs.output[0])
 
     async def test_optional_inputs_the_job_lacks_are_left_out(self) -> None:

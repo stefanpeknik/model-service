@@ -88,8 +88,7 @@ class HeatmapBuilderTests(unittest.IsolatedAsyncioTestCase):
                 {"root": str(self.root)},
                 inputs=inputs,
                 # Tissue detection needs a realistic slide; see slides/test_tissue.py.
-                resolved_configuration={"skip_background": False}
-                | (configuration or {}),
+                configuration={"skip_background": False} | (configuration or {}),
             ),
             self.model,
         )

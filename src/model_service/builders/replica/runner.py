@@ -128,7 +128,7 @@ class BuilderApplication:
                             model=client,
                             inputs=self._resolve_inputs(invocation, access),
                             configuration=self._spec.resolve_configuration(
-                                invocation.resolved_configuration
+                                invocation.configuration
                             ),
                             output_paths=self._output_paths(invocation),
                         )

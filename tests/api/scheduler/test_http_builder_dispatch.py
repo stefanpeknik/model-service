@@ -53,7 +53,7 @@ class HttpBuilderDispatchTests(unittest.IsolatedAsyncioTestCase):
                 "heatmap",
                 Invocation(
                     inputs={"slide": SharedPathInput(path="slide.svs")},
-                    resolved_configuration=None,
+                    configuration=None,
                     input_access=InputAccessContext(
                         kind="shared_storage", state={"root": "/mnt/data"}
                     ),
@@ -85,7 +85,7 @@ class HttpBuilderDispatchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(request.url, "http://ray:8000/builders/heatmap/")
         body = json.loads(request.content)
         self.assertEqual(body["invocation"]["inputs"]["slide"]["path"], "slide.svs")
-        self.assertIsNone(body["invocation"]["resolved_configuration"])
+        self.assertIsNone(body["invocation"]["configuration"])
         self.assertEqual(body["model"]["id"], "prostate-classifier-1")
         self.assertEqual(body["model"]["contract"], "spatial-scores")
         self.assertEqual(

@@ -298,9 +298,7 @@ class PostgresExecutionRepositoryTests(
                 (record.builder_id, record.model_id), (builder_id, model_id)
             )
         prostate = await self.repository.get(identifiers["prostate-heatmap"])
-        self.assertEqual(
-            prostate.invocation.resolved_configuration, {"stride_fraction": 0.5}
-        )
+        self.assertEqual(prostate.invocation.configuration, {"stride_fraction": 0.5})
         self.assertEqual(await self._applied_migrations(), ALL_MIGRATIONS)
 
     async def test_raw_inference_removal_keeps_builders(self) -> None:
@@ -525,7 +523,7 @@ class PostgresExecutionRepositoryTests(
                 inputs={
                     "slide": SharedPathInput(path="/shared/input.tiff"),
                 },
-                resolved_configuration={"level": 2, "optional": None},
+                configuration={"level": 2, "optional": None},
             ),
             protected_context={"credential": "historical-test-token"},
         )
@@ -1011,7 +1009,7 @@ class PostgresExecutionRepositoryTests(
             model_id="prostate-classifier-1",
             invocation=Invocation(
                 inputs={},
-                resolved_configuration={},
+                configuration={},
                 input_access=InputAccessContext(
                     kind="shared_storage",
                     state={"root": "/shared"},

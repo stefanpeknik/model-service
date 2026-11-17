@@ -45,7 +45,7 @@ class ExecutionRepositoryContract:
                 model_id=model_id,
                 invocation=Invocation(
                     inputs={},
-                    resolved_configuration=None,
+                    configuration=None,
                     input_access=InputAccessContext(
                         kind="shared_storage", state={"root": "/shared"}
                     ),

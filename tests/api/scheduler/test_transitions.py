@@ -34,7 +34,7 @@ def publishing():
             model_id="model",
             invocation=Invocation(
                 inputs={},
-                resolved_configuration=None,
+                configuration=None,
                 input_access=InputAccessContext(kind="external", state={}),
                 deadline_at=deadline,
             ),

@@ -108,13 +108,14 @@ type Deadline = Annotated[
 class Invocation:
     """One request to run a builder; stored durably for scheduled executions.
 
-    `resolved_configuration` is None for standalone work, which uses the builder's
-    current defaults when each attempt starts. A provider's admission may resolve
-    it from an external job's configuration.
+    `configuration` holds the settings that differ from the builder's defaults,
+    e.g. a caller's or an EMPAIA job's; None for none. Each attempt applies it
+    over the builder's current defaults, so a value the builder rejects fails
+    the attempt rather than admission.
     """
 
     inputs: Annotated[dict[str, BuilderInput], Field(strict=True)]
-    resolved_configuration: JsonObject | None
+    configuration: JsonObject | None
     input_access: InputAccessContext
     deadline_at: Deadline
     output_path: NonEmptyString | None = None

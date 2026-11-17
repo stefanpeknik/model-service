@@ -38,7 +38,7 @@ class BuilderRequest(BaseModel):
         """
         return Invocation(
             inputs=self.inputs,
-            resolved_configuration=None,
+            configuration=None,
             input_access=self.input_access,
             deadline_at=deadline_at,
             output_path=self.output_path,

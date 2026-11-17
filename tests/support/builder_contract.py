@@ -99,7 +99,7 @@ class BuilderContractTests(_Base):
         )
         options = {
             "inputs": self.inputs(),
-            "resolved_configuration": self.configuration or None,
+            "configuration": self.configuration or None,
             **invocation_options,
         }
         return await application.run(
