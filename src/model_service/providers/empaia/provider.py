@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from model_service.api.scheduler.settings import SchedulerSettings
     from model_service.builders.base import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
+    from model_service.providers.empaia.credentials import OutgoingCredentials
     from model_service.providers.empaia.registration import Marketplace
     from model_service.providers.empaia.triggers import PreprocessingTriggers
 
@@ -75,12 +76,16 @@ class EmpaiaProvider(Provider):
         apps = app_definitions(
             catalog, parse_listings(catalog.provider_block(CATALOG_BLOCK)), publishers
         )
-        registration = _registration(empaia)
+        credentials = _credentials(empaia)
+        marketplace = _marketplace(empaia, credentials)
+        triggers = _triggers(empaia, credentials)
 
         async def register() -> None:
-            """Register the apps until done, when a marketplace is configured."""
-            if registration is not None and apps:
-                marketplace, triggers = registration
+            """Register the apps until done, when a marketplace is configured.
+
+            It runs with no apps too, so triggers of removed models go.
+            """
+            if marketplace is not None:
                 await register_until_done(marketplace, apps, triggers)
 
         return ApiContribution(
@@ -120,54 +125,81 @@ class EmpaiaProvider(Provider):
         }
 
 
-def _registration(
-    settings: EmpaiaSettings,
-) -> tuple[Marketplace, PreprocessingTriggers | None] | None:
-    """Build the marketplace and trigger clients the settings describe.
-
-    Both use client credentials when an identity provider is set, otherwise none.
+def _credentials(settings: EmpaiaSettings) -> OutgoingCredentials:
+    """Build the credentials model-service registers apps and triggers with.
 
     Args:
         settings: The EMPAIA settings.
 
     Returns:
-        The marketplace and, with a Medical Data Service URL, its triggers; None
-        without a marketplace URL and organization ID.
+        Client credentials when an identity provider is set, otherwise none.
     """
     from model_service.providers.empaia.credentials import (
         ClientCredentials,
         NoCredentials,
-        OutgoingCredentials,
     )
+
+    target = settings.marketplace
+    if target is None or target.client is None:
+        return NoCredentials()
+    return ClientCredentials(
+        target.client.idp_url,
+        target.client.client_id,
+        target.client.client_secret.get_secret_value(),
+    )
+
+
+def _marketplace(
+    settings: EmpaiaSettings, credentials: OutgoingCredentials
+) -> Marketplace | None:
+    """Build the marketplace client the settings describe.
+
+    Args:
+        settings: The EMPAIA settings.
+        credentials: Supplies the `Authorization` header.
+
+    Returns:
+        The marketplace, or None without a marketplace URL and organization ID.
+    """
     from model_service.providers.empaia.registration import Marketplace
-    from model_service.providers.empaia.triggers import PreprocessingTriggers
 
     target = settings.marketplace
     if target is None:
         return None
-    credentials: OutgoingCredentials = NoCredentials()
-    if target.client is not None:
-        credentials = ClientCredentials(
-            target.client.idp_url,
-            target.client.client_id,
-            target.client.client_secret.get_secret_value(),
-        )
-    marketplace = Marketplace(
+    return Marketplace(
         target.url,
         target.organization_id,
         target.jes_target,
         credentials,
         timeout=settings.app_service_timeout_seconds,
     )
-    triggers = None
-    if target.mds_url is not None:
-        triggers = PreprocessingTriggers(
-            target.mds_url,
-            f"model-service:{target.jes_target}",
-            credentials,
-            timeout=settings.app_service_timeout_seconds,
-        )
-    return marketplace, triggers
+
+
+def _triggers(
+    settings: EmpaiaSettings, credentials: OutgoingCredentials
+) -> PreprocessingTriggers | None:
+    """Build the preprocessing trigger client the settings describe.
+
+    Triggers it creates are owned by `model-service:<jes_target>`.
+
+    Args:
+        settings: The EMPAIA settings.
+        credentials: Supplies the `Authorization` header.
+
+    Returns:
+        The triggers, or None without a Medical Data Service URL.
+    """
+    from model_service.providers.empaia.triggers import PreprocessingTriggers
+
+    target = settings.marketplace
+    if target is None or target.mds_url is None:
+        return None
+    return PreprocessingTriggers(
+        target.mds_url,
+        f"model-service:{target.jes_target}",
+        credentials,
+        timeout=settings.app_service_timeout_seconds,
+    )
 
 
 PROVIDER = EmpaiaProvider()

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 import unittest
@@ -299,12 +300,16 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
         settings = EmpaiaSettings(
             marketplace_url="https://marketplace.example", organization_id="org-1"
         )
-        from model_service.providers.empaia.provider import _registration
+        from model_service.providers.empaia.provider import (
+            _credentials,
+            _marketplace,
+            _triggers,
+        )
 
-        registration = _registration(settings)
-        assert registration is not None
-        marketplace, triggers = registration
-        self.assertIsNone(triggers, "no Medical Data Service, no triggers")
+        credentials = _credentials(settings)
+        marketplace = _marketplace(settings, credentials)
+        assert marketplace is not None
+        self.assertIsNone(_triggers(settings, credentials), "no MDS, no triggers")
         marketplace._transport = httpx.MockTransport(handle)
 
         with self.assertLogs("model_service.providers.empaia.registration") as logs:
@@ -323,69 +328,78 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
 
 
 class TriggerTests(unittest.IsolatedAsyncioTestCase):
-    async def test_triggers_follow_the_apps_and_leave_others_alone(self) -> None:
+    def setUp(self) -> None:
         models = catalog("prostate-classifier-1")
-        (app,) = app_definitions(models, listings(models), PUBLISHERS)
-        ours = "model-service:model-service"
-        existing = [
-            # Someone else's trigger for a listed pair already covers it.
-            {"id": "t1", "creator_id": "admin", "portal_app_id": app.portal_app_id,
-             "tissue": "PROSTATE", "stain": "H_AND_E"},
-            # Ours, no longer listed, and our duplicate of a covered pair.
-            {"id": "t2", "creator_id": ours, "portal_app_id": app.portal_app_id,
-             "tissue": "BREAST", "stain": "H_AND_E"},
-            {"id": "t3", "creator_id": ours, "portal_app_id": app.portal_app_id,
-             "tissue": "PROSTATE", "stain": "H_AND_E"},
-            # Someone else's, not listed: never touched.
-            {"id": "t4", "creator_id": "admin", "portal_app_id": "other",
-             "tissue": "LUNG", "stain": "ANY"},
-        ]  # fmt: skip
-        calls: list[tuple[str, str, object]] = []
+        (self.app,) = app_definitions(models, listings(models), PUBLISHERS)
+        self.items: list[dict[str, str]] = []
+        self.created = 0
+
+    def mds(self, owner: str) -> PreprocessingTriggers:
+        """A client for an in-memory Medical Data Service shared by every client."""
 
         def handle(request: httpx.Request) -> httpx.Response:
-            body = json.loads(request.content) if request.content else None
-            calls.append((request.method, request.url.path, body))
             if request.method == "GET":
-                return httpx.Response(
-                    200, json={"item_count": len(existing), "items": existing}
-                )
-            return httpx.Response(200 if request.method == "DELETE" else 201)
+                return httpx.Response(200, json={"items": list(self.items)})
+            if request.method == "POST":
+                self.created += 1
+                body = json.loads(request.content)
+                self.items.append({"id": f"n{self.created}", **body})
+                return httpx.Response(201)
+            trigger_id = request.url.path.rsplit("/", 1)[1]
+            if all(item["id"] != trigger_id for item in self.items):
+                return httpx.Response(404)
+            self.items[:] = [i for i in self.items if i["id"] != trigger_id]
+            return httpx.Response(200)
 
-        triggers = PreprocessingTriggers(
+        return PreprocessingTriggers(
             "http://mds.example",
-            ours,
+            owner,
             NoCredentials(),
             transport=httpx.MockTransport(handle),
         )
 
-        await triggers.ensure([app])
-        self.assertEqual(
-            calls[1:],
-            [
-                ("DELETE", "/v3/preprocessing-triggers/t2", None),
-                ("DELETE", "/v3/preprocessing-triggers/t3", None),
-            ],
-        )
+    def trigger(self, trigger_id: str, owner: str, tissue: str) -> dict[str, str]:
+        return {
+            "id": trigger_id,
+            "creator_id": owner,
+            "creator_type": "USER",
+            "portal_app_id": self.app.portal_app_id,
+            "tissue": tissue,
+            "stain": "H_AND_E",
+        }
 
-        # Once the others are gone, the listed pair is created as ours.
-        del existing[:3]
-        calls.clear()
-        await triggers.ensure([app])
+    async def test_owned_triggers_follow_the_apps_and_others_are_left_alone(
+        self,
+    ) -> None:
+        ours = "model-service:model-service"
+        self.items[:] = [
+            # Ours for the listed pair comes first in the list ...
+            self.trigger("a", ours, "PROSTATE"),
+            # ... yet someone else's already covers it, so ours goes.
+            self.trigger("b", "admin", "PROSTATE"),
+            # Ours, no longer listed.
+            self.trigger("c", ours, "BREAST"),
+            # Someone else's, not listed: never touched.
+            self.trigger("d", "admin", "LUNG"),
+        ]
+
+        await self.mds(ours).ensure([self.app])
+
+        self.assertEqual([item["id"] for item in self.items], ["b", "d"])
+
+        await self.mds(ours).ensure([])
+        self.assertEqual([item["id"] for item in self.items], ["b", "d"])
+
+    async def test_replicas_starting_together_end_with_one_trigger(self) -> None:
+        ours = "model-service:model-service"
+        first, second = self.mds(ours), self.mds(ours)
+
+        await asyncio.gather(first.ensure([self.app]), second.ensure([self.app]))
+
+        self.assertEqual(len(self.items), 1)
         self.assertEqual(
-            calls[1:],
-            [
-                (
-                    "POST",
-                    "/v3/preprocessing-triggers",
-                    {
-                        "creator_id": ours,
-                        "creator_type": "USER",
-                        "portal_app_id": app.portal_app_id,
-                        "tissue": "PROSTATE",
-                        "stain": "H_AND_E",
-                    },
-                )
-            ],
+            {k: v for k, v in self.items[0].items() if k != "id"},
+            {k: v for k, v in self.trigger("", ours, "PROSTATE").items() if k != "id"},
         )
 
 

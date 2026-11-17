@@ -119,7 +119,8 @@ empaia:
   marketplace:
     url: ""
     organizationId: ""
-    # model-service's name in the installation's JES_HTTP_TARGETS.
+    # model-service's name in the installation's JES_HTTP_TARGETS. Unique per
+    # installation: it also marks the preprocessing triggers this deployment owns.
     jesTarget: model-service
     # The installation's Medical Data Service: the API keeps the preprocessing
     # triggers the model files list there, with these client credentials.
