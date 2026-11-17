@@ -337,7 +337,9 @@ class TriggerTests(unittest.IsolatedAsyncioTestCase):
     def mds(self, owner: str) -> PreprocessingTriggers:
         """A client for an in-memory Medical Data Service shared by every client."""
 
-        def handle(request: httpx.Request) -> httpx.Response:
+        async def handle(request: httpx.Request) -> httpx.Response:
+            # Let other clients' requests interleave, as against a real service.
+            await asyncio.sleep(0)
             if request.method == "GET":
                 return httpx.Response(200, json={"items": list(self.items)})
             if request.method == "POST":
