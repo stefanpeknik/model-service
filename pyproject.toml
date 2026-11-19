@@ -21,6 +21,7 @@ api = [
     "cryptography>=45.0.0",
     "fastapi>=0.115.0",
     "httpx>=0.27.0",
+    "jsonschema>=4.23.0,<5",
     "pydantic-settings>=2.10.0,<3",
     "pyjwt>=2.15.1,<3",
     "psycopg[binary]>=3.2.0",
