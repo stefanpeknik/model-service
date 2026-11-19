@@ -25,7 +25,10 @@ from model_service.contracts.result import BuilderResult, InlineOutput
 from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from tests.support.log_capture import capture_logs
-from tests.support.memory_repository import InMemoryExecutionRepository
+from tests.support.memory_repository import (
+    FakeDispatch,
+    InMemoryExecutionRepository,
+)
 
 
 if TYPE_CHECKING:
@@ -48,7 +51,7 @@ class RequestIdTests(unittest.IsolatedAsyncioTestCase):
         catalog = ModelCatalog([])
         scheduler = ExecutionScheduler(
             repository=InMemoryExecutionRepository(),
-            dispatch=None,  # type: ignore[arg-type]
+            dispatch=FakeDispatch({}),
             providers={
                 "standalone": StandaloneProviderAdapter(
                     SharedStorageAccessFactory([Path("/data")])

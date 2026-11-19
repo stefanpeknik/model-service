@@ -116,7 +116,7 @@ podman run -d --name ms-test-pg -p 127.0.0.1:55432:5432 \
 TEST_POSTGRES_DSN=postgresql://postgres:test@127.0.0.1:55432/postgres \
   UV_CACHE_DIR=.cache/uv uv run python -m unittest discover -s tests -t .
 UV_CACHE_DIR=.cache/uv uv run ruff check
-UV_CACHE_DIR=.cache/uv uv run mypy src
+UV_CACHE_DIR=.cache/uv uv run mypy .
 ```
 
 Without `TEST_POSTGRES_DSN` the PostgreSQL tests are skipped.

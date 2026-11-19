@@ -14,20 +14,19 @@ MAX_LENGTH = 255
 _SEPARATOR = "; "
 
 
-def fit_failure_message(message: str, limit: int = MAX_LENGTH) -> str:
-    """Shorten a failure message to `limit` characters, keeping whole entries.
+def fit_failure_message(message: str) -> str:
+    """Shorten a failure message to `MAX_LENGTH` characters, keeping whole entries.
 
     Args:
         message: The safe failure message; entries after the first `: ` are
             separated by `; `.
-        limit: The longest message allowed.
 
     Returns:
         The message unchanged if it fits; otherwise its leading entries that fit
         with `…and N more` after them, or, when not even one fits, its first
-        `limit` characters ending in `…`.
+        `MAX_LENGTH` characters ending in `…`.
     """
-    if len(message) <= limit:
+    if len(message) <= MAX_LENGTH:
         return message
     head, colon, rest = message.partition(": ")
     entries = rest.split(_SEPARATOR) if colon else []
@@ -36,6 +35,6 @@ def fit_failure_message(message: str, limit: int = MAX_LENGTH) -> str:
             f"{head}: {_SEPARATOR.join(entries[:kept])}"
             f"{_SEPARATOR}…and {len(entries) - kept} more"
         )
-        if len(shortened) <= limit:
+        if len(shortened) <= MAX_LENGTH:
             return shortened
-    return message[: limit - 1] + "…"
+    return message[: MAX_LENGTH - 1] + "…"

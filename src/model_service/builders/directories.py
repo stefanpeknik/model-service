@@ -63,6 +63,13 @@ def remove_directory(path: Path) -> None:
     failures: list[BaseException] = []
 
     def record(_function: object, _path: str, error: BaseException) -> None:
+        """Keep a failure, except for an entry already gone.
+
+        Args:
+            _function: The function that failed.
+            _path: The entry it failed on.
+            error: Why it failed.
+        """
         if not isinstance(error, FileNotFoundError):
             failures.append(error)
 

@@ -123,7 +123,21 @@ class BuilderApplication:
         model: ModelBinding,
         execution_context: ExecutionContext,
     ) -> BuilderResult:
-        """Run the invocation as `run` describes, with its execution named in logs."""
+        """Run the invocation as `run` describes; `run` names its execution in logs.
+
+        Args:
+            invocation: Invocation to run.
+            model: Model binding resolved for this attempt.
+            execution_context: Attempt identity and protected provider state.
+
+        Returns:
+            The builder's validated result.
+
+        Raises:
+            InvalidInvocation: As `run` documents.
+            ContractViolation: As `run` documents.
+            BuilderFailure: As `run` documents.
+        """
         self._spec.check_invocation(invocation)
         self._spec.check_model(model)
         access: InputAccess | None = None

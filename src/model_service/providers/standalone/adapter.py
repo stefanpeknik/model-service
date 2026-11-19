@@ -220,6 +220,7 @@ def _move_outputs(
         InvalidInvocation: A requested path leaves the root.
     """
     moved = dict(outputs)
+    storage = SharedStorageAccess(root, {})
     for name, output in outputs.items():
         if not isinstance(output, SharedArtifact):
             continue
@@ -228,7 +229,7 @@ def _move_outputs(
             continue
         # Drop the attempt's own directory from the relative path.
         relative = source.relative_to(attempts).parts[1:]
-        destination = SharedStorageAccess(root, {}).output_path("/".join(relative))
+        destination = storage.output_path("/".join(relative))
         if source.exists():
             make_shared_directory(destination.parent)
             os.replace(source, destination)
