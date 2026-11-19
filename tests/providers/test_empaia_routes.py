@@ -8,7 +8,12 @@ from fastapi import Request
 from httpx import ASGITransport, AsyncClient
 
 from model_service.api.app_factory import create_app
-from model_service.api.http.auth import Access, AuthenticationError, Principal
+from model_service.api.http.auth import (
+    Access,
+    AuthenticationError,
+    Authenticator,
+    Principal,
+)
 from model_service.api.model_catalog import ModelCatalog
 from model_service.api.scheduler.public import (
     ExecutionError,
@@ -201,7 +206,7 @@ class EmpaiaRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(unknown_delete.status_code, 404)
 
     async def test_the_empaia_routes_have_their_own_access(self) -> None:
-        class Nobody:
+        class Nobody(Authenticator):
             async def authenticate(self, request: Request) -> Principal:
                 raise AuthenticationError
 

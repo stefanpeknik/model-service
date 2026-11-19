@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 from rationai.empaia.typing import SlideInfo
@@ -20,6 +21,10 @@ from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayErro
 from model_service.providers.empaia.app_service.http import HttpEmpaiaGateway
 from model_service.providers.empaia.publishing.pixelmap import ScoreGridPublisher
 from tests.support.empaia_fixtures import SLIDE_ID
+
+
+if TYPE_CHECKING:
+    from rationai.empaia import Client
 
 
 def slide_info() -> SlideInfo:
@@ -141,10 +146,11 @@ class PixelmapPyramidTests(unittest.IsolatedAsyncioTestCase):
 
 class PyramidUploadFailureTests(unittest.IsolatedAsyncioTestCase):
     def gateway(self, upload: object) -> HttpEmpaiaGateway:
-        client = SimpleNamespace(upload_pixelmap_pyramid=upload)
+        # Stands in for the SDK client: only its pyramid upload is called.
+        client = cast("Client", SimpleNamespace(upload_pixelmap_pyramid=upload))
         return HttpEmpaiaGateway(
             "https://empaia.invalid", "job-1", "credential", client=client
-        )  # type: ignore[arg-type]
+        )
 
     async def test_a_pyramid_the_sdk_gave_up_on_is_an_unknown_outcome(self) -> None:
         async def gave_up(**_kwargs: object) -> str:

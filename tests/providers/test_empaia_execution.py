@@ -9,7 +9,7 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import httpx
 import jwt
@@ -26,6 +26,7 @@ from model_service.api.scheduler.public import (
 )
 from model_service.api.scheduler.running_work import ActiveWorkRegistry
 from model_service.api.scheduler.worker import ExecutionWorker
+from model_service.builders.base import Builder, BuilderSettings
 from model_service.builders.implementations.heatmap.spec import HeatmapOutputs
 from model_service.builders.registry import get_builder
 from model_service.builders.replica.http_handler import run_http
@@ -45,9 +46,11 @@ from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
 from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessFactory
 from model_service.providers.empaia.publishing.publishers import (
     Commit,
+    OutputPublisher,
     PublisherRegistry,
 )
 from tests.support.builder_fixtures import deployments
+from tests.support.empaia_fixtures import StrictGateway
 from tests.support.memory_repository import InMemoryExecutionRepository
 
 
@@ -160,10 +163,7 @@ def over_http(application: BuilderApplication) -> HTTPBuilderDispatch:
 def copy_inputs_application(
     service: ControlledEmpaiaService,
     directory: str,
-    builder: CopyInputsBuilder
-    | HalfwayBuilder
-    | SettingsRejectingBuilder
-    | None = None,
+    builder: Builder[Any, Any, Any, Any] | None = None,
 ) -> BuilderApplication:
     return BuilderApplication(
         get_builder("heatmap"),
@@ -205,7 +205,7 @@ class ControlledEmpaiaService:
         return FakeGateway(self, context.api_url, context.job_id)
 
 
-class RecordingPublisher:
+class RecordingPublisher(OutputPublisher):
     """Hand each heatmap to the fake gateway, which records it."""
 
     def accepts(self, model: ModelBinding) -> bool:
@@ -223,7 +223,7 @@ PUBLISHERS = PublisherRegistry(
 )
 
 
-class FakeGateway:
+class FakeGateway(StrictGateway):
     """Simulate one EMPAIA job while recording acquisition, mutation guards, publication, and cleanup."""
 
     def __init__(
@@ -307,10 +307,13 @@ class FakeGateway:
             raise self._service.close_failures.pop(0)
 
 
-class CopyInputsBuilder:
+class CopyInputsBuilder(Builder[Any, Any, Any, Any]):
     """Write both materialized inputs into the artifact, proving access reaches the builder."""
 
-    async def run(self, context: AnyContext) -> BuilderResult:
+    def __init__(self) -> None:
+        super().__init__(BuilderSettings())
+
+    async def run(self, context: AnyContext) -> HeatmapOutputs:
         slide = context.inputs.slide.read_bytes()
         roi = context.inputs.region_of_interest.read_bytes()
         output = context.output_path("heatmap")
@@ -319,14 +322,15 @@ class CopyInputsBuilder:
         return HeatmapOutputs(heatmap=SharedArtifact(path=str(output)))
 
 
-class HalfwayBuilder:
+class HalfwayBuilder(Builder[Any, Any, Any, Any]):
     """Report being half done, wait until EMPAIA heard of it or refused it, then copy."""
 
     def __init__(self, service: ControlledEmpaiaService) -> None:
+        super().__init__(BuilderSettings())
         self._service = service
         self._copy = CopyInputsBuilder()
 
-    async def run(self, context: AnyContext) -> BuilderResult:
+    async def run(self, context: AnyContext) -> HeatmapOutputs:
         context.report_progress(0.5)
         while not (self._service.progress or self._service.progress_failures):
             await asyncio.sleep(0.001)
@@ -337,10 +341,13 @@ class HalfwayBuilder:
 SETTINGS_ERRORS = [f"setting_{i}: Input should be greater than 0" for i in range(1, 9)]
 
 
-class SettingsRejectingBuilder:
+class SettingsRejectingBuilder(Builder[Any, Any, Any, Any]):
     """Reject eight settings at once, more than EMPAIA's 255 characters can name."""
 
-    async def run(self, context: AnyContext) -> BuilderResult:
+    def __init__(self) -> None:
+        super().__init__(BuilderSettings())
+
+    async def run(self, context: AnyContext) -> HeatmapOutputs:
         raise InvalidInvocation(f"invalid settings: {'; '.join(SETTINGS_ERRORS)}")
 
 
@@ -849,6 +856,7 @@ class EmpaiaCredentialTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_invalid_expiry_is_rejected_before_gateway_preparation(self) -> None:
         """Reject coerced, nonfinite, and unrepresentable expiry with a safe error."""
+        expiry: object
         for expiry in (
             None,
             True,

@@ -110,7 +110,7 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
                 writer = RecordingRectangleWriter()
 
                 def handle(
-                    request: httpx.Request, coordinate=coordinate
+                    request: httpx.Request, coordinate: object = coordinate
                 ) -> httpx.Response:
                     """Return scenario-specific mock HTTP responses and record or assert requests for this gateway test."""
                     if request.url.path.endswith("/direct-access"):
@@ -174,9 +174,9 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_mutation_guard_runs_before_authenticated_request(self) -> None:
         """Verify mutation guard runs before authenticated request."""
-        events = []
+        events: list[str] = []
 
-        async def guard():
+        async def guard() -> None:
             """Record that mutation guarding ran before the fake authenticated HTTP request."""
             events.append("guard")
 
@@ -256,6 +256,7 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             body = json.loads(request.content) if request.content else None
             requests.append((request.method, request.url.path, body))
             if request.method == "POST":
+                assert body is not None
                 return httpx.Response(200, json={**body, "id": PIXELMAP_ID})
             return httpx.Response(200, json={})
 
@@ -272,6 +273,7 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
         await gateway.close()
 
         method, path, body = requests[0]
+        assert isinstance(body, dict)
         self.assertEqual((method, path), ("POST", "/v3/job-1/outputs/score"))
         # The SDK sends the whole typed model; these are the fields that matter.
         self.assertEqual(

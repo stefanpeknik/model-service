@@ -17,14 +17,17 @@ from model_service.providers.empaia.app_service.http import (
 
 
 class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
-    async def test_disconnect_after_accepted_put_is_unknown_without_resend(self):
-        requests = []
+    async def test_disconnect_after_accepted_put_is_unknown_without_resend(
+        self,
+    ) -> None:
+        requests: list[str] = []
 
-        async def handle(request):
+        async def handle(request: web.Request) -> web.Response:
             requests.append(request.method)
             if request.method == "GET":
                 return web.json_response({})
             if requests.count("PUT") == 1:
+                assert request.transport is not None
                 request.transport.close()
             return web.Response(status=204)
 
@@ -42,10 +45,10 @@ class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
                 await gateway.close()
         self.assertEqual(requests, ["GET", "PUT"])
 
-    async def test_malformed_mutation_acknowledgment_is_outcome_unknown(self):
-        received = []
+    async def test_malformed_mutation_acknowledgment_is_outcome_unknown(self) -> None:
+        received: list[str] = []
 
-        async def handle(request):
+        async def handle(request: web.Request) -> web.Response:
             received.append(request.path)
             return web.Response(text="private malformed response")
 
@@ -68,11 +71,15 @@ class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
                 await gateway.close()
         self.assertEqual(received, ["/v3/job/outputs/score"])
 
-    async def test_an_unusable_acknowledgment_of_an_output_is_outcome_unknown(self):
+    async def test_an_unusable_acknowledgment_of_an_output_is_outcome_unknown(
+        self,
+    ) -> None:
         for value in ({}, {"id": ""}, {"id": 4}, None):
             with self.subTest(value=value):
 
-                async def handle(_request, value=value):
+                async def handle(
+                    _request: web.Request, value: object = value
+                ) -> web.Response:
                     return web.json_response(value)
 
                 app = web.Application()
@@ -88,12 +95,16 @@ class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
                     self.assertFalse(raised.exception.retryable)
                     await gateway.close()
 
-    async def test_http_errors_preserve_read_and_mutation_classification(self):
+    async def test_http_errors_preserve_read_and_mutation_classification(self) -> None:
         for status in (400, 401, 403, 404, 429, 500, 503):
             with self.subTest(status=status):
-                received = []
+                received: list[str] = []
 
-                async def handle(request, received=received, status=status):
+                async def handle(
+                    request: web.Request,
+                    received: list[str] = received,
+                    status: int = status,
+                ) -> web.Response:
                     received.append(request.method)
                     return web.Response(
                         status=status, text="private-token upstream detail"

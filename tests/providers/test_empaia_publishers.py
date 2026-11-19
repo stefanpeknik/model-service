@@ -162,7 +162,7 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
         gateway = AsyncMock()
         gateway.set_before_mutation = lambda _callback: None
         provider = EmpaiaProviderAdapter(
-            lambda _context: gateway,  # type: ignore[arg-type, return-value]
+            lambda _context: gateway,
             allowed_api_urls=("https://empaia.invalid",),
         )
 
@@ -191,7 +191,7 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
         gateway = AsyncMock()
         gateway.set_before_mutation = lambda _callback: None
         provider = EmpaiaProviderAdapter(
-            lambda _context: gateway,  # type: ignore[arg-type, return-value]
+            lambda _context: gateway,
             allowed_api_urls=("https://empaia.invalid",),
             publishers=PublisherRegistry(
                 {("continuous_pixelmap", MEDIA_TYPE): pixelmaps}
@@ -236,7 +236,7 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
         gateway = AsyncMock()
         gateway.set_before_mutation = lambda _callback: None
         provider = EmpaiaProviderAdapter(
-            lambda _context: gateway,  # type: ignore[arg-type, return-value]
+            lambda _context: gateway,
             allowed_api_urls=("https://empaia.invalid",),
             publishers=publishers,
             io={"heatmap": io},

@@ -7,6 +7,7 @@ import hashlib
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import TYPE_CHECKING
 
 from model_service.api.scheduler.public import (
     ExecutionError,
@@ -19,6 +20,10 @@ from model_service.contracts.result import BuilderResult, SharedArtifact
 from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from tests.support.builder_fixtures import invocation
+
+
+if TYPE_CHECKING:
+    from model_service.contracts.json_values import JsonValue
 
 
 def shared(root: str | Path, **inputs: str):  # type: ignore[no-untyped-def]
@@ -86,7 +91,7 @@ class SharedStorageTests(unittest.TestCase):
                 self.adapter.create(shared(root), ExecutionContext())
 
     def test_state_must_contain_only_a_non_empty_string_root(self) -> None:
-        for state in (
+        states: list[dict[str, JsonValue]] = [
             {},
             {"root": None},
             {"root": True},
@@ -94,7 +99,8 @@ class SharedStorageTests(unittest.TestCase):
             {"root": ""},
             {"root": str(self.allowed), "credential": "secret"},
             {"root": str(self.allowed), "processing_attempt_id": "caller-attempt"},
-        ):
+        ]
+        for state in states:
             with self.subTest(state=state), self.assertRaises(InvalidInvocation):
                 self.adapter.create(
                     invocation("shared_storage", state), ExecutionContext()
@@ -160,7 +166,10 @@ class SharedStorageTests(unittest.TestCase):
     def test_finish_moves_the_accepted_artifact_and_removes_every_attempt(
         self,
     ) -> None:
-        context = {"root": str(self.allowed.resolve()), "attempts": "execution"}
+        context: dict[str, JsonValue] = {
+            "root": str(self.allowed.resolve()),
+            "attempts": "execution",
+        }
 
         def write(attempt: str) -> Path:
             path = self.adapter.create(

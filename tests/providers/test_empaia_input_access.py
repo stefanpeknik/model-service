@@ -8,7 +8,7 @@ import stat
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import httpx
 from fastapi import FastAPI
@@ -43,9 +43,15 @@ from tests.support.builder_fixtures import (
     invocation,
     spec,
 )
+from tests.support.empaia_fixtures import StrictGateway
 
 
 if TYPE_CHECKING:
+    from model_service.contracts.json_values import JsonValue
+    from model_service.providers.empaia.app_service.gateway import (
+        EmpaiaGateway,
+        EmpaiaJobContext,
+    )
     from tests.support.builder_fixtures import AnyContext
 
 
@@ -54,17 +60,11 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
         started = asyncio.Event()
         closed = asyncio.Event()
 
-        class Gateway:
-            async def materialize_input(
-                self,
-                _name: str,
-                _directory: str,
-                *,
-                mpp: float | None = None,
-                **_: object,
-            ) -> str:
+        class Gateway(StrictGateway):
+            async def materialize_input(self, name: str, directory: str) -> str:
                 started.set()
                 await asyncio.Event().wait()
+                raise AssertionError("the event is never set")
 
             async def close(self) -> None:
                 closed.set()
@@ -107,17 +107,11 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
         ]
         for failure in cases:
 
-            class Gateway:
-                async def materialize_input(
-                    self,
-                    _name: str,
-                    _directory: str,
-                    *,
-                    mpp: float | None = None,
-                    failure: EmpaiaGatewayError = failure,
-                    **_: object,
-                ) -> str:
-                    raise failure
+            class Gateway(StrictGateway):
+                error = failure
+
+                async def materialize_input(self, name: str, directory: str) -> str:
+                    raise self.error
 
                 async def close(self) -> None:
                     return None
@@ -153,15 +147,18 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
     async def test_empaia_access_validates_contexts_before_opening_a_gateway(
         self,
     ) -> None:
-        def unexpected_gateway(_context: object) -> Any:
+        def unexpected_gateway(context: EmpaiaJobContext) -> EmpaiaGateway:
             self.fail("invalid context must not open an AppService gateway")
 
-        public = {"api_url": "https://empaia.invalid", "job_id": "job"}
-        protected = {**public, "credential": "secret"}
+        public: dict[str, JsonValue] = {
+            "api_url": "https://empaia.invalid",
+            "job_id": "job",
+        }
+        protected: dict[str, JsonValue] = {**public, "credential": "secret"}
         runtime = ExecutionContext(
             processing_attempt_id="attempt", protected_context=protected
         )
-        cases = [
+        cases: list[tuple[dict[str, JsonValue], ExecutionContext]] = [
             ({}, runtime),
             ({**public, "job_id": False}, runtime),
             ({**public, "credential": "secret"}, runtime),
@@ -195,15 +192,8 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
         closed: list[bool] = []
         seen_requests: list[RunRequest] = []
 
-        class Gateway:
-            async def materialize_input(
-                self,
-                _name: str,
-                directory: str,
-                *,
-                mpp: float | None = None,
-                **_: object,
-            ) -> str:
+        class Gateway(StrictGateway):
+            async def materialize_input(self, name: str, directory: str) -> str:
                 path = Path(directory) / "slide.svs"
                 path.write_bytes(b"slide")
                 return str(path)
@@ -211,12 +201,12 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
             async def close(self) -> None:
                 closed.append(True)
 
-        def gateway_factory(context: Any) -> Gateway:
+        def gateway_factory(context: EmpaiaJobContext) -> Gateway:
             seen_credentials.append(context.credential)
             return Gateway()
 
         async def build(context: AnyContext) -> BuilderResult:
-            _ = context.inputs.slide  # type: ignore[attr-defined]
+            _ = context.inputs.slide
             return BuilderResult({"score": InlineOutput(1)})
 
         with TemporaryDirectory() as directory:
@@ -233,7 +223,10 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
                 seen_requests.append(body)
                 return await run_http(application, body)
 
-            public = {"api_url": "https://empaia.invalid", "job_id": "job"}
+            public: dict[str, JsonValue] = {
+                "api_url": "https://empaia.invalid",
+                "job_id": "job",
+            }
             request = invocation(
                 "empaia", public, inputs={"slide": ProviderInput("slide")}
             )
@@ -274,10 +267,8 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
         # different users: whatever the umask, every directory is 0777.
         modes: dict[str, int] = {}
 
-        class Gateway:
-            async def materialize_input(
-                self, _name: str, directory: str, **_: object
-            ) -> str:
+        class Gateway(StrictGateway):
+            async def materialize_input(self, name: str, directory: str) -> str:
                 path = Path(directory) / "slide.svs"
                 path.write_bytes(b"slide")
                 return str(path)
@@ -307,7 +298,10 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
                 {"empaia": EmpaiaInputAccessFactory(lambda _c: Gateway(), root)},
                 model_handles=DECLARED,
             )
-            public = {"api_url": "https://empaia.invalid", "job_id": "job"}
+            public: dict[str, JsonValue] = {
+                "api_url": "https://empaia.invalid",
+                "job_id": "job",
+            }
             previous = os.umask(0o077)
             try:
                 await application.run(

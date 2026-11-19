@@ -103,7 +103,7 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
             root = Path(directory)
             job, artifact, other_job = self.job_workspaces(root)
             provider = EmpaiaProviderAdapter(
-                lambda _context: gateway,  # type: ignore[arg-type, return-value]
+                lambda _context: gateway,
                 allowed_api_urls=("https://empaia.invalid",),
                 workspace_root=root,
                 publishers=PUBLISHERS,
@@ -139,7 +139,7 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
             root = Path(directory)
             job, _artifact, other_job = self.job_workspaces(root)
             provider = EmpaiaProviderAdapter(
-                lambda _context: gateway,  # type: ignore[arg-type, return-value]
+                lambda _context: gateway,
                 allowed_api_urls=("https://empaia.invalid",),
                 workspace_root=root,
                 publishers=PUBLISHERS,
@@ -166,7 +166,7 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
             root = Path(directory)
             _job, artifact, _other = self.job_workspaces(root)
             provider = EmpaiaProviderAdapter(
-                lambda _context: gateway,  # type: ignore[arg-type, return-value]
+                lambda _context: gateway,
                 allowed_api_urls=("https://empaia.invalid",),
                 workspace_root=root,
                 publishers=PUBLISHERS,
@@ -211,7 +211,7 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
             root = Path(directory)
             _job, artifact, _other = self.job_workspaces(root)
             provider = EmpaiaProviderAdapter(
-                lambda _context: gateway,  # type: ignore[arg-type, return-value]
+                lambda _context: gateway,
                 allowed_api_urls=("https://empaia.invalid",),
                 workspace_root=root,
                 publishers=PUBLISHERS,
