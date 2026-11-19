@@ -9,12 +9,12 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
-import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
+from model_service.builders.directories import make_shared_directory, remove_directory
 from model_service.builders.input_access import (
     InputAccess,
     InputAccessFactory,
@@ -140,7 +140,7 @@ class EmpaiaInputAccess(InputAccess):
         try:
             await self._gateway.close()
         finally:
-            await asyncio.to_thread(shutil.rmtree, self._root / "inputs", True)
+            await asyncio.to_thread(remove_directory, self._root / "inputs")
 
 
 def job_workspace(root: Path, api_url: str, job_id: str) -> Path:
@@ -220,14 +220,14 @@ class EmpaiaInputAccessFactory(InputAccessFactory):
         )
         paths: dict[str, Path] = {}
         try:
-            root.mkdir(parents=True, exist_ok=True)
+            make_shared_directory(root)
             for name, value in invocation.inputs.items():
                 if not isinstance(value, ProviderInput):
                     raise InvalidInvocation(
                         "EMPAIA input access requires provider inputs"
                     )
                 directory = root / "inputs" / name
-                directory.mkdir(parents=True, exist_ok=True)
+                make_shared_directory(directory)
                 path = Path(await gateway.materialize_input(value.name, str(directory)))
                 if not path.is_relative_to(directory) or not path.is_file():
                     raise InvalidInvocation(
@@ -241,7 +241,7 @@ class EmpaiaInputAccessFactory(InputAccessFactory):
                 logger.warning(
                     "EMPAIA input cleanup failed: %s", type(cleanup_error).__name__
                 )
-            await asyncio.to_thread(shutil.rmtree, root, True)
+            await asyncio.to_thread(remove_directory, root)
             if isinstance(error, EmpaiaGatewayError):
                 # Keep the gateway's safe reason instead of "builder failed unexpectedly".
                 raise BuilderFailure(

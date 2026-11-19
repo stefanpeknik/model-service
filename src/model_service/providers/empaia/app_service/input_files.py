@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
+from model_service.builders.directories import make_shared_directory
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.app_service.types import (
     DirectAccess,
@@ -43,7 +44,7 @@ def link_direct_input(direct: DirectAccess, directory: Path) -> Path:
             raise EmpaiaGatewayError(
                 "EMPAIA input is unavailable on shared storage", retryable=True
             )
-        directory.mkdir(parents=True, exist_ok=True)
+        make_shared_directory(directory)
         link = directory / source.name
         link.symlink_to(source)
         companion = source.with_suffix("")
@@ -75,7 +76,7 @@ def write_rectangle_input(
             failure, including missing libvips.
     """
     try:
-        destination.parent.mkdir(parents=True, exist_ok=True)
+        make_shared_directory(destination.parent)
         writer(destination, slide, rectangle)
     except EmpaiaGatewayError:
         raise

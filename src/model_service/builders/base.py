@@ -16,6 +16,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 from model_service.builders.declarations import BuilderInputs, BuilderOutputs
+from model_service.builders.directories import make_shared_directory
 from model_service.builders.model_clients.base import ModelClient
 from model_service.contracts.failures import InvalidInvocation
 from model_service.contracts.result import SharedArtifact
@@ -122,7 +123,7 @@ def _atomic_artifact(destination: Path, *, inputs: tuple[Path, ...]) -> Iterator
     """
     if any(destination.resolve() == source.resolve() for source in inputs):
         raise InvalidInvocation("output must not replace an input")
-    destination.parent.mkdir(parents=True, exist_ok=True)
+    make_shared_directory(destination.parent)
     temporary = destination.with_name(
         f".{destination.stem}.{uuid4().hex}{destination.suffix}"
     )

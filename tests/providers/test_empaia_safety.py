@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -156,6 +157,47 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertFalse(job.exists())
             self.assertTrue(other_job.exists())
+
+    @unittest.skipIf(os.geteuid() == 0, "root removes read-only directories")
+    async def test_a_workspace_that_cannot_be_removed_is_reported(self) -> None:
+        gateway = AsyncMock()
+        gateway.set_before_mutation = lambda _callback: None
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            _job, artifact, _other = self.job_workspaces(root)
+            provider = EmpaiaProviderAdapter(
+                lambda _context: gateway,  # type: ignore[arg-type, return-value]
+                allowed_api_urls=("https://empaia.invalid",),
+                workspace_root=root,
+                publishers=PUBLISHERS,
+            )
+            # As if another user had created it without letting others in.
+            artifact.parent.chmod(0o555)
+            try:
+                with self.assertLogs("model_service", "WARNING"):
+                    await provider.finish(
+                        {
+                            "api_url": "https://empaia.invalid",
+                            "job_id": "j",
+                            "credential": "c",
+                        },
+                        ProviderSuccess(
+                            BuilderResult(
+                                outputs={
+                                    "heatmap": SharedArtifact(
+                                        path=str(artifact),
+                                        media_type="application/x-npz",
+                                    )
+                                }
+                            ),
+                            "heatmap",
+                        ),
+                    )
+            finally:
+                artifact.parent.chmod(0o755)
+
+            gateway.finalize.assert_awaited_once()
+            self.assertTrue(artifact.exists())
 
     async def test_a_publication_that_fails_keeps_outputs_for_its_retry(
         self,

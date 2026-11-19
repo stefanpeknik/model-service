@@ -11,7 +11,6 @@ import asyncio
 import hashlib
 import json
 import logging
-import shutil
 from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime, timedelta
@@ -31,6 +30,7 @@ from model_service.api.scheduler.public import (
     ScheduleRequest,
     SubmissionIdentity,
 )
+from model_service.builders.directories import remove_directory
 from model_service.builders.registry import get_builder
 from model_service.contracts.invocation import (
     InputAccessContext,
@@ -346,4 +346,4 @@ class EmpaiaProviderAdapter(ProviderAdapter):
         if self._workspace_root is None:
             return
         directory = job_workspace(self._workspace_root, context.api_url, context.job_id)
-        await asyncio.to_thread(shutil.rmtree, directory, True)
+        await asyncio.to_thread(remove_directory, directory)

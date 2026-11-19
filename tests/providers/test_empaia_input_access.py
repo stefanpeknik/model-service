@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import stat
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -36,6 +38,7 @@ from tests.support.builder_fixtures import (
     DECLARED,
     SPATIAL_MODEL,
     FunctionBuilder,
+    artifact_output,
     inline_output,
     invocation,
     spec,
@@ -263,6 +266,68 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(raised.exception.code, "invalid_builder_invocation")
         self.assertFalse(raised.exception.retryable)
         self.assertNotIn("secret", str(raised.exception))
+
+    async def test_workspace_directories_let_any_user_remove_their_entries(
+        self,
+    ) -> None:
+        # Ray creates the workspace, the API removes it, and they may run as
+        # different users: whatever the umask, every directory is 0777.
+        modes: dict[str, int] = {}
+
+        class Gateway:
+            async def materialize_input(
+                self, _name: str, directory: str, **_: object
+            ) -> str:
+                path = Path(directory) / "slide.svs"
+                path.write_bytes(b"slide")
+                return str(path)
+
+            async def close(self) -> None:
+                return None
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            async def build(context: BuilderContext) -> BuilderResult:
+                with context.write_artifact("heatmap") as (path, artifact):
+                    path.write_bytes(b"npz")
+                for entry in root.rglob("*"):
+                    if entry.is_dir():
+                        modes[str(entry.relative_to(root))] = stat.S_IMODE(
+                            entry.stat().st_mode
+                        )
+                return BuilderResult({"heatmap": artifact})
+
+            application = BuilderApplication(
+                spec(
+                    inputs={"slide": InputSpec()},
+                    outputs={"heatmap": artifact_output("outputs/heatmap.npz")},
+                ),
+                FunctionBuilder(build),
+                {"empaia": EmpaiaInputAccessFactory(lambda _c: Gateway(), root)},
+                model_handles=DECLARED,
+            )
+            public = {"api_url": "https://empaia.invalid", "job_id": "job"}
+            previous = os.umask(0o077)
+            try:
+                await application.run(
+                    invocation(
+                        "empaia", public, inputs={"slide": ProviderInput("slide")}
+                    ),
+                    SPATIAL_MODEL,
+                    ExecutionContext(
+                        processing_attempt_id="attempt",
+                        protected_context={**public, "credential": "secret"},
+                    ),
+                )
+            finally:
+                os.umask(previous)
+
+        # The job, its attempt, the inputs and the outputs, at least.
+        self.assertGreaterEqual(len(modes), 4)
+        self.assertEqual(
+            {name: mode for name, mode in modes.items() if mode != 0o777}, {}
+        )
 
 
 if __name__ == "__main__":

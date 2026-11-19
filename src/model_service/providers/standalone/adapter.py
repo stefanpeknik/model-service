@@ -12,7 +12,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import shutil
 from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -29,6 +28,7 @@ from model_service.api.scheduler.public import (
     ScheduleRequest,
     SubmissionIdentity,
 )
+from model_service.builders.directories import make_shared_directory, remove_directory
 from model_service.builders.registry import get_builder
 from model_service.contracts.caller_request import BuilderRequest
 from model_service.contracts.failures import InvalidInvocation
@@ -195,7 +195,7 @@ class StandaloneProviderAdapter(ProviderAdapter):
                         "/".join(relative)
                     )
                     if source.exists():
-                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        make_shared_directory(destination.parent)
                         os.replace(source, destination)
                     outputs[name] = replace(output, path=str(destination))
             except (OSError, InvalidInvocation) as error:
@@ -205,5 +205,5 @@ class StandaloneProviderAdapter(ProviderAdapter):
                     retryable=True,
                 ) from error
             result = BuilderResult(outputs)
-        shutil.rmtree(attempts, ignore_errors=True)
+        remove_directory(attempts)
         return result
