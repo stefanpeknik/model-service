@@ -121,6 +121,28 @@ class HeatmapBuilderTests(unittest.IsolatedAsyncioTestCase):
         artifact = await self.run_builder(handle)
         np.testing.assert_allclose(self.scores(artifact), 0.375)
 
+    async def test_a_region_of_interest_sends_only_its_tiles_to_the_model(
+        self,
+    ) -> None:
+        # Each pixel's red value is its column, so a tile shows where it starts;
+        # the region is the slide's right third, columns 64 to 95.
+        pixels = np.zeros((64, 96, 3), dtype=np.uint8)
+        pixels[..., 0] = np.arange(96)
+        write_slide(self.root / "slide.tiff", pixels)
+        region = np.zeros_like(pixels)
+        region[:, 64:] = 255
+        write_slide(self.root / "mask.tiff", region)
+        handle = fake_handle(self.config, np.zeros((32, 32), dtype=np.float32))
+
+        await self.run_builder(handle)
+
+        first_columns = {
+            int(call.args[0][0, 0, 0]) for call in handle.predict.remote.await_args_list
+        }
+        # Stride 16: the tiles at 48 and 64 reach into the region, those at 0
+        # to 32 end before it.
+        self.assertEqual(first_columns, {48, 64})
+
 
 class UnreadableInputTests(unittest.TestCase):
     def test_a_file_that_is_not_a_slide_is_an_invalid_input(self) -> None:

@@ -10,7 +10,6 @@ level.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from math import ceil, floor
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -179,17 +178,14 @@ class TileReader:
         Returns:
             True when the window's tissue share exceeds the minimum.
         """
-        left, top = floor(x * self._tissue_scale_x), floor(y * self._tissue_scale_y)
-        right = ceil((x + tile_size) * self._tissue_scale_x)
-        bottom = ceil((y + tile_size) * self._tissue_scale_y)
-        window = tissue.pixels[top:bottom, left:right]
+        left, top, width, height = _window(
+            x, y, tile_size, self._tissue_scale_x, self._tissue_scale_y
+        )
+        window = tissue.pixels[top : top + height, left : left + width]
         return window.size > 0 and float(window.mean()) > self._min_tissue_fraction
 
     def _mask_selects(self, mask: OpenSlide, x: int, y: int, tile_size: int) -> bool:
         """Check whether the tile's window in the mask has a nonzero pixel.
-
-        The window is rounded outward so a downsampled mask keeps every
-        intersecting pixel.
 
         Args:
             mask: The region-of-interest mask.
@@ -200,11 +196,36 @@ class TileReader:
         Returns:
             True when the window contains a nonzero mask pixel.
         """
-        # Round outward so a downsampled mask keeps every intersecting pixel.
-        mask_x, mask_y = floor(x * self._scale_x), floor(y * self._scale_y)
-        width = ceil((x + tile_size) * self._scale_x) - mask_x
-        height = ceil((y + tile_size) * self._scale_y) - mask_y
+        left, top, width, height = _window(
+            x, y, tile_size, self._scale_x, self._scale_y
+        )
         window = mask.read_region_relative(
-            (mask_x, mask_y), self._mask_level, (width, height)
+            (left, top), self._mask_level, (width, height)
         )
         return bool(np.asarray(window.convert("L")).any())
+
+
+def _window(
+    x: int, y: int, tile_size: int, scale_x: float, scale_y: float
+) -> tuple[int, int, int, int]:
+    """Scale a tile into a coarser image the way the original model-service tiling did.
+
+    Origin and size are scaled and truncated separately, as in its
+    `fetch_tissue_tile`.
+
+    Args:
+        x: Tile origin x at the selected level.
+        y: Tile origin y at the selected level.
+        tile_size: Tile width and height in pixels.
+        scale_x: The image's width over the level's.
+        scale_y: The image's height over the level's.
+
+    Returns:
+        The window's left, top, width and height in the image's pixels.
+    """
+    return (
+        int(x * scale_x),
+        int(y * scale_y),
+        int(tile_size * scale_x),
+        int(tile_size * scale_y),
+    )

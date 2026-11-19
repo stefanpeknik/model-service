@@ -61,6 +61,7 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
         stride_fraction: float = 0.5,
         predictor: LandmarkPredictor | None = None,
         mask: str = "full",
+        mask_pixels: np.ndarray | None = None,
     ) -> ScoreGrid:
         predictor = predictor or LandmarkPredictor()
         directory = root / f"{width}-{height}-{mask}"
@@ -76,7 +77,7 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
             if mask == "region":
                 selected[:] = 0
                 selected[REGION] = 255
-            write_slide(mask_path, selected)
+            write_slide(mask_path, selected if mask_pixels is None else mask_pixels)
         output = directory / "heatmap.npz"
         await build_heatmap(
             directory / "slide.tiff",
@@ -197,6 +198,21 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertTrue(region.scored[2:4, 3:6].all())
         self.assertFalse(region.scored[:, 0].any())
+
+    async def test_a_coarser_mask_selects_tiles_by_its_truncated_window(self) -> None:
+        # A mask at a third of the slide's size: a 32 px tile at x covers mask
+        # columns int(x / 3) to int(x / 3) + int(32 / 3), as in the original
+        # model-service tiling. Mask pixel (15, 15) is in the window of the tile
+        # at (32, 32) only; the tile at 16 covers columns 5 to 14.
+        mask_pixels = np.zeros((32, 32, 3), dtype=np.uint8)
+        mask_pixels[15, 15] = 255
+        predictor = LandmarkPredictor()
+        with TemporaryDirectory() as directory:
+            await self._build(
+                Path(directory), 96, 96, predictor=predictor, mask_pixels=mask_pixels
+            )
+
+        self.assertEqual(predictor.calls, 1)
 
     async def test_empty_mask_skips_predictions_and_scores_nothing(self) -> None:
         predictor = LandmarkPredictor()
