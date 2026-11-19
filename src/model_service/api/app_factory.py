@@ -36,6 +36,7 @@ from model_service.api.scheduler.store.protected_context import ProtectedContext
 from model_service.api.synchronous_runs import SynchronousBuilderService
 from model_service.builders.registry import BUILDERS, get_builder
 from model_service.providers.registry import PROVIDERS
+from model_service.providers.standalone.provider import STANDALONE_PROVIDER
 
 
 if TYPE_CHECKING:
@@ -189,7 +190,9 @@ def create_app(
         return result
 
     app.include_router(models.create_router(catalog, access))
-    app.include_router(builders.create_router(scheduler, builder_runner, access))
+    app.include_router(
+        builders.create_router(scheduler, builder_runner, access, STANDALONE_PROVIDER)
+    )
     for routes in provider_routes:
         app.include_router(routes(scheduler))
     app.include_router(executions.create_router(scheduler, access))

@@ -39,13 +39,13 @@ from model_service.contracts.invocation import Deadline
 from model_service.contracts.json_values import JsonValue
 from model_service.contracts.model_declarations import InferenceContract
 from model_service.contracts.result import BuilderResult
-from model_service.providers.standalone.provider import STANDALONE_PROVIDER
 
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
 
     from model_service.api.scheduler.protocols import Scheduler
+    from model_service.api.scheduler.public import ProviderName
     from model_service.api.synchronous_runs import SynchronousBuilderService
 
 
@@ -125,6 +125,7 @@ def create_router(
     scheduler: Scheduler,
     builder_runner: SynchronousBuilderService | None,
     access: Access,
+    provider: ProviderName,
 ) -> APIRouter:
     """Build the `/v1/builders` router: the catalog, synchronous runs and scheduling.
 
@@ -132,6 +133,7 @@ def create_router(
         scheduler: Admits durable executions.
         builder_runner: Runs builders synchronously; None makes `/run` answer 503.
         access: Guards the routes.
+        provider: The provider whose files scheduled executions read and write.
 
     Returns:
         The router.
@@ -271,7 +273,7 @@ def create_router(
             ScheduleRequest(
                 builder_id=builder_id,
                 model_id=model_id,
-                provider=STANDALONE_PROVIDER,
+                provider=provider,
                 body=body.builder_request(),
                 requested_timeout_seconds=body.requested_timeout_seconds,
                 idempotency_key=idempotency_key,
