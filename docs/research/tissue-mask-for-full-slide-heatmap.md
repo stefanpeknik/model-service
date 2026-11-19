@@ -24,7 +24,7 @@ This preparation is not a smaller inference run. The first `prostate-heatmap` ex
 
 ## Prepared input, 2026-10-02
 
-[`scripts/prepare_tissue_mask.py`](../../scripts/prepare_tissue_mask.py) reads the WSI through OpenSlide at level 7, composites transparent pixels over white, selects stained or dark pixels, removes isolated noise, and expands the selection slightly around tissue. It writes a tiled, ZIP-compressed binary TIFF with resolution metadata derived from the slide. This is a tile-selection mask, not a diagnostic tissue segmentation.
+A one-off script (since removed; builders now use ratiopath's tissue mask) read the WSI through OpenSlide at level 7, composited transparent pixels over white, selected stained or dark pixels, removed isolated noise, and expanded the selection slightly around tissue. It wrote a tiled, ZIP-compressed binary TIFF with resolution metadata derived from the slide. This is a tile-selection mask, not a diagnostic tissue segmentation.
 
 The prepared local mask is `downloads/wsi/962ea217-0fd7-4ddd-a1a0-165c89056cef/tissue-mask-open-slide.tiff`. Its [preview](../../downloads/wsi/962ea217-0fd7-4ddd-a1a0-165c89056cef/tissue-mask-open-slide-preview.png) overlays the selected region on the same OpenSlide level. The mask is 697 by 1599 pixels, covers 2.87% of that canvas, contains only 0 and 255, and has SHA-256 `64cb47eec2737bd0441753f7646cead8f169146b90d9c5efc135c7db67dc0806`. OpenSlide 4.0.1 opens both the original WSI and generated mask; sample tissue and background reads returned 255 and 0 respectively.
 

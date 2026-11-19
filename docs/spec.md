@@ -384,7 +384,6 @@ Not part of the service, used to deploy and validate it:
 
 - `scripts/warm_model.py`: one scheduled tile, to start a GPU replica before a
   demo or a job.
-- `scripts/prepare_tissue_mask.py`: a tissue mask TIFF for standalone runs.
 - `deploy/images/Dockerfile.code-refresh`: swaps the code layer of an existing
   image for test deployments; release images build from source.
 - `testing/` doubles and `deploy/helm/rayservice/templates/validation-appservice-*`:
