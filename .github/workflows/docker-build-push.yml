@@ -10,6 +10,8 @@ on:
         options:
           - cpu
           - gpu
+          - api
+          - ray-gpu
       tag:
         description: "Docker image tag (e.g., latest, 2.53.0)"
         required: true
@@ -43,9 +45,15 @@ jobs:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
-      - name: Determine exact image tag
+      - name: Determine image name and exact tag
         id: set_tag
         run: |
+          # The API and Ray GPU images have repositories of their own.
+          case "${{ inputs.image }}" in
+            api) echo "repository=cerit.io/rationai/model-service-api" >> $GITHUB_OUTPUT ;;
+            ray-gpu) echo "repository=cerit.io/rationai/model-service-ray" >> $GITHUB_OUTPUT ;;
+            *) echo "repository=cerit.io/rationai/model-service" >> $GITHUB_OUTPUT ;;
+          esac
           # Automatically append '-gpu' suffix for GPU images if not already present
           if [ "${{ inputs.image }}" = "gpu" ] && [[ "${{ inputs.tag }}" != *"-gpu" ]]; then
             echo "image_tag=${{ inputs.tag }}-gpu" >> $GITHUB_OUTPUT
@@ -59,5 +67,5 @@ jobs:
           context: .
           file: ./deploy/images/Dockerfile.${{ inputs.image }}
           push: true
-          tags: cerit.io/rationai/model-service:${{ steps.set_tag.outputs.image_tag }}
+          tags: ${{ steps.set_tag.outputs.repository }}:${{ steps.set_tag.outputs.image_tag }}
           platforms: linux/amd64
