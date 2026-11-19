@@ -6,6 +6,7 @@ import asyncio
 import base64
 import json
 import unittest
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -21,6 +22,7 @@ from model_service.api.scheduler.internal_state import RetryPolicy
 from model_service.api.scheduler.public import (
     InvalidScheduleRequestError,
     Priority,
+    ScheduleConflictError,
     ScheduleRequest,
     SchedulingUnavailableError,
 )
@@ -181,6 +183,8 @@ class ControlledEmpaiaService:
         """Initialize valid configuration, observable call lists, and independently injectable publication/finalization/cleanup failures."""
         self.configuration: dict[str, JsonValue] = dict(DEFAULT_CONFIGURATION)
         self.configuration_reads = 0
+        # Raised by the configuration read, e.g. when EMPAIA refuses the credential.
+        self.configuration_error: EmpaiaGatewayError | None = None
         self.credentials: list[str] = []
         self.materialized: list[str] = []
         self.published: list[tuple[str, BuilderOutput]] = []
@@ -245,6 +249,8 @@ class FakeGateway(StrictGateway):
     async def get_configuration(self) -> dict[str, JsonValue]:
         """Count configuration reads and return a copy of the configured values."""
         self._service.configuration_reads += 1
+        if self._service.configuration_error is not None:
+            raise self._service.configuration_error
         return dict(self._service.configuration)
 
     async def get_mode(self) -> EmpaiaJobMode:
@@ -539,6 +545,67 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
                 _credential(now + timedelta(hours=2), "original"),
             ],
         )
+
+    async def test_a_replay_from_another_app_service_is_refused(self) -> None:
+        now = datetime.now(UTC)
+        other = "https://other-empaia.invalid"
+        service = ControlledEmpaiaService()
+        provider = EmpaiaProviderAdapter(
+            service.gateway, allowed_api_urls=(API_URL, other), publishers=PUBLISHERS
+        )
+        scheduler = scheduler_for(
+            InMemoryExecutionRepository(clock=lambda: now), provider, now
+        )
+        request = self._request(now, "credential")
+        await scheduler.schedule(request)
+
+        with self.assertRaises(ScheduleConflictError):
+            await scheduler.schedule(
+                replace(request, body={**request.body, "api_url": other})
+            )
+
+    async def test_a_credential_the_app_service_refuses_is_a_permanent_refusal(
+        self,
+    ) -> None:
+        now = datetime.now(UTC)
+        service = ControlledEmpaiaService()
+        service.configuration_error = EmpaiaGatewayError(
+            "EMPAIA rejected the job credential", retryable=False
+        )
+        repository = InMemoryExecutionRepository(clock=lambda: now)
+        provider = EmpaiaProviderAdapter(
+            service.gateway, allowed_api_urls=(API_URL,), publishers=PUBLISHERS
+        )
+        scheduler = scheduler_for(repository, provider, now)
+
+        with self.assertRaises(InvalidScheduleRequestError):
+            await scheduler.schedule(self._request(now, "credential"))
+        # Nothing was admitted: the job is not retried by model-service.
+        self.assertIsNone(
+            await repository.find_submission(
+                provider.identify(self._request(now, "credential"))
+            )
+        )
+
+    async def test_a_cancelled_job_is_reported_to_empaia_as_failed(self) -> None:
+        now = datetime.now(UTC)
+        service = ControlledEmpaiaService()
+        repository = InMemoryExecutionRepository(clock=lambda: now)
+        provider = EmpaiaProviderAdapter(
+            service.gateway, allowed_api_urls=(API_URL,), publishers=PUBLISHERS
+        )
+        scheduler = scheduler_for(repository, provider, now)
+        with TemporaryDirectory() as directory:
+            worker = worker_for(
+                repository, provider, copy_inputs_application(service, directory).run
+            )
+            admitted = await scheduler.schedule(self._request(now, "credential"))
+            await scheduler.cancel(admitted.execution.id)
+            await worker.run_once()
+
+        self.assertEqual(len(service.failures), 1)
+        self.assertFalse(service.finalized)
+        self.assertEqual(service.materialized, [])
 
     async def test_credential_expiry_caps_the_execution_deadline(self) -> None:
         """Verify credential expiry caps the execution deadline."""
