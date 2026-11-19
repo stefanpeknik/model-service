@@ -21,16 +21,15 @@ from model_service.providers.empaia.credentials import (
     ClientCredentials,
     NoCredentials,
 )
-from model_service.providers.empaia.ead.apps import (
+from model_service.providers.empaia.ead.apps import app_definitions, generate_ead
+from model_service.providers.empaia.ead.builder_io import BUILDER_IO, NOT_OFFERED
+from model_service.providers.empaia.ead.listing import (
     VIEWER_CONFIG_KEY,
     AppMode,
     EmpaiaListing,
     ViewerConfig,
-    app_definitions,
-    generate_ead,
     parse_listings,
 )
-from model_service.providers.empaia.ead.builder_io import BUILDER_IO, NOT_OFFERED
 from model_service.providers.empaia.provider import CATALOG_BLOCK
 from model_service.providers.empaia.publishing.publishers import default_publishers
 from model_service.providers.empaia.registration import (
@@ -183,7 +182,7 @@ class AppDefinitionTests(unittest.TestCase):
             "modes": ["preprocessing"],
         }
         with self.assertLogs(
-            "model_service.providers.empaia.ead.apps", "ERROR"
+            "model_service.providers.empaia.ead.listing", "ERROR"
         ) as logs:
             parsed = parse_listings(
                 {

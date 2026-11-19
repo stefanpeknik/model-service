@@ -23,12 +23,9 @@ from model_service.contracts.result import (
 from model_service.contracts.score_grid import MEDIA_TYPE
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.app_service.input_files import _clip
-from model_service.providers.empaia.ead.apps import (
-    AppMode,
-    EmpaiaListing,
-    app_definitions,
-)
+from model_service.providers.empaia.ead.apps import app_definitions
 from model_service.providers.empaia.ead.builder_io import BUILDER_IO
+from model_service.providers.empaia.ead.listing import AppMode, EmpaiaListing
 from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
 from model_service.providers.empaia.publishing.publishers import (
     PrimitivePublisher,

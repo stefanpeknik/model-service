@@ -10,7 +10,7 @@ from model_service.api.scheduler.public import (
     SchedulingUnavailableError,
 )
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
-from model_service.providers.empaia.ead.apps import VIEWER_CONFIG_KEY
+from model_service.providers.empaia.ead.listing import VIEWER_CONFIG_KEY
 
 
 if TYPE_CHECKING:

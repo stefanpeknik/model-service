@@ -59,10 +59,8 @@ class EmpaiaProvider(Provider):
                 unknown input.
             jsonschema.ValidationError: If a generated EAD fails the EAD v3 schema.
         """
-        from model_service.providers.empaia.ead.apps import (
-            app_definitions,
-            parse_listings,
-        )
+        from model_service.providers.empaia.ead.apps import app_definitions
+        from model_service.providers.empaia.ead.listing import parse_listings
         from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
         from model_service.providers.empaia.jobs.routes import create_router
         from model_service.providers.empaia.publishing.publishers import (
