@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from model_service.builders.declarations import (
     Artifact,
@@ -12,6 +12,7 @@ from model_service.builders.declarations import (
     BuilderOutputs,
     BuilderSpec,
     RegionOfInterest,
+    SkipBackground,
     Slide,
     StrideFraction,
     TissueFraction,
@@ -46,15 +47,7 @@ class EmbeddingConfiguration(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     stride_fraction: StrideFraction = 1.0
-    skip_background: Annotated[
-        bool,
-        Field(
-            description=(
-                "Whether tiles without tissue are skipped; they get no row. "
-                "Skipping is faster and leaves empty glass out of the table. On by default."
-            )
-        ),
-    ] = True
+    skip_background: SkipBackground = True
     min_tissue_fraction: TissueFraction = 0.0
 
 

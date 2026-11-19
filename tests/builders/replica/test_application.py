@@ -298,12 +298,12 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
     async def test_builder_failures_keep_their_safe_classification(self) -> None:
         async def build(_context: BuilderContext) -> BuilderResult:
             raise BuilderFailure(
-                code="model_unavailable", safe_message="down", retryable=True
+                code="model_failed", safe_message="down", retryable=True
             )
 
         with self.assertRaises(BuilderFailure) as raised:
             await self.application(run(build)).run(invocation("test"), SPATIAL_MODEL)
-        self.assertEqual(raised.exception.code, "model_unavailable")
+        self.assertEqual(raised.exception.code, "model_failed")
         self.assertTrue(raised.exception.retryable)
 
     async def test_unexpected_failure_does_not_expose_the_raw_exception(self) -> None:

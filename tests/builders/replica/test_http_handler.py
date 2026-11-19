@@ -62,7 +62,7 @@ class BuilderHttpTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(retryable=retryable):
                 detail, actual = await self._run(
                     BuilderFailure(
-                        code="model_unavailable",
+                        code="model_failed",
                         safe_message="model is unavailable",
                         retryable=retryable,
                     )
@@ -71,7 +71,7 @@ class BuilderHttpTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(
                     detail,
                     {
-                        "code": "model_unavailable",
+                        "code": "model_failed",
                         "message": "model is unavailable",
                         "retryable": retryable,
                     },

@@ -491,10 +491,10 @@ class RunRouteTests(ApiTestCase):
             ),
             (
                 RemoteFailureError(
-                    code="model_unavailable", safe_message="down", retryable=True
+                    code="model_failed", safe_message="down", retryable=True
                 ),
                 503,
-                "model_unavailable",
+                "model_failed",
                 True,
             ),
             (UnknownOutcomeError("lost"), 503, "builder_unavailable", True),

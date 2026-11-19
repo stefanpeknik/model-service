@@ -115,6 +115,15 @@ StrideFraction = Annotated[
         ),
     ),
 ]
+SkipBackground = Annotated[
+    bool,
+    Field(
+        description=(
+            "Whether tiles without tissue are skipped; they get no result. "
+            "Skipping is faster and leaves empty glass out. On by default."
+        )
+    ),
+]
 TissueFraction = Annotated[
     float,
     Field(
