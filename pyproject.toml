@@ -9,8 +9,9 @@ readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.12"
 # What every process shares (contracts/). Each process adds its own extra.
-# Both images install from uv.lock: Dockerfile.api the `api` extra,
-# Dockerfile.ray-gpu `builders`, `inference` and `gpu`.
+# The images install from uv.lock: Dockerfile.api the `api` extra,
+# Dockerfile.ray-cpu `builders`, `inference` and `cpu`, Dockerfile.ray-gpu
+# `builders`, `inference` and `gpu`.
 dependencies = [
     "numpy>=1.26.4",
     "pydantic>=2.10.0",
@@ -58,10 +59,15 @@ inference = [
     "torch==2.8.0",
     "torchvision==0.23.0",
 ]
-# ONNX Runtime for model replicas: exactly one of these, since both packages
-# install the same `onnxruntime` module.
-cpu = ["onnxruntime==1.23.2"]
-gpu = ["onnxruntime-gpu==1.23.2", "tensorrt-cu12-libs==10.9.0.34"]
+# Exactly one of these: both ONNX Runtime packages install the same module,
+# and `cpu` takes torch's CPU build, `gpu` its CUDA build.
+cpu = ["onnxruntime==1.23.2", "torch==2.8.0", "torchvision==0.23.0"]
+gpu = [
+    "onnxruntime-gpu==1.23.2",
+    "tensorrt-cu12-libs==10.9.0.34",
+    "torch==2.8.0",
+    "torchvision==0.23.0",
+]
 
 [dependency-groups]
 dev = [
@@ -83,10 +89,18 @@ conflicts = [[{ extra = "cpu" }, { extra = "gpu" }]]
 rationai-empaia = { git = "ssh://git@gitlab.ics.muni.cz/524810/empaia.git", rev = "94de5d033685aaa26157174b148cbe46388324e7" }
 # PyPI only has a download stub for this package.
 tensorrt-cu12-libs = { index = "nvidia" }
+# PyPI's Linux torch is the CUDA build; the CPU one is a fraction of its size.
+torch = [{ index = "pytorch-cpu", extra = "cpu" }]
+torchvision = [{ index = "pytorch-cpu", extra = "cpu" }]
 
 [[tool.uv.index]]
 name = "nvidia"
 url = "https://pypi.nvidia.com"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [build-system]

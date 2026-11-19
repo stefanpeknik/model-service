@@ -52,8 +52,12 @@ workers:
   - rationai-test-gpu-workers
 
 rayImage:
+  repository: cerit.io/stefanpeknik/model-service-ray-cpu
+  tag: empaia-36
+  pullPolicy: IfNotPresent
+rayGpuImage:
   repository: cerit.io/stefanpeknik/model-service-ray
-  tag: empaia-35
+  tag: empaia-36
   pullPolicy: IfNotPresent
 
 storage:
@@ -67,7 +71,7 @@ api:
   replicas: 2
   image:
     repository: cerit.io/stefanpeknik/model-service-api
-    tag: empaia-35
+    tag: empaia-36
     pullPolicy: IfNotPresent
   database:
     existingSecret: model-service-db

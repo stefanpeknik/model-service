@@ -18,8 +18,8 @@ template:
         type: RuntimeDefault
     containers:
       - name: ray-worker
-        image: "{{ .Values.rayImage.repository }}:{{ .Values.rayImage.tag }}"
-        imagePullPolicy: {{ .Values.rayImage.pullPolicy }}
+        image: "{{ .Values.rayGpuImage.repository }}:{{ .Values.rayGpuImage.tag }}"
+        imagePullPolicy: {{ .Values.rayGpuImage.pullPolicy }}
         resources:
           requests:
             cpu: 4

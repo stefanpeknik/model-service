@@ -53,9 +53,16 @@ workers:
   - cpu-workers
   - mig20-workers
 
+# The Ray head's image (Dockerfile.ray-cpu), also run by CPU workers that take
+# it; GPU workers that take an image setting run `rayGpuImage`
+# (Dockerfile.ray-gpu). Both carry the same code.
 rayImage:
   repository: rayproject/ray
   tag: 2.58.0-py312
+  pullPolicy: Always
+rayGpuImage:
+  repository: rayproject/ray
+  tag: 2.58.0-py312-gpu
   pullPolicy: Always
 
 api:

@@ -11,6 +11,7 @@ on:
           - cpu
           - gpu
           - api
+          - ray-cpu
           - ray-gpu
       tag:
         description: "Docker image tag (e.g., latest, 2.53.0)"
@@ -48,9 +49,10 @@ jobs:
       - name: Determine image name and exact tag
         id: set_tag
         run: |
-          # The API and Ray GPU images have repositories of their own.
+          # The API and Ray images have repositories of their own.
           case "${{ inputs.image }}" in
             api) echo "repository=cerit.io/rationai/model-service-api" >> $GITHUB_OUTPUT ;;
+            ray-cpu) echo "repository=cerit.io/rationai/model-service-ray-cpu" >> $GITHUB_OUTPUT ;;
             ray-gpu) echo "repository=cerit.io/rationai/model-service-ray" >> $GITHUB_OUTPUT ;;
             *) echo "repository=cerit.io/rationai/model-service" >> $GITHUB_OUTPUT ;;
           esac
