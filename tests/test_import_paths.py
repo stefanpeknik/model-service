@@ -2,7 +2,7 @@
 
 Code moves rename modules, and string paths escape the type checker: a builder's
 spec.implementation, the `import_path` and `_target_` of each model file in
-deploy/helm/rayservice/models/ (not peknik/, a personal overlay) and the builder
+deploy/helm/rayservice/models/ (not rationai-test/, the test instance's copies) and the builder
 `import_path` in the Helm template. This test imports each module for real and
 looks the attribute up. The model implementations pull in Ray, ONNX Runtime and
 torch; the dev environment has them, so a real import is affordable and catches

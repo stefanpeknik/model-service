@@ -4,8 +4,8 @@
 # Other objects it needs: deploy/k8s/rationai-test-ns/ and the Secrets
 # model-service-db, mlflow-public-credentials and huggingface-secret.
 models:
-  - peknik/prostate-classifier-1
-  - peknik/virchow2
+  - rationai-test/prostate-classifier-1
+  - rationai-test/virchow2
 
 builders:
   heatmap:

@@ -1,8 +1,9 @@
-# The official prostate-classifier-1.yaml, with weights from the public MLflow
-# (experiment 169 is a copy of 65), which this cluster can reach.
+# The test instance's copy of ../prostate-classifier-1.yaml. It differs in one
+# thing: the weights come from the public MLflow (experiment 169 is a copy of
+# 65), which the test cluster can reach.
 inference:
   contract: spatial-scores
-# Offered in EMPAIA as one app with these modes; the facade registers it at startup.
+# Offered in EMPAIA as one app with these modes; the API registers it at startup.
 empaia:
   name: Prostate cancer
   name_short: ProstHM
