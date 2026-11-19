@@ -1,8 +1,74 @@
 # Adding New Models
 
-This guide covers the full model preparation path before deployment: export the model to ONNX, store it in MLflow, and then implement the Python entrypoint that Ray Serve will load.
+## A model that fits an existing implementation: YAML only
 
-If you are adding a new model from scratch, start here first. Once the Python file is ready, continue with the [Deployment Guide](deployment-guide.md) for Helm configuration, deploy, and rollout monitoring.
+Most new models are another trained artifact for an implementation that already
+exists in `src/model_service/inference/implementations/`: another binary classifier ONNX, another segmentation model,
+another tile encoder. These need no Python and no image rebuild.
+
+1. Copy the closest file in `deploy/helm/rayservice/models/` (for example
+   `prostate-classifier-1.yaml`) to `deploy/helm/rayservice/models/<model-id>.yaml`.
+2. Set `serve.name` and `serve.route_prefix: /<model-id>`, the artifact under
+   `user_config.model`, and the model's geometry in `user_config`
+   (`tile_size`, `output_tile_size`, `n_channels`, `mpp` for a classifier or
+   segmentation model).
+3. Keep `inference.contract` (`spatial-scores` for classifiers and segmentation,
+   `tile-embedding` for encoders). An encoder also declares `inference.mpp` and
+   `inference.summaries`, because its implementation does not read them.
+4. Add `<model-id>` to `models:` in the values file and run `helm upgrade`.
+5. Check `GET /v1/models`: the model is listed with the builders that can use it,
+   for example `heatmap`. Run it with
+   `client.builders.run("heatmap", BuilderRequest(model_id="<model-id>", ...))`.
+
+The API refuses to start if a model file is inconsistent (wrong
+`route_prefix`, missing geometry, a parameter declared twice), so a mistake shows
+up at `helm upgrade` rather than at the first request.
+
+Declare truthful values: the contract says how to call the model, not whether its
+predictions mean what you expect. `mpp` in particular must be the resolution the
+model was trained at.
+
+## Iterating on a model
+
+While the model is still changing, the Python implementation is written once
+and each new training run only changes YAML:
+
+1. Point `user_config.model.artifact_uri` in
+   `deploy/helm/rayservice/models/<id>.yaml` at the new MLflow artifact.
+2. Update `tile_size`, `mpp` and the other geometry fields if the new run
+   changed them; the API checks them against the running model.
+3. `helm upgrade`. Ray Serve calls `reconfigure`, which loads the new artifact. The TensorRT engine is cached per
+   checkpoint, so the first start after a new checkpoint builds a new one.
+
+A change to the Python implementation needs a new image:
+`deploy/images/Dockerfile.gpu` copies `src/model_service/` into it. It also
+installs the EMPAIA SDK from a named build context, so build it with
+`--build-context empaia-sdk=<SDK checkout>`. Tag it, push it and set the image
+in the values file.
+
+To try the model, call it directly for a quick answer, or schedule a builder
+over many slides and let it queue:
+
+- `client.builders.run("heatmap", BuilderRequest(model_id="<id>", ...))` waits
+  for the result.
+- `client.builders.schedule(...)` stores the execution in PostgreSQL and
+  returns at once. It waits in the queue until the model has a free replica
+  (GPU workers scale from zero), survives API restarts, and is polled with
+  `client.executions.get(id)` or cancelled. Scheduled work has no start-time
+  option; it runs as soon as capacity allows.
+  For many slides, call `schedule` once per slide; there is no batch call.
+  Each model runs at most its configured replicas, so queued work never takes
+  more GPUs than the model file allows.
+- Raw per-tile inference is not part of the API: post one LZ4-compressed
+  `tile_size`×`tile_size`×3 uint8 tile to the model's Ray Serve ingress at
+  `/<id>/` (`scripts/warm_model.py` does this with a blank tile). For many
+  tiles write a builder, which calls the model by Ray handle inside the cluster.
+
+## A new kind of model: an inference implementation
+
+The rest of this guide is for a model that no existing implementation can serve:
+export the model to ONNX, store it in MLflow, and then implement the Python
+entrypoint that Ray Serve will load. Once the Python file is ready, continue with the [Deployment Guide](deployment-guide.md) for Helm configuration, deploy, and rollout monitoring.
 
 ## Export the Model to ONNX
 
@@ -53,16 +119,14 @@ The deployment guide explains how the runtime reads this artifact back during st
 
 Do not start from an empty file. Copy the closest implementation and adapt only model-specific pieces.
 
-- **Binary classification (baseline)**: [`models/binary_classifier.py`](https://github.com/RationAI/model-service/blob/main/models/binary_classifier.py)
-- **Semantic segmentation**: [`models/semantic_segmentation.py`](https://github.com/RationAI/model-service/blob/main/models/semantic_segmentation.py)
-- **Virchow2 embedding/classification**: [`models/virchow2.py`](https://github.com/RationAI/model-service/blob/main/models/virchow2.py)
-- **Heatmap pipeline**: [`builders/heatmap_builder.py`](https://github.com/RationAI/model-service/blob/main/builders/heatmap_builder.py)
-
-Matching application definitions live in `helm/rayservice/applications/`, but the YAML itself is covered in the [Deployment Guide](deployment-guide.md).
+- **Binary classification (baseline)**: [`src/model_service/inference/implementations/binary_classifier.py`](https://github.com/RationAI/model-service/blob/main/src/model_service/inference/implementations/binary_classifier.py)
+- **Semantic segmentation**: [`src/model_service/inference/implementations/semantic_segmentation.py`](https://github.com/RationAI/model-service/blob/main/src/model_service/inference/implementations/semantic_segmentation.py)
+- **Virchow2 embedding/classification**: [`src/model_service/inference/implementations/virchow2.py`](https://github.com/RationAI/model-service/blob/main/src/model_service/inference/implementations/virchow2.py)
+Matching model files live in `deploy/helm/rayservice/models/`; the YAML itself is covered in the [Deployment Guide](deployment-guide.md).
 
 ## Python Entrypoint
 
-Create a new file in `models/` (for example `models/my_model.py`). The sections below explain what each method does and what belongs inside it.
+Create a new file in `src/model_service/inference/implementations/` (for example `src/model_service/inference/implementations/my_model.py`). The sections below explain what each method does and what belongs inside it.
 
 ### `__init__`: one-time lightweight setup
 
@@ -113,12 +177,11 @@ def reconfigure(self, config: Config) -> None:
   self.predict.set_batch_wait_timeout_s(config["batch_wait_timeout_s"])
 ```
 
-For TensorRT, mixed precision, and other runtime tuning options, see [Optimization Guide](optimization-guide.md).
 
 Data and control flow:
 
 - Read static inference shape from config (`tile_size`).
-- Resolve model provider from `_target_` and fetch the ONNX artifact (typically from MLflow).
+- Resolve the artifact loader from `_target_` and fetch the ONNX artifact (typically from MLflow).
 - Build ONNX Runtime session with desired execution providers.
 - Cache input and output tensor names for fast inference calls.
 - Apply batching limits from config directly to `predict`.
@@ -143,7 +206,7 @@ What happens with data:
 
 ### `get_config`: expose model settings for builders
 
-If your model is used by any Whole-Slide Inference builder (for example `HeatmapBuilder`), you must provide a `get_config` method that builders can call through a Serve handle. The builder uses this to read `tile_size`, `output_tile_size`, `n_channels`, and `mpp` so it can pick the right tiling grid and resolution.
+If your model serves the `spatial-scores` contract (used by the `heatmap` builder), you must provide a `get_config` method that builders can call through a Serve handle. The builder uses this to read `tile_size`, `output_tile_size`, `n_channels`, and `mpp` so it can pick the right tiling grid and resolution.
 
 ```python
 async def get_config(self) -> dict[str, Any]:
@@ -155,7 +218,9 @@ async def get_config(self) -> dict[str, Any]:
   }
 ```
 
-The builder calls it with `await model.get_config.remote()`; keep it cheap and avoid any I/O.
+The contract's model client (`src/model_service/builders/model_clients/`) calls it with `await model.get_config.remote()` before each run and fails with `model_contract_mismatch` if the values differ from the model's catalog declaration; keep it cheap and avoid any I/O.
+
+A `tile-embedding` model (used by the `tile-embeddings` builder) instead provides `get_config()` returning `tile_size` and `summaries`, and `async def embed(self, tile)`: one CHW uint8 tile in, float32 `(dim,)` (one summary) or `(len(summaries), dim)` out, with the model's own preprocessing and pooling inside. See `src/model_service/inference/implementations/virchow2.py`. Builders call these methods by handle. The HTTP `root` route is optional: it is only for posting raw tiles to the model directly, and should call the same methods. `tests/api/test_model_catalog.py` fails if a model file's implementation lacks the methods of its contract.
 
 ### `root`: HTTP request parsing and serialization
 
@@ -218,23 +283,22 @@ async def root(self, request: Request):
     return await self.predict(embedding)
 ```
 
-## Whole-Slide (WSI) Inference and Output Builders
+## Whole-Slide (WSI) Inference and Builders
 
-When predicting on an entire Whole-Slide Image (WSI):
+Builders in `src/model_service/builders/` do the whole-slide work; a model only answers per tile.
 
-1. **Heatmaps:** If your model's WSI output should be a spatial heatmap (e.g., probability maps or segmentation masks overlaying the WSI), you **do not need to implement WSI logic**. The cluster already provides a universal `HeatmapBuilder` service (running under `/heatmap-builder`). Users can pass your model's ID to the heatmap builder via the SDK, and it will tile the image, aggregate all localized predictions seamlessly, and output a multi-resolution BigTIFF mask automatically.
-
-2. **Custom WSI Aggregations (Non-Heatmap Outputs):** If your model generates something else across the entire slide (for example, a single slide-level scalar score, diagnostic classification, custom tabular statistics, embedded feature bags), you must **implement your own WSI aggregator service**. You should create a custom Application (similar to `HeatmapBuilder`) that takes paths to WSI files, iterates through the WSI tiles querying your base model for each tile, and correctly aggregates the results into your desired slide-level output format.
-
+1. **Heatmaps and segmentation maps:** a `spatial-scores` model works with the
+   `heatmap` builder, which tiles the slide at the model's resolution, averages
+   overlapping predictions and writes a score grid (`.npz`). Nothing to implement.
+2. **Tile embeddings:** a `tile-embedding` model works with the `tile-embeddings`
+   builder, which writes one feature row per selected tile to HDF5.
+3. **Other slide-level outputs** (a slide score, annotations, statistics) need a
+   new builder, and a model that fits neither contract needs a new contract:
+   see [Adding a builder or an inference contract](adding-builders.md).
 
 ## Next Step
 
-After the Python entrypoint is ready, continue with the [Deployment Guide](deployment-guide.md). That guide covers the Helm application YAML, deployment, rollout monitoring, and smoke testing in the order you should run them.
-
-## Related Guides
-
-- [Deployment Guide](deployment-guide.md)
-- [Configuration Reference](configuration-reference.md)
-- [Optimization Guide](optimization-guide.md)
-- [Troubleshooting](troubleshooting.md)
-- [Architecture Overview](../architecture/overview.md)
+List the model file under `models:` in the values file and `helm upgrade`; see
+[Iterating on a model](#iterating-on-a-model) above. For how the service fits
+together, read the [README](../../README.md); for EMPAIA, the
+[EMPAIA integration](../architecture/empaia.md).
