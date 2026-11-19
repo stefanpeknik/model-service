@@ -11,6 +11,10 @@ from ray import serve
 
 if TYPE_CHECKING:
     import torch
+    from numpy.typing import NDArray
+
+
+SUMMARIES = ("tile",)
 
 
 class Config(TypedDict):
@@ -77,10 +81,21 @@ class ProvGigaPath:
             output = self.model(tensors)
         return list(output)
 
-    @fastapi.post("/")
-    async def root(self, request: Request) -> Response:
+    def get_config(self) -> dict[str, Any]:
+        return {"tile_size": self.tile_size, "summaries": list(SUMMARIES)}
+
+    async def embed(self, tile: NDArray[np.uint8]) -> NDArray[np.float32]:
+        """Embed one CHW uint8 tile as a `(dim,)` float32 vector."""
+        output = await self._encode(np.ascontiguousarray(tile.transpose(1, 2, 0)))
+        return output.float().cpu().numpy()
+
+    async def _encode(self, image: NDArray[np.uint8]) -> torch.Tensor:
         from PIL import Image
 
+        return await self.predict(self.transforms(Image.fromarray(image)))
+
+    @fastapi.post("/")
+    async def root(self, request: Request) -> Response:
         data = await asyncio.to_thread(lz4.frame.decompress, await request.body())
         image = np.frombuffer(data, dtype=np.uint8).reshape(
             self.tile_size, self.tile_size, 3
@@ -90,9 +105,7 @@ class ProvGigaPath:
             request.headers.get("x-output-dtype", "float32").lower()
         )
 
-        tensor = self.transforms(Image.fromarray(image))
-
-        raw_output: torch.Tensor = await self.predict(tensor)
+        raw_output = await self._encode(image)
         result = raw_output.cpu().numpy().astype(output_dtype, copy=False)
         output_shape = str(result.shape)
 

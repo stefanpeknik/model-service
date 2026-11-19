@@ -11,6 +11,11 @@ from ray import serve
 
 if TYPE_CHECKING:
     import torch
+    from numpy.typing import NDArray
+
+
+# `embed` returns the class token and the mean of the patch tokens.
+SUMMARIES = ("global", "local_mean")
 
 
 class Config(TypedDict):
@@ -83,10 +88,33 @@ class Virchow2:
 
         return list(output)
 
+    def get_config(self) -> dict[str, Any]:
+        return {"tile_size": self.tile_size, "summaries": list(SUMMARIES)}
+
+    async def embed(self, tile: NDArray[np.uint8]) -> NDArray[np.float32]:
+        """Embed one CHW uint8 tile as `(len(SUMMARIES), dim)` float32.
+
+        Builders call this through a deployment handle, avoiding the HTTP route's
+        LZ4 encoding and proxy hop.
+        """
+        tokens = await self._encode(np.ascontiguousarray(tile.transpose(1, 2, 0)))
+        return self._pool(tokens).float().cpu().numpy()
+
+    async def _encode(self, image: NDArray[np.uint8]) -> torch.Tensor:
+        from PIL import Image
+
+        return await self.predict(self.transforms(Image.fromarray(image)))
+
+    @staticmethod
+    def _pool(tokens: torch.Tensor) -> torch.Tensor:
+        import torch
+
+        # Tokens 1-4 are register tokens; patch tokens start at 5.
+        return torch.stack([tokens[0], tokens[5:].mean(dim=0)])
+
     @fastapi.post("/")
     async def root(self, request: Request) -> Response:
         import torch
-        from PIL import Image
 
         data = await asyncio.to_thread(lz4.frame.decompress, await request.body())
         image = np.frombuffer(data, dtype=np.uint8).reshape(
@@ -98,16 +126,11 @@ class Virchow2:
         )
         pool_tokens = request.headers.get("x-pool-tokens", "true").lower() == "true"
 
-        tensor = self.transforms(Image.fromarray(image))
-
-        raw_output: torch.Tensor = await self.predict(tensor)
-
+        tokens = await self._encode(image)
         if pool_tokens:
-            class_token = raw_output[0]
-            patch_tokens = raw_output[5:]
-            result_tensor = torch.stack([class_token, patch_tokens.mean(dim=0)])
+            result_tensor = self._pool(tokens)
         else:
-            result_tensor = torch.cat([raw_output[0:1], raw_output[5:]], dim=0)
+            result_tensor = torch.cat([tokens[0:1], tokens[5:]], dim=0)
 
         result = result_tensor.cpu().numpy().astype(output_dtype, copy=False)
         output_shape = str(result.shape)
