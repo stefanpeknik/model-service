@@ -1,0 +1,174 @@
+{{- if .Values.api.enabled }}
+{{- $imageTag := required "api.image.tag is required" .Values.api.image.tag }}
+{{- $databaseSecret := required "api.database.existingSecret is required" .Values.api.database.existingSecret }}
+{{- $encryptionSecret := required "api.encryption.existingSecret is required" .Values.api.encryption.existingSecret }}
+{{- $empaia := .Values.empaia.apiUrls }}
+{{- $workspaceClaim := "" }}
+{{- if $empaia }}
+{{- $workspaceClaim = required "empaia.workspaceClaim is required with apiUrls: the API publishes EMPAIA results the builders wrote there" .Values.empaia.workspaceClaim }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-api
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: model-service-api
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.api.replicas }}
+  # A model or config change restarts the API; replace it one pod at a time,
+  # never dropping below the set replicas, so the API stays up.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: model-service-api
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+        checksum/model-catalog: {{ include (print $.Template.BasePath "/model-catalog.yaml") . | sha256sum }}
+      labels:
+        app.kubernetes.io/name: model-service-api
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+{{- include "model-service.empaiaDns" . | nindent 6 }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: "{{ .Values.api.image.repository }}:{{ $imageTag }}"
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          # Explicit, so code-refresh images built on older bases start the current module.
+          command: ["uvicorn", "model_service.api.main:app", "--host", "0.0.0.0", "--port", "8080", "--log-config", "/app/model_service/api/log-config.json"]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $databaseSecret }}
+                  key: {{ .Values.api.database.urlKey }}
+            - name: PROVIDER_CONTEXT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $encryptionSecret }}
+                  key: {{ .Values.api.encryption.keyKey }}
+            - name: RAY_SERVE_ORIGIN
+              value: {{ default (printf "http://%s-serve-svc.%s.svc.cluster.local:8000" .Release.Name (.Release.Namespace | default "rationai-jobs-ns")) .Values.api.rayServeOrigin | quote }}
+            - name: MODEL_CATALOG_PATH
+              value: /etc/model-service/model-catalog.json
+            - name: BUILDER_IDS
+              value: {{ keys (.Values.builders | default dict) | sortAlpha | toJson | quote }}
+            - name: SHARED_STORAGE_ROOTS
+              value: {{ .Values.sharedStorageRoots | toJson | quote }}
+            - name: LEASE_SECONDS
+              value: {{ .Values.api.leaseSeconds | quote }}
+            - name: WORKER_POLL_SECONDS
+              value: {{ .Values.api.workerPollSeconds | quote }}
+            - name: PROCESSING_ATTEMPTS
+              value: {{ .Values.api.processingAttempts | quote }}
+            - name: PROVIDER_FINISH_ATTEMPTS
+              value: {{ .Values.api.providerFinishAttempts | quote }}
+            - name: INITIAL_BACKOFF_SECONDS
+              value: {{ .Values.api.initialBackoffSeconds | quote }}
+            - name: MAXIMUM_BACKOFF_SECONDS
+              value: {{ .Values.api.maximumBackoffSeconds | quote }}
+            - name: DEFAULT_DEADLINE_SECONDS
+              value: {{ .Values.api.defaultDeadlineSeconds | quote }}
+            - name: MAXIMUM_DEADLINE_SECONDS
+              value: {{ .Values.api.maximumDeadlineSeconds | quote }}
+            - name: PER_MODEL_LIMIT
+              value: {{ .Values.api.perModelLimit | quote }}
+            - name: MAX_CONCURRENT_EXECUTIONS
+              value: {{ .Values.api.maxConcurrentExecutions | quote }}
+{{- include "model-service.empaiaEnv" . | nindent 12 }}
+            {{- with .Values.empaia.marketplace }}
+            {{- if and $empaia .url }}
+            - name: EMPAIA_MARKETPLACE_URL
+              value: {{ .url | quote }}
+            - name: EMPAIA_ORGANIZATION_ID
+              value: {{ required "empaia.marketplace.organizationId is required with a marketplace url" .organizationId | quote }}
+            - name: EMPAIA_JES_TARGET
+              value: {{ .jesTarget | quote }}
+            {{- if .mdsUrl }}
+            - name: EMPAIA_MDS_URL
+              value: {{ .mdsUrl | quote }}
+            {{- end }}
+            {{- if .idpUrl }}
+            - name: EMPAIA_IDP_URL
+              value: {{ .idpUrl | quote }}
+            - name: EMPAIA_CLIENT_ID
+              value: {{ required "empaia.marketplace.clientId is required with an idpUrl" .clientId | quote }}
+            - name: EMPAIA_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "empaia.marketplace.existingSecret is required with an idpUrl" .existingSecret }}
+                  key: {{ .clientSecretKey }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsUser: 10001
+            runAsGroup: 10001
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: model-catalog
+              mountPath: /etc/model-service
+              readOnly: true
+            {{- if .Values.api.sharedStorage.existingClaim }}
+            - name: shared-storage
+              mountPath: {{ .Values.api.sharedStorage.mountPath | quote }}
+            {{- end }}
+            {{- if $empaia }}
+            - name: empaia-workspace
+              mountPath: {{ .Values.empaia.workspaceRoot | quote }}
+            {{- end }}
+{{- include "model-service.slideVolumeMount" . | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: model-catalog
+          configMap:
+            name: {{ .Release.Name }}-model-catalog
+        {{- if .Values.api.sharedStorage.existingClaim }}
+        - name: shared-storage
+          persistentVolumeClaim:
+            claimName: {{ .Values.api.sharedStorage.existingClaim | quote }}
+        {{- end }}
+        {{- if $empaia }}
+        - name: empaia-workspace
+          persistentVolumeClaim:
+            claimName: {{ $workspaceClaim | quote }}
+        {{- end }}
+{{- include "model-service.slideVolume" . | nindent 8 }}
+{{- end }}
