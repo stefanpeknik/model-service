@@ -42,6 +42,7 @@ builders = [
     "openslide-python>=1.4.0",
     "pydantic-settings>=2.10.0,<3",
     "pyvips>=3.0.0,<4",
+    "python-json-logger>=3.2,<5",
     "rationai-empaia>=0.1.2",
     "ratiopath>=1.4.0",
     "ray[serve]>=2.58.0",

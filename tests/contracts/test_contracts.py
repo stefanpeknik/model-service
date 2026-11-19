@@ -117,6 +117,7 @@ class BuilderContractTests(unittest.TestCase):
             },
             "execution_context": {
                 "processing_attempt_id": "attempt-1",
+                "execution_id": "execution-1",
                 "protected_context": {"credential": "secret"},
             },
         }

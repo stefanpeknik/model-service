@@ -6,7 +6,6 @@ Every builder application uses this module; only its user_config differs.
 from __future__ import annotations
 
 import importlib
-import logging
 from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, status
@@ -21,6 +20,7 @@ from model_service.builders.replica.http_handler import (
     invalid_request,
     run_http,
 )
+from model_service.builders.replica.logs import configure_replica_logging
 from model_service.builders.replica.runner import BuilderApplication
 from model_service.contracts.builder_http import ErrorCode, ErrorResponse, RunRequest
 from model_service.contracts.result import BuilderResult
@@ -69,14 +69,9 @@ class BuilderDeployment:
     """The Ray Serve ingress of one builder, configured through user_config."""
 
     def __init__(self) -> None:
-        """Route model-service logs to Serve's handlers; the builder waits for config."""
+        """Log model-service lines as JSON; the builder waits for config."""
         self._application: BuilderApplication | None = None
-        # Serve only sets up its own logger; without this, model-service INFO logs
-        # never reach the replica log or the dashboard.
-        package_logger = logging.getLogger("model_service")
-        package_logger.handlers = logging.getLogger("ray.serve").handlers
-        package_logger.setLevel(logging.INFO)
-        package_logger.propagate = False
+        configure_replica_logging()
 
     def reconfigure(self, values: dict[str, object]) -> None:
         """Rebuild the builder application from new user_config.

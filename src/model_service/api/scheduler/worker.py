@@ -43,6 +43,7 @@ from model_service.api.scheduler.store.repository import (
     ExecutionRepositoryUnavailableError,
 )
 from model_service.contracts.invocation import ExecutionContext
+from model_service.contracts.log_context import logging_execution
 from model_service.contracts.result import BuilderResult
 
 
@@ -189,7 +190,8 @@ class ExecutionWorker:
         claim = await self._repository.claim_due(self._owner, self._lease_duration)
         if claim is None:
             return False
-        await self._process(claim)
+        with logging_execution(claim.execution_id):
+            await self._process(claim)
         return True
 
     async def _process_logged(self, claim: WorkClaim) -> None:
@@ -198,16 +200,17 @@ class ExecutionWorker:
         Args:
             claim: Leased attempt.
         """
-        try:
-            await self._process(claim)
-        except Exception as error:
-            logger.error(
-                "execution claim failed: id=%s kind=%s attempt=%s error=%s",
-                claim.execution_id,
-                claim.kind,
-                claim.attempt,
-                type(error).__name__,
-            )
+        with logging_execution(claim.execution_id):
+            try:
+                await self._process(claim)
+            except Exception as error:
+                logger.error(
+                    "execution claim failed: id=%s kind=%s attempt=%s error=%s",
+                    claim.execution_id,
+                    claim.kind,
+                    claim.attempt,
+                    type(error).__name__,
+                )
 
     async def _process(self, claim: WorkClaim) -> None:
         """Run one claim while renewing its lease; settle only a completed outcome.
@@ -411,6 +414,7 @@ class ExecutionWorker:
                 model,
                 ExecutionContext(
                     processing_attempt_id=claim.fencing_token,
+                    execution_id=claim.execution_id,
                     protected_context=claim.protected_context,
                 ),
             )

@@ -31,6 +31,7 @@ from model_service.api.scheduler.store.repository import (
     ExecutionRepositoryUnavailableError,
 )
 from model_service.api.scheduler.worker import ExecutionWorker
+from model_service.contracts.log_context import EXECUTION_ID
 
 
 if TYPE_CHECKING:
@@ -183,6 +184,8 @@ class ExecutionScheduler:
             raise InvalidScheduleRequestError("unknown provider") from error
         identity = provider.identify(request)
         if (existing := await self._find(identity)) is not None:
+            # The rest of the request's log lines name the execution.
+            EXECUTION_ID.set(existing.id)
             return ScheduleResult(self._view(existing), created=False)
         deadline_at = self._clock() + self._requested_timeout(
             request.requested_timeout_seconds
@@ -247,6 +250,8 @@ class ExecutionScheduler:
             raise SchedulingUnavailableError(
                 "execution scheduling is temporarily unavailable"
             ) from error
+        # The rest of the request's log lines name the execution.
+        EXECUTION_ID.set(admitted.execution.id)
         return ScheduleResult(self._view(admitted.execution), created=admitted.created)
 
     async def get(self, execution_id: str) -> ExecutionView:

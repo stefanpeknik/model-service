@@ -33,6 +33,7 @@ from model_service.contracts.failures import (
 )
 from model_service.contracts.invocation import ExecutionContext
 from model_service.contracts.json_values import is_json_value
+from model_service.contracts.log_context import logging_execution
 from model_service.contracts.result import BuilderResult, InlineOutput, SharedArtifact
 
 
@@ -112,6 +113,17 @@ class BuilderApplication:
                 failed unexpectedly (retryable), or the model client or builder
                 raised one.
         """
+        execution_context = execution_context or ExecutionContext()
+        with logging_execution(execution_context.execution_id):
+            return await self._run(invocation, model, execution_context)
+
+    async def _run(
+        self,
+        invocation: Invocation,
+        model: ModelBinding,
+        execution_context: ExecutionContext,
+    ) -> BuilderResult:
+        """Run the invocation as `run` describes, with its execution named in logs."""
         self._spec.check_invocation(invocation)
         self._spec.check_model(model)
         access: InputAccess | None = None
@@ -126,7 +138,7 @@ class BuilderApplication:
                     client = client_for(model, self._model_handles)
                     await client.verify()
                     access = await self._create_access(
-                        invocation, execution_context or ExecutionContext(), model
+                        invocation, execution_context, model
                     )
                     async with reporting_progress(
                         access.report_progress,

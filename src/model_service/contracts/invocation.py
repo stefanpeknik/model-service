@@ -72,9 +72,13 @@ class InputAccessContext:
 
 @validated_dataclass(frozen=True, slots=True, config=ConfigDict(extra="forbid"))
 class ExecutionContext:
-    """Attempt identity and secret provider state, kept out of the stored invocation."""
+    """Attempt identity and secret provider state, kept out of the stored invocation.
+
+    `execution_id` names the execution in the replica's log lines.
+    """
 
     processing_attempt_id: NonEmptyString | None = None
+    execution_id: NonEmptyString | None = None
     protected_context: JsonObject = field(default_factory=dict, repr=False)
 
 

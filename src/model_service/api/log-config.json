@@ -5,18 +5,14 @@
     "request_id": {
       "()": "asgi_correlation_id.CorrelationIdFilter",
       "default_value": null
+    },
+    "execution_id": {
+      "()": "model_service.contracts.log_context.ExecutionIdFilter"
     }
   },
   "formatters": {
     "json": {
-      "()": "pythonjsonlogger.json.JsonFormatter",
-      "fmt": "%(asctime)s %(levelname)s %(name)s %(message)s %(correlation_id)s",
-      "rename_fields": {
-        "asctime": "time",
-        "levelname": "level",
-        "name": "logger",
-        "correlation_id": "request_id"
-      }
+      "()": "model_service.contracts.log_context.json_formatter"
     }
   },
   "handlers": {
@@ -24,13 +20,27 @@
       "class": "logging.StreamHandler",
       "stream": "ext://sys.stdout",
       "formatter": "json",
-      "filters": ["request_id"]
+      "filters": [
+        "request_id",
+        "execution_id"
+      ]
     }
   },
   "loggers": {
-    "model_service": {"level": "INFO"},
-    "uvicorn": {"level": "INFO"},
-    "uvicorn.access": {"level": "INFO"}
+    "model_service": {
+      "level": "INFO"
+    },
+    "uvicorn": {
+      "level": "INFO"
+    },
+    "uvicorn.access": {
+      "level": "INFO"
+    }
   },
-  "root": {"level": "WARNING", "handlers": ["stdout"]}
+  "root": {
+    "level": "WARNING",
+    "handlers": [
+      "stdout"
+    ]
+  }
 }
