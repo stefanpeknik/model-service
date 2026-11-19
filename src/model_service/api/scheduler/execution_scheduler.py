@@ -37,7 +37,7 @@ from model_service.contracts.log_context import EXECUTION_ID
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Mapping
 
-    from model_service.api.scheduler.builder_dispatch import HTTPBuilderDispatch
+    from model_service.api.scheduler.protocols import BuilderDispatch
     from model_service.api.scheduler.public import (
         ModelResolver,
         ProviderName,
@@ -54,7 +54,7 @@ class ExecutionScheduler:
         self,
         *,
         repository: ExecutionRepository,
-        dispatch: HTTPBuilderDispatch,
+        dispatch: BuilderDispatch,
         providers: Mapping[ProviderName, ProviderAdapter],
         resolve_model: ModelResolver,
         default_timeout: timedelta,

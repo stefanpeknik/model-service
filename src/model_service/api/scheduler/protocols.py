@@ -1,6 +1,7 @@
-"""What the API's and providers' routes need from the scheduler.
+"""What the API's and providers' routes need from the scheduler, and what it runs builders through.
 
-ExecutionScheduler implements it, and documents each method; tests pass fakes.
+ExecutionScheduler implements `Scheduler` and HTTPBuilderDispatch implements
+`BuilderDispatch`; each documents its methods. Tests pass fakes.
 """
 
 from __future__ import annotations
@@ -14,6 +15,9 @@ if TYPE_CHECKING:
         ScheduleRequest,
         ScheduleResult,
     )
+    from model_service.contracts.invocation import ExecutionContext, Invocation
+    from model_service.contracts.model_declarations import ModelBinding
+    from model_service.contracts.result import BuilderResult
 
 
 class Scheduler(Protocol):
@@ -42,4 +46,18 @@ class Scheduler(Protocol):
 
     async def cancel(self, execution_id: str) -> ExecutionView:
         """Cancel an execution."""
+        ...
+
+
+class BuilderDispatch(Protocol):
+    """How the scheduler runs a builder on a replica."""
+
+    async def run(
+        self,
+        builder_id: str,
+        invocation: Invocation,
+        model: ModelBinding,
+        execution_context: ExecutionContext,
+    ) -> BuilderResult:
+        """Run one builder invocation and return its result."""
         ...

@@ -110,6 +110,8 @@ class FakeDispatch:
 class RecordingScheduler:
     """Record admitted requests and return a fixed queued execution."""
 
+    alive = True
+
     def __init__(self) -> None:
         self.requests: list[ScheduleRequest] = []
 
@@ -130,6 +132,9 @@ class RecordingScheduler:
 
     async def get(self, execution_id: str) -> ExecutionView:
         raise AssertionError(execution_id)
+
+    async def get_many(self, execution_ids: list[str]) -> list[ExecutionView]:
+        raise AssertionError(execution_ids)
 
     async def cancel(self, execution_id: str) -> ExecutionView:
         raise AssertionError(execution_id)

@@ -5,10 +5,11 @@ from __future__ import annotations
 import asyncio
 import unittest
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 from model_service.api.scheduler.execution_scheduler import ExecutionScheduler
-from model_service.api.scheduler.internal_state import RetryPolicy
+from model_service.api.scheduler.internal_state import RenewDirective, RetryPolicy
 from model_service.api.scheduler.public import ScheduleRequest
 from model_service.api.scheduler.status import ExecutionStatus
 from model_service.contracts.result import BuilderResult
@@ -18,6 +19,12 @@ from tests.support.memory_repository import (
     resolve_test_model,
 )
 from tests.support.scheduling import MutableClock, StandaloneProvider
+
+
+if TYPE_CHECKING:
+    from model_service.api.scheduler.public import ScheduleResult
+    from model_service.contracts.invocation import ExecutionContext, Invocation
+    from tests.support.memory_repository import Handler
 
 
 class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):
@@ -32,7 +39,9 @@ class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):
         )
         self.provider = StandaloneProvider()
 
-    def scheduler(self, dispatch=None, **settings) -> ExecutionScheduler:
+    def scheduler(
+        self, dispatch: Handler | None = None, **settings: Any
+    ) -> ExecutionScheduler:
         """Construct a scheduler over the shared test repository with selectable dispatch and timing settings."""
         return ExecutionScheduler(
             repository=self.repository,
@@ -47,11 +56,15 @@ class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):
         )
 
     @staticmethod
-    def completed_dispatch(_invocation, _execution_context):
+    def completed_dispatch(
+        _invocation: Invocation, _execution_context: ExecutionContext
+    ) -> BuilderResult:
         """Return an empty successful result for scheduler lifetime checks."""
         return BuilderResult(outputs={})
 
-    async def schedule(self, scheduler, key="request-1"):
+    async def schedule(
+        self, scheduler: ExecutionScheduler, key: str = "request-1"
+    ) -> ScheduleResult:
         """Submit minimal standalone fixture work under the selected replay key."""
         return await scheduler.schedule(
             ScheduleRequest(
@@ -63,7 +76,9 @@ class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-    async def wait_succeeded(self, scheduler, execution_id):
+    async def wait_succeeded(
+        self, scheduler: ExecutionScheduler, execution_id: str
+    ) -> None:
         """Poll for successful completion within the one-second lifetime test budget."""
         async with asyncio.timeout(1):
             while (
@@ -71,7 +86,9 @@ class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):
             ).status is not ExecutionStatus.SUCCEEDED:
                 await asyncio.sleep(0.001)
 
-    async def test_construction_starts_no_tasks_and_running_completes_work(self):
+    async def test_construction_starts_no_tasks_and_running_completes_work(
+        self,
+    ) -> None:
         tasks_before = asyncio.all_tasks()
         scheduler = self.scheduler()
         admitted = await self.schedule(scheduler)
@@ -85,24 +102,27 @@ class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_shutdown_joins_dispatch_renewal_and_maintenance_without_cancelling_execution(
         self,
-    ):
+    ) -> None:
         tasks_before = asyncio.all_tasks()
         started = asyncio.Event()
         renewed = asyncio.Event()
         stopped = asyncio.Event()
         renew = self.repository.renew
 
-        async def tracked_renew(*args, **kwargs):
+        async def tracked_renew(*args: Any, **kwargs: Any) -> RenewDirective:
             """Delegate lease renewal and signal that the worker renewed its active claim."""
             result = await renew(*args, **kwargs)
             renewed.set()
             return result
 
-        async def dispatch(_invocation, _execution_context):
+        async def dispatch(
+            _invocation: Invocation, _execution_context: ExecutionContext
+        ) -> BuilderResult:
             """Simulate the scenario computation, using events or injected failures to control completion and ownership races."""
             started.set()
             try:
                 await asyncio.Event().wait()
+                raise AssertionError("the event is never set")
             finally:
                 stopped.set()
 
@@ -125,7 +145,7 @@ class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):
         recovered = await self.repository.get(admitted.execution.id)
         self.assertEqual(recovered.processing_attempts, 2)
 
-    async def test_duplicate_start_is_rejected_and_scheduler_can_restart(self):
+    async def test_duplicate_start_is_rejected_and_scheduler_can_restart(self) -> None:
         scheduler = self.scheduler()
         async with scheduler.running():
             with self.assertRaisesRegex(RuntimeError, "already running"):
@@ -138,13 +158,18 @@ class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):
         async with scheduler.running():
             await self.wait_succeeded(scheduler, admitted.execution.id)
 
-    async def test_queued_deadlines_advance_while_managed_dispatch_is_blocked(self):
+    async def test_queued_deadlines_advance_while_managed_dispatch_is_blocked(
+        self,
+    ) -> None:
         started = asyncio.Event()
 
-        async def dispatch(_invocation, _execution_context):
+        async def dispatch(
+            _invocation: Invocation, _execution_context: ExecutionContext
+        ) -> BuilderResult:
             """Simulate the scenario computation, using events or injected failures to control completion and ownership races."""
             started.set()
             await asyncio.Event().wait()
+            raise AssertionError("the event is never set")
 
         scheduler = self.scheduler(dispatch)
         await self.schedule(scheduler)
@@ -167,26 +192,31 @@ class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):
                 ).status is not ExecutionStatus.FAILED:
                     await asyncio.sleep(0.001)
             expired = await scheduler.get(queued.execution.id)
-            self.assertIsNotNone(expired.error)
+            assert expired.error is not None
             self.assertEqual(expired.error.code, "execution_deadline_exceeded")
 
-    async def test_cancelling_owner_scope_joins_tasks_and_preserves_durable_work(self):
+    async def test_cancelling_owner_scope_joins_tasks_and_preserves_durable_work(
+        self,
+    ) -> None:
         tasks_before = asyncio.all_tasks()
         started = asyncio.Event()
         stopped = asyncio.Event()
 
-        async def dispatch(_invocation, _execution_context):
+        async def dispatch(
+            _invocation: Invocation, _execution_context: ExecutionContext
+        ) -> BuilderResult:
             """Simulate the scenario computation, using events or injected failures to control completion and ownership races."""
             started.set()
             try:
                 await asyncio.Event().wait()
+                raise AssertionError("the event is never set")
             finally:
                 stopped.set()
 
         scheduler = self.scheduler(dispatch)
         admitted = await self.schedule(scheduler)
 
-        async def serve():
+        async def serve() -> None:
             """Keep the scheduler lifetime open until its owning task is cancelled."""
             async with scheduler.running():
                 await asyncio.Event().wait()
@@ -203,7 +233,9 @@ class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):
             ExecutionStatus.RUNNING,
         )
 
-    async def test_worker_failure_is_surfaced_and_lifetime_can_be_reentered(self):
+    async def test_worker_failure_is_surfaced_and_lifetime_can_be_reentered(
+        self,
+    ) -> None:
         scheduler = self.scheduler()
         with (
             patch(

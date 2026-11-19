@@ -6,7 +6,12 @@ import unittest
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
-from model_service.api.scheduler.internal_state import Admission, RetryPolicy, WorkKind
+from model_service.api.scheduler.internal_state import (
+    Admission,
+    ExecutionRecord,
+    RetryPolicy,
+    WorkKind,
+)
 from model_service.api.scheduler.public import SubmissionIdentity
 from model_service.api.scheduler.status import ExecutionErrorCode, ExecutionStatus
 from model_service.api.scheduler.transitions.execution_transitions import (
@@ -25,7 +30,7 @@ POLICY = RetryPolicy(
 TRANSITIONS = ExecutionTransitions(POLICY, POLICY)
 
 
-def publishing():
+def publishing() -> ExecutionRecord:
     deadline = NOW + timedelta(minutes=5)
     admitted = TRANSITIONS.admission.admit(
         Admission(

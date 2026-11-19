@@ -12,11 +12,17 @@ from model_service.api.http.auth import (
     Access,
     Action,
     AuthenticationError,
+    Authenticator,
     AuthorizationError,
+    Authorizer,
     Principal,
 )
 from model_service.api.model_catalog import ModelCatalog
-from model_service.api.scheduler.public import ExecutionView
+from model_service.api.scheduler.public import (
+    ExecutionView,
+    ScheduleRequest,
+    ScheduleResult,
+)
 from model_service.api.scheduler.status import ExecutionStatus
 from model_service.contracts.model_declarations import SpatialScoresModel
 
@@ -32,10 +38,15 @@ EXECUTION = "00000000-0000-4000-8000-000000000001"
 
 
 class Scheduler:
+    """Answers reads with a queued execution; admits and cancels nothing."""
+
     alive = True
 
     async def check_ready(self) -> None:
         return None
+
+    async def schedule(self, request: ScheduleRequest) -> ScheduleResult:
+        raise AssertionError(request)
 
     async def get(self, execution_id: str) -> ExecutionView:
         return ExecutionView(
@@ -45,8 +56,14 @@ class Scheduler:
             status=ExecutionStatus.QUEUED,
         )
 
+    async def get_many(self, execution_ids: list[str]) -> list[ExecutionView]:
+        return [await self.get(execution_id) for execution_id in execution_ids]
 
-class BearerToken:
+    async def cancel(self, execution_id: str) -> ExecutionView:
+        return await self.get(execution_id)
+
+
+class BearerToken(Authenticator):
     """Accepts one token and names its holder."""
 
     async def authenticate(self, request: Request) -> Principal:
@@ -55,7 +72,7 @@ class BearerToken:
         return Principal("student")
 
 
-class Recorder:
+class Recorder(Authorizer):
     """Refuses cancellation and records every decision it was asked for."""
 
     def __init__(self) -> None:
@@ -69,12 +86,8 @@ class Recorder:
             raise AuthorizationError
 
 
-def client(**access: Access) -> AsyncClient:
-    app = create_app(
-        Scheduler(),  # type: ignore[arg-type]
-        catalog=CATALOG,
-        **access,
-    )
+def client(access: Access | None = None) -> AsyncClient:
+    app = create_app(Scheduler(), catalog=CATALOG, access=access)
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://ms")
 
 

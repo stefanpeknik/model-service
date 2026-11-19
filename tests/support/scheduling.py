@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from model_service.api.scheduler.public import PreparedInvocation, SubmissionIdentity
 from model_service.contracts.invocation import InputAccessContext, Invocation
+from model_service.providers.provider import ProviderAdapter
 
 
 if TYPE_CHECKING:
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
     from model_service.contracts.json_values import JsonValue
 
 
-class StandaloneProvider:
+class StandaloneProvider(ProviderAdapter):
     """Prepare minimal scheduler invocations without shared-file checks so tests can isolate orchestration."""
 
     name = "standalone"
@@ -54,13 +55,13 @@ class StandaloneProvider:
 
     async def finish(
         self,
-        _protected_context: dict[str, JsonValue],
-        _outcome: ProviderFinishOutcome,
+        protected_context: dict[str, JsonValue],
+        outcome: ProviderFinishOutcome,
         *,
         before_mutation: BeforeMutation,
     ) -> None:
         """Complete without external writes or mutation guarding for standalone orchestration tests."""
-        del before_mutation
+        del protected_context, outcome, before_mutation
 
 
 class MutableClock:

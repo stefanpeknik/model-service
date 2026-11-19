@@ -30,6 +30,7 @@ from model_service.api.scheduler.internal_state import (
     RenewDirective,
     RetryPolicy,
     StaleWorkClaimError,
+    WorkClaim,
     WorkKind,
 )
 from model_service.api.scheduler.public import (
@@ -70,6 +71,8 @@ DATABASE_DEADLINE_WAIT_SECONDS = 0.7
 class PostgresExecutionRepositoryTests(
     ExecutionRepositoryContract, unittest.IsolatedAsyncioTestCase
 ):
+    repository: PostgresExecutionRepository
+
     async def _advance_time(self, duration: timedelta) -> None:
         await asyncio.sleep(duration.total_seconds())
 
@@ -130,7 +133,7 @@ class PostgresExecutionRepositoryTests(
                 "WHERE table_schema = %s AND table_name = 'executions'",
                 (self.schema,),
             )
-            actual_columns = dict(await columns.fetchall())
+            actual_columns: dict[str, str] = dict(await columns.fetchall())
             indexes = await connection.execute(
                 "SELECT indexname FROM pg_indexes WHERE schemaname = %s",
                 (self.schema,),
@@ -383,7 +386,7 @@ class PostgresExecutionRepositoryTests(
 
     async def test_libpq_connection_string_remains_supported(self) -> None:
         repository = PostgresExecutionRepository(
-            make_conninfo(**conninfo_to_dict(self.dsn)),
+            make_conninfo("", **conninfo_to_dict(self.dsn)),
             cipher=self.cipher,
             schema=self.schema,
         )
@@ -420,7 +423,7 @@ class PostgresExecutionRepositoryTests(
         repository = self._repository(per_model_limit=2)
         for index in range(6):
             await repository.admit(self._admission(f"capacity-{index}"))
-        claims = []
+        claims: list[WorkClaim] = []
 
         for _ in range(3):
             competing = await asyncio.gather(

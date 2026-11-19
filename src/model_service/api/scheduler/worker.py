@@ -54,8 +54,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from datetime import timedelta
 
-    from model_service.api.scheduler.builder_dispatch import HTTPBuilderDispatch
     from model_service.api.scheduler.internal_state import Settlement
+    from model_service.api.scheduler.protocols import BuilderDispatch
     from model_service.api.scheduler.public import ModelResolver, ProviderName
     from model_service.api.scheduler.running_work import ActiveWorkRegistry
     from model_service.api.scheduler.store.repository import ExecutionRepository
@@ -70,7 +70,7 @@ class ExecutionWorker:
         *,
         repository: ExecutionRepository,
         providers: Mapping[ProviderName, ProviderAdapter],
-        dispatch: HTTPBuilderDispatch,
+        dispatch: BuilderDispatch,
         resolve_model: ModelResolver,
         owner: str,
         lease_duration: timedelta,

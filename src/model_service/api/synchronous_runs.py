@@ -11,14 +11,14 @@ from model_service.contracts.invocation import ExecutionContext
 if TYPE_CHECKING:
     from model_service.api.model_catalog import ModelCatalog
     from model_service.api.routes.v1.builders import ImmediateBuilderRequest
-    from model_service.api.scheduler.builder_dispatch import HTTPBuilderDispatch
+    from model_service.api.scheduler.protocols import BuilderDispatch
     from model_service.contracts.result import BuilderResult
 
 
 class SynchronousBuilderService:
     """Runs a builder with a model while the caller waits."""
 
-    def __init__(self, catalog: ModelCatalog, dispatch: HTTPBuilderDispatch) -> None:
+    def __init__(self, catalog: ModelCatalog, dispatch: BuilderDispatch) -> None:
         """Keep the catalog runs are checked against and the dispatch to builders.
 
         Args:

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Any
 
-def spatial_document(model_id: str = "prostate-classifier-1") -> dict[str, object]:
+
+def spatial_document(model_id: str = "prostate-classifier-1") -> dict[str, Any]:
     return {
         "inference": {"contract": "spatial-scores"},
         "serve": {
@@ -29,7 +31,7 @@ def spatial_document(model_id: str = "prostate-classifier-1") -> dict[str, objec
     }
 
 
-def embedding_document(model_id: str = "virchow2") -> dict[str, object]:
+def embedding_document(model_id: str = "virchow2") -> dict[str, Any]:
     return {
         "inference": {
             "contract": "tile-embedding",

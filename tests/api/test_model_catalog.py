@@ -136,7 +136,7 @@ class ModelCatalogTests(unittest.TestCase):
     def test_a_repeated_model_id_keeps_the_first_file(self) -> None:
         first = spatial_document()
         repeated = deepcopy(first)
-        user_config = repeated["serve"]["deployments"][0]["user_config"]  # type: ignore[index]
+        user_config = repeated["serve"]["deployments"][0]["user_config"]
         user_config["mpp"] = 1.0
 
         with self.assertLogs("model_service.api.model_catalog", "ERROR"):
