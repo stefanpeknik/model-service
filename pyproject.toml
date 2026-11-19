@@ -18,8 +18,11 @@ dependencies = [
 # Builder replicas on Ray Serve, with the providers' input access.
 builders = [
     "fastapi>=0.115.0",
+    "openslide-bin>=4.0.0,<5",
+    "openslide-python>=1.4.0",
     "python-json-logger>=3.2,<5",
     "pyvips[binary]>=3.0.0,<4",
+    "ratiopath>=1.4.0",
     "ray[serve]>=2.58.0",
 ]
 # Model replicas on Ray Serve.
