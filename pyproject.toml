@@ -17,8 +17,12 @@ dependencies = [
 [project.optional-dependencies]
 # The API process: HTTP, the scheduler's database, model catalog, EMPAIA.
 api = [
+    "cryptography>=45.0.0",
     "httpx>=0.27.0",
     "pydantic-settings>=2.10.0,<3",
+    "psycopg[binary]>=3.2.0",
+    "sqlalchemy[asyncio]>=2.0.36,<2.1",
+    "yoyo-migrations>=9.0.0,<10",
 ]
 # Builder replicas on Ray Serve, with the providers' input access.
 builders = [
