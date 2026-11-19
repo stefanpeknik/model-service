@@ -2,8 +2,10 @@ workers:
   - cpu-workers
   - mig20-workers
 
-applications:
-  - episeg-1
+# Model deployments: files under models/ (without .yaml). Each file holds the
+# model's `inference` declaration and its Ray Serve application (`serve`).
+models:
   - prostate-classifier-1
-  - prov-gigapath
+  - episeg-1
   - virchow2
+  - prov-gigapath

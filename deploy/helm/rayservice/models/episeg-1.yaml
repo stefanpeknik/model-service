@@ -1,8 +1,9 @@
-- name: episeg-1
+inference:
+  contract: spatial-scores
+serve:
+  name: episeg-1
   import_path: model_service.inference.implementations.semantic_segmentation:app
   route_prefix: /episeg-1
-  runtime_env:
-    working_dir: https://github.com/RationAI/model-service/archive/refs/heads/main.zip
   deployments:
     - name: SemanticSegmentation
       max_ongoing_requests: 16

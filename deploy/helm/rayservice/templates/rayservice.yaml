@@ -60,6 +60,8 @@ spec:
 {{- end }}
   serveConfigV2: |
     applications:
-{{- range $appName := .Values.applications }}
-{{ printf "applications/%s.yaml" $appName | $.Files.Get | indent 4 }}
+{{- range $path := .Values.models }}
+{{- $model := printf "models/%s.yaml" $path | $.Files.Get | fromYaml }}
+{{- if not $model.serve }}{{ fail (printf "models/%s.yaml has no serve block" $path) }}{{ end }}
+      - {{ toYaml $model.serve | nindent 8 | trim }}
 {{- end }}
