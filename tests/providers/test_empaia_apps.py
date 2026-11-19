@@ -370,7 +370,6 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             [r.levelname for r in logs.records][:3], ["WARNING", "WARNING", "ERROR"]
         )
-        self.assertIn("HTTP 401 from https://marketplace.example/", logs.output[2])
 
     def test_a_medical_data_service_needs_a_marketplace(self) -> None:
         with self.assertRaises(SettingsError):

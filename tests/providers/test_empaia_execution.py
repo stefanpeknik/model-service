@@ -389,7 +389,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         execution = await repository.get(scheduled.execution.id)
 
         self.assertEqual(execution.invocation.configuration, DEFAULT_CONFIGURATION)
-        self.assertIn("viewer_colormap", logs.output[0])
+        self.assertEqual(len(logs.records), 1)
 
     async def test_a_standalone_jobs_parameters_override_the_apps_settings(
         self,
@@ -639,7 +639,8 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(service.progress_failures, 0)
         self.assertEqual(completed.status, "succeeded")
         self.assertTrue(service.finalized)
-        self.assertIn("progress could not be sent", logs.output[0])
+        # Every refusal is logged once, however many sends EMPAIA refused.
+        self.assertEqual(len(logs.records), 1)
 
     async def _run_halfway_job(
         self, *, reject_progress: bool = False

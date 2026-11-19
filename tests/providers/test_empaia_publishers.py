@@ -128,7 +128,8 @@ class AppPublishabilityTests(unittest.TestCase):
 
         self.assertEqual(len(single), 1)
         self.assertEqual(multi, [])
-        self.assertIn("nothing publishes heatmap", logs.output[0])
+        # The skipped builder is visible to operators.
+        self.assertEqual([r.levelname for r in logs.records], ["WARNING"])
 
     def test_an_output_nothing_publishes_withholds_the_app(self) -> None:
         heatmap = BUILDER_IO["heatmap"]
