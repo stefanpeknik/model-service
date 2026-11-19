@@ -212,7 +212,7 @@ def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
         The FastAPI application served by Uvicorn.
 
     Raises:
-        CatalogError: If the model catalog file cannot be read or is invalid.
+        CatalogError: If the model catalog file cannot be read or is not a list.
         UnknownBuilderError: If `BUILDER_IDS` names a builder that is not registered.
         ValueError: If the provider context key is not a valid base64 key.
     """

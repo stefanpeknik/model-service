@@ -8,13 +8,17 @@ models come from the same files.
 Contract parameters the model already reads from its `user_config` are taken
 from there; `inference` declares only what the model does not read itself. Any
 other top-level block belongs to a provider (e.g. how that provider offers
-the model): the catalog keeps it for that provider, unread, and rejects a
-block no provider takes.
+the model): the catalog keeps it for that provider, unread.
+
+A model file that is invalid, has a block no provider takes, or repeats an
+earlier model's ID is logged and left out, so one bad file does not take the
+other models down; only a catalog that cannot be read stops the API.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 from typing import TYPE_CHECKING, Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -32,6 +36,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from model_service.contracts.model_declarations import ModelBinding
+
+
+logger = logging.getLogger(__name__)
 
 
 class InferenceDeclaration(BaseModel):
@@ -177,37 +184,45 @@ class ModelCatalog:
     ) -> ModelCatalog:
         """Build the catalog from the JSON list Helm renders from the model YAML files.
 
+        A document that is invalid, has a block no provider takes, or repeats an
+        earlier document's model ID is logged and left out.
+
         Args:
             documents: The decoded JSON, expected to be a list of model documents.
             provider_blocks: The top-level keys providers read.
 
         Returns:
-            The catalog.
+            The catalog of the valid documents.
 
         Raises:
-            CatalogError: If `documents` is not a list, a document is invalid,
-                a document has a block no provider takes, or a binding is invalid.
+            CatalogError: If `documents` is not a list.
         """
         if not isinstance(documents, list):
             raise CatalogError("model catalog must be a list")
-        parsed = []
-        for index, item in enumerate(documents):
-            try:
-                parsed.append(ModelDocument.model_validate(item))
-            except ValidationError as error:
-                raise CatalogError(
-                    f"model file {_document_name(item, index)} is invalid: {error}"
-                ) from error
+        models: list[ModelBinding] = []
         blocks: dict[str, dict[str, object]] = {key: {} for key in provider_blocks}
-        for document in parsed:
-            for key, value in (document.model_extra or {}).items():
-                if key not in blocks:
+        for index, item in enumerate(documents):
+            name = _document_name(item, index)
+            try:
+                document = ModelDocument.model_validate(item)
+                extra = document.model_extra or {}
+                if unknown := sorted(extra.keys() - blocks.keys()):
                     raise CatalogError(
-                        f"model {document.serve.name!r} has a {key!r} block "
-                        "no provider takes"
+                        f"its {', '.join(unknown)} block is one no provider takes"
                     )
-                blocks[key][document.serve.name] = value
-        return cls([model_binding(document) for document in parsed], blocks)
+                model = model_binding(document)
+            except (ValidationError, CatalogError) as error:
+                logger.error("model file %s is left out: %s", name, error)
+                continue
+            if any(known.id == model.id for known in models):
+                logger.error(
+                    "model file %s is left out: an earlier file has its ID", name
+                )
+                continue
+            models.append(model)
+            for key, value in extra.items():
+                blocks[key][model.id] = value
+        return cls(models, blocks)
 
     @classmethod
     def from_file(
@@ -223,7 +238,7 @@ class ModelCatalog:
             The catalog.
 
         Raises:
-            CatalogError: If the file cannot be read or decoded, or its content is invalid.
+            CatalogError: If the file cannot be read or decoded, or is not a list.
         """
         try:
             documents = json.loads(path.read_text(encoding="utf-8"))

@@ -58,10 +58,35 @@ class ExecutionRuntimeTests(RuntimeTestCase):
             ["prostate-classifier-1", "virchow2"],
         )
 
-    def test_invalid_catalog_or_builder_selection_prevents_startup(self) -> None:
+    async def test_an_invalid_or_repeated_model_is_left_out_of_the_catalog(
+        self,
+    ) -> None:
+        broken = spatial_document()
+        broken["serve"] = {**broken["serve"], "name": "broken", "route_prefix": 7}
         self.catalog_path.write_text(
-            json.dumps([spatial_document(), spatial_document()]), encoding="utf-8"
+            json.dumps(
+                [spatial_document(), broken, spatial_document(), embedding_document()]
+            ),
+            encoding="utf-8",
         )
+        app = build_api_process(self.settings())
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://model-service"
+        ) as client:
+            models = await client.get("/v1/models")
+
+        self.assertEqual(
+            [model["id"] for model in models.json()],
+            ["prostate-classifier-1", "virchow2"],
+        )
+
+    def test_an_unreadable_catalog_or_bad_builder_selection_prevents_startup(
+        self,
+    ) -> None:
+        self.catalog_path.write_text("{not json", encoding="utf-8")
+        with self.assertRaises(CatalogError):
+            build_api_process(self.settings())
+        self.catalog_path.unlink()
         with self.assertRaises(CatalogError):
             build_api_process(self.settings())
         self.catalog_path.write_text("[]", encoding="utf-8")

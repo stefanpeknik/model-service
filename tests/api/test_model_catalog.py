@@ -56,18 +56,15 @@ class ModelCatalogTests(unittest.TestCase):
         )
         self.assertEqual(catalog.provider_block("other"), {})
 
-    def test_a_block_no_provider_takes_is_rejected(self) -> None:
-        document = {**spatial_document(), "listing": {"name": "Prostate"}}
-
-        with self.assertRaises(CatalogError):
-            ModelCatalog.from_documents([document])
-
-    def test_an_invalid_model_file_is_named_in_the_error(self) -> None:
+    def test_a_model_file_left_out_is_named_in_an_error_log(self) -> None:
         broken = spatial_document()
-        broken["serve"] = {**broken["serve"], "route_prefix": 7}
+        broken["serve"] = {**broken["serve"], "name": "broken", "route_prefix": 7}
 
-        with self.assertRaisesRegex(CatalogError, repr(broken["serve"]["name"])):
-            ModelCatalog.from_documents([spatial_document(), broken])
+        with self.assertLogs("model_service.api.model_catalog", "ERROR") as logs:
+            catalog = ModelCatalog.from_documents([embedding_document(), broken])
+
+        self.assertEqual([model.id for model in catalog], ["virchow2"])
+        self.assertIn("'broken'", logs.output[0])
 
     def test_reads_rendered_json_file(self) -> None:
         with TemporaryDirectory() as directory:
@@ -83,7 +80,7 @@ class ModelCatalogTests(unittest.TestCase):
             with self.assertRaises(CatalogError):
                 ModelCatalog.from_file(path)
 
-    def test_invalid_declarations_are_rejected(self) -> None:
+    def test_invalid_model_files_are_left_out(self) -> None:
         def changed(document: dict[str, object], change: object) -> object:
             copy = deepcopy(document)
             change(copy)  # type: ignore[operator]
@@ -99,45 +96,58 @@ class ModelCatalogTests(unittest.TestCase):
             return document["inference"]  # type: ignore[return-value]
 
         cases = {
-            "wrong route prefix": [
-                changed(
-                    spatial_document(),
-                    lambda d: serve(d).update(route_prefix="/elsewhere"),
-                )
-            ],
-            "missing user_config key": [
-                changed(spatial_document(), lambda d: user_config(d).pop("mpp"))
-            ],
-            "mpp declared twice": [
-                changed(spatial_document(), lambda d: inference(d).update(mpp=0.5))
-            ],
-            "missing embedding mpp": [
-                changed(embedding_document(), lambda d: inference(d).pop("mpp"))
-            ],
-            "missing embedding summaries": [
-                changed(embedding_document(), lambda d: inference(d).pop("summaries"))
-            ],
-            "unknown contract": [
-                changed(
-                    spatial_document(),
-                    lambda d: inference(d).update(contract="segmentation-mask"),
-                )
-            ],
-            "invalid parameter": [
-                changed(spatial_document(), lambda d: user_config(d).update(mpp=-1))
-            ],
-            "no deployments": [
-                changed(spatial_document(), lambda d: serve(d).update(deployments=[]))
-            ],
-            "unknown top-level key": [
-                changed(spatial_document(), lambda d: d.update(extra=True))
-            ],
-            "duplicate model IDs": [spatial_document(), spatial_document()],
-            "not a list": {"models": []},
+            "wrong route prefix": changed(
+                spatial_document(),
+                lambda d: serve(d).update(route_prefix="/elsewhere"),
+            ),
+            "missing user_config key": changed(
+                spatial_document(), lambda d: user_config(d).pop("mpp")
+            ),
+            "mpp declared twice": changed(
+                spatial_document(), lambda d: inference(d).update(mpp=0.5)
+            ),
+            "missing embedding mpp": changed(
+                embedding_document(), lambda d: inference(d).pop("mpp")
+            ),
+            "missing embedding summaries": changed(
+                embedding_document(), lambda d: inference(d).pop("summaries")
+            ),
+            "unknown contract": changed(
+                spatial_document(),
+                lambda d: inference(d).update(contract="segmentation-mask"),
+            ),
+            "invalid parameter": changed(
+                spatial_document(), lambda d: user_config(d).update(mpp=-1)
+            ),
+            "no deployments": changed(
+                spatial_document(), lambda d: serve(d).update(deployments=[])
+            ),
+            "a block no provider takes": changed(
+                spatial_document(), lambda d: d.update(listing={"name": "Prostate"})
+            ),
         }
-        for name, documents in cases.items():
-            with self.subTest(name), self.assertRaises(CatalogError):
-                ModelCatalog.from_documents(documents)
+        for name, document in cases.items():
+            with (
+                self.subTest(name),
+                self.assertLogs("model_service.api.model_catalog", "ERROR"),
+            ):
+                self.assertEqual(len(ModelCatalog.from_documents([document])), 0)
+
+    def test_a_repeated_model_id_keeps_the_first_file(self) -> None:
+        first = spatial_document()
+        repeated = deepcopy(first)
+        user_config = repeated["serve"]["deployments"][0]["user_config"]  # type: ignore[index]
+        user_config["mpp"] = 1.0
+
+        with self.assertLogs("model_service.api.model_catalog", "ERROR"):
+            catalog = ModelCatalog.from_documents([first, repeated])
+
+        self.assertEqual(catalog.get("prostate-classifier-1").mpp, 0.468)
+        self.assertEqual(len(catalog), 1)
+
+    def test_a_catalog_that_is_not_a_list_is_rejected(self) -> None:
+        with self.assertRaises(CatalogError):
+            ModelCatalog.from_documents({"models": []})
 
 
 MODEL_FILES = sorted(

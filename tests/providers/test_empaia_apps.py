@@ -471,6 +471,8 @@ class ValuesFileTests(unittest.TestCase):
             with self.subTest(values.name):
                 documents = [load(CHART / f"models/{m}.yaml") for m in models]
                 catalog = ModelCatalog.from_documents(documents, [CATALOG_BLOCK])
+                # The catalog leaves an invalid model file out instead of failing.
+                self.assertEqual(len(catalog), len(models))
                 listings = parse_listings(catalog.provider_block(CATALOG_BLOCK))
                 apps = app_definitions(catalog, listings, publishers)
                 # A model listed for EMPAIA that no builder can serve there would
