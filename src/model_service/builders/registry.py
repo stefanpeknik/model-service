@@ -7,6 +7,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from model_service.builders.implementations.embeddings.spec import (
+    SPEC as TILE_EMBEDDINGS,
+)
 from model_service.builders.implementations.heatmap.spec import SPEC as HEATMAP
 from model_service.contracts.failures import UnknownBuilderError
 
@@ -16,7 +19,9 @@ if TYPE_CHECKING:
     from model_service.contracts.model_declarations import ModelBinding
 
 
-BUILDERS: dict[str, BuilderSpec] = {spec.id: spec for spec in (HEATMAP,)}
+BUILDERS: dict[str, BuilderSpec] = {
+    spec.id: spec for spec in (HEATMAP, TILE_EMBEDDINGS)
+}
 
 
 def get_builder(builder_id: str) -> BuilderSpec:

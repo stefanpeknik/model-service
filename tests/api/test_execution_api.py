@@ -262,7 +262,7 @@ class CatalogRouteTests(ApiTestCase):
                         "mpp": 0.5,
                         "summaries": ["global", "local_mean"],
                     },
-                    "builders": [],
+                    "builders": ["tile-embeddings"],
                 },
             ],
         )
@@ -274,7 +274,7 @@ class CatalogRouteTests(ApiTestCase):
             response = await client.get("/v1/builders")
 
         builders = {item["id"]: item for item in response.json()}
-        self.assertEqual(set(builders), {"heatmap"})
+        self.assertEqual(set(builders), {"heatmap", "tile-embeddings"})
         heatmap = builders["heatmap"]
         self.assertEqual(heatmap["accepts"], "spatial-scores")
         self.assertEqual(
@@ -291,6 +291,7 @@ class CatalogRouteTests(ApiTestCase):
         stride = heatmap["configuration_schema"]["properties"]["stride_fraction"]
         self.assertEqual((stride["type"], stride["exclusiveMinimum"]), ("number", 0))
         self.assertIn("share of the tile size", stride["description"])
+        self.assertEqual(builders["tile-embeddings"]["accepts"], "tile-embedding")
 
 
 class ScheduleRouteTests(ApiTestCase):
