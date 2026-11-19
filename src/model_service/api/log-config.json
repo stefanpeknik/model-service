@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "disable_existing_loggers": false,
+  "filters": {
+    "request_id": {
+      "()": "asgi_correlation_id.CorrelationIdFilter",
+      "default_value": null
+    }
+  },
+  "formatters": {
+    "json": {
+      "()": "pythonjsonlogger.json.JsonFormatter",
+      "fmt": "%(asctime)s %(levelname)s %(name)s %(message)s %(correlation_id)s",
+      "rename_fields": {
+        "asctime": "time",
+        "levelname": "level",
+        "name": "logger",
+        "correlation_id": "request_id"
+      }
+    }
+  },
+  "handlers": {
+    "stdout": {
+      "class": "logging.StreamHandler",
+      "stream": "ext://sys.stdout",
+      "formatter": "json",
+      "filters": ["request_id"]
+    }
+  },
+  "loggers": {
+    "model_service": {"level": "INFO"},
+    "uvicorn": {"level": "INFO"},
+    "uvicorn.access": {"level": "INFO"}
+  },
+  "root": {"level": "WARNING", "handlers": ["stdout"]}
+}

@@ -31,4 +31,4 @@ RUN groupadd --gid 10001 api \
 USER 10001:10001
 EXPOSE 8080
 
-CMD ["uvicorn", "model_service.api.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "model_service.api.main:app", "--host", "0.0.0.0", "--port", "8080", "--log-config", "/app/model_service/api/log-config.json"]

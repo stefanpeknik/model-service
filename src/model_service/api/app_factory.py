@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
 import httpx
+from asgi_correlation_id import CorrelationIdMiddleware
 from fastapi import FastAPI, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -111,6 +112,9 @@ def create_app(
     """
     access = access or Access()
     app = FastAPI(title="model-service", lifespan=lifespan)
+    # Reads `X-Request-ID` or makes one, returns it, and names it in log lines.
+    # Any caller's ID is kept: it only labels the request.
+    app.add_middleware(CorrelationIdMiddleware, validator=None)
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(
