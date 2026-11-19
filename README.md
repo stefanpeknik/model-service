@@ -110,7 +110,11 @@ microns per pixel to place them on the slide.
 ## Develop
 
 ```sh
-UV_CACHE_DIR=.cache/uv uv sync --all-extras
+# The SDK's models submodule is read from GitLab; see [tool.uv.sources].
+export GIT_CONFIG_COUNT=1 \
+  GIT_CONFIG_KEY_0=url.git@gitlab.ics.muni.cz:rationai/digital-pathology/production/services/models.git.insteadOf \
+  GIT_CONFIG_VALUE_0=https://github.com/AigoPath/EMPAIA-Models.git
+UV_CACHE_DIR=.cache/uv uv sync --extra api --extra builders --extra inference --extra cpu
 podman run -d --name ms-test-pg -p 127.0.0.1:55432:5432 \
   -e POSTGRES_PASSWORD=test docker.io/library/postgres:17-alpine
 TEST_POSTGRES_DSN=postgresql://postgres:test@127.0.0.1:55432/postgres \
