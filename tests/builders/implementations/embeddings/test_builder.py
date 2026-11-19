@@ -225,6 +225,34 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(self.model.calls, 4)
 
+    async def test_rows_follow_grid_order_when_later_tiles_finish_first(
+        self,
+    ) -> None:
+        client = await self.client(("tile",))
+        embed = self.model.embed
+        delays = iter([0.03, 0.02, 0.01, 0.0])
+
+        class SlowFirst:
+            async def remote(self, tile: np.ndarray) -> object:
+                await asyncio.sleep(next(delays))
+                return await embed.remote(tile)
+
+        self.model.embed = SlowFirst()  # type: ignore[assignment]
+
+        response = await client.post(
+            "/v1/builders/tile-embeddings/models/encoder/run",
+            json=self.body(mask=False),
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        with h5py.File(response.json()["outputs"]["embeddings"]["path"]) as output:
+            coordinates = output["coordinates"][:].tolist()
+            features = output["features"][:, 0].tolist()
+        self.assertEqual(coordinates, [[0, 0], [32, 0], [0, 32], [32, 32]])
+        # Each tile's mean: the left half is black, the right 200, and the
+        # bottom tiles' lower half is padding, read as white.
+        self.assertEqual(features, [0.0, 200.0, 127.5, 227.5])
+
     async def test_a_caller_sets_the_builders_settings_per_run(self) -> None:
         client = await self.client(("tile",))
 

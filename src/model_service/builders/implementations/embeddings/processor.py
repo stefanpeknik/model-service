@@ -77,6 +77,8 @@ async def build_embeddings(
             min_tissue_fraction=min_tissue_fraction,
         ) as reader,
         ThreadPoolExecutor(max_workers=num_threads) as executor,
+        # One thread writes the table, in the order rows are handed to it.
+        ThreadPoolExecutor(max_workers=1) as writer,
         h5py.File(output_path, "w") as output,
     ):
         level = reader.level
@@ -131,7 +133,7 @@ async def build_embeddings(
             Raises:
                 BuilderFailure: The features differ in shape from earlier tiles.
             """
-            nonlocal features, finished
+            nonlocal finished
             # Keep the task registered until it is joined, including on cancellation.
             x, y, result = await tasks[0]
             tasks.popleft()
@@ -139,6 +141,20 @@ async def build_embeddings(
             report_progress(finished / len(positions))
             if result is None:
                 return
+            await loop.run_in_executor(writer, append_row, x, y, result)
+
+        def append_row(x: int, y: int, result: NDArray[np.float32]) -> None:
+            """Append one tile's row to the table; runs on the writer thread.
+
+            Args:
+                x: Tile x on the read level.
+                y: Tile y on the read level.
+                result: The tile's features.
+
+            Raises:
+                BuilderFailure: The features differ in shape from earlier tiles.
+            """
+            nonlocal features
             if features is None:
                 features = output.create_dataset(
                     "features",

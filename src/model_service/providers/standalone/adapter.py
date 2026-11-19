@@ -9,6 +9,7 @@ imports this module; builder replicas load provider.py alone.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -49,8 +50,11 @@ from model_service.providers.standalone.shared_storage import (
 
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from model_service.api.scheduler.public import BeforeMutation, ProviderFinishOutcome
     from model_service.contracts.json_values import JsonValue
+    from model_service.contracts.result import BuilderOutput
 
 
 class StandaloneProviderAdapter(ProviderAdapter):
@@ -181,23 +185,10 @@ class StandaloneProviderAdapter(ProviderAdapter):
         attempts = Path(root, ATTEMPTS_DIR, group)
         result = None
         if isinstance(outcome, ProviderSuccess):
-            outputs = dict(outcome.result.outputs)
             try:
-                for name, output in outputs.items():
-                    if not isinstance(output, SharedArtifact):
-                        continue
-                    source = Path(output.path)
-                    if not source.is_relative_to(attempts):
-                        continue
-                    # Drop the attempt's own directory from the relative path.
-                    relative = source.relative_to(attempts).parts[1:]
-                    destination = SharedStorageAccess(Path(root), {}).output_path(
-                        "/".join(relative)
-                    )
-                    if source.exists():
-                        make_shared_directory(destination.parent)
-                        os.replace(source, destination)
-                    outputs[name] = replace(output, path=str(destination))
+                outputs = await asyncio.to_thread(
+                    _move_outputs, Path(root), attempts, outcome.result.outputs
+                )
             except (OSError, InvalidInvocation) as error:
                 raise ProviderFinishFailureError(
                     code="output_unavailable",
@@ -205,5 +196,41 @@ class StandaloneProviderAdapter(ProviderAdapter):
                     retryable=True,
                 ) from error
             result = BuilderResult(outputs)
-        remove_directory(attempts)
+        await asyncio.to_thread(remove_directory, attempts)
         return result
+
+
+def _move_outputs(
+    root: Path, attempts: Path, outputs: Mapping[str, BuilderOutput]
+) -> dict[str, BuilderOutput]:
+    """Move an attempt's artifacts to their requested paths under the root.
+
+    Blocking file work, so the caller runs it in a thread.
+
+    Args:
+        root: The caller's shared storage root.
+        attempts: The execution's attempts directory.
+        outputs: The builder's outputs.
+
+    Returns:
+        The outputs, with moved artifacts at their requested paths.
+
+    Raises:
+        OSError: A file could not be moved.
+        InvalidInvocation: A requested path leaves the root.
+    """
+    moved = dict(outputs)
+    for name, output in outputs.items():
+        if not isinstance(output, SharedArtifact):
+            continue
+        source = Path(output.path)
+        if not source.is_relative_to(attempts):
+            continue
+        # Drop the attempt's own directory from the relative path.
+        relative = source.relative_to(attempts).parts[1:]
+        destination = SharedStorageAccess(root, {}).output_path("/".join(relative))
+        if source.exists():
+            make_shared_directory(destination.parent)
+            os.replace(source, destination)
+        moved[name] = replace(output, path=str(destination))
+    return moved
