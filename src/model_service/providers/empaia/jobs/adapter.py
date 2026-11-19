@@ -48,6 +48,7 @@ from model_service.providers.empaia.app_service.gateway import (
     EmpaiaJobMode,
 )
 from model_service.providers.empaia.ead.builder_io import BUILDER_IO
+from model_service.providers.empaia.jobs.failure_message import fit_failure_message
 from model_service.providers.empaia.jobs.gateways import (
     FINISH_FAILED,
     finish_gateway,
@@ -323,7 +324,9 @@ class EmpaiaProviderAdapter(ProviderAdapter):
                         mutation_completed = True
                     await gateway.finalize()
                 elif isinstance(outcome, ProviderFailure):
-                    await gateway.report_failure(outcome.error.message)
+                    await gateway.report_failure(
+                        fit_failure_message(outcome.error.message)
+                    )
                 elif isinstance(outcome, ProviderCancellation):
                     await gateway.report_failure("execution was cancelled")
             except EmpaiaGatewayError as error:

@@ -214,8 +214,8 @@ def app_definitions(
 
     A model without a listing offers none. A builder becomes an app of a model
     when it accepts the model's contract, has an `io` entry, and every one of its
-    outputs has a publisher that accepts the model; otherwise it is skipped and
-    logged.
+    outputs has a publisher that accepts the model; a listed model's builder
+    whose outputs nothing publishes is skipped with a warning.
 
     Args:
         models: The deployed models.
@@ -252,7 +252,7 @@ def app_definitions(
                 is None
                 or not publisher.accepts(model)
             ]:
-                logger.info(
+                logger.warning(
                     "%s with the %s builder is not offered in EMPAIA: "
                     "nothing publishes %s",
                     model.id,

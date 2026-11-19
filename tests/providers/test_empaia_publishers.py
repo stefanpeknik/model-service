@@ -119,7 +119,9 @@ class AppPublishabilityTests(unittest.TestCase):
         single = app_definitions(
             [model(1)], {"prostate-classifier-1": LISTING}, PUBLISHERS
         )
-        with self.assertLogs("model_service.providers.empaia.ead.apps", "INFO") as logs:
+        with self.assertLogs(
+            "model_service.providers.empaia.ead.apps", "WARNING"
+        ) as logs:
             multi = app_definitions(
                 [model(3)], {"prostate-classifier-1": LISTING}, PUBLISHERS
             )
@@ -141,7 +143,7 @@ class AppPublishabilityTests(unittest.TestCase):
             ),
         )
 
-        with self.assertLogs("model_service.providers.empaia.ead.apps", "INFO"):
+        with self.assertLogs("model_service.providers.empaia.ead.apps", "WARNING"):
             apps = app_definitions(
                 [model(1)],
                 {"prostate-classifier-1": LISTING},

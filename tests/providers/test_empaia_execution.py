@@ -31,6 +31,7 @@ from model_service.builders.registry import get_builder
 from model_service.builders.replica.http_handler import run_http
 from model_service.builders.replica.runner import BuilderApplication
 from model_service.contracts.builder_http import RunRequest
+from model_service.contracts.failures import InvalidInvocation
 from model_service.contracts.invocation import ExecutionContext, Invocation
 from model_service.contracts.model_declarations import ModelBinding, SpatialScoresModel
 from model_service.contracts.result import BuilderResult, SharedArtifact
@@ -159,7 +160,10 @@ def over_http(application: BuilderApplication) -> HTTPBuilderDispatch:
 def copy_inputs_application(
     service: ControlledEmpaiaService,
     directory: str,
-    builder: CopyInputsBuilder | HalfwayBuilder | None = None,
+    builder: CopyInputsBuilder
+    | HalfwayBuilder
+    | SettingsRejectingBuilder
+    | None = None,
 ) -> BuilderApplication:
     return BuilderApplication(
         get_builder("heatmap"),
@@ -327,6 +331,17 @@ class HalfwayBuilder:
         while not (self._service.progress or self._service.progress_failures):
             await asyncio.sleep(0.001)
         return await self._copy.run(context)
+
+
+# Eight settings errors, as `BuilderSpec.resolve_configuration` words them.
+SETTINGS_ERRORS = [f"setting_{i}: Input should be greater than 0" for i in range(1, 9)]
+
+
+class SettingsRejectingBuilder:
+    """Reject eight settings at once, more than EMPAIA's 255 characters can name."""
+
+    async def run(self, context: BuilderContext) -> BuilderResult:
+        raise InvalidInvocation(f"invalid settings: {'; '.join(SETTINGS_ERRORS)}")
 
 
 class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
@@ -576,6 +591,33 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         (message,) = service.failures
         self.assertIn("stride_fraction", message)
         self.assertIn("greater than 0", message)
+
+    async def test_a_long_settings_error_names_whole_settings_and_counts_the_rest(
+        self,
+    ) -> None:
+        now = datetime.now(UTC)
+        service = ControlledEmpaiaService()
+        repository = InMemoryExecutionRepository(clock=lambda: now)
+        provider = EmpaiaProviderAdapter(
+            service.gateway, allowed_api_urls=(API_URL,), publishers=PUBLISHERS
+        )
+        scheduler = scheduler_for(repository, provider, now)
+        with TemporaryDirectory() as directory:
+            application = copy_inputs_application(
+                service, directory, SettingsRejectingBuilder()
+            )
+            worker = worker_for(repository, provider, over_http(application))
+            await scheduler.schedule(self._request(now, "credential"))
+            await worker.run_once()
+            await worker.run_once()
+
+        # Five whole entries fit in EMPAIA's 255 characters with the count.
+        (message,) = service.failures
+        self.assertEqual(
+            message,
+            f"invalid settings: {'; '.join(SETTINGS_ERRORS[:5])}; …and 3 more",
+        )
+        self.assertLessEqual(len(message), 255)
 
     async def test_the_viewer_is_told_how_far_a_job_got(self) -> None:
         completed, service = await self._run_halfway_job()
