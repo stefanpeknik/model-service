@@ -325,6 +325,45 @@ class ScheduleRouteTests(ApiTestCase):
         self.assertEqual(cancelled.json()["status"], "cancelled")
         self.assert_error(unknown, 404, "unknown_execution")
 
+    async def test_accepted_settings_are_the_ones_the_execution_runs_with(
+        self,
+    ) -> None:
+        body = {**self.schedule_request(), "configuration": {"stride_fraction": 1.0}}
+        async with self.client(self.app()) as client:
+            created = await self.schedule(client, body)
+            execution = await client.get(
+                f"/v1/executions/{created.json()['execution']['id']}"
+            )
+
+        self.assertEqual(created.status_code, 202, created.text)
+        self.assertEqual(
+            execution.json()["configuration"],
+            HEATMAP_DEFAULTS | {"stride_fraction": 1.0},
+        )
+
+    async def test_a_setting_the_builder_rejects_is_refused_naming_it(self) -> None:
+        body = {**self.schedule_request(), "configuration": {"stride_fraction": 0}}
+        async with self.client(self.app()) as client:
+            refused = await self.schedule(client, body)
+            # Nothing was admitted under the key: a valid request creates.
+            corrected = await self.schedule(client)
+
+        self.assert_error(refused, 422, "invalid_request")
+        self.assertIn("stride_fraction", refused.json()["detail"]["message"])
+        self.assertTrue(corrected.json()["created"])
+
+    async def test_a_replay_that_changes_the_request_is_refused(self) -> None:
+        changed = {**self.schedule_request(), "configuration": {"stride_fraction": 1.0}}
+        async with self.client(self.app()) as client:
+            created = await self.schedule(client)
+            replay = await self.schedule(client, changed)
+            execution = await client.get(
+                f"/v1/executions/{created.json()['execution']['id']}"
+            )
+
+        self.assert_error(replay, 409, "schedule_conflict")
+        self.assertEqual(execution.json()["configuration"], HEATMAP_DEFAULTS)
+
     async def test_lookup_and_validation_errors_are_distinct(self) -> None:
         body = self.schedule_request()
         async with self.client(self.app()) as client:
