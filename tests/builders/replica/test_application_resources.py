@@ -26,10 +26,10 @@ from tests.support.builder_fixtures import (
 
 
 if TYPE_CHECKING:
-    from model_service.builders.base import BuilderContext
+    from tests.support.builder_fixtures import AnyContext
 
 
-async def empty(_context: BuilderContext) -> BuilderResult:
+async def empty(_context: AnyContext) -> BuilderResult:
     return BuilderResult({})
 
 
@@ -91,7 +91,7 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
             BuilderFailure(code="permanent", safe_message="cannot", retryable=False),
         ):
 
-            async def build(_context: BuilderContext, primary: Any = primary) -> Any:
+            async def build(_context: AnyContext, primary: Any = primary) -> Any:
                 raise primary
 
             with (
@@ -109,7 +109,7 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
         release_close = asyncio.Event()
         closed = asyncio.Event()
 
-        async def build(_context: BuilderContext) -> BuilderResult:
+        async def build(_context: AnyContext) -> BuilderResult:
             started.set()
             await asyncio.Event().wait()
             raise AssertionError
@@ -169,7 +169,7 @@ class BuilderResourceTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(raised.exception.code, "builder_internal_error")
 
-        async def build(_context: BuilderContext) -> BuilderResult:
+        async def build(_context: AnyContext) -> BuilderResult:
             raise InvalidInvocation("primary failure")
 
         with self.assertRaisesRegex(InvalidInvocation, "primary failure"):

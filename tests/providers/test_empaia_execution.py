@@ -55,13 +55,13 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from model_service.api.scheduler.public import ExecutionView
-    from model_service.builders.base import BuilderContext
     from model_service.contracts.json_values import JsonValue
     from model_service.contracts.result import BuilderOutput
     from model_service.providers.empaia.app_service.gateway import (
         EmpaiaGateway,
         MutationGuard,
     )
+    from tests.support.builder_fixtures import AnyContext
 
 
 MODEL = SpatialScoresModel(
@@ -310,7 +310,7 @@ class FakeGateway:
 class CopyInputsBuilder:
     """Write both materialized inputs into the artifact, proving access reaches the builder."""
 
-    async def run(self, context: BuilderContext) -> BuilderResult:
+    async def run(self, context: AnyContext) -> BuilderResult:
         slide = context.inputs.slide.read_bytes()
         roi = context.inputs.region_of_interest.read_bytes()
         output = context.output_path("heatmap")
@@ -326,7 +326,7 @@ class HalfwayBuilder:
         self._service = service
         self._copy = CopyInputsBuilder()
 
-    async def run(self, context: BuilderContext) -> BuilderResult:
+    async def run(self, context: AnyContext) -> BuilderResult:
         context.report_progress(0.5)
         while not (self._service.progress or self._service.progress_failures):
             await asyncio.sleep(0.001)
@@ -340,7 +340,7 @@ SETTINGS_ERRORS = [f"setting_{i}: Input should be greater than 0" for i in range
 class SettingsRejectingBuilder:
     """Reject eight settings at once, more than EMPAIA's 255 characters can name."""
 
-    async def run(self, context: BuilderContext) -> BuilderResult:
+    async def run(self, context: AnyContext) -> BuilderResult:
         raise InvalidInvocation(f"invalid settings: {'; '.join(SETTINGS_ERRORS)}")
 
 

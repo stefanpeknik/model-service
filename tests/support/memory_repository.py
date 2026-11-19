@@ -28,6 +28,7 @@ from model_service.api.scheduler.public import (
     UnknownExecutionError,
 )
 from model_service.api.scheduler.status import ExecutionStatus
+from model_service.api.scheduler.store.repository import ExecutionRepository
 from model_service.api.scheduler.transitions.common import work_deadline_at
 from model_service.api.scheduler.transitions.execution_transitions import (
     ExecutionTransitions,
@@ -54,7 +55,7 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-class InMemoryExecutionRepository:
+class InMemoryExecutionRepository(ExecutionRepository):
     """Mirror durable repository semantics using dictionaries and the shared execution state machine."""
 
     def __init__(
@@ -188,6 +189,7 @@ class InMemoryExecutionRepository:
                     )
 
             def order(item: ExecutionRecord) -> tuple[object, ...]:
+                group: tuple[object, ...]
                 if item.work_kind is WorkKind.PROCESSING:
                     target = item.model_id
                     group = (-top_priority[target], first_created[target])

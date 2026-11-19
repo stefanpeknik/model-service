@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from model_service.builders.base import _atomic_artifact as atomic_artifact
 from model_service.builders.declarations import InputSpec
+from model_service.builders.input_access import InputAccess, InputAccessFactory
 from model_service.builders.replica.runner import BuilderApplication
 from model_service.contracts.failures import (
     BuilderFailure,
@@ -43,10 +44,12 @@ from tests.support.builder_fixtures import (
 
 
 if TYPE_CHECKING:
-    from model_service.builders.base import BuilderContext
+    from model_service.contracts.invocation import ExecutionContext, Invocation
+    from model_service.contracts.model_declarations import ModelBinding
+    from tests.support.builder_fixtures import AnyContext
 
 
-class FixedAccess:
+class FixedAccess(InputAccess):
     def __init__(self, root: Path, sent: list[float] | None = None) -> None:
         self._root = root
         self.sent = [] if sent is None else sent
@@ -71,7 +74,7 @@ class FixedAccess:
         return None
 
 
-class FixedAccessAdapter:
+class FixedAccessAdapter(InputAccessFactory):
     def __init__(self, root: Path, access: type[FixedAccess] = FixedAccess) -> None:
         self._root = root
         self._access = access
@@ -79,7 +82,10 @@ class FixedAccessAdapter:
         self.sent: list[float] = []
 
     def create(
-        self, _invocation: object, _context: object, _model: object
+        self,
+        invocation: Invocation,
+        execution_context: ExecutionContext,
+        model: ModelBinding,
     ) -> FixedAccess:
         return self._access(self._root, self.sent)
 
@@ -94,12 +100,15 @@ class TimingOutCloseAccess(FixedAccess):
         raise TimeoutError("provider cleanup timed out")
 
 
-class RaisingAdapter:
+class RaisingAdapter(InputAccessFactory):
     def __init__(self, error: Exception) -> None:
         self._error = error
 
     def create(
-        self, _invocation: object, _context: object, _model: object
+        self,
+        invocation: Invocation,
+        execution_context: ExecutionContext,
+        model: ModelBinding,
     ) -> FixedAccess:
         raise self._error
 
@@ -129,7 +138,7 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
     async def test_artifact_is_published_atomically_at_default_path(self) -> None:
         temporaries: list[Path] = []
 
-        async def build(context: BuilderContext) -> BuilderResult:
+        async def build(context: AnyContext) -> BuilderResult:
             destination = context.output_path("artifact")
             with atomic_artifact(destination, inputs=()) as temporary:
                 temporaries.append(temporary)
@@ -147,7 +156,7 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(temporaries[0].exists())
 
     async def test_output_path_overrides_the_single_artifact_default(self) -> None:
-        async def build(context: BuilderContext) -> BuilderResult:
+        async def build(context: AnyContext) -> BuilderResult:
             destination = context.output_path("artifact")
             destination.parent.mkdir(parents=True)
             destination.write_bytes(b"x")
@@ -163,7 +172,7 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_output_path_requires_an_artifact_output(self) -> None:
-        async def build(_context: BuilderContext) -> BuilderResult:
+        async def build(_context: AnyContext) -> BuilderResult:
             return BuilderResult({"label": InlineOutput("x")})
 
         with self.assertRaisesRegex(InvalidInvocation, "no artifact output"):
@@ -174,7 +183,7 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
     async def test_failed_build_leaves_no_partial_artifact(self) -> None:
         temporaries: list[Path] = []
 
-        async def build(context: BuilderContext) -> BuilderResult:
+        async def build(context: AnyContext) -> BuilderResult:
             with atomic_artifact(context.output_path("artifact"), inputs=()) as temp:
                 temporaries.append(temp)
                 temp.write_bytes(b"partial")
@@ -191,9 +200,9 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
     async def test_optional_inputs_are_none_when_not_supplied(self) -> None:
         seen: dict[str, Path | None] = {}
 
-        async def build(context: BuilderContext) -> BuilderResult:
-            seen["slide"] = context.inputs.slide  # type: ignore[attr-defined]
-            seen["mask"] = context.inputs.region_of_interest  # type: ignore[attr-defined]
+        async def build(context: AnyContext) -> BuilderResult:
+            seen["slide"] = context.inputs.slide
+            seen["mask"] = context.inputs.region_of_interest
             return BuilderResult({})
 
         builder = self.application(
@@ -222,7 +231,7 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(seen["mask"], self.root / "region_of_interest")
 
     async def test_incompatible_model_is_rejected_before_access(self) -> None:
-        async def build(_context: BuilderContext) -> BuilderResult:
+        async def build(_context: AnyContext) -> BuilderResult:
             self.fail("incompatible models must not run")
 
         application = BuilderApplication(
@@ -235,7 +244,7 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
             await application.run(invocation("test"), EMBEDDING_MODEL)
 
     async def test_a_mismatched_model_fails_before_inputs_are_fetched(self) -> None:
-        async def build(_context: BuilderContext) -> BuilderResult:
+        async def build(_context: AnyContext) -> BuilderResult:
             self.fail("a mismatched model must not run")
 
         running = FakeDeployment(running_config(SPATIAL_MODEL) | {"tile_size": 64})
@@ -286,7 +295,7 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
             for name, (outputs, value) in cases.items():
 
                 async def build(
-                    _context: BuilderContext, value: BuilderResult = value
+                    _context: AnyContext, value: BuilderResult = value
                 ) -> BuilderResult:
                     return value
 
@@ -296,7 +305,7 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
                     )
 
     async def test_builder_failures_keep_their_safe_classification(self) -> None:
-        async def build(_context: BuilderContext) -> BuilderResult:
+        async def build(_context: AnyContext) -> BuilderResult:
             raise BuilderFailure(
                 code="model_failed", safe_message="down", retryable=True
             )
@@ -307,7 +316,7 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(raised.exception.retryable)
 
     async def test_unexpected_failure_does_not_expose_the_raw_exception(self) -> None:
-        async def build(_context: BuilderContext) -> BuilderResult:
+        async def build(_context: AnyContext) -> BuilderResult:
             raise RuntimeError("database password is secret")
 
         with self.assertRaises(BuilderFailure) as raised:
@@ -320,7 +329,7 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
     async def test_access_and_cleanup_failures_are_safe_and_not_deadlines(
         self,
     ) -> None:
-        async def build(_context: BuilderContext) -> BuilderResult:
+        async def build(_context: AnyContext) -> BuilderResult:
             return BuilderResult({})
 
         adapters = {
@@ -340,14 +349,14 @@ class BuilderApplicationTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("secret", str(raised.exception))
 
     async def test_unknown_access_kind_is_invalid(self) -> None:
-        async def build(_context: BuilderContext) -> BuilderResult:
+        async def build(_context: AnyContext) -> BuilderResult:
             return BuilderResult({})
 
         with self.assertRaisesRegex(InvalidInvocation, "input access kind"):
             await self.application(run(build)).run(invocation("missing"), SPATIAL_MODEL)
 
     async def test_absolute_deadline_cancels_the_builder(self) -> None:
-        async def build(_context: BuilderContext) -> BuilderResult:
+        async def build(_context: AnyContext) -> BuilderResult:
             await asyncio.sleep(60)
             return BuilderResult({})
 
@@ -384,7 +393,7 @@ class ProgressTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0.001)
 
     async def test_the_latest_progress_is_sent_once_it_moved(self) -> None:
-        async def build(context: BuilderContext) -> BuilderResult:
+        async def build(context: AnyContext) -> BuilderResult:
             # Reported between two sends: only the latest goes out.
             for fraction in (0.1, 0.2, 0.3):
                 context.report_progress(fraction)
@@ -405,7 +414,7 @@ class ProgressTests(unittest.IsolatedAsyncioTestCase):
     async def test_nothing_is_sent_after_the_run_ends(self) -> None:
         reporters = []
 
-        async def build(context: BuilderContext) -> BuilderResult:
+        async def build(context: AnyContext) -> BuilderResult:
             reporters.append(context.report_progress)
             context.report_progress(0.5)
             return BuilderResult({})

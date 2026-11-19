@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from collections.abc import Mapping
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -35,7 +36,7 @@ def spatial(**overrides: Any) -> SpatialScoresModel:
     return SpatialScoresModel(**(values | overrides))
 
 
-def fake_handle(config: dict[str, object], score: object = 0.75) -> SimpleNamespace:
+def fake_handle(config: Mapping[str, object], score: object = 0.75) -> SimpleNamespace:
     return SimpleNamespace(
         get_config=SimpleNamespace(remote=AsyncMock(return_value=config)),
         predict=SimpleNamespace(remote=AsyncMock(return_value=score)),

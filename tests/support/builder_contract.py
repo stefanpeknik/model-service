@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 import numpy as np
 
 from model_service.builders.base import ReplicaSettings
-from model_service.builders.input_access import InputAccess
+from model_service.builders.input_access import InputAccess, InputAccessFactory
 from model_service.builders.registry import get_builder
 from model_service.builders.replica.runner import BuilderApplication
 from model_service.contracts.failures import (
@@ -38,7 +38,11 @@ from tests.support.builder_fixtures import (
 if TYPE_CHECKING:
     import unittest
 
-    from model_service.contracts.invocation import BuilderInput
+    from model_service.contracts.invocation import (
+        BuilderInput,
+        ExecutionContext,
+        Invocation,
+    )
     from model_service.contracts.model_declarations import ModelBinding
     from model_service.contracts.result import BuilderResult
 
@@ -49,6 +53,7 @@ else:
 
 def healthy_deployment(model: ModelBinding) -> FakeDeployment:
     """A deployment running as declared that answers every tile within the contract."""
+    shape: tuple[int, ...]
     if model.contract is InferenceContract.SPATIAL_SCORES:
         shape = (model.n_channels, model.output_tile_size, model.output_tile_size)
         return FakeDeployment(
@@ -217,15 +222,22 @@ class BuilderContractTests(_Base):
         self.assertEqual(self.leftovers(), [])
 
 
-class _RecordingProgress:
+class _RecordingProgress(InputAccessFactory):
     """Shared storage access whose progress updates are collected."""
 
     def __init__(self, factory: SharedStorageAccessFactory, sent: list[float]) -> None:
         self._factory = factory
         self._sent = sent
 
-    def create(self, *arguments: Any) -> InputAccess:
-        return _RecordingAccess(self._factory.create(*arguments), self._sent)
+    def create(
+        self,
+        invocation: Invocation,
+        execution_context: ExecutionContext,
+        model: ModelBinding,
+    ) -> InputAccess:
+        return _RecordingAccess(
+            self._factory.create(invocation, execution_context, model), self._sent
+        )
 
 
 class _RecordingAccess(InputAccess):

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, create_model
 
+from model_service.builders.base import Builder, BuilderSettings
 from model_service.builders.declarations import (
     Artifact,
     BuilderInputs,
@@ -39,7 +40,11 @@ if TYPE_CHECKING:
 
     from model_service.builders.base import BuilderContext
     from model_service.builders.model_clients.base import HandleLookup
+    from model_service.contracts.json_values import JsonValue
     from model_service.contracts.model_declarations import ModelBinding
+
+    # What a test's builder function gets: any model, inputs and configuration.
+    type AnyContext = BuilderContext[Any, Any, Any]
 
 
 SPATIAL_MODEL = SpatialScoresModel(
@@ -151,31 +156,29 @@ def artifact_output(
     )
 
 
-class FunctionBuilder:
-    def __init__(
-        self, function: Callable[[BuilderContext], Awaitable[BuilderResult]]
-    ) -> None:
+class FunctionBuilder(Builder[Any, Any, Any, Any]):
+    """A builder whose run is a test's function."""
+
+    def __init__(self, function: Callable[[AnyContext], Awaitable[object]]) -> None:
+        super().__init__(BuilderSettings())
         self._function = function
 
-    async def run(self, context: BuilderContext[Any, Any]) -> BuilderOutputs:
+    async def run(self, context: AnyContext) -> Any:
         """Return the function's result as outputs, without validating it.
 
         Unvalidated, so tests can hand the application wrong names and kinds.
         """
         result = await self._function(context)
         if not isinstance(result, BuilderResult):
-            return result  # type: ignore[return-value]
-        model = create_model(
-            "Returned",
-            __base__=BuilderOutputs,
-            **dict.fromkeys(result.outputs, (BuilderOutput, ...)),  # type: ignore[call-overload]
-        )
-        return model.model_construct(**result.outputs)
+            return result
+        fields: dict[str, Any] = dict.fromkeys(result.outputs, (BuilderOutput, ...))
+        model = create_model("Returned", __base__=BuilderOutputs, **fields)
+        return model.model_construct(None, **result.outputs)
 
 
 def invocation(
     kind: str = "shared_storage",
-    state: dict[str, object] | None = None,
+    state: dict[str, JsonValue] | None = None,
     **overrides: object,
 ) -> Invocation:
     values: dict[str, object] = {

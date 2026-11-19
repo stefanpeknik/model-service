@@ -46,7 +46,7 @@ from tests.support.builder_fixtures import (
 
 
 if TYPE_CHECKING:
-    from model_service.builders.base import BuilderContext
+    from tests.support.builder_fixtures import AnyContext
 
 
 class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
@@ -215,7 +215,7 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
             seen_credentials.append(context.credential)
             return Gateway()
 
-        async def build(context: BuilderContext) -> BuilderResult:
+        async def build(context: AnyContext) -> BuilderResult:
             _ = context.inputs.slide  # type: ignore[attr-defined]
             return BuilderResult({"score": InlineOutput(1)})
 
@@ -288,7 +288,7 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
         with TemporaryDirectory() as directory:
             root = Path(directory)
 
-            async def build(context: BuilderContext) -> BuilderResult:
+            async def build(context: AnyContext) -> BuilderResult:
                 with context.write_artifact("heatmap") as (path, artifact):
                     path.write_bytes(b"npz")
                 for entry in root.rglob("*"):

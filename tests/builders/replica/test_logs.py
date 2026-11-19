@@ -26,12 +26,12 @@ from tests.support.log_capture import capture_logs
 
 
 if TYPE_CHECKING:
-    from model_service.builders.base import BuilderContext
+    from tests.support.builder_fixtures import AnyContext
 
 
 class ReplicaLogTests(unittest.IsolatedAsyncioTestCase):
     async def test_a_builders_log_lines_name_its_execution(self) -> None:
-        async def build(_context: BuilderContext) -> BuilderResult:
+        async def build(_context: AnyContext) -> BuilderResult:
             logging.getLogger("model_service.builders.probe").info("halfway")
             return BuilderResult({"score": InlineOutput(1)})
 
