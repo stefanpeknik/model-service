@@ -26,7 +26,6 @@ RUN rm -rf /app/models /app/providers /app/builders /app/integrations \
     /app/validation /app/testing /app/model_service /app/execution_scheduler \
     /app/workflow_execution /app/workflows /app/workflow-definitions
 COPY src/model_service /app/model_service
-COPY testing /app/testing
 ARG SOURCE_REVISION
 LABEL org.opencontainers.image.revision=${SOURCE_REVISION}
 USER ${RUN_USER}

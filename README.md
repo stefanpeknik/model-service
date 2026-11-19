@@ -57,7 +57,6 @@ deploy/
   helm/rayservice/models/<id>.yaml   one file per trained model
   images/                            Dockerfiles
   k8s/                               manifests the chart does not create
-testing/         deployable test doubles (constant classifier, mock AppService)
 tests/           unit and PostgreSQL tests
 ```
 
@@ -117,7 +116,7 @@ podman run -d --name ms-test-pg -p 127.0.0.1:55432:5432 \
 TEST_POSTGRES_DSN=postgresql://postgres:test@127.0.0.1:55432/postgres \
   UV_CACHE_DIR=.cache/uv uv run python -m unittest discover -s tests -t .
 UV_CACHE_DIR=.cache/uv uv run ruff check
-UV_CACHE_DIR=.cache/uv uv run mypy src testing
+UV_CACHE_DIR=.cache/uv uv run mypy src
 ```
 
 Without `TEST_POSTGRES_DSN` the PostgreSQL tests are skipped.

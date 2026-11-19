@@ -43,7 +43,6 @@ LABEL org.opencontainers.image.revision=${SOURCE_REVISION}
 WORKDIR /app
 ENV PYTHONPATH=/app
 COPY src/model_service model_service
-COPY testing testing
 
 RUN uv --no-cache run --no-project python -c \
     "from ratiopath.masks.mask_builders import MaskBuilder; from ratiopath.openslide import OpenSlide; from ratiopath.tiling import grid_tiles"

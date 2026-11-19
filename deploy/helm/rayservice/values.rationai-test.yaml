@@ -61,10 +61,6 @@ storage:
   outputSize: 32Gi
   scratchSize: 32Gi
 
-validation:
-  appService:
-    enabled: false
-
 api:
   enabled: true
   # Two, so a restart (e.g. for a new model) never takes the API down.
