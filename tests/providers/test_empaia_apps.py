@@ -11,7 +11,6 @@ from pathlib import Path
 
 import httpx
 import jwt
-import yaml
 from jsonschema import ValidationError
 from pydantic import ValidationError as SettingsError
 
@@ -39,6 +38,7 @@ from model_service.providers.empaia.registration import (
 from model_service.providers.empaia.settings import EmpaiaSettings
 from model_service.providers.empaia.triggers import PreprocessingTriggers
 from tests.support.deployment import CHART, VALUES, load
+from tests.support.model_documents import model_file
 
 
 PUBLISHERS = default_publishers()
@@ -49,8 +49,7 @@ MODELS = (
 
 def catalog(*names: str) -> ModelCatalog:
     return ModelCatalog.from_documents(
-        [yaml.safe_load((MODELS / f"{name}.yaml").read_text()) for name in names],
-        [CATALOG_BLOCK],
+        [model_file(MODELS / f"{name}.yaml") for name in names], [CATALOG_BLOCK]
     )
 
 
@@ -491,7 +490,7 @@ class ValuesFileTests(unittest.TestCase):
             if not models:
                 continue
             with self.subTest(values.name):
-                documents = [load(CHART / f"models/{m}.yaml") for m in models]
+                documents = [model_file(CHART / f"models/{m}.yaml") for m in models]
                 catalog = ModelCatalog.from_documents(documents, [CATALOG_BLOCK])
                 # The catalog leaves an invalid model file out instead of failing.
                 self.assertEqual(len(catalog), len(models))

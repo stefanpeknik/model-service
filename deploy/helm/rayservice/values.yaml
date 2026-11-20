@@ -1,6 +1,6 @@
-# Model deployments: files under models/ (without .yaml). Each file holds the
-# model's `inference` declaration and its Ray Serve application (`serve`).
-# Adding a compatible model = add a file here and list it.
+# Model deployments: files under models/ (without .yaml); the file name is the
+# model ID. Each file names the model's contract and implementation and its
+# Ray Serve deployment. Adding a compatible model = add a file here and list it.
 models:
   - prostate-classifier-1
   - episeg-1

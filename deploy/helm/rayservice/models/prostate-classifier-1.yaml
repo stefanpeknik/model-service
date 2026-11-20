@@ -1,7 +1,44 @@
-# One trained model. To add another, copy this file, change the names and
-# the fields marked below, and list it under `models:` in the values file.
-inference:
-  contract: spatial-scores
+# One trained model; its ID is the file name. To add another, copy this file
+# under a new name, change the fields marked below, and list it under
+# `models:` in the values file.
+contract: spatial-scores
+# The code that serves it: module.Class in src/model_service/inference/implementations/.
+implementation: binary_classifier.BinaryClassifier
+
+# How the model runs on Ray Serve: replicas, resources, batching, weights.
+deployment:
+  max_ongoing_requests: 512
+  max_queued_requests: 4096
+  autoscaling_config:
+    min_replicas: 0
+    max_replicas: 4
+    target_ongoing_requests: 128
+  ray_actor_options:
+    num_cpus: 4
+    num_gpus: 1
+    memory: 12884901888  # 12 GiB
+    runtime_env:
+      env_vars:
+        MLFLOW_TRACKING_URI: http://mlflow.rationai-mlflow:5000
+  # Geometry the API checks against the running model: change it with the model.
+  user_config:
+    tile_size: 512
+    output_tile_size: 1
+    n_channels: 1
+    mpp: 0.468
+    max_batch_size: 256
+    batch_wait_timeout_s: 0.05
+    intra_op_num_threads: 4
+    trt_max_workspace_size: 8589934592  # 8 GiB
+    # Where ONNX Runtime keeps the built TensorRT engine, so restarts skip the build.
+    # Each checkpoint gets its own subdirectory here.
+    trt_cache_path: /mnt/cache/trt_cache/binary-classifier-1/b256
+    trt_builder_optimization_level: 3
+    # The checkpoint; a new training run changes this line.
+    model:
+      _target_: model_service.inference.artifacts:mlflow
+      artifact_uri: mlflow-artifacts:/65/aebc892f526047249b972f200bef4381/artifacts/checkpoints/epoch=0-step=6972/prostate_model_norm.onnx
+
 # Offered in EMPAIA as one app with these modes; the API registers it at startup.
 empaia:
   name: Prostate cancer
@@ -29,40 +66,3 @@ empaia:
           shader:
             type: heatmap
             params: {threshold: 65, opacity: 0.5, color: "#ffff00"}
-serve:
-  name: prostate-classifier-1
-  import_path: model_service.inference.implementations.binary_classifier:app
-  route_prefix: /prostate-classifier-1
-  deployment:
-    name: BinaryClassifier
-    max_ongoing_requests: 512
-    max_queued_requests: 4096
-    autoscaling_config:
-      min_replicas: 0
-      max_replicas: 4
-      target_ongoing_requests: 128
-    ray_actor_options:
-      num_cpus: 4
-      num_gpus: 1
-      memory: 12884901888  # 12 GiB
-      runtime_env:
-        env_vars:
-          MLFLOW_TRACKING_URI: http://mlflow.rationai-mlflow:5000
-    # Geometry the API checks against the running model: change it with the model.
-    user_config:
-      tile_size: 512
-      output_tile_size: 1
-      n_channels: 1
-      mpp: 0.468
-      max_batch_size: 256
-      batch_wait_timeout_s: 0.05
-      intra_op_num_threads: 4
-      trt_max_workspace_size: 8589934592  # 8 GiB
-      # Where ONNX Runtime keeps the built TensorRT engine, so restarts skip the build.
-      # Each checkpoint gets its own subdirectory here.
-      trt_cache_path: /mnt/cache/trt_cache/binary-classifier-1/b256
-      trt_builder_optimization_level: 3
-      # The checkpoint; a new training run changes this line.
-      model:
-        _target_: model_service.inference.artifacts:mlflow
-        artifact_uri: mlflow-artifacts:/65/aebc892f526047249b972f200bef4381/artifacts/checkpoints/epoch=0-step=6972/prostate_model_norm.onnx

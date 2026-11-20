@@ -8,6 +8,8 @@ data:
   model-catalog.json: |
     {{- $models := list }}
     {{- range $path := .Values.models }}
-    {{- $models = append $models (tpl (printf "models/%s.yaml" $path | $.Files.Get) $ | fromYaml) }}
+    {{- $model := tpl (printf "models/%s.yaml" $path | $.Files.Get) $ | fromYaml }}
+    {{- /* The model ID is the file name, as in rayservice.yaml. */}}
+    {{- $models = append $models (set $model "id" (base $path)) }}
     {{- end }}
     {{- toJson $models | nindent 4 }}

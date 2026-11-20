@@ -1,14 +1,13 @@
 """Model catalog derived from the deployed model YAML files.
 
-Helm renders every `deploy/helm/rayservice/models/<id>.yaml` into one JSON list. Each
-entry has an `inference` declaration and the Ray Serve application (`serve`)
-that Helm also injects into the RayService, so the catalog and the running
-models come from the same files.
+Helm renders every `deploy/helm/rayservice/models/<id>.yaml` into one JSON list,
+adding each file's name as its `id`. The same files become the RayService's
+applications, so the catalog and the running models cannot drift apart.
 
-Contract parameters come from the model's deployment's `user_config`, which the
-model implementation reads too; `inference` names only the contract. Any other
-top-level block belongs to a provider (e.g. how that provider offers
-the model): the catalog keeps it for that provider, unread.
+Contract parameters come from the deployment's `user_config`, which the model
+implementation reads too; `contract` names the contract. Any other top-level
+block belongs to a provider (e.g. how that provider offers the model): the
+catalog keeps it for that provider, unread.
 
 A model file that is invalid, has a block no provider takes, or repeats an
 earlier model's ID is logged and left out, so one bad file does not take the
@@ -21,7 +20,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from model_service.contracts.failures import UnknownModelError
 from model_service.contracts.model_declarations import (
@@ -41,22 +40,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class InferenceDeclaration(BaseModel):
-    """A model file's `inference:` block.
-
-    Attributes:
-        contract: The model's inference contract; its parameters are in the
-            deployment's `user_config`.
-    """
-
-    # Other fields are allowed only to reject them with a pointer to user_config.
-    model_config = ConfigDict(frozen=True, extra="allow")
-
-    contract: InferenceContract
-
-
-class _ServeDeployment(BaseModel):
-    """The part of a Ray Serve deployment the catalog reads.
+class _Deployment(BaseModel):
+    """The part of a model's Ray Serve deployment the catalog reads.
 
     Attributes:
         user_config: The deployment's user_config.
@@ -67,57 +52,28 @@ class _ServeDeployment(BaseModel):
     user_config: dict[str, object] = Field(default_factory=dict)
 
 
-class _ServeApplication(BaseModel):
-    """The part of a model file's Ray Serve application the catalog reads.
-
-    Attributes:
-        name: The application name, which is the model id.
-        route_prefix: The application's route prefix.
-        deployment: The model's one deployment; Helm puts it in the
-            application's `deployments` list for Ray.
-    """
-
-    model_config = ConfigDict(extra="allow")
-
-    name: Annotated[str, Field(min_length=1, pattern=r"^[A-Za-z0-9._-]+$")]
-    route_prefix: str
-    deployment: _ServeDeployment
-
-    @model_validator(mode="before")
-    @classmethod
-    def _one_deployment(cls, data: object) -> object:
-        """Reject Ray's `deployments` list; a model file has one `deployment`.
-
-        Args:
-            data: The raw `serve` block.
-
-        Returns:
-            The block, unchanged.
-
-        Raises:
-            ValueError: If the block has a `deployments` key.
-        """
-        if isinstance(data, dict) and "deployments" in data:
-            raise ValueError(
-                "serve has one `deployment`, not a `deployments` list; "
-                "Helm builds Ray's list from it"
-            )
-        return data
-
-
 class ModelDocument(BaseModel):
-    """One model file; blocks other than these belong to providers.
+    """One model file, with the `id` Helm adds; other blocks belong to providers.
 
     Attributes:
-        inference: The model's contract and parameters.
-        serve: Its Ray Serve application.
+        id: The model ID, the file's name.
+        contract: The model's inference contract.
+        implementation: The code that serves it, `module.Class` in
+            `inference/implementations/`; Helm builds the Ray application from it.
+        deployment: The model's Ray Serve deployment options.
+        application: Ray Serve options for the whole application, if any.
     """
 
     # Other blocks are providers'.
     model_config = ConfigDict(extra="allow")
 
-    inference: InferenceDeclaration
-    serve: _ServeApplication
+    id: Annotated[str, Field(min_length=1, pattern=r"^[A-Za-z0-9._-]+$")]
+    contract: InferenceContract
+    implementation: Annotated[
+        str, Field(pattern=r"^[a-z_][a-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$")
+    ]
+    deployment: _Deployment
+    application: dict[str, object] = Field(default_factory=dict)
 
 
 class CatalogError(ValueError):
@@ -137,31 +93,20 @@ def model_binding(document: ModelDocument) -> ModelBinding:
         The validated binding.
 
     Raises:
-        CatalogError: If the route prefix is not `/<model id>`, `inference` holds
-            more than the contract, a parameter is missing, or the values are
-            invalid.
+        CatalogError: If a parameter is missing or the values are invalid.
     """
-    model_id = document.serve.name
-    if document.serve.route_prefix != f"/{model_id}":
-        raise CatalogError(f"model {model_id!r} must use route_prefix /{model_id}")
-    inference = document.inference
-    if extra := sorted(inference.model_extra or {}):
-        raise CatalogError(
-            f"model {model_id!r} declares {', '.join(extra)} in inference; "
-            "it belongs in user_config"
-        )
-    model_class = MODEL_CLASSES[inference.contract]
-    user_config = document.serve.deployment.user_config
-    values: dict[str, object] = {"id": model_id, "contract": inference.contract}
+    model_class = MODEL_CLASSES[document.contract]
+    user_config = document.deployment.user_config
+    values: dict[str, object] = {"id": document.id, "contract": document.contract}
     for name in sorted(model_class.model_fields.keys() - {"id", "contract"}):
         if name not in user_config:
-            raise CatalogError(f"model {model_id!r} user_config lacks {name}")
+            raise CatalogError(f"model {document.id!r} user_config lacks {name}")
         values[name] = user_config[name]
     try:
         return MODEL_BINDING.validate_python(values)
     except ValidationError as error:
         raise CatalogError(
-            f"model {model_id!r} declaration is invalid: {error}"
+            f"model {document.id!r} declaration is invalid: {error}"
         ) from error
 
 
@@ -301,7 +246,7 @@ class ModelCatalog:
 
 
 def _document_name(item: object, index: int) -> str:
-    """Name a model document for an error: its `serve.name` if readable, else its position.
+    """Name a model document for an error: its `id` if readable, else its position.
 
     Args:
         item: The raw document.
@@ -310,6 +255,5 @@ def _document_name(item: object, index: int) -> str:
     Returns:
         A quoted model name, or `#<index>`.
     """
-    serve = item.get("serve") if isinstance(item, dict) else None
-    name = serve.get("name") if isinstance(serve, dict) else None
+    name = item.get("id") if isinstance(item, dict) else None
     return repr(name) if isinstance(name, str) else f"#{index}"

@@ -70,11 +70,20 @@ spec:
     applications:
 {{- range $path := .Values.models }}
 {{- $model := tpl (printf "models/%s.yaml" $path | $.Files.Get) $ | fromYaml }}
-{{- if not $model.serve }}{{ fail (printf "models/%s.yaml has no serve block" $path) }}{{ end }}
-{{- if not $model.serve.deployment }}{{ fail (printf "models/%s.yaml has no serve.deployment" $path) }}{{ end }}
-{{- /* A model file has one deployment; Ray takes a list, as for builders below. */}}
-{{- $app := merge (dict "deployments" (list $model.serve.deployment)) (omit $model.serve "deployment") }}
-      - {{ toYaml $app | nindent 8 | trim }}
+{{- if not (and $model.implementation $model.deployment) }}{{ fail (printf "models/%s.yaml needs implementation and deployment" $path) }}{{ end }}
+{{- /* The model ID is the file name; `implementation` is module.Class. */}}
+{{- $id := base $path }}
+{{- $module := first (splitList "." $model.implementation) }}
+{{- $class := last (splitList "." $model.implementation) }}
+      - name: {{ $id }}
+        route_prefix: /{{ $id }}
+        import_path: model_service.inference.implementations.{{ $module }}:app
+        {{- with $model.application }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        deployments:
+          - name: {{ $class }}
+            {{- toYaml $model.deployment | nindent 12 }}
 {{- end }}
 {{- range $id, $builder := .Values.builders }}
       - name: builder-{{ $id }}

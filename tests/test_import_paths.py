@@ -1,7 +1,7 @@
 """Every module path the deployment names as a string resolves to a real attribute.
 
 Code moves rename modules, and string paths escape the type checker: a builder's
-spec.implementation, the `import_path` and `_target_` of each model file in
+spec.implementation, the `implementation` and `_target_` of each model file in
 deploy/helm/rayservice/models/ (not rationai-test/, the test instance's copies) and the builder
 `import_path` in the Helm template. This test imports each module for real and
 looks the attribute up. The model implementations pull in Ray, ONNX Runtime and
@@ -16,6 +16,7 @@ import unittest
 from pathlib import Path
 
 from model_service.builders.registry import BUILDERS
+from tests.support.model_documents import implementation, model_file
 
 
 CHART = Path(__file__).resolve().parents[1] / "deploy" / "helm" / "rayservice"
@@ -43,6 +44,13 @@ class ImportPathTests(unittest.TestCase):
         for builder_id, spec in BUILDERS.items():
             with self.subTest(builder=builder_id):
                 self.assert_resolves(spec.implementation)
+
+    def test_model_implementations_resolve(self) -> None:
+        """Every model file's implementation has the class and the `app` Ray loads."""
+        for path in sorted((CHART / "models").glob("*.yaml")):
+            with self.subTest(path.name):
+                module, _ = implementation(model_file(path))
+                self.assertTrue(hasattr(module, "app"), path.name)
 
     def test_deployment_paths_resolve(self) -> None:
         """Every import_path and _target_ in the chart resolves."""

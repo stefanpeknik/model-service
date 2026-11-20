@@ -14,7 +14,12 @@ from model_service.contracts.model_declarations import (
     SpatialScoresModel,
     TileEmbeddingModel,
 )
-from tests.support.model_documents import embedding_document, spatial_document
+from tests.support.model_documents import (
+    embedding_document,
+    implementation,
+    model_file,
+    spatial_document,
+)
 
 
 class ModelCatalogTests(unittest.TestCase):
@@ -57,8 +62,8 @@ class ModelCatalogTests(unittest.TestCase):
         self.assertEqual(catalog.provider_block("other"), {})
 
     def test_a_model_file_left_out_is_named_in_an_error_log(self) -> None:
-        broken = spatial_document()
-        broken["serve"] = {**broken["serve"], "name": "broken", "route_prefix": 7}
+        broken = spatial_document("broken")
+        broken["deployment"] = {"user_config": 7}
 
         with self.assertLogs("model_service.api.model_catalog", "ERROR") as logs:
             catalog = ModelCatalog.from_documents([embedding_document(), broken])
@@ -86,25 +91,12 @@ class ModelCatalogTests(unittest.TestCase):
             change(copy)  # type: ignore[operator]
             return copy
 
-        def serve(document: dict[str, object]) -> dict[str, object]:
-            return document["serve"]  # type: ignore[return-value]
-
         def user_config(document: dict[str, object]) -> dict[str, object]:
-            return serve(document)["deployment"]["user_config"]  # type: ignore[index]
-
-        def inference(document: dict[str, object]) -> dict[str, object]:
-            return document["inference"]  # type: ignore[return-value]
+            return document["deployment"]["user_config"]  # type: ignore[index]
 
         cases = {
-            "wrong route prefix": changed(
-                spatial_document(),
-                lambda d: serve(d).update(route_prefix="/elsewhere"),
-            ),
             "missing user_config key": changed(
                 spatial_document(), lambda d: user_config(d).pop("mpp")
-            ),
-            "mpp declared twice": changed(
-                spatial_document(), lambda d: inference(d).update(mpp=0.5)
             ),
             "missing embedding mpp": changed(
                 embedding_document(), lambda d: user_config(d).pop("mpp")
@@ -112,23 +104,26 @@ class ModelCatalogTests(unittest.TestCase):
             "missing embedding summaries": changed(
                 embedding_document(), lambda d: user_config(d).pop("summaries")
             ),
-            "embedding parameters in inference": changed(
-                embedding_document(), lambda d: inference(d).update(mpp=0.5)
-            ),
             "unknown contract": changed(
-                spatial_document(),
-                lambda d: inference(d).update(contract="segmentation-mask"),
+                spatial_document(), lambda d: d.update(contract="segmentation-mask")
             ),
             "invalid parameter": changed(
                 spatial_document(), lambda d: user_config(d).update(mpp=-1)
             ),
-            "no deployment": changed(
-                spatial_document(), lambda d: serve(d).pop("deployment")
+            "no deployment": changed(spatial_document(), lambda d: d.pop("deployment")),
+            "no implementation": changed(
+                spatial_document(), lambda d: d.pop("implementation")
             ),
-            # Ray's own shape; Helm builds it from `deployment`.
-            "a deployments list": changed(
+            # A module path, not `module.Class` in inference/implementations.
+            "an import path as implementation": changed(
                 spatial_document(),
-                lambda d: serve(d).update(deployments=[serve(d).pop("deployment")]),
+                lambda d: d.update(
+                    implementation="model_service.inference.binary_classifier:app"
+                ),
+            ),
+            # The earlier shape; its `serve` block is no provider's.
+            "a serve block": changed(
+                spatial_document(), lambda d: d.update(serve={"name": "x"})
             ),
             "a block no provider takes": changed(
                 spatial_document(), lambda d: d.update(listing={"name": "Prostate"})
@@ -144,7 +139,7 @@ class ModelCatalogTests(unittest.TestCase):
     def test_a_repeated_model_id_keeps_the_first_file(self) -> None:
         first = spatial_document()
         repeated = deepcopy(first)
-        user_config = repeated["serve"]["deployment"]["user_config"]
+        user_config = repeated["deployment"]["user_config"]
         user_config["mpp"] = 1.0
 
         with self.assertLogs("model_service.api.model_catalog", "ERROR"):
@@ -167,28 +162,19 @@ class ModelImplementationTests(unittest.TestCase):
     def test_every_model_file_points_to_an_implementation_of_its_contract(
         self,
     ) -> None:
-        import importlib
-
-        import yaml
-
         from model_service.builders.model_clients.registry import CLIENTS
 
         self.assertTrue(MODEL_FILES)
         for path in MODEL_FILES:
             with self.subTest(path.name):
-                document = yaml.safe_load(path.read_text(encoding="utf-8"))
-                contract = InferenceContract(document["inference"]["contract"])
-                module_name = document["serve"]["import_path"].partition(":")[0]
-                deployment = getattr(
-                    importlib.import_module(module_name),
-                    document["serve"]["deployment"]["name"],
-                )
-                implementation = deployment.func_or_class
+                document = model_file(path)
+                contract = InferenceContract(document["contract"])
+                _, deployment = implementation(document)
                 # The methods the contract's model client calls by handle.
                 for method in CLIENTS[contract].methods:
                     self.assertTrue(
-                        callable(getattr(implementation, method, None)),
-                        f"{module_name} lacks {method} for {contract}",
+                        callable(getattr(deployment.func_or_class, method, None)),
+                        f"{document['implementation']} lacks {method} for {contract}",
                     )
 
 

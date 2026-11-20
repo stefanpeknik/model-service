@@ -61,8 +61,8 @@ class ExecutionRuntimeTests(RuntimeTestCase):
     async def test_an_invalid_or_repeated_model_is_left_out_of_the_catalog(
         self,
     ) -> None:
-        broken = spatial_document()
-        broken["serve"] = {**broken["serve"], "name": "broken", "route_prefix": 7}
+        broken = spatial_document("broken")
+        broken["deployment"] = {"user_config": 7}
         self.catalog_path.write_text(
             json.dumps(
                 [spatial_document(), broken, spatial_document(), embedding_document()]
