@@ -1,5 +1,5 @@
 - name: prov-gigapath
-  import_path: models.prov_gigapath:app
+  import_path: model_service.inference.implementations.prov_gigapath:app
   route_prefix: /prov-gigapath
   runtime_env:
     config:
