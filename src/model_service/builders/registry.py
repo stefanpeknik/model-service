@@ -1,6 +1,8 @@
 """The available builders, one declaration per builder package.
 
-Adding a builder adds its package's `spec.SPEC` here.
+Adding a builder adds its package's `spec.SPEC` here. It must also be listed in
+`providers/empaia/ead/builder_io.py`: in BUILDER_IO to be offered in EMPAIA, or
+in NOT_OFFERED with the reason; a test checks.
 """
 
 from __future__ import annotations
