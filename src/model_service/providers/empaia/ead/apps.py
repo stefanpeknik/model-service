@@ -274,7 +274,7 @@ def app_definitions(
                 AppDefinition(
                     spec.id,
                     model.id,
-                    listing.modes,
+                    listing.modes.enabled,
                     ead,
                     configuration,
                     listing.triggers,
@@ -317,7 +317,7 @@ def generate_ead(
             for name in offered
             if spec.inputs[name].required or mode is AppMode.STANDALONE
         ]
-        for mode in listing.modes
+        for mode in listing.modes.enabled
     }
     inputs = {
         name: builder_io.inputs[name]
@@ -349,7 +349,7 @@ def generate_ead(
             f"org.empaia.rationai.{_identifier(spec.id)}_{_identifier(model_id)}.v3.0"
         ),
         "description": " ".join(
-            [listing.description, *(m.description for m in listing.modes)]
+            [listing.description, *(m.description for m in listing.modes.enabled)]
         ),
         # The RationAI direct-access route serves apps allowed raw slide access.
         "permissions": {

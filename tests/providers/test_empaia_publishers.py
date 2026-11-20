@@ -25,7 +25,7 @@ from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayErro
 from model_service.providers.empaia.app_service.input_files import _clip
 from model_service.providers.empaia.ead.apps import app_definitions
 from model_service.providers.empaia.ead.builder_io import BUILDER_IO
-from model_service.providers.empaia.ead.listing import AppMode, EmpaiaListing
+from model_service.providers.empaia.ead.listing import EmpaiaListing
 from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
 from model_service.providers.empaia.publishing.publishers import (
     PrimitivePublisher,
@@ -41,7 +41,7 @@ LISTING = EmpaiaListing(
     name="Prostate cancer",
     name_short="ProstHM",
     description="Finds things.",
-    modes=(AppMode.PREPROCESSING,),
+    modes={"preprocessing": {}},
 )
 
 

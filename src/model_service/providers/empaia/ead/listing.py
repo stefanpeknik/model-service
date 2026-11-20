@@ -1,9 +1,9 @@
 """The `empaia` block of a model file: how the model appears in EMPAIA.
 
-It names the model's apps, the job modes they offer, the case browser's display
-settings per builder, the slides EMPAIA preprocesses with them, and the builder
-settings users set per standalone job. `parse_listings` validates the blocks;
-`apps` turns them into EADs.
+It names the model's apps, the job modes they offer with each mode's settings
+(the builder settings users set per standalone job, the slides EMPAIA
+preprocesses), and the case browser's display settings per builder.
+`parse_listings` validates the blocks; `apps` turns them into EADs.
 """
 
 from __future__ import annotations
@@ -217,54 +217,18 @@ class Trigger(BaseModel):
         return stain
 
 
-class EmpaiaListing(BaseModel):
-    """How a model appears in EMPAIA; the `empaia` block of its model file.
+class StandaloneMode(BaseModel):
+    """The standalone mode's settings: a user starts the app on a slide.
 
     Attributes:
-        name: The model's part of each app name, `<name> <builder>`.
-        name_short: The short app name.
-        description: What the model finds; each mode adds a sentence.
-        modes: The job modes its apps offer.
-        viewer: The case browser's display settings, by builder ID.
-        triggers: The slides EMPAIA preprocesses with its apps.
-        parameters: By builder ID, the settings users set per standalone job;
-            their type and description come from the builder.
+        parameters: By builder ID, the settings users set per job; their type
+            and description come from the builder.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    # The app is named `<name> <builder>`, e.g. "Prostate cancer heatmap".
-    name: Annotated[str, Field(min_length=3, max_length=22, pattern=_TEXT)]
-    name_short: Annotated[str, Field(min_length=3, max_length=10, pattern=_TEXT)]
-    # What the model finds, for someone choosing an app; the mode adds a sentence.
-    description: Annotated[str, Field(min_length=3, max_length=900)]
-    modes: Annotated[tuple[AppMode, ...], Field(min_length=1)]
-    # Viewer settings per builder ID, since each builder is its own app with its
-    # own outputs; entries for io keys an app lacks are left out of its value.
-    viewer: dict[str, ViewerConfig] = Field(default_factory=dict)
-    # The slides EMPAIA preprocesses with the model's apps; registration keeps
-    # the installation's preprocessing triggers in line with them.
-    triggers: tuple[Trigger, ...] = ()
-    # Per builder ID, the settings users set per standalone job; the rest run
-    # at the builder's defaults.
+    # The rest run at the builder's defaults.
     parameters: dict[str, tuple[str, ...]] = Field(default_factory=dict)
-
-    @model_validator(mode="after")
-    def _modes_take_triggers_and_parameters(self) -> Self:
-        """Reject triggers or parameters for a mode the model does not run in.
-
-        Returns:
-            The listing, unchanged.
-
-        Raises:
-            ValueError: If triggers are listed without the preprocessing mode, or
-                parameters without the standalone mode.
-        """
-        if self.triggers and AppMode.PREPROCESSING not in self.modes:
-            raise ValueError("triggers need the preprocessing mode")
-        if any(self.parameters.values()) and AppMode.STANDALONE not in self.modes:
-            raise ValueError("parameters need the standalone mode")
-        return self
 
     @field_validator("parameters")
     @classmethod
@@ -306,6 +270,121 @@ class EmpaiaListing(BaseModel):
                 if name in spec.inputs or name in spec.outputs:
                     raise ValueError(f"{builder_id} parameter {name!r} is also io")
         return parameters
+
+
+class PreprocessingMode(BaseModel):
+    """The preprocessing mode's settings: EMPAIA runs the app on new slides.
+
+    Attributes:
+        triggers: The slides EMPAIA preprocesses with the app.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    # Registration keeps the installation's preprocessing triggers in line with them.
+    triggers: tuple[Trigger, ...] = ()
+
+
+class ListingModes(BaseModel):
+    """The job modes a model's apps offer, each with its own settings.
+
+    A mode is on when its key is present; `standalone:` with no value turns it on
+    with no settings.
+
+    Attributes:
+        standalone: The standalone mode, if offered.
+        preprocessing: The preprocessing mode, if offered.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    standalone: StandaloneMode | None = None
+    preprocessing: PreprocessingMode | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _present_keys_turn_modes_on(cls, data: object) -> object:
+        """Read a mode key without a value as the mode with no settings.
+
+        Args:
+            data: The raw `modes` value.
+
+        Returns:
+            The value with each present but empty mode as `{}`.
+
+        Raises:
+            ValueError: If `modes` is a list, the earlier shape of the block.
+        """
+        if isinstance(data, list):
+            raise ValueError(
+                "modes maps each offered mode to its settings, e.g. "
+                "`preprocessing: {triggers: [...]}`, not a list"
+            )
+        if isinstance(data, dict):
+            return {key: {} if value is None else value for key, value in data.items()}
+        return data
+
+    @model_validator(mode="after")
+    def _at_least_one(self) -> Self:
+        """Reject a listing that offers no mode.
+
+        Returns:
+            The modes, unchanged.
+
+        Raises:
+            ValueError: If neither mode is set.
+        """
+        if not self.enabled:
+            raise ValueError("modes needs standalone, preprocessing or both")
+        return self
+
+    @property
+    def enabled(self) -> tuple[AppMode, ...]:
+        """The offered modes, standalone first."""
+        return tuple(
+            mode
+            for mode, settings in (
+                (AppMode.STANDALONE, self.standalone),
+                (AppMode.PREPROCESSING, self.preprocessing),
+            )
+            if settings is not None
+        )
+
+
+class EmpaiaListing(BaseModel):
+    """How a model appears in EMPAIA; the `empaia` block of its model file.
+
+    Attributes:
+        name: The model's part of each app name, `<name> <builder>`.
+        name_short: The short app name.
+        description: What the model finds; each mode adds a sentence.
+        modes: The job modes its apps offer, with each mode's settings.
+        viewer: The case browser's display settings, by builder ID.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    # The app is named `<name> <builder>`, e.g. "Prostate cancer heatmap".
+    name: Annotated[str, Field(min_length=3, max_length=22, pattern=_TEXT)]
+    name_short: Annotated[str, Field(min_length=3, max_length=10, pattern=_TEXT)]
+    # What the model finds, for someone choosing an app; the mode adds a sentence.
+    description: Annotated[str, Field(min_length=3, max_length=900)]
+    modes: ListingModes
+    # Viewer settings per builder ID, since each builder is its own app with its
+    # own outputs; entries for io keys an app lacks are left out of its value.
+    viewer: dict[str, ViewerConfig] = Field(default_factory=dict)
+
+    @property
+    def triggers(self) -> tuple[Trigger, ...]:
+        """The preprocessing mode's triggers; none without that mode."""
+        preprocessing = self.modes.preprocessing
+        return preprocessing.triggers if preprocessing is not None else ()
+
+    @property
+    def parameters(self) -> dict[str, tuple[str, ...]]:
+        """The standalone mode's parameters by builder ID; none without that mode."""
+        standalone = self.modes.standalone
+        return dict(standalone.parameters) if standalone is not None else {}
 
     @field_validator("viewer")
     @classmethod

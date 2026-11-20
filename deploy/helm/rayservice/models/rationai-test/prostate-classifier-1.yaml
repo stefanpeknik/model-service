@@ -8,13 +8,14 @@ empaia:
   name: Prostate cancer
   name_short: ProstHM
   description: Classifies prostate tissue and shows the scores as a heatmap over the slide.
+  # Each mode with its own settings; a mode with none is a bare key.
   modes:
-    - standalone
-    - preprocessing
-  # EMPAIA preprocesses slides with these EMPAIA tags (or ANY) with the app.
-  triggers:
-    - tissue: PROSTATE
-      stain: H_AND_E
+    standalone:
+    preprocessing:
+      # EMPAIA preprocesses slides with these EMPAIA tags (or ANY) with the app.
+      triggers:
+        - tissue: PROSTATE
+          stain: H_AND_E
   # The AigoPath case browser's display settings (xOpat shader and its params),
   # per builder.
   viewer:

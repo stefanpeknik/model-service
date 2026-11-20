@@ -109,7 +109,7 @@ class AppDefinitionTests(unittest.TestCase):
             name="Prostate cancer",
             name_short="ProstHM",
             description="Finds things.",
-            modes=(AppMode.PREPROCESSING,),
+            modes={"preprocessing": {}},
         )
         models = catalog("prostate-classifier-1")
 
@@ -125,8 +125,14 @@ class AppDefinitionTests(unittest.TestCase):
             name="Prostate cancer",
             name_short="ProstHM",
             description="Finds things.",
-            modes=(AppMode.STANDALONE, AppMode.PREPROCESSING),
-            parameters={"heatmap": ("min_tissue_fraction", "skip_background")},
+            modes={
+                "standalone": {
+                    "parameters": {
+                        "heatmap": ("min_tissue_fraction", "skip_background")
+                    }
+                },
+                "preprocessing": {},
+            },
         )
         models = catalog("prostate-classifier-1")
 
@@ -179,7 +185,7 @@ class AppDefinitionTests(unittest.TestCase):
             "name": "Prostate",
             "name_short": "Pros",
             "description": "Finds.",
-            "modes": ["preprocessing"],
+            "modes": {"preprocessing": None},
         }
         with self.assertLogs(
             "model_service.providers.empaia.ead.listing", "ERROR"
@@ -187,39 +193,56 @@ class AppDefinitionTests(unittest.TestCase):
             parsed = parse_listings(
                 {
                     "good": valid,
-                    "typo": {**valid, "mods": ["preprocessing"]},
+                    "typo": {**valid, "mods": {"preprocessing": None}},
+                    # The earlier shape, a list of mode names.
+                    "modes-as-list": {**valid, "modes": ["preprocessing"]},
+                    "no-mode": {**valid, "modes": {}},
                     "unknown-builder": {**valid, "viewer": {"heatmapp": {}}},
                     # A tag no slide carries would never trigger anything.
                     "unknown-tissue": {
                         **valid,
-                        "triggers": [{"tissue": "PROSTRATE", "stain": "H_AND_E"}],
+                        "modes": {
+                            "preprocessing": {
+                                "triggers": [
+                                    {"tissue": "PROSTRATE", "stain": "H_AND_E"}
+                                ]
+                            }
+                        },
                     },
-                    "triggers-without-preprocessing": {
+                    "triggers-under-standalone": {
                         **valid,
-                        "modes": ["standalone"],
-                        "triggers": [{"tissue": "ANY", "stain": "ANY"}],
+                        "modes": {
+                            "standalone": {
+                                "triggers": [{"tissue": "ANY", "stain": "ANY"}]
+                            }
+                        },
                     },
                     "unknown-setting": {
                         **valid,
-                        "modes": ["standalone"],
-                        "parameters": {"heatmap": ["treshold"]},
+                        "modes": {
+                            "standalone": {"parameters": {"heatmap": ["treshold"]}}
+                        },
                     },
                     # Preprocessing jobs have no form to fill in.
-                    "parameters-without-standalone": {
+                    "parameters-under-preprocessing": {
                         **valid,
-                        "parameters": {"heatmap": ["stride_fraction"]},
+                        "modes": {
+                            "preprocessing": {
+                                "parameters": {"heatmap": ["stride_fraction"]}
+                            }
+                        },
                     },
                 }
             )
         self.assertEqual(list(parsed), ["good"])
-        self.assertEqual(len(logs.output), 6)
+        self.assertEqual(len(logs.output), 8)
 
     def test_viewer_entries_for_io_an_app_lacks_are_left_out(self) -> None:
         listing = EmpaiaListing(
             name="Prostate cancer",
             name_short="ProstHM",
             description="Finds things.",
-            modes=(AppMode.PREPROCESSING,),
+            modes={"preprocessing": {}},
             viewer={
                 "heatmap": ViewerConfig.model_validate(
                     {
@@ -260,13 +283,13 @@ class AppDefinitionTests(unittest.TestCase):
                 name="A model name far too long",
                 name_short="Model",
                 description="Finds things.",
-                modes=(AppMode.STANDALONE,),
+                modes={"standalone": {}},
             )
         listing = EmpaiaListing(
             name="Prostate cancer",
             name_short="ProstHM",
             description="Finds things.",
-            modes=(AppMode.STANDALONE,),
+            modes={"standalone": {}},
         )
         heatmap = BUILDER_IO["heatmap"]
         broken = replace(heatmap, outputs={"heatmap": {"type": "no_such_type"}})
