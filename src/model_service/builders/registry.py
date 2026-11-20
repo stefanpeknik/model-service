@@ -2,8 +2,7 @@
 
 Adding a builder adds its package's `spec.SPEC` here. It must also be listed in
 `providers/empaia/ead/builder_io.py`: in BUILDER_IO to be offered in EMPAIA, or
-in NOT_OFFERED with the reason; a test checks. See
-`docs/guides/adding-builders.md`.
+in NOT_OFFERED with the reason; a test checks.
 """
 
 from __future__ import annotations

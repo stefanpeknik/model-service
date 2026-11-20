@@ -9,5 +9,5 @@
 - synchronous_runs.py: runs a builder while the caller waits.
 - health.py: Ray Serve readiness.
 - scheduler/: durable executions on PostgreSQL; it calls builder replicas over
-  HTTP in builder_dispatch.py (see docs/adr/0001).
+  HTTP in builder_dispatch.py.
 """

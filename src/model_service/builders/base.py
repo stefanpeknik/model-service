@@ -1,7 +1,4 @@
-"""What a builder author implements and receives: `Builder`, `BuilderContext`, settings.
-
-See `docs/guides/adding-builders.md`.
-"""
+"""What a builder author implements and receives: `Builder`, `BuilderContext`, settings."""
 
 from __future__ import annotations
 

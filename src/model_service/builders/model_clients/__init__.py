@@ -14,5 +14,5 @@ failure handling:
   `invalid_model_output`, not retried.
 
 A new contract adds a model declaration in `model_declarations.py` and a client
-module here, listed in `CLIENTS` in registry.py; see `docs/guides/adding-builders.md`.
+module here, listed in `CLIENTS` in registry.py.
 """
