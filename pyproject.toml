@@ -17,6 +17,7 @@ dependencies = [
 [project.optional-dependencies]
 # Builder replicas on Ray Serve, with the providers' input access.
 builders = [
+    "fastapi>=0.115.0",
     "python-json-logger>=3.2,<5",
     "pyvips[binary]>=3.0.0,<4",
     "ray[serve]>=2.58.0",
