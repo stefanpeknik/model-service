@@ -9,6 +9,9 @@ readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.12"
 # What every process shares (contracts/). Each process adds its own extra.
+# The images install from uv.lock: Dockerfile.api the `api` extra,
+# Dockerfile.ray-cpu `builders`, `inference` and `cpu`, Dockerfile.ray-gpu
+# `builders`, `inference` and `gpu`.
 dependencies = [
     "numpy>=1.26.4",
     "pydantic>=2.10.0",

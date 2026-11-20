@@ -1,0 +1,15 @@
+{{- /* The API's model catalog, rendered from the same files as the Serve config. */}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-model-catalog
+  namespace: {{ .Release.Namespace }}
+data:
+  model-catalog.json: |
+    {{- $models := list }}
+    {{- range $path := .Values.models }}
+    {{- $model := tpl (printf "models/%s.yaml" $path | $.Files.Get) $ | fromYaml }}
+    {{- /* The model ID is the file name, as in rayservice.yaml. */}}
+    {{- $models = append $models (set $model "id" (base $path)) }}
+    {{- end }}
+    {{- toJson $models | nindent 4 }}
