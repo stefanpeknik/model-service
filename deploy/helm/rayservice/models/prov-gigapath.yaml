@@ -1,8 +1,5 @@
 inference:
   contract: tile-embedding
-  mpp: 0.5  # 20x; the resolution the published encoder was trained at
-  summaries:
-  - tile
 serve:
   name: prov-gigapath
   import_path: model_service.inference.implementations.prov_gigapath:app
@@ -27,6 +24,10 @@ serve:
             HF_HOME: /mnt/huggingface_cache
       user_config:
         tile_size: 224
+        mpp: 0.5  # 20x; the resolution the published encoder was trained at
+        # What `embed` returns per tile; the implementation refuses any other list.
+        summaries:
+          - tile
         max_batch_size: 512
         batch_wait_timeout_s: 0.1
         model:

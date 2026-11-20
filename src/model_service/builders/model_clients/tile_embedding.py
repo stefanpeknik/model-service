@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from pydantic import ValidationError
+
 from model_service.builders.model_clients.base import ModelClient
 from model_service.contracts.model_declarations import (
     InferenceContract,
@@ -23,17 +25,25 @@ class TileEmbeddingClient(ModelClient[TileEmbeddingModel]):
     methods = ("get_config", "embed")
 
     def _matches(self, running: dict[str, object]) -> bool:
-        """Compare the running tile size and summaries with the declaration.
+        """Compare the running tile size, mpp and summaries with the declaration.
+
+        Other keys the model reports are ignored.
 
         Args:
-            running: At least `tile_size` and `summaries`.
+            running: At least `tile_size`, `mpp` and `summaries`.
 
         Returns:
-            Whether both equal the declaration's.
+            Whether every one is valid and equals the declaration's.
         """
-        return running.get("tile_size") == self.declaration.tile_size and running.get(
-            "summaries"
-        ) == list(self.declaration.summaries)
+        keys = self.declaration.model_dump(exclude={"id", "contract"}).keys()
+        try:
+            model = TileEmbeddingModel.model_validate(
+                {"id": self.declaration.id}
+                | {key: running[key] for key in keys if key in running}
+            )
+        except ValidationError:
+            return False
+        return model == self.declaration
 
     async def embed(self, tile: NDArray[np.uint8]) -> NDArray[np.float32]:
         """Embed one tile.

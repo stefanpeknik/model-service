@@ -5,9 +5,9 @@ entry has an `inference` declaration and the Ray Serve application (`serve`)
 that Helm also injects into the RayService, so the catalog and the running
 models come from the same files.
 
-Contract parameters the model already reads from its `user_config` are taken
-from there; `inference` declares only what the model does not read itself. Any
-other top-level block belongs to a provider (e.g. how that provider offers
+Contract parameters come from the first deployment's `user_config`, which the
+model implementation reads too; `inference` names only the contract. Any other
+top-level block belongs to a provider (e.g. how that provider offers
 the model): the catalog keeps it for that provider, unread.
 
 A model file that is invalid, has a block no provider takes, or repeats an
@@ -45,11 +45,11 @@ class InferenceDeclaration(BaseModel):
     """A model file's `inference:` block.
 
     Attributes:
-        contract: The model's inference contract; other fields are the
-            contract's parameters.
+        contract: The model's inference contract; its parameters are in the
+            first deployment's `user_config`.
     """
 
-    # Besides the contract, the fields its model class takes from here.
+    # Other fields are allowed only to reject them with a pointer to user_config.
     model_config = ConfigDict(frozen=True, extra="allow")
 
     contract: InferenceContract
@@ -105,9 +105,8 @@ class CatalogError(ValueError):
 def model_binding(document: ModelDocument) -> ModelBinding:
     """Build a model binding from one model document.
 
-    Each field of the contract's model class comes from the `inference` block if
-    the class lists it in `inference_fields`, otherwise from the first
-    deployment's `user_config`.
+    Every field of the contract's model class comes from the first deployment's
+    `user_config`.
 
     Args:
         document: A parsed model YAML document.
@@ -116,38 +115,26 @@ def model_binding(document: ModelDocument) -> ModelBinding:
         The validated binding.
 
     Raises:
-        CatalogError: If the route prefix is not `/<model id>`, a parameter is
-            declared in the wrong place or missing, or the values are invalid.
+        CatalogError: If the route prefix is not `/<model id>`, `inference` holds
+            more than the contract, a parameter is missing, or the values are
+            invalid.
     """
     model_id = document.serve.name
     if document.serve.route_prefix != f"/{model_id}":
         raise CatalogError(f"model {model_id!r} must use route_prefix /{model_id}")
     inference = document.inference
-    model_class = MODEL_CLASSES[inference.contract]
-    from_inference = set(model_class.inference_fields)
-    from_user_config = (
-        model_class.model_fields.keys()
-        - from_inference
-        - {
-            "id",
-            "contract",
-        }
-    )
-    declared = inference.model_extra or {}
-    if extra := declared.keys() - from_inference:
+    if extra := sorted(inference.model_extra or {}):
         raise CatalogError(
-            f"model {model_id!r} declares {', '.join(sorted(extra))} in inference; "
-            f"{inference.contract} reads it from user_config"
+            f"model {model_id!r} declares {', '.join(extra)} in inference; "
+            "it belongs in user_config"
         )
+    model_class = MODEL_CLASSES[inference.contract]
     user_config = document.serve.deployments[0].user_config
     values: dict[str, object] = {"id": model_id, "contract": inference.contract}
-    for name, source, where in (
-        *((n, user_config, "user_config") for n in sorted(from_user_config)),
-        *((n, declared, "inference") for n in sorted(from_inference)),
-    ):
-        if name not in source:
-            raise CatalogError(f"model {model_id!r} {where} lacks {name}")
-        values[name] = source[name]
+    for name in sorted(model_class.model_fields.keys() - {"id", "contract"}):
+        if name not in user_config:
+            raise CatalogError(f"model {model_id!r} user_config lacks {name}")
+        values[name] = user_config[name]
     try:
         return MODEL_BINDING.validate_python(values)
     except ValidationError as error:

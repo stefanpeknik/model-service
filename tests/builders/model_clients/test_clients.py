@@ -63,6 +63,8 @@ class VerifyTests(unittest.IsolatedAsyncioTestCase):
             spatial_client({"tile_size": 4}),
             embedding_client(running_config(EMBEDDING) | {"tile_size": 8}),
             embedding_client(running_config(EMBEDDING) | {"summaries": ["global"]}),
+            embedding_client(running_config(EMBEDDING) | {"mpp": 0.25}),
+            embedding_client({"tile_size": 4, "summaries": ["global", "mean"]}),
         ]
         for client in cases:
             with (

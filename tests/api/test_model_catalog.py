@@ -107,10 +107,13 @@ class ModelCatalogTests(unittest.TestCase):
                 spatial_document(), lambda d: inference(d).update(mpp=0.5)
             ),
             "missing embedding mpp": changed(
-                embedding_document(), lambda d: inference(d).pop("mpp")
+                embedding_document(), lambda d: user_config(d).pop("mpp")
             ),
             "missing embedding summaries": changed(
-                embedding_document(), lambda d: inference(d).pop("summaries")
+                embedding_document(), lambda d: user_config(d).pop("summaries")
+            ),
+            "embedding parameters in inference": changed(
+                embedding_document(), lambda d: inference(d).update(mpp=0.5)
             ),
             "unknown contract": changed(
                 spatial_document(),

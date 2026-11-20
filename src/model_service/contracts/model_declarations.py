@@ -13,7 +13,7 @@ client. A new model of an existing contract needs none of this.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated, ClassVar, Literal
+from typing import Annotated, Literal
 
 from pydantic import (
     BaseModel,
@@ -33,14 +33,11 @@ class InferenceContract(StrEnum):
 class _ModelBinding(BaseModel):
     """A model's catalog declaration: what builders need to drive it.
 
-    A model file gives each field in its `inference` block if the field is in
-    `inference_fields`, otherwise in its first deployment's `user_config`, which
-    the model implementation also reads.
+    A model file gives each field in its first deployment's `user_config`, which
+    the model implementation also reads and reports back from `get_config()`.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
-
-    inference_fields: ClassVar[tuple[str, ...]] = ()
 
     id: Annotated[str, Field(min_length=1)]
     tile_size: Annotated[int, Field(strict=True, gt=0)]
@@ -59,9 +56,6 @@ class SpatialScoresModel(_ModelBinding):
 
 class TileEmbeddingModel(_ModelBinding):
     """Ray-handle model returning one float32 vector per summary name for an RGB tile."""
-
-    # The implementation hard-codes these; the file states them for the catalog.
-    inference_fields = ("mpp", "summaries")
 
     contract: Literal[InferenceContract.TILE_EMBEDDING] = (
         InferenceContract.TILE_EMBEDDING

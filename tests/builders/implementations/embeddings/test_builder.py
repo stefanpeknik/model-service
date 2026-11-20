@@ -69,7 +69,11 @@ class FakeEmbeddingDeployment:
         self.failure: Exception | None = None
         self.dimension = 4
         self.get_config = _Method(
-            lambda: {"tile_size": self.tile_size, "summaries": list(self.summaries)}
+            lambda: {
+                "tile_size": self.tile_size,
+                "mpp": 0.5,
+                "summaries": list(self.summaries),
+            }
         )
         self.embed = _Method(self._embed)
 

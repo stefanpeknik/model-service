@@ -2,10 +2,6 @@
 # one replica on half a GPU, with smaller batches and fewer requests in flight.
 inference:
   contract: tile-embedding
-  mpp: 0.5  # 20x; the resolution the published encoder was trained at
-  summaries:
-    - global
-    - local_mean
 serve:
   name: virchow2
   import_path: model_service.inference.implementations.virchow2:app
@@ -31,6 +27,11 @@ serve:
             HF_HOME: /mnt/huggingface_cache
       user_config:
         tile_size: 224
+        mpp: 0.5  # 20x; the resolution the published encoder was trained at
+        # What `embed` returns per tile; the implementation refuses any other list.
+        summaries:
+          - global
+          - local_mean
         max_batch_size: 64
         batch_wait_timeout_s: 0.05
         model:

@@ -19,6 +19,8 @@ SUMMARIES = ("tile",)
 
 class Config(TypedDict):
     tile_size: int
+    mpp: float
+    summaries: list[str]
     model: dict[str, Any]
     max_batch_size: int
     batch_wait_timeout_s: float
@@ -35,6 +37,7 @@ class ProvGigaPath:
     model: torch.nn.Module
     transforms: Any
     tile_size: int
+    mpp: float
 
     def __init__(self) -> None:
         import torch
@@ -45,7 +48,11 @@ class ProvGigaPath:
         import timm
         from torchvision import transforms
 
+        # The summaries are what `embed` returns; the file states them for the catalog.
+        if tuple(config["summaries"]) != SUMMARIES:
+            raise ValueError(f"summaries must be {list(SUMMARIES)}")
         self.tile_size = config["tile_size"]
+        self.mpp = config["mpp"]
         model_config = dict(config["model"])
         repo_id = model_config["repo_id"]
 
@@ -82,7 +89,11 @@ class ProvGigaPath:
         return list(output)
 
     def get_config(self) -> dict[str, Any]:
-        return {"tile_size": self.tile_size, "summaries": list(SUMMARIES)}
+        return {
+            "tile_size": self.tile_size,
+            "mpp": self.mpp,
+            "summaries": list(SUMMARIES),
+        }
 
     async def embed(self, tile: NDArray[np.uint8]) -> NDArray[np.float32]:
         """Embed one CHW uint8 tile as a `(dim,)` float32 vector."""
