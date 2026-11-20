@@ -12,5 +12,6 @@
 - internal_state.py: internal records, leases, retry policy and outcomes.
 - protocols.py: what the API needs from the scheduler (Scheduler); settings.py: process settings.
 - builder_dispatch.py: sending a builder run to its replica over HTTP, and how a send can end.
-- store/: persistence: repository.py, the interface every repository implements.
+- store/: persistence: postgres/ (one operations class per concern over a shared
+  PostgresDatabase), rows.py, migrate.py and migrations/.
 """
