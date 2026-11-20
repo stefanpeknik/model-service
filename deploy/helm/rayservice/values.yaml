@@ -2,8 +2,11 @@ workers:
   - cpu-workers
   - mig20-workers
 
-applications:
-  - episeg-1
+# Model deployments: files under models/ (without .yaml); the file name is the
+# model ID. Each file names the model's contract and implementation and its
+# Ray Serve deployment.
+models:
   - prostate-classifier-1
-  - prov-gigapath
+  - episeg-1
   - virchow2
+  - prov-gigapath
