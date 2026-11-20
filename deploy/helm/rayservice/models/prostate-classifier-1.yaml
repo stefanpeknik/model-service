@@ -39,3 +39,30 @@ deployment:
       _target_: model_service.inference.artifacts:mlflow
       artifact_uri: mlflow-artifacts:/65/aebc892f526047249b972f200bef4381/artifacts/checkpoints/epoch=0-step=6972/prostate_model_norm.onnx
 
+# Offered in EMPAIA as one app with these modes; the API registers it at startup.
+empaia:
+  name: Prostate cancer
+  name_short: ProstHM
+  description: Classifies prostate tissue and shows the scores as a heatmap over the slide.
+  # Each mode with its own settings; a mode with none is a bare key.
+  modes:
+    standalone:
+    preprocessing:
+      # EMPAIA preprocesses slides with these EMPAIA tags (or ANY) with the app.
+      triggers:
+        - tissue: PROSTATE
+          stain: H_AND_E
+  # The AigoPath case browser's display settings (xOpat shader and its params),
+  # per builder.
+  viewer:
+    heatmap:
+      inputs:
+        slide: {target: xopat, lossless: false}
+      outputs:
+        heatmap:
+          render: shader
+          label: Prostate Heatmap
+          visible: true
+          shader:
+            type: heatmap
+            params: {threshold: 65, opacity: 0.5, color: "#ffff00"}
