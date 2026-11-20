@@ -2059,6 +2059,7 @@ api = [
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic-settings" },
     { name = "python-json-logger" },
+    { name = "rationai-empaia" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "uvicorn" },
     { name = "yoyo-migrations" },
@@ -2136,6 +2137,7 @@ requires-dist = [
     { name = "python-json-logger", marker = "extra == 'api'", specifier = ">=3.2,<5" },
     { name = "python-json-logger", marker = "extra == 'builders'", specifier = ">=3.2,<5" },
     { name = "pyvips", extras = ["binary"], marker = "extra == 'builders'", specifier = ">=3.0.0,<4" },
+    { name = "rationai-empaia", marker = "extra == 'api'", git = "ssh://git@gitlab.ics.muni.cz/524810/empaia.git?rev=94de5d033685aaa26157174b148cbe46388324e7" },
     { name = "ratiopath", marker = "extra == 'builders'", specifier = ">=1.4.0" },
     { name = "ray", extras = ["serve"], marker = "extra == 'builders'", specifier = ">=2.58.0" },
     { name = "ray", extras = ["serve"], marker = "extra == 'inference'", specifier = ">=2.58.0" },
@@ -3324,6 +3326,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pyjwt"
+version = "2.15.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/43/ea/5194e52748b0da83d71e082d75496eaec6e58f419f5e184786ded517e6a9/pyjwt-2.15.1.tar.gz", hash = "sha256:4f259e80cdfb6b3fc18a7de51fd1ef9ec79652f25019bae68975ca2468a34df8", size = 121252, upload-time = "2026-09-28T18:40:42.598Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/50/ca/44de4e75f8aadc457f0634be3b542815078ded46dca30efb960edeecad6e/pyjwt-2.15.1-py3-none-any.whl", hash = "sha256:42d59d631f7768a1028a64c7ff581a9bf7519804daf91fc5b6c56e30eec5e193", size = 33860, upload-time = "2026-09-28T18:40:41.429Z" },
+]
+
+[[package]]
 name = "pymdown-extensions"
 version = "10.21.2"
 source = { registry = "https://pypi.org/simple" }
@@ -3662,6 +3673,22 @@ wheels = [
 ]
 
 [[package]]
+name = "rationai-empaia"
+version = "0.1.2"
+source = { git = "ssh://git@gitlab.ics.muni.cz/524810/empaia.git?rev=94de5d033685aaa26157174b148cbe46388324e7#94de5d033685aaa26157174b148cbe46388324e7" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "h5py" },
+    { name = "imageio" },
+    { name = "numpy" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "pyjwt" },
+    { name = "ray" },
+    { name = "rsa" },
+]
+
+[[package]]
 name = "ratiopath"
 version = "1.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3866,6 +3893,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/85/70/92482ccffb96f5441aab93e26c4d66489eb599efdcf96fad90c14bbfb976/rpds_py-0.30.0-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:dbd936cde57abfee19ab3213cf9c26be06d60750e60a8e4dd85d1ab12c8b1f40", size = 556030, upload-time = "2025-11-30T20:24:10.956Z" },
     { url = "https://files.pythonhosted.org/packages/20/53/7c7e784abfa500a2b6b583b147ee4bb5a2b3747a9166bab52fec4b5b5e7d/rpds_py-0.30.0-cp314-cp314t-win32.whl", hash = "sha256:dc824125c72246d924f7f796b4f63c1e9dc810c7d9e2355864b3c3a73d59ade0", size = 211570, upload-time = "2025-11-30T20:24:12.735Z" },
     { url = "https://files.pythonhosted.org/packages/d0/02/fa464cdfbe6b26e0600b62c528b72d8608f5cc49f96b8d6e38c95d60c676/rpds_py-0.30.0-cp314-cp314t-win_amd64.whl", hash = "sha256:27f4b0e92de5bfbc6f86e43959e6edd1425c33b5e69aab0984a72047f2bcf1e3", size = 226532, upload-time = "2025-11-30T20:24:14.634Z" },
+]
+
+[[package]]
+name = "rsa"
+version = "4.9.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyasn1" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/da/8a/22b7beea3ee0d44b1916c0c1cb0ee3af23b700b6da9f04991899d0c555d4/rsa-4.9.1.tar.gz", hash = "sha256:e7bdbfdb5497da4c07dfd35530e1a902659db6ff241e39d9953cad06ebd0ae75", size = 29034, upload-time = "2025-04-16T09:51:18.218Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/64/8d/0133e4eb4beed9e425d9a98ed6e081a55d195481b7632472be1af08d2f6b/rsa-4.9.1-py3-none-any.whl", hash = "sha256:68635866661c6836b8d39430f97a996acbd61bfa49406748ea243539fe239762", size = 34696, upload-time = "2025-04-16T09:51:17.142Z" },
 ]
 
 [[package]]
