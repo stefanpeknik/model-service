@@ -90,7 +90,7 @@ class ModelCatalogTests(unittest.TestCase):
             return document["serve"]  # type: ignore[return-value]
 
         def user_config(document: dict[str, object]) -> dict[str, object]:
-            return serve(document)["deployments"][0]["user_config"]  # type: ignore[index]
+            return serve(document)["deployment"]["user_config"]  # type: ignore[index]
 
         def inference(document: dict[str, object]) -> dict[str, object]:
             return document["inference"]  # type: ignore[return-value]
@@ -122,8 +122,13 @@ class ModelCatalogTests(unittest.TestCase):
             "invalid parameter": changed(
                 spatial_document(), lambda d: user_config(d).update(mpp=-1)
             ),
-            "no deployments": changed(
-                spatial_document(), lambda d: serve(d).update(deployments=[])
+            "no deployment": changed(
+                spatial_document(), lambda d: serve(d).pop("deployment")
+            ),
+            # Ray's own shape; Helm builds it from `deployment`.
+            "a deployments list": changed(
+                spatial_document(),
+                lambda d: serve(d).update(deployments=[serve(d).pop("deployment")]),
             ),
             "a block no provider takes": changed(
                 spatial_document(), lambda d: d.update(listing={"name": "Prostate"})
@@ -139,7 +144,7 @@ class ModelCatalogTests(unittest.TestCase):
     def test_a_repeated_model_id_keeps_the_first_file(self) -> None:
         first = spatial_document()
         repeated = deepcopy(first)
-        user_config = repeated["serve"]["deployments"][0]["user_config"]
+        user_config = repeated["serve"]["deployment"]["user_config"]
         user_config["mpp"] = 1.0
 
         with self.assertLogs("model_service.api.model_catalog", "ERROR"):
@@ -176,7 +181,7 @@ class ModelImplementationTests(unittest.TestCase):
                 module_name = document["serve"]["import_path"].partition(":")[0]
                 deployment = getattr(
                     importlib.import_module(module_name),
-                    document["serve"]["deployments"][0]["name"],
+                    document["serve"]["deployment"]["name"],
                 )
                 implementation = deployment.func_or_class
                 # The methods the contract's model client calls by handle.

@@ -71,7 +71,10 @@ spec:
 {{- range $path := .Values.models }}
 {{- $model := tpl (printf "models/%s.yaml" $path | $.Files.Get) $ | fromYaml }}
 {{- if not $model.serve }}{{ fail (printf "models/%s.yaml has no serve block" $path) }}{{ end }}
-      - {{ toYaml $model.serve | nindent 8 | trim }}
+{{- if not $model.serve.deployment }}{{ fail (printf "models/%s.yaml has no serve.deployment" $path) }}{{ end }}
+{{- /* A model file has one deployment; Ray takes a list, as for builders below. */}}
+{{- $app := merge (dict "deployments" (list $model.serve.deployment)) (omit $model.serve "deployment") }}
+      - {{ toYaml $app | nindent 8 | trim }}
 {{- end }}
 {{- range $id, $builder := .Values.builders }}
       - name: builder-{{ $id }}

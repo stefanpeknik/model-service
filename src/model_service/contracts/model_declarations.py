@@ -33,7 +33,7 @@ class InferenceContract(StrEnum):
 class _ModelBinding(BaseModel):
     """A model's catalog declaration: what builders need to drive it.
 
-    A model file gives each field in its first deployment's `user_config`, which
+    A model file gives each field in its deployment's `user_config`, which
     the model implementation also reads and reports back from `get_config()`.
     """
 

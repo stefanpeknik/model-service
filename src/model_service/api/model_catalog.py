@@ -5,7 +5,7 @@ entry has an `inference` declaration and the Ray Serve application (`serve`)
 that Helm also injects into the RayService, so the catalog and the running
 models come from the same files.
 
-Contract parameters come from the first deployment's `user_config`, which the
+Contract parameters come from the model's deployment's `user_config`, which the
 model implementation reads too; `inference` names only the contract. Any other
 top-level block belongs to a provider (e.g. how that provider offers
 the model): the catalog keeps it for that provider, unread.
@@ -21,7 +21,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from model_service.contracts.failures import UnknownModelError
 from model_service.contracts.model_declarations import (
@@ -46,7 +46,7 @@ class InferenceDeclaration(BaseModel):
 
     Attributes:
         contract: The model's inference contract; its parameters are in the
-            first deployment's `user_config`.
+            deployment's `user_config`.
     """
 
     # Other fields are allowed only to reject them with a pointer to user_config.
@@ -73,14 +73,36 @@ class _ServeApplication(BaseModel):
     Attributes:
         name: The application name, which is the model id.
         route_prefix: The application's route prefix.
-        deployments: Its deployments; the first one is the model.
+        deployment: The model's one deployment; Helm puts it in the
+            application's `deployments` list for Ray.
     """
 
     model_config = ConfigDict(extra="allow")
 
     name: Annotated[str, Field(min_length=1, pattern=r"^[A-Za-z0-9._-]+$")]
     route_prefix: str
-    deployments: Annotated[list[_ServeDeployment], Field(min_length=1)]
+    deployment: _ServeDeployment
+
+    @model_validator(mode="before")
+    @classmethod
+    def _one_deployment(cls, data: object) -> object:
+        """Reject Ray's `deployments` list; a model file has one `deployment`.
+
+        Args:
+            data: The raw `serve` block.
+
+        Returns:
+            The block, unchanged.
+
+        Raises:
+            ValueError: If the block has a `deployments` key.
+        """
+        if isinstance(data, dict) and "deployments" in data:
+            raise ValueError(
+                "serve has one `deployment`, not a `deployments` list; "
+                "Helm builds Ray's list from it"
+            )
+        return data
 
 
 class ModelDocument(BaseModel):
@@ -105,7 +127,7 @@ class CatalogError(ValueError):
 def model_binding(document: ModelDocument) -> ModelBinding:
     """Build a model binding from one model document.
 
-    Every field of the contract's model class comes from the first deployment's
+    Every field of the contract's model class comes from the deployment's
     `user_config`.
 
     Args:
@@ -129,7 +151,7 @@ def model_binding(document: ModelDocument) -> ModelBinding:
             "it belongs in user_config"
         )
     model_class = MODEL_CLASSES[inference.contract]
-    user_config = document.serve.deployments[0].user_config
+    user_config = document.serve.deployment.user_config
     values: dict[str, object] = {"id": model_id, "contract": inference.contract}
     for name in sorted(model_class.model_fields.keys() - {"id", "contract"}):
         if name not in user_config:
