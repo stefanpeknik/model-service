@@ -13,7 +13,7 @@ Generic files, which every builder uses:
 
 Subpackages:
 
-- implementations/: the concrete builders, one package each (heatmap/).
+- implementations/: the concrete builders, one package each (heatmap/, embeddings/).
 - replica/: the Ray Serve deployment that hosts a builder; it runs only inside
   Ray replicas, never in the API process.
 """
