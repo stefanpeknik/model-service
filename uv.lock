@@ -257,6 +257,19 @@ wheels = [
 ]
 
 [[package]]
+name = "asgi-correlation-id"
+version = "4.3.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+    { name = "starlette" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f4/ff/a6538245ac1eaa7733ec6740774e9d5add019e2c63caa29e758c16c0afdd/asgi_correlation_id-4.3.4.tar.gz", hash = "sha256:ea6bc310380373cb9f731dc2e8b2b6fb978a76afe33f7a2384f697b8d6cd811d", size = 20075, upload-time = "2024-10-17T11:44:30.324Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d9/ab/6936e2663c47a926e0659437b9333ad87d1ff49b1375d239026e0a268eba/asgi_correlation_id-4.3.4-py3-none-any.whl", hash = "sha256:36ce69b06c7d96b4acb89c7556a4c4f01a972463d3d49c675026cbbd08e9a0a2", size = 15262, upload-time = "2024-10-17T11:44:28.739Z" },
+]
+
+[[package]]
 name = "attrs"
 version = "26.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1996,11 +2009,15 @@ dependencies = [
 
 [package.optional-dependencies]
 api = [
+    { name = "asgi-correlation-id" },
     { name = "cryptography" },
+    { name = "fastapi" },
     { name = "httpx" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic-settings" },
+    { name = "python-json-logger" },
     { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "uvicorn" },
     { name = "yoyo-migrations" },
 ]
 builders = [
@@ -2054,7 +2071,9 @@ docs = [
 
 [package.metadata]
 requires-dist = [
+    { name = "asgi-correlation-id", marker = "extra == 'api'", specifier = ">=4.3,<5" },
     { name = "cryptography", marker = "extra == 'api'", specifier = ">=45.0.0" },
+    { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115.0" },
     { name = "fastapi", marker = "extra == 'builders'", specifier = ">=0.115.0" },
     { name = "fastapi", marker = "extra == 'inference'", specifier = ">=0.115.0" },
     { name = "httpx", marker = "extra == 'api'", specifier = ">=0.27.0" },
@@ -2069,6 +2088,7 @@ requires-dist = [
     { name = "psycopg", extras = ["binary"], marker = "extra == 'api'", specifier = ">=3.2.0" },
     { name = "pydantic", specifier = ">=2.10.0" },
     { name = "pydantic-settings", marker = "extra == 'api'", specifier = ">=2.10.0,<3" },
+    { name = "python-json-logger", marker = "extra == 'api'", specifier = ">=3.2,<5" },
     { name = "python-json-logger", marker = "extra == 'builders'", specifier = ">=3.2,<5" },
     { name = "pyvips", extras = ["binary"], marker = "extra == 'builders'", specifier = ">=3.0.0,<4" },
     { name = "ratiopath", marker = "extra == 'builders'", specifier = ">=1.4.0" },
@@ -2083,6 +2103,7 @@ requires-dist = [
     { name = "torchvision", marker = "extra == 'cpu'", specifier = "==0.23.0", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "model-service", extra = "cpu" } },
     { name = "torchvision", marker = "extra == 'gpu'", specifier = "==0.23.0" },
     { name = "torchvision", marker = "extra == 'inference'", specifier = "==0.23.0" },
+    { name = "uvicorn", marker = "extra == 'api'", specifier = ">=0.30.0" },
     { name = "yoyo-migrations", marker = "extra == 'api'", specifier = ">=9.0.0,<10" },
 ]
 provides-extras = ["api", "builders", "inference", "cpu", "gpu"]
