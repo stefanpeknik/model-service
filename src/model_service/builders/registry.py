@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from model_service.builders.implementations.heatmap.spec import SPEC as HEATMAP
 from model_service.contracts.failures import UnknownBuilderError
 
 
@@ -15,7 +16,7 @@ if TYPE_CHECKING:
     from model_service.contracts.model_declarations import ModelBinding
 
 
-BUILDERS: dict[str, BuilderSpec] = {}
+BUILDERS: dict[str, BuilderSpec] = {spec.id: spec for spec in (HEATMAP,)}
 
 
 def get_builder(builder_id: str) -> BuilderSpec:
