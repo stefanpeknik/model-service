@@ -6,6 +6,7 @@ rayStartParams:
   num-gpus: "1"
 template:
   spec:
+{{- include "model-service.empaiaDns" . | nindent 4 }}
     securityContext:
       fsGroup: 1000
       fsGroupChangePolicy: OnRootMismatch
@@ -15,7 +16,7 @@ template:
         type: RuntimeDefault
     containers:
       - name: ray-worker
-        image: cerit.io/rationai/model-service:2.54.0-gpu
+        image: cerit.io/rationai/model-service:2.58.0-gpu
         imagePullPolicy: Always
         resources:
           limits:
@@ -26,6 +27,7 @@ template:
             cpu: 8
             memory: 24Gi
         env:
+          {{- include "model-service.rayLogEnv" . | nindent 10 }}
           - name: HTTPS_PROXY
             value: http://proxy.ics.muni.cz:3128
           - name: HF_TOKEN
@@ -33,6 +35,7 @@ template:
               secretKeyRef:
                 name: huggingface-secret
                 key: token
+{{- include "model-service.empaiaEnv" . | nindent 10 }}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -55,6 +58,11 @@ template:
             mountPath: /mnt/cache
           - name: huggingface-cache
             mountPath: /mnt/huggingface_cache
+{{- if and .Values.empaia.apiUrls .Values.empaia.workspaceClaim }}
+          - name: empaia-workspace
+            mountPath: {{ .Values.empaia.workspaceRoot | quote }}
+{{- end }}
+{{- include "model-service.slideVolumeMount" . | nindent 10 }}
     volumes:
       - name: data
         persistentVolumeClaim:
@@ -74,3 +82,9 @@ template:
       - name: huggingface-cache
         persistentVolumeClaim:
           claimName: huggingface-cache-pvc
+{{- if and .Values.empaia.apiUrls .Values.empaia.workspaceClaim }}
+      - name: empaia-workspace
+        persistentVolumeClaim:
+          claimName: {{ .Values.empaia.workspaceClaim | quote }}
+{{- end }}
+{{- include "model-service.slideVolume" . | nindent 6 }}

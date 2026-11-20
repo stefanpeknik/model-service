@@ -1,0 +1,49 @@
+ARG GPU_BASE_IMAGE=docker.io/rayproject/ray:2.58.0-py312-gpu
+FROM ghcr.io/astral-sh/uv:0.13.7 AS uv
+
+FROM ${GPU_BASE_IMAGE}
+
+COPY --from=uv /uv /usr/local/bin/uv
+
+USER root
+
+ARG UV_HTTP_TIMEOUT=300
+ARG UV_CONCURRENT_DOWNLOADS=4
+
+# The builders, inference and gpu extras, pinned by uv.lock. The base image's
+# Ray stays. The EMPAIA SDK is a git dependency on a GitLab fork, so build
+# with `--ssh default`.
+COPY pyproject.toml uv.lock /tmp/project/
+RUN --mount=type=ssh cd /tmp/project \
+    && export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new" \
+        GIT_CONFIG_COUNT=1 \
+        GIT_CONFIG_KEY_0=url.git@gitlab.ics.muni.cz:rationai/digital-pathology/production/services/models.git.insteadOf \
+        GIT_CONFIG_VALUE_0=https://github.com/AigoPath/EMPAIA-Models.git \
+    && uv export --frozen --no-dev --extra builders --extra inference --extra gpu \
+        --no-emit-project --no-emit-package ray \
+        --format pylock.toml -o /tmp/pylock.ray-gpu.toml \
+    && uv pip install --python /home/ray/anaconda3/bin/python --no-cache \
+        -r /tmp/pylock.ray-gpu.toml \
+    && rm -rf /tmp/project /tmp/pylock.ray-gpu.toml
+
+USER 1000
+
+ENV NVIDIA_PYTHON_LIB=/home/ray/anaconda3/lib/python3.12/site-packages/nvidia
+ENV LD_LIBRARY_PATH="/home/ray/anaconda3/lib/python3.12/site-packages/tensorrt_libs:${NVIDIA_PYTHON_LIB}/cudnn/lib:${NVIDIA_PYTHON_LIB}/cublas/lib:${NVIDIA_PYTHON_LIB}/cuda_runtime/lib:${NVIDIA_PYTHON_LIB}/cufft/lib:${NVIDIA_PYTHON_LIB}/curand/lib:${NVIDIA_PYTHON_LIB}/cuda_nvrtc/lib:${NVIDIA_PYTHON_LIB}/nvjitlink/lib:${LD_LIBRARY_PATH}"
+
+ARG SOURCE_REVISION
+LABEL org.opencontainers.image.revision=${SOURCE_REVISION}
+
+WORKDIR /app
+ENV PYTHONPATH=/app
+COPY src/model_service model_service
+
+RUN /home/ray/anaconda3/bin/python -c "\
+import onnxruntime, timm, torch, torchvision; \
+from ratiopath.masks.mask_builders import MaskBuilder; \
+from ratiopath.openslide import OpenSlide; \
+from ratiopath.tiling import grid_tiles; \
+import model_service.builders.replica.serve; \
+import model_service.inference.implementations.binary_classifier; \
+providers = onnxruntime.get_available_providers(); \
+assert 'TensorrtExecutionProvider' in providers, providers"
