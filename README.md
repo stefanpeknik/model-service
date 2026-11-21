@@ -118,12 +118,14 @@ UV_CACHE_DIR=.cache/uv uv sync --extra api --extra builders --extra inference --
 podman run -d --name ms-test-pg -p 127.0.0.1:55432:5432 \
   -e POSTGRES_PASSWORD=test docker.io/library/postgres:17-alpine
 TEST_POSTGRES_DSN=postgresql://postgres:test@127.0.0.1:55432/postgres \
-  UV_CACHE_DIR=.cache/uv uv run python -m unittest discover -s tests -t .
+  UV_CACHE_DIR=.cache/uv uv run pytest
 UV_CACHE_DIR=.cache/uv uv run ruff check
 UV_CACHE_DIR=.cache/uv uv run mypy .
 ```
 
-Without `TEST_POSTGRES_DSN` the PostgreSQL tests are skipped.
+Without `TEST_POSTGRES_DSN` the PostgreSQL tests are skipped. Tests marked
+`live` call the deployed cluster and run only with `uv run pytest -m live`.
+`python -m unittest discover -s tests -t .` still runs the unittest-style tests.
 
 ## License
 
