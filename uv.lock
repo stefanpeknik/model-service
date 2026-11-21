@@ -2057,6 +2057,7 @@ source = { editable = "." }
 dependencies = [
     { name = "numpy" },
     { name = "pydantic" },
+    { name = "pyyaml" },
 ]
 
 [package.optional-dependencies]
@@ -2156,6 +2157,7 @@ requires-dist = [
     { name = "python-json-logger", marker = "extra == 'api'", specifier = ">=3.2,<5" },
     { name = "python-json-logger", marker = "extra == 'builders'", specifier = ">=3.2,<5" },
     { name = "pyvips", extras = ["binary"], marker = "extra == 'builders'", specifier = ">=3.0.0,<4" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "rationai-empaia", marker = "extra == 'api'", git = "ssh://git@gitlab.ics.muni.cz/524810/empaia.git?rev=94de5d033685aaa26157174b148cbe46388324e7" },
     { name = "rationai-empaia", marker = "extra == 'builders'", git = "ssh://git@gitlab.ics.muni.cz/524810/empaia.git?rev=94de5d033685aaa26157174b148cbe46388324e7" },
     { name = "ratiopath", marker = "extra == 'builders'", specifier = ">=1.4.0" },
