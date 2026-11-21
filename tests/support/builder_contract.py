@@ -27,11 +27,11 @@ from model_service.contracts.invocation import SharedPathInput
 from model_service.contracts.model_declarations import InferenceContract
 from model_service.contracts.result import SharedArtifact
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
+from model_service.testing import fake_slide
 from tests.support.builder_fixtures import (
     FakeDeployment,
     invocation,
     running_config,
-    write_slide,
 )
 
 
@@ -82,7 +82,7 @@ class BuilderContractTests(_Base):
         # H&E-like pink, so a background filter sees tissue everywhere.
         pixels = np.empty((64, 96, 3), dtype=np.uint8)
         pixels[...] = (200, 120, 160)
-        write_slide(self.root / "slide.tiff", pixels)
+        fake_slide(self.root / "slide.tiff", pixels)
         self.spec = get_builder(self.builder_id)
 
     def inputs(self) -> dict[str, BuilderInput]:

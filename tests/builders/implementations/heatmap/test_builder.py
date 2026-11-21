@@ -21,8 +21,9 @@ from model_service.contracts.model_declarations import SpatialScoresModel
 from model_service.contracts.result import SharedArtifact
 from model_service.contracts.score_grid import read_score_grid
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
+from model_service.testing import fake_slide
 from tests.support.builder_contract import BuilderContractTests
-from tests.support.builder_fixtures import invocation, write_slide
+from tests.support.builder_fixtures import invocation
 
 
 def spatial(**overrides: Any) -> SpatialScoresModel:
@@ -57,8 +58,8 @@ class HeatmapBuilderTests(unittest.IsolatedAsyncioTestCase):
         self.root = Path(self._directory.name)
         pixels = np.empty((64, 96, 3), dtype=np.uint8)
         pixels[...] = (200, 120, 160)
-        write_slide(self.root / "slide.tiff", pixels)
-        write_slide(self.root / "mask.tiff", np.full_like(pixels, 255))
+        fake_slide(self.root / "slide.tiff", pixels)
+        fake_slide(self.root / "mask.tiff", np.full_like(pixels, 255))
         self.model = spatial(tile_size=32, output_tile_size=32)
         self.config = {
             "tile_size": 32,
@@ -129,10 +130,10 @@ class HeatmapBuilderTests(unittest.IsolatedAsyncioTestCase):
         # the region is the slide's right third, columns 64 to 95.
         pixels = np.zeros((64, 96, 3), dtype=np.uint8)
         pixels[..., 0] = np.arange(96)
-        write_slide(self.root / "slide.tiff", pixels)
+        fake_slide(self.root / "slide.tiff", pixels)
         region = np.zeros_like(pixels)
         region[:, 64:] = 255
-        write_slide(self.root / "mask.tiff", region)
+        fake_slide(self.root / "mask.tiff", region)
         handle = fake_handle(self.config, np.zeros((32, 32), dtype=np.float32))
 
         await self.run_builder(handle)

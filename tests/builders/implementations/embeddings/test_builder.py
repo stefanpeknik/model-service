@@ -31,8 +31,8 @@ from model_service.contracts.builder_http import RunRequest
 from model_service.contracts.model_declarations import TileEmbeddingModel
 from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
+from model_service.testing import fake_slide
 from tests.support.builder_contract import BuilderContractTests
-from tests.support.builder_fixtures import write_slide
 from tests.support.memory_repository import InMemoryExecutionRepository
 
 
@@ -121,10 +121,10 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
         # Level 0 at 0.25 mpp; the model wants 0.5 mpp, i.e. level 1 (64x48).
         pixels = np.zeros((96, 128, 3), dtype=np.uint8)
         pixels[:, 64:] = 200
-        write_slide(self.root / "slide.tiff", pixels, mpp=0.25, pyramid=True, tile=16)
+        fake_slide(self.root / "slide.tiff", pixels, mpp=0.25, pyramid=True, tile=16)
         mask = np.zeros((96, 128, 3), dtype=np.uint8)
         mask[:, 64:] = 255
-        write_slide(self.root / "mask.tiff", mask, mpp=0.25)
+        fake_slide(self.root / "mask.tiff", mask, mpp=0.25)
 
     async def client(self, summaries: tuple[str, ...]) -> httpx.AsyncClient:
         self.model = FakeEmbeddingDeployment(summaries)

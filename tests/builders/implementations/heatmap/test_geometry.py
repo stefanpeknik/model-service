@@ -11,7 +11,7 @@ import numpy as np
 from model_service.builders.implementations.heatmap.processor import build_heatmap
 from model_service.contracts.model_declarations import SpatialScoresModel
 from model_service.contracts.score_grid import ScoreGrid, read_score_grid
-from tests.support.builder_fixtures import write_slide
+from model_service.testing import fake_slide
 
 
 class LandmarkPredictor:
@@ -69,7 +69,7 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
         y, x = np.indices((height, width))
         pixels = np.zeros((height, width, 3), dtype=np.uint8)
         pixels[..., 0] = ((x // 16 + y // 16) % 2) * 255
-        write_slide(directory / "slide.tiff", pixels)
+        fake_slide(directory / "slide.tiff", pixels)
         mask_path = None
         if mask != "none":
             mask_path = directory / "mask.tiff"
@@ -77,7 +77,7 @@ class HeatmapGeometryTests(unittest.IsolatedAsyncioTestCase):
             if mask == "region":
                 selected[:] = 0
                 selected[REGION] = 255
-            write_slide(mask_path, selected if mask_pixels is None else mask_pixels)
+            fake_slide(mask_path, selected if mask_pixels is None else mask_pixels)
         output = directory / "heatmap.npz"
         await build_heatmap(
             directory / "slide.tiff",

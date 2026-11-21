@@ -13,7 +13,7 @@ from ratiopath.openslide import OpenSlide
 from model_service.builders.slides import tissue
 from model_service.builders.slides.tile_reader import TileReader
 from model_service.contracts.failures import InvalidInvocation
-from tests.support.builder_fixtures import write_slide
+from model_service.testing import fake_slide
 
 
 def slide_pixels() -> np.ndarray:
@@ -32,7 +32,7 @@ class TissueTests(unittest.TestCase):
         self.path = Path(directory.name) / "slide.tiff"
         # 2400x1600 at 0.5 µm/px; the level closest to 8 µm/px is 16x smaller.
         big = np.kron(slide_pixels(), np.ones((8, 8, 1), dtype=np.uint8))
-        write_slide(self.path, big, mpp=0.5, pyramid=True)
+        fake_slide(self.path, big, mpp=0.5, pyramid=True)
 
     def test_mask_comes_from_the_coarse_level_and_finds_the_tissue(self) -> None:
         with OpenSlide(str(self.path)) as slide:
