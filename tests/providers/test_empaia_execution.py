@@ -696,7 +696,8 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
     async def test_the_viewer_is_told_how_far_a_job_got(self) -> None:
         completed, service = await self._run_halfway_job()
 
-        self.assertEqual(service.progress, [0.5])
+        # EMPAIA keeps the last progress sent, completed jobs' too.
+        self.assertEqual(service.progress, [0.5, 1.0])
         self.assertEqual(completed.status, "succeeded")
 
     async def test_a_job_whose_progress_empaia_refuses_still_succeeds(self) -> None:

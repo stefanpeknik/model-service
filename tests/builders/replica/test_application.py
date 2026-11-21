@@ -76,7 +76,7 @@ class FixedAccess(InputAccess):
 
 class FixedAccessAdapter(InputAccessFactory):
     def __init__(self, root: Path, access: type[FixedAccess] = FixedAccess) -> None:
-        self._root = root
+        self.root = root
         self._access = access
         # The progress every access it created sent, in order.
         self.sent: list[float] = []
@@ -87,12 +87,17 @@ class FixedAccessAdapter(InputAccessFactory):
         execution_context: ExecutionContext,
         model: ModelBinding,
     ) -> FixedAccess:
-        return self._access(self._root, self.sent)
+        return self._access(self.root, self.sent)
 
 
 class FailingCloseAccess(FixedAccess):
     async def aclose(self) -> None:
         raise OSError("provider credential is secret")
+
+
+class RefusingProgressAccess(FixedAccess):
+    async def report_progress(self, fraction: float) -> None:
+        raise OSError("provider refused the progress")
 
 
 class TimingOutCloseAccess(FixedAccess):
@@ -409,7 +414,8 @@ class ProgressTests(unittest.IsolatedAsyncioTestCase):
             self.application(build).run(invocation("test"), SPATIAL_MODEL), timeout=2
         )
 
-        self.assertEqual(self.adapter.sent, [0.3, 0.6])
+        # A finished run is complete, whatever the last interval caught.
+        self.assertEqual(self.adapter.sent, [0.3, 0.6, 1.0])
 
     async def test_nothing_is_sent_after_the_run_ends(self) -> None:
         reporters = []
@@ -423,7 +429,37 @@ class ProgressTests(unittest.IsolatedAsyncioTestCase):
         reporters[0](0.9)
         await asyncio.sleep(0.05)
 
-        self.assertEqual(self.adapter.sent, [])
+        self.assertEqual(self.adapter.sent, [1.0])
+
+    async def test_a_failed_run_keeps_its_last_progress(self) -> None:
+        async def build(context: AnyContext) -> BuilderResult:
+            context.report_progress(0.5)
+            await self.sent(1)
+            raise BuilderFailure(
+                code=FailureCode.INTERNAL_ERROR,
+                safe_message="builder failed",
+                retryable=False,
+            )
+
+        with self.assertRaises(BuilderFailure):
+            await asyncio.wait_for(
+                self.application(build).run(invocation("test"), SPATIAL_MODEL),
+                timeout=2,
+            )
+
+        self.assertEqual(self.adapter.sent, [0.5])
+
+    async def test_a_failed_final_send_does_not_fail_the_run(self) -> None:
+        self.adapter = FixedAccessAdapter(
+            self.adapter.root, access=RefusingProgressAccess
+        )
+
+        async def build(context: AnyContext) -> BuilderResult:
+            return BuilderResult({})
+
+        result = await self.application(build).run(invocation("test"), SPATIAL_MODEL)
+
+        self.assertEqual(result, BuilderResult({}))
 
 
 if __name__ == "__main__":
