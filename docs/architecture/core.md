@@ -38,6 +38,9 @@ behind one public API that can also run builders durably.
 | `src/model_service/contracts/` | Data shapes processes hand each other: invocation, result, failures, score grid, model declarations. |
 | `src/model_service/api/scheduler/` | Durable executions: admission, leases with fencing, retries, deadlines, cancellation, provider finish. PostgreSQL with Yoyo migrations. |
 | `src/model_service/providers/` | Providers: standalone (shared storage) and EMPAIA (AppService input and publication). `providers/registry.py` lists them; the API and the builder ingress compose what each contributes and name none of them. |
+| `src/model_service/components/` | Being built, not yet wired in: the seven component kinds (loader, runtime, step, source, sink, input converter, publisher), options with the `PerRun` marker, column declarations, and the registry that scans the component folders (`served_model/`, `steps/`, `analysis/`, `empaia/`, `standalone/`). |
+| `src/model_service/catalog/` and `catalog/` | Being built, not yet wired in: `load_catalog(root, environment)` deep-merges `catalog/environments/<env>/` patches over the base files and resolves each document kind, reporting every mistake as `<file>:<yaml path>: <what's wrong>. <what fits>. Hint: <fix>`. `tests/catalog/` loads the repo's `catalog/` for every environment. |
+| `src/model_service/testing/` | `fake_slide`, `fake_model`, `run_component` and the per-kind conformance suites that run for every registered component. |
 
 ### Interfaces
 
