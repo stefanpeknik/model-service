@@ -11,11 +11,21 @@ from pathlib import Path
 
 
 SRC = Path(__file__).resolve().parents[1] / "src"
+CATALOG = SRC.parent / "catalog"
 
 
-def loaded_modules(module: str) -> set[str]:
-    """Import `module` in a fresh interpreter and list every module it loaded."""
-    script = f"import json, sys, {module}; print(json.dumps(sorted(sys.modules)))"
+def loaded_modules(module: str, then: str = "") -> set[str]:
+    """Import `module` in a fresh interpreter, run `then`, and list every module loaded."""
+    script = "; ".join(
+        filter(
+            None,
+            [
+                f"import json, sys, {module}",
+                then,
+                "print(json.dumps(sorted(sys.modules)))",
+            ],
+        )
+    )
     env = {**os.environ, "PYTHONPATH": str(SRC)}
     result = subprocess.run(
         [sys.executable, "-c", script],
@@ -49,6 +59,34 @@ class ProcessBoundaryTests(unittest.TestCase):
                 "model_service.builders.replica",
                 "model_service.builders.model_clients",
                 "model_service.inference",
+            ),
+            [],
+        )
+
+    def test_every_component_and_the_catalog_load_without_heavy_libraries(
+        self,
+    ) -> None:
+        """The API validates catalogs, so component declarations must stay light."""
+        modules = loaded_modules(
+            "model_service.catalog, model_service.components, model_service.testing",
+            then=(
+                "model_service.components.default_registry(); "
+                f"model_service.catalog.load_catalog(__import__('pathlib').Path({str(CATALOG)!r}))"
+            ),
+        )
+
+        self.assertEqual(
+            under(
+                modules,
+                "ray",
+                "onnxruntime",
+                "torch",
+                "timm",
+                "mlflow",
+                "openslide",
+                "pyvips",
+                "ratiopath",
+                "h5py",
             ),
             [],
         )
