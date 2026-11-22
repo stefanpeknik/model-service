@@ -1,0 +1,157 @@
+# Write a component
+
+Catalog files name components with `{use: <name>, …}`. When the piece you
+need doesn't exist, write it as one small class in one file, with one test.
+You don't touch the catalog loader, the host or the runner: a folder scan
+finds the new class, checks its declaration and lists it in the reference
+docs.
+
+## Pick the kind and the folder
+
+The kind decides where a catalog file may name the component, and the folder
+under `src/model_service/components/` must match it:
+
+| You need | Kind | Folder |
+| --- | --- | --- |
+| Weights from somewhere new | loader | `served_model/loaders/` |
+| A new way to run weights | runtime | `served_model/runtimes/` |
+| A per-tile transform, in a served model's `pre:`/`post:` or as an analysis step | step | `steps/` |
+| A new way to produce items from a slide | source | `analysis/sources/` |
+| A new kind of output file | sink | `analysis/sinks/`, plus a module in `src/model_service/formats/` if the format is new |
+| A new EMPAIA input or output type | converter, publisher | `empaia/input_converters/`, `empaia/publishers/` |
+
+Each kind's base class in `src/model_service/components/kinds/` documents
+the methods to write. The closest existing component of the same kind is
+the best template; [Components](../reference/components.md) links each one's
+code.
+
+## Write it
+
+Say a model returns logits and you want probabilities. A step in the served
+model's `post:` fixes that. `src/model_service/components/steps/softmax.py`:
+
+```python
+"""The `softmax` step: turns a model's logits into probabilities."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, ClassVar
+
+import numpy as np
+from pydantic import Field
+
+from model_service.components import Col, Options, Step
+
+
+if TYPE_CHECKING:
+    from model_service.components import Batch
+
+
+class SoftmaxOptions(Options):
+    """Options of the `softmax` step."""
+
+    temperature: float = Field(
+        1.0, gt=0, description="Divides the logits first; above 1 flattens the scores."
+    )
+
+
+class Softmax(Step):
+    """Turns per-channel logits into probabilities that sum to 1.
+
+    `post: [{use: softmax}]` fixes a model that returns logits, so its
+    file can declare `output: {range: [0, 1]}`.
+    """
+
+    name = "softmax"
+    Options = SoftmaxOptions
+    example_options: ClassVar[dict[str, Any]] = {"temperature": 1.0}
+    reads: ClassVar[dict[str, Col]] = {"output": Col("float32", (None, None, None))}
+    adds: ClassVar[dict[str, Col]] = {"output": Col("float32", (None, None, None))}
+    options: SoftmaxOptions
+
+    def __call__(self, batch: Batch) -> Batch:
+        """Apply softmax over the channel axis.
+
+        Args:
+            batch: `output`, logits `(rows, channels, size, size)`.
+
+        Returns:
+            The batch with probabilities in `output`.
+        """
+        logits = batch["output"] / self.options.temperature
+        exp = np.exp(logits - logits.max(axis=1, keepdims=True))
+        return batch | {"output": exp / exp.sum(axis=1, keepdims=True)}
+```
+
+What each part is for:
+
+- `name` is what catalog files write after `use:`. Two components of one
+  kind can't share a name.
+- `Options` lists what a file may set. Unknown keys are errors, and every
+  field needs a `description`, which becomes the option's line in the
+  reference docs and the editor's hover text. Mark an option `PerRun[...]`
+  if callers may change it for one run; it then becomes an analysis setting
+  and an EMPAIA job parameter.
+- `reads` and `adds` declare the columns, as dtype and shape without the
+  batch axis. A dimension is a number, `None` for any size, the name of one
+  of your options, or `model.input.tile_size`-style fields of the served
+  model. The catalog check uses them to tell a file author that your step
+  doesn't fit before anything runs. A served model's runtime output is the
+  column `output`; in an analysis, a model step adds `scores` or `features`.
+- The class docstring is the component's reference page.
+- Import heavy libraries (torch, ONNX Runtime, OpenSlide) inside methods,
+  never at the top of the module. The API imports every component to check
+  catalog files and must stay free of them.
+- Override `hint()` if you can tell a file author which value to change when
+  a check fails; `huggingface.py` does it for a bad `revision`.
+
+## Test it
+
+`tests/components/test_conformance.py` runs your kind's conformance suite on
+every registered component, so yours is covered as soon as the file exists.
+It checks the docstring, the option descriptions, `example_options`, the
+declared dimensions and, for steps, that the output has the declared columns
+and the same number of rows.
+
+Add a test of what your component computes. `model_service.testing` runs a
+component the way the runner would, without Ray or a cluster:
+
+```python
+import numpy as np
+
+from model_service.components.steps.softmax import Softmax
+from model_service.testing import run_component
+
+
+def test_softmax_gives_probabilities_that_sum_to_one() -> None:
+    logits = np.array([[[[2.0]], [[0.0]], [[-1.0]]]], dtype=np.float32)
+
+    out = run_component(Softmax, {"output": logits})
+
+    np.testing.assert_allclose(out["output"].sum(axis=1), 1.0, rtol=1e-6)
+    assert out["output"][0, 0, 0, 0] > out["output"][0, 1, 0, 0]
+```
+
+The other helpers cover the rest of the kinds:
+
+- `run_component(MySource, work_dir=tmp_path)` writes a `fake_slide()` for
+  each input the source takes and returns its frame, keys and loaded items.
+- `run_component(MySink, batches, work_dir=tmp_path)` feeds a sink batches
+  and a `fake_frame()` and returns the artifact it wrote.
+- `fake_model(output={"kind": "embedding", "summaries": ["global"]})` stands
+  in for a served model, for `model.` dimensions and model calls.
+
+Run the tests, then regenerate the reference docs so they list your
+component:
+
+```sh
+uv run pytest tests/components
+PYTHONPATH=src uv run scripts/generate.py
+```
+
+## Use it
+
+Name it in a catalog file and check that file:
+`post: [{use: softmax}]` in a served model, then `uv run pytest tests/catalog`.
+A component is code, so deploying it needs a new image; catalog files that
+use it deploy with `helm upgrade` once the image runs.
