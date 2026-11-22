@@ -1,86 +1,48 @@
 # Model Service
 
-RationAI's service for running pathology models on Ray Serve: **analyses** run
-served models over a whole slide, either synchronously or as durable
-executions you can poll, cancel, or leave queued until a GPU frees up.
+RationAI's service for running pathology models on Ray Serve. Trained models
+are **served models**; whole-slide jobs that call them are **analyses**. Both
+are YAML files in `catalog/`, built from reusable **components**. An analysis
+runs synchronously, as a durable execution you can poll and cancel, or as an
+EMPAIA app.
 
 ## In short
 
-- **What it does:** turns a trained model (an ONNX checkpoint in MLflow, or a foundation model) into a
-  service that scores whole slides, for RationAI's own tools and for
-  researchers working in EMPAIA.
-- **Adding a model:** a model that fits an existing implementation is one YAML
-  file and a `helm upgrade`; no Python. See [Add a model](#add-a-model).
-- **EMPAIA:** model-service registers itself as an EMPAIA app and runs EMPAIA
-  jobs. On the EMPAIA test instance a prostate heatmap job finishes in 49 s
-  warm, 101 s with a cold GPU, and the result shows in the case browser
+- **A new model** that an existing runtime can run (an ONNX graph, a timm or
+  Hugging Face encoder) is one file in `catalog/served-models/` and a
+  `helm upgrade`, with no Python and no image rebuild.
+  [Add a model](docs/guides/add-a-model.md).
+- **A new analysis** is one file in `catalog/analyses/`: a source, steps
+  (`{model: <id>}` calls a served model) and sinks.
+  [Add an analysis](docs/guides/add-an-analysis.md).
+- **Code** is needed only for a missing component, one small class with its
+  own test. [Write a component](docs/guides/write-a-component.md).
+- **Every catalog file is checked** before it deploys:
+  `uv run pytest tests/catalog` lists every mistake with the file, the YAML
+  path and a hint. Editors with the YAML language server complete keys and
+  flag errors from the generated JSON Schemas in `catalog/.schemas/`.
+- **EMPAIA:** an analysis's `expose.empaia` section makes it an EMPAIA app,
+  which model-service registers itself. The prostate heatmap app runs on the
+  EMPAIA test instance; a job takes 49 s warm and 101 s with a cold GPU
   ([run record](docs/operations/empaia-score-grid-2026-10-31.md)).
 - **Status (2026-11):** running on the RationAI test namespace beside the
-  EMPAIA test instance; not yet in production.
-- **What this thesis added** to the original model-service:
-  [thesis scope](docs/thesis-scope.md).
+  EMPAIA test instance; not yet in production. What the thesis added to the
+  original model-service: [thesis scope](docs/thesis-scope.md).
 
-## Status and evidence
+## Reference
 
-Dated records of live runs, newest first (all in
-[docs/operations/](docs/operations/)):
+Generated from the code and the catalog by `scripts/generate.py`, so they
+match what deploys:
 
-- [2026-11-01](docs/operations/empaia-provider-composition-2026-11-01.md):
-  self-registration in EMPAIA, one app with both modes, heatmap in the case browser.
-- [2026-10-31](docs/operations/empaia-score-grid-2026-10-31.md): prostate heatmap
-  published to EMPAIA with timings.
-- [2026-10-25](docs/operations/empaia-test-instance-2026-10-25.md): first job
-  started from the EMPAIA test instance.
-- [2026-10-14](docs/operations/core-acceptance-2026-10-14.md): core API and
-  scheduler acceptance.
+- [Components](docs/reference/components.md): every loader, runtime, step,
+  source, sink, converter and publisher, with its options and where it may be
+  used;
+- [Served models](docs/reference/served-models.md) and
+  [analyses](docs/reference/analyses.md) in `catalog/`;
+- [Data formats](docs/reference/formats.md) of the files analyses write.
 
-Both EMPAIA modes run live. A standalone (region-of-interest) result first did
-not show in the case browser; its maintainers fixed that on 2026-11-11, and a
-later standalone run showed its result.
-
-## Layout
-
-```text
-src/model_service/
-  api/                    the public API process: routes/v1/, mounted catalog, synchronous runs
-  api/http/               auth, error mapping, scheduling calls (API and provider routes)
-  api/scheduler/          durable executions on PostgreSQL (runs inside the API process)
-  served_model/           the generic host that serves every catalog/served-models/ file
-  analysis_runner/        the one Ray Serve app that runs every catalog/analyses/ file
-  catalog/, components/   catalog loading and the components catalog files name
-  formats/                data formats sinks write and readers open
-  slides/                 slide reading and tissue detection for analysis sources
-  providers/              where runs read input and publish output: standalone, empaia/
-  contracts/              data shapes processes hand each other
-deploy/
-  helm/rayservice/                   the chart; reads catalog/ through a symlink
-  images/                            Dockerfiles
-  k8s/                               manifests the chart does not create
-catalog/
-  served-models/<id>.yaml            one file per served model
-  analyses/, environments/<env>/     analyses; per-environment patches
-tests/           unit and PostgreSQL tests
-```
-
-Start with [what this thesis added](docs/thesis-scope.md), then
-[Adding models](docs/guides/adding-models.md) or the
-[EMPAIA integration](docs/architecture/empaia.md).
-
-## Add a model
-
-A model the existing components can run needs only YAML: add
-`catalog/served-models/<id>.yaml`, check it with `uv run pytest tests/catalog`,
-and `helm upgrade`; every file is deployed unless the environment's values
-name a subset in `servedModels`. See the
-[Configuration Reference](docs/guides/configuration-reference.md) for the
-file's blocks.
-
-## Add an analysis
-
-A new slide-level output is a file in `catalog/analyses/`: a source, steps
-(`{model: <id>}` calls a served model) and sinks, by component name. Check it
-with `uv run pytest tests/catalog` and `helm upgrade`. Code is needed only for
-a missing component, under `src/model_service/components/`.
+[How model-service is put together](docs/architecture/core.md) explains the
+design, and the [documentation map](docs/README.md) lists the rest.
 
 ## Use it
 
@@ -109,17 +71,36 @@ grid = formats.read(heatmap.path, heatmap.media_type)
 
 `client.analyses.run` takes the same request and waits for the outputs.
 `formats.read` refuses a format version it doesn't know; reading an
-`embedding_table` needs the SDK's `hdf5` extra.
+`embedding_table` needs the SDK's `hdf5` extra. Without the SDK,
+`numpy.load("heatmap.npz")` reads a score grid too.
 
-For one raw tile, skip the API: post a single LZ4-compressed
-`tile_size`×`tile_size`×3 uint8 tile to the model's Ray Serve ingress,
-`POST http://<ray-serve>:8000/<model-id>/`. `GET /v1/models/<id>` gives the
-model's declaration, with `tile_size` and `mpp` under `input`.
+For one tile, skip the API and post it to the served model's Ray Serve route;
+[raw inference](docs/available-models.md) shows the request and reply.
 
-The heatmap is a score grid (`score_grid` v1): its scores per cell (`values`),
-which cells were scored, and the slide level, cell size and microns per pixel
-to place them on the slide. Without the SDK, `numpy.load("heatmap.npz")`
-reads it too.
+## Layout
+
+```text
+catalog/
+  served-models/<id>.yaml            one file per served model
+  analyses/<id>.yaml                 one file per analysis
+  environments/<env>/                per-cluster patches of those files
+  .schemas/                          generated JSON Schemas
+src/model_service/
+  components/             loaders, runtimes, steps, sources, sinks, EMPAIA converters and publishers
+  catalog/                loading and checking catalog files
+  served_model/           the generic host that serves every served model
+  analysis_runner/        the Ray Serve app that runs every analysis
+  formats/                data formats sinks write and readers open
+  testing/                fake slides and models, run_component, conformance suites
+  api/                    the public API process, with the durable scheduler in api/scheduler/
+  providers/              where runs read input and publish output: standalone, empaia/
+  slides/                 slide reading and tissue detection for sources
+  contracts/              data shapes processes hand each other
+  reference/              what scripts/generate.py writes
+deploy/helm/rayservice/   the chart; reads catalog/ through a symlink
+docs/                     guides, generated reference, architecture, dated operations records
+tests/                    unit, catalog, chart and PostgreSQL tests; tests/live/ for the cluster
+```
 
 ## Develop
 
@@ -128,18 +109,20 @@ reads it too.
 export GIT_CONFIG_COUNT=1 \
   GIT_CONFIG_KEY_0=url.git@gitlab.ics.muni.cz:rationai/digital-pathology/production/services/models.git.insteadOf \
   GIT_CONFIG_VALUE_0=https://github.com/AigoPath/EMPAIA-Models.git
-UV_CACHE_DIR=.cache/uv uv sync --extra api --extra builders --extra inference --extra cpu
+export UV_CACHE_DIR=.cache/uv
+uv sync --extra api --extra builders --extra inference --extra cpu
 podman run -d --name ms-test-pg -p 127.0.0.1:55432:5432 \
   -e POSTGRES_PASSWORD=test docker.io/library/postgres:17-alpine
-TEST_POSTGRES_DSN=postgresql://postgres:test@127.0.0.1:55432/postgres \
-  UV_CACHE_DIR=.cache/uv uv run pytest
-UV_CACHE_DIR=.cache/uv uv run ruff check
-UV_CACHE_DIR=.cache/uv uv run mypy .
+TEST_POSTGRES_DSN=postgresql://postgres:test@127.0.0.1:55432/postgres uv run pytest
+uv run ruff check
+uv run mypy src
+PYTHONPATH=src uv run scripts/generate.py   # after changing components, formats or catalog/
 ```
 
-Without `TEST_POSTGRES_DSN` the PostgreSQL tests are skipped. Tests marked
-`live` call the deployed cluster and run only with `uv run pytest -m live`.
-`python -m unittest discover -s tests -t .` still runs the unittest-style tests.
+The `builders` extra installs the analysis runner's dependencies; it keeps
+its old name until the lock file is regenerated. Without `TEST_POSTGRES_DSN`
+the PostgreSQL tests are skipped. Tests marked `live` call the deployed
+cluster and run only with `uv run pytest -m live`.
 
 ## License
 

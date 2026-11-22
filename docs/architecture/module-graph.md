@@ -1,110 +1,126 @@
 # Module graph
 
-Generated from the runtime imports in `src/model_service` (imports under
-`TYPE_CHECKING` are left out). Solid arrows mean "imports"; dashed arrows are
-calls across a process or network boundary that no import shows.
+Drawn from the runtime imports in `src/model_service` on 2026-11-22 (imports
+under `TYPE_CHECKING` are left out). Solid arrows mean "imports"; dashed
+arrows are calls across a process or network boundary that no import shows.
+`tests/test_process_boundaries.py` checks the part that matters most: the API
+process loads no Ray, ONNX Runtime, torch, OpenSlide or replica code, and
+the shared packages stay light.
 
 ## Packages and processes
 
 ```mermaid
 flowchart LR
-  classDef proc fill:#e8f0fe,stroke:#4a6fd1
   classDef ext fill:#f4f4f4,stroke:#999,stroke-dasharray:3
 
   subgraph sg_api["API process (uvicorn: api.main)"]
-    api["api<br/>app_factory, synchronous_runs,<br/>raw_inference_proxy"]
-    routes["api.routes.v1<br/>builders · executions · models"]
-    http_common["http_common<br/>auth · errors · scheduling"]
-    subgraph sg_sched["scheduler"]
-      scheduler["scheduler<br/>public, execution_scheduler,<br/>worker, builder_dispatch"]
+    api["api<br/>app_factory, catalog_mount,<br/>synchronous_runs, analysis_requests"]
+    routes["api.routes.v1<br/>analyses · executions · models"]
+    http["api.http<br/>auth · errors · scheduling"]
+    subgraph sg_sched["api.scheduler"]
+      scheduler["scheduler<br/>execution_scheduler, worker, dispatch"]
       transitions["scheduler.transitions"]
       store["scheduler.store<br/>repository · postgres · migrate"]
     end
-    providers["providers<br/>provider · registry"]
-    standalone["providers.standalone"]
-    subgraph sg_emp["providers.empaia"]
-      empaia["empaia<br/>provider · registration · settings"]
-      jobs["empaia.jobs<br/>routes · adapter · gateways"]
-      publishing["empaia.publishing"]
+    subgraph sg_prov["providers"]
+      providers["providers<br/>provider · registry"]
+      standalone["providers.standalone"]
+      empaia["providers.empaia<br/>provider · registration"]
+      jobs["empaia.jobs"]
       ead["empaia.ead"]
       app_service["empaia.app_service"]
     end
   end
 
-  subgraph sg_bd["Builder process (Ray Serve: builder_deployment.serve)"]
-    builder_deployment["builder_deployment<br/>serve · runner · http_handler"]
-    builders["builders<br/>base · registry · input_access"]
-    heatmap["builders.heatmap"]
-    embeddings["builders.embeddings"]
-    slides["builders.slides"]
+  subgraph sg_runner["Analysis runner (Ray Serve: analysis_runner.serve)"]
+    runner["analysis_runner<br/>run · replica · serve"]
+    slides["slides<br/>tile_reader · tissue"]
   end
 
-  inference["inference<br/>catalog · model_clients"]
-  shared["shared<br/>cross-process types"]
-  models["model_implementations<br/>Ray Serve model apps"]:::proc
+  subgraph sg_host["Served models (Ray Serve: served_model.serve)"]
+    host["served_model<br/>host · batching · guards · replies"]
+  end
+
+  subgraph sg_shared["Shared, light: every process"]
+    catalog["catalog<br/>loader · served_models · analyses"]
+    components["components<br/>kinds · registry · the components"]
+    formats["formats"]
+    contracts["contracts"]
+  end
+
+  testing["testing<br/>fakes, run_component, conformance"]
+  reference["reference<br/>scripts/generate.py"]
   pg[("PostgreSQL")]:::ext
   jes["EMPAIA JES / App Service"]:::ext
 
-  routes --> api & http_common & scheduler & builders & shared
-  api --> http_common & scheduler & store & builders & inference & providers & shared
-  http_common --> scheduler & shared
-  scheduler --> store & shared
+  api --> routes & http & scheduler & store & catalog & providers & contracts
+  routes --> http & scheduler & catalog & formats & contracts
+  http --> scheduler & contracts
+  scheduler --> api & store & contracts
+  store --> scheduler & transitions & contracts
   transitions --> scheduler
-  store --> scheduler & transitions
 
   providers --> standalone & empaia
-  standalone --> providers & scheduler & builders & shared
-  empaia --> providers & jobs & publishing & ead & app_service
-  jobs --> providers & app_service & ead & publishing & scheduler & http_common & builders & shared
-  publishing --> app_service & shared
-  app_service --> jobs & publishing
-  ead --> builders
+  standalone --> providers & scheduler & contracts
+  empaia --> providers & jobs & ead & app_service
+  jobs --> providers & app_service & ead & scheduler & http & catalog & components & formats & contracts
+  ead --> empaia & catalog & components
+  app_service --> contracts
 
-  builder_deployment --> builders & inference & providers & shared
-  builders --> heatmap & embeddings & inference & shared
-  heatmap --> builders & slides & inference & shared
-  embeddings --> builders & slides & inference & shared
-  slides --> shared
-  inference --> shared
+  runner --> catalog & components & providers & host & formats & contracts
+  host --> catalog & components
+
+  catalog --> components & contracts & ead
+  components --> formats & slides & app_service & contracts
+  slides --> contracts
+  testing --> components
+  reference --> catalog & components & formats
 
   store -.->|SQL| pg
-  scheduler -.->|HTTP run request| builder_deployment
-  inference -.->|Ray handle| models
+  scheduler -.->|HTTP run request| runner
+  runner -.->|Ray handle: infer, describe| host
   app_service -.->|HTTP| jes
   jes -.->|HTTP job post| jobs
 ```
 
-`store ⇄ scheduler`, `app_service ⇄ jobs` and the loop
-`scheduler → store → transitions → scheduler` exist at package level only. The
-modules on each side import different files, so no import cycle runs at
-runtime.
+A few arrows cross into packages of another process at module level only:
 
-## One scheduled job
+- `catalog` imports `providers.empaia.ead` for the EMPAIA vocabulary (modes,
+  triggers, viewer settings) that `expose.empaia` is checked against;
+- the EMPAIA converters and publishers in `components` import the gateway
+  errors and types of `providers.empaia.app_service`, and `slide_tiles`
+  imports `slides` inside its methods only, so the API never loads OpenSlide;
+- `analysis_runner` imports `served_model.guards` to check each model's
+  output against its declaration.
+
+`scheduler ⇄ store`, `empaia ⇄ ead` and `scheduler → api` exist at package
+level only; the modules on each side import different files, so no import
+cycle runs.
+
+## One scheduled run
 
 ```mermaid
 sequenceDiagram
   participant C as Caller / EMPAIA JES
   participant R as api.routes.v1 / empaia.jobs.routes
-  participant H as http_common.scheduling
+  participant H as api.http.scheduling
   participant S as scheduler (execution_scheduler)
   participant P as provider adapter
   participant DB as scheduler.store → PostgreSQL
   participant W as scheduler.worker
-  participant B as builder_deployment
-  participant BL as builders.heatmap / embeddings
-  participant M as inference → model_implementations
+  participant A as analysis_runner
+  participant M as served_model hosts
 
-  C->>R: POST schedule
+  C->>R: POST /v1/analyses/{a}/schedule
   R->>H: submit()
   H->>S: schedule(request)
   S->>P: identify + prepare
-  S->>DB: admit (transitions.admission)
-  W->>DB: claim (claim_sql, transitions.leases)
-  W->>B: HTTP run (http_builder_dispatch)
-  B->>BL: runner → builder.run
-  BL->>M: model_clients over Ray handle
-  B-->>W: BuilderResult
+  S->>DB: admit with the resolved analysis (transitions.admission)
+  W->>DB: claim a slot in every served model it calls
+  W->>A: HTTP run (dispatch) with the stored document
+  A->>M: describe() digest check, then infer(tile) per tile
+  A-->>W: result: output paths and media types
   W->>DB: record outcome (transitions.attempt_outcomes)
-  W->>P: finish (EMPAIA: publishing → app_service)
+  W->>P: finish (EMPAIA: publishers → app_service)
   C->>R: GET /v1/executions/{id}
 ```

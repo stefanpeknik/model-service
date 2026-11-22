@@ -1,211 +1,64 @@
-# Available Models & Endpoints
+# Raw inference
 
-This document describes implemented model endpoints and their request and response
-formats. It is not a live deployment inventory; enabled applications depend on
-the deployment profile. For builders and durable executions, see
-[the architecture](architecture/core.md).
+Every served model answers single tiles on its own Ray Serve route,
+`POST /<model-id>/` on the Ray Serve origin (`http://<release>-serve-svc:8000`
+inside the cluster). The API doesn't proxy these calls; use an
+[analysis](reference/analyses.md) to run a model over a whole slide. Which
+models a deployment serves is in `GET /v1/models` on the API, and
+[Served models](reference/served-models.md) lists the ones in `catalog/`.
 
-## Overview of Endpoints
+## Request
 
-All endpoints receive and return data over HTTP using `POST` requests. To minimize network overhead, image payloads and tensor outputs are compressed using **LZ4**.
+The body is one tile, uint8 RGB in `(tile_size, tile_size, 3)` order
+(channels last), compressed with LZ4's frame format. `tile_size` is the
+model's `input.tile_size`, which `GET /v1/models/<id>` returns under
+`declaration.input`.
 
-| Application Name          | Route Prefix             | Model Type                    |
-| ------------------------- | ------------------------ | ----------------------------- |
-| **Prostate Classifier 1** | `/prostate-classifier-1` | Binary Classification         |
-| **Episeg 1**              | `/episeg-1`              | Semantic Segmentation         |
-| **Virchow2**              | `/virchow2`              | Foundation Model / Embeddings |
-| **Prov-GigaPath**         | `/prov-gigapath`         | Foundation Model / Embeddings |
+## Reply
 
-Each model is a file in `catalog/served-models/` (the route is its file name),
-served by the one generic host; the reply format follows from the file's
-`output:`.
+The format follows from the served model's `output:`:
 
----
+| `output:` | Reply |
+| --- | --- |
+| `scores`, one channel of size 1 (`prostate-classifier-1`) | The score as a JSON float. |
+| `scores` with a larger map (`episeg-1`) | The scores' raw bytes in the declared `dtype`, LZ4-compressed, shaped `(channels, size, size)`. |
+| `embedding` (`virchow2`, `prov-gigapath`) | The features' raw bytes, LZ4-compressed, with their shape in the `x-output-shape` header. |
 
-## Model Specifications
+An embedding request may send two headers:
 
-### 1. Binary Classifier (`/prostate-classifier-1`)
+- `x-output-dtype: float16` casts the features (default `float32`);
+- `x-pool-tokens: false` skips the model's `post:` steps. Virchow2 then
+  returns its class token and patch tokens instead of the two pooled
+  vectors, without its register tokens.
 
-A binary classification model (e.g., tumor vs. normal tissue).
+A tile of the wrong size, or an output that breaks the declaration (wrong
+shape, NaN, a score outside the declared `range`), fails the request with the
+reason.
 
-- **Input**: LZ4-compressed raw bytes of an image (RGB format).
-  - The model converts these bytes back to a NumPy array (`uint8`) of shape `(tile_size, tile_size, 3)`.
-- **Output**: A single floating-point number representing the classification score.
-
-**SDK example**:
-
-```python
-from rationai import Client
-
-with Client() as client:
-    score = client.models.classify_image(model="prostate-classifier-1", image=image, timeout=30.0)
-    print(f"Classification score: {score}")
-```
-
-### 2. Semantic Segmentation (`/episeg-1`)
-
-A semantic segmentation model yielding a prediction map over the input image.
-
-- **Input**: LZ4-compressed raw bytes of an image (`uint8`).
-  - Expected layout before compression is `(tile_size, tile_size, 3)`.
-- **Output**: LZ4-compressed sequence of bytes representing an `np.float16` NumPy array.
-  - The client SDK should decompress this buffer and reconstruct the float16 array.
-- **SDK example**:
+## Example
 
 ```python
-from rationai import Client
+import ast
 
-with Client() as client:
-    seg = client.models.segment_image(model="episeg-1", image=image, timeout=30.0)
-    # `seg` is returned as a NumPy array (float16 when configured). SDK handles LZ4 decompression.
-    print(seg.shape)
-```
-
-### 3. Virchow2 (`/virchow2`)
-
-A versatile foundation model (Virchow2) used primarily for generating embeddings or classification features.
-
-- **Input**: LZ4-compressed raw bytes of a tissue tile image (`uint8`, shape `(tile_size, tile_size, 3)`).
-- **Output**: Output tensor matching the user's requested specification.
-- **Headers**:
-  - `x-output-dtype` (optional, default: `float32`): Sets the return precision. Can be `float32` or `float16`.
-  - `x-pool-tokens` (optional, default: `true`): If `true`, returns a pooled result (usually `class_token` and `mean` patch tokens). If `false`, returns unpooled raw outputs.
-- **SDK example**:
-
-```python
-from rationai import Client
+import httpx
+import lz4.frame
 import numpy as np
 
-with Client() as client:
-  emb = client.models.embed_image(
-    model="virchow2",
-    image=image,
-    output_dtype=np.float16,
-    timeout=30.0,
-    pool_tokens=False,
-  )
-  print(emb.shape)
+tile = np.zeros((224, 224, 3), dtype=np.uint8)  # virchow2 takes 224 px tiles
+response = httpx.post(
+    "http://model-service-serve-svc:8000/virchow2/",
+    content=lz4.frame.compress(tile.tobytes()),
+    headers={"x-output-dtype": "float16"},
+    timeout=600,
+)
+response.raise_for_status()
+shape = ast.literal_eval(response.headers["x-output-shape"])
+features = np.frombuffer(lz4.frame.decompress(response.content), np.float16).reshape(shape)
+print(features.shape)  # (2, 1280): the class token and the patch mean
 ```
 
-### 4. Prov-GigaPath (`/prov-gigapath`)
-
-A foundation model for pathology tile embeddings (Prov-GigaPath).
-
-- **Input**: LZ4-compressed raw bytes of a tissue tile image (`uint8`, shape `(tile_size, tile_size, 3)`).
-- **Output**: Output tensor matching the user's requested precision.
-- **Headers**:
-  - `x-output-dtype` (optional, default: `float32`): Sets the return precision (for example `float16`).
-- **SDK example**:
-
-```python
-from rationai import Client
-import numpy as np
-
-with Client() as client:
-  emb = client.models.embed_image(
-    model="prov-gigapath",
-    image=image,
-    output_dtype=np.float16,
-    timeout=30.0,
-  )
-  print(emb.shape)
-```
-
-### 5. Analyses (`/v1/analyses/...` on the API)
-
-Analyses run served models over a whole slide. They are called through the
-API, not on the Ray route, and each names the models it calls:
-
-| Analysis | Model | Output |
-| --- | --- | --- |
-| `prostate-heatmap` | `prostate-classifier-1` | `score_grid` (`.npz`): scores per cell with the slide geometry |
-| `episeg-heatmap` | `episeg-1` | `score_grid` (`.npz`) |
-| `virchow2-embeddings` | `virchow2` | `embedding_table` (`.h5`): one feature row per tile |
-| `prov-gigapath-embeddings` | `prov-gigapath` | `embedding_table` (`.h5`) |
-
-`GET /v1/analyses` lists the deployed analyses, and `GET /v1/models` the
-served models with the analyses that call each.
-
-```python
-from rationai import Client, formats
-from rationai.types import AnalysisRequest, InputAccess, SharedPathInput
-
-with Client(base_url="http://<model-service>:8080") as client:
-  result = client.analyses.run(
-    "prostate-heatmap",
-    AnalysisRequest(
-      inputs={
-        "slide": SharedPathInput("slides/slide.mrxs"),
-        "region_of_interest": SharedPathInput("masks/mask.tif"),  # optional
-      },
-      input_access=InputAccess("shared_storage", {"root": "/mnt/data"}),
-      output_path="outputs/heatmap.npz",
-    ),
-  )
-
-heatmap = result.outputs["heatmap"]
-grid = formats.read(heatmap.path, heatmap.media_type)  # refuses unknown versions
-```
-
----
-
-## SDK Integration Patterns
-
-The RationAI SDK provides convenient methods for interacting with each model type. All image data is automatically compressed with LZ4 before transmission, and responses are automatically decompressed.
-
-### Using the RationAI Client
-
-Initialize the client and call model methods:
-
-```python
-from rationai import Client
-from PIL import Image
-import numpy as np
-
-with Client() as client:
-  image = Image.open("tissue_sample.tiff")
-
-  # Binary classification
-  score = client.models.classify_image(model="prostate-classifier-1", image=image)
-  print(f"Classification score: {score}")
-
-  # Semantic segmentation
-  segmentation = client.models.segment_image(model="episeg-1", image=image)
-  print(f"Segmentation shape: {segmentation.shape}")  # (num_classes, height, width)
-
-  # Embedding with custom options
-  embedding = client.models.embed_image(
-    model="virchow2",
-    image=image,
-    output_dtype=np.float16,
-    pool_tokens=False,
-  )
-  print(f"Embedding shape: {embedding.shape}")
-```
-
-### Scheduling many tiles
-
-When you tile slides yourself, schedule the tiles instead of keeping one
-request open per tile. Model-service stores each tile, runs it once a model
-replica is up (a cold GPU worker takes a few minutes), and keeps the response
-for 24 hours.
-
-```python
-with Client() as client:
-  ids = [
-    client.models.schedule("virchow2", tile, output_dtype=np.float16).execution.id
-    for tile in tiles  # uint8 RGB arrays of the model's tile size
-  ]
-  finished = client.executions.wait(ids)  # polls up to 1000 at a time
-  embeddings = [
-    client.executions.result(execution.id).array(np.float16)
-    for execution in finished
-    if execution.status == "succeeded"
-  ]
-```
-
-A classifier's response decodes with `.json()`. The HTTP form is
-`POST /v1/models/{model}/schedule` with the raw route's body and an
-`Idempotency-Key` header; see [the specification](spec.md#scheduled-raw-inference).
-Concurrent requests to a batching model can differ slightly from a request run
-alone (Virchow2: up to about 0.1%), because Ray batches them together.
+The first request to a model scaled to zero waits for a GPU worker, which
+can take a few minutes. `scripts/warm_model.py` sends one blank tile to warm
+a model. Concurrent requests to a batching model can differ slightly from a
+request run alone (Virchow2: up to about 0.1%), because Ray batches them
+together.

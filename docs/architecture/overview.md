@@ -1,7 +1,8 @@
 # Architecture Overview
 
-This page describes the Ray model-inference layer. For builders, the API and
-the durable scheduler, see [How model-service is put together](core.md).
+This page describes the Ray Serve layer that served models and the analysis
+runner run on. For analyses, the API and the durable scheduler, see
+[How model-service is put together](core.md).
 
 This section provides a structured overview of Model Service's architecture.
 
@@ -122,8 +123,8 @@ Ray places a replica on any node with enough free resources, so a CPU-only
 replica could take a GPU worker's free CPUs and leave its served model
 unschedulable. The chart prevents this with a custom resource
 (`cpuWorkerResource` in `values.yaml`): CPU worker groups advertise
-`cpu_worker` through `rayStartParams.resources`, and every builder and the
-analysis runner request a unit of it in `ray_actor_options.resources`. Served
+`cpu_worker` through `rayStartParams.resources`, and the analysis runner
+requests a unit of it in `ray_actor_options.resources`. Served
 models don't request it and go wherever their GPU fits.
 
 ## Autoscaling Architecture
@@ -145,20 +146,19 @@ Ray Serve is designed to be resilient to failures:
 
 ## Design Principles
 
-1. **Declarative Configuration**: Infrastructure defined in YAML, assembled with Helm.
-2. **Separation of Concerns**: Model Code (Python), Infrastructure (K8s), Configuration (User Config).
-3. **Elastic Scaling**: Scale to zero when idle, scale up on demand.
-4. **Developer Experience**: Simple model implementation, easy local testing.
+1. **Declarative configuration**: served models and analyses are catalog files; Helm renders them into Serve applications.
+2. **Separation of concerns**: components hold the code, catalog files the models and jobs, the chart the infrastructure.
+3. **Elastic scaling**: scale to zero when idle, scale up on demand.
 
 ## Metrics & Debugging
 
 Common commands:
 
 ```bash
-kubectl get pods -n rationai-jobs-ns
-kubectl top pods -n rationai-jobs-ns
-kubectl logs -n rationai-jobs-ns <pod-name>
-kubectl describe rayservice <release-name> -n rationai-jobs-ns
+kubectl get pods -n <namespace>
+kubectl top pods -n <namespace>
+kubectl logs -n <namespace> <pod-name>
+kubectl describe rayservice <release-name> -n <namespace>
 ```
 
 Ray can export Prometheus metrics (when metrics collection/export is enabled):
@@ -171,6 +171,5 @@ Ray can export Prometheus metrics (when metrics collection/export is enabled):
 ## Next Steps
 
 - [Request lifecycle](request-lifecycle.md)
-- [Deployment guide](../guides/deployment-guide.md)
-- [Configuration reference](../guides/configuration-reference.md)
-- [Adding new models](../guides/adding-models.md)
+- [How the chart deploys the catalog](deployment.md)
+- [Add a model](../guides/add-a-model.md)

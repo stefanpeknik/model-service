@@ -2,22 +2,25 @@
 
 Model-service runs trained models (**served models**) and whole-slide
 **analyses** on Ray Serve, behind one public API that can also run analyses
-durably.
+durably. Both are YAML files in `catalog/` that name **components**, small
+classes under `src/model_service/components/`. The
+[guides](../guides/add-a-model.md) show how to add each, and the
+[reference](../reference/components.md) lists what exists.
 
 ```text
              callers: RationAI SDK, EMPAIA (via JES), notebooks
-                                  │ HTTP
-┌─────────────────────────────────▼──────────────────────────────────┐
-│ API process (model_service/api/, one Deployment, outside Ray)      │
-│  /v1/models   /v1/models/{m}/run|schedule (raw tiles)              │
-│  /v1/analyses   /v1/analyses/{a}/run|schedule                      │
-│  /v1/executions/{id}[/cancel|/result]   /v1/executions/lookup      │
-│  /v1/empaia/analyses/{a}  (JES HTTP execution backend)             │
-│  model catalog ◄── ConfigMap rendered from catalog/                │
-│  execution scheduler (model_service/api/scheduler/) ◄──► PostgreSQL    │
-└───────────────┬───────────────────────────────────┬────────────────┘
-      run call  │ POST /analyses/                   │ raw tiles: POST /{m}/
-┌───────────────▼───────────────────────────────────▼────────────────┐
+                                  │ HTTP                           │ raw tiles
+┌─────────────────────────────────▼────────────────────────────┐   │
+│ API process (model_service/api/, one Deployment, outside Ray)│   │
+│  /v1/models[/{m}]   (served-model catalog)                   │   │
+│  /v1/analyses   /v1/analyses/{a}/run|schedule                │   │
+│  /v1/executions/{id}[/cancel]   /v1/executions/lookup        │   │
+│  /v1/empaia/analyses/{a}  (JES HTTP execution backend)       │   │
+│  catalog ◄── ConfigMap rendered from catalog/                │   │
+│  execution scheduler (api/scheduler/) ◄──► PostgreSQL        │   │
+└───────────────┬──────────────────────────────────────────────┘   │
+      run call  │ POST /analyses/                                  │ POST /{m}/
+┌───────────────▼──────────────────────────────────────────────────▼─┐
 │ Ray Serve (RayService)                                             │
 │  analysis-runner (analysis_runner/serve.py), POST /analyses/       │
 │        │ Ray handle: infer(tile), describe()                       │
@@ -42,6 +45,7 @@ durably.
 | `src/model_service/formats/` | Data formats sinks write and readers open: one light module each with a versioned vendor media type, a dataclass, `read`/`write`/`check`. `score_grid` v1 is the heatmap's npz layout (`application/vnd.rationai.score-grid+npz; version=1`); `embedding_table` v2 is the tile-embeddings HDF5 layout (`application/vnd.rationai.embedding-table+hdf5; version=2`, the file's own `schema_version`), with a `TableWriter` that appends rows. Readers still take the builders' plain media types (`application/x-npz`, `application/x-hdf5`). |
 | `src/model_service/served_model/` | The generic host that serves every served model. `ServedModelHost` (a plain class) batches, guards inputs and outputs against the declaration, answers the raw route in today's formats and reports `describe()`; `serve.py` is its Serve wrapper (`model_service.served_model.serve:app`); `deployment.py` defines the Serve application each served model deploys as. `prostate-classifier-1`, `virchow2` (the `huggingface` loader, the `timm` runtime and the `cls_mean_pool` post step) and `prov-gigapath` (the `timm` runtime with `resize`, `center_crop` and `normalize` pre steps, keeping the old class's crop of a 224 px tile to its centre) match their golden references on the test cluster, and their old classes are gone. `episeg-1` was bit-identical to the old `SemanticSegmentation` on stand-in weights (its live check can't run on the test cluster); it keeps ONNX Runtime's default session options (`apply_session_options: false`) because the old class never applied its own. The chart deploys every served model on it; the test cluster deploys `prostate-classifier-1`, `virchow2` and `prov-gigapath` (EPISeg's weights are unreachable there), the base values all four. |
 | `src/model_service/testing/` | `fake_slide`, `fake_model`, `run_component` and the per-kind conformance suites that run for every registered component. |
+| `src/model_service/reference/`, `scripts/generate.py` | The generated files: each document kind's JSON Schema in `catalog/.schemas/` (with a patch variant that requires nothing), the `yaml-language-server` line at the top of each catalog file, and the pages in `docs/reference/`. They come from the component classes, the format modules and `catalog/`; `tests/test_generated.py` fails when a committed copy is stale. |
 
 ### Interfaces
 
@@ -107,13 +111,10 @@ matching analysis or `<builder>:<model>`, and one that was still pending fails
 with `unknown_analysis` without running. `GET /v1/models` lists each served
 model's declaration, digest and the analyses calling it.
 
-A scheduled tile (`POST /v1/models/{m}/schedule`) is the same lifecycle with a
-different payload: the API checks the tile against the model's `tile_size`,
-writes its bytes to a file on the inference storage volume that the execution
-row points to, and an attempt sends them to the
-model's Ray route exactly as `POST /v1/models/{m}/run` would. The response is stored for a
-day and served by `GET /v1/executions/{id}/result`. There is no provider
-finish. `POST /v1/executions/lookup` polls many executions at once.
+Raw tiles don't pass through the API: callers post them straight to the
+served model's Ray Serve route, `POST /{m}/`
+([raw inference](../available-models.md)). `POST /v1/executions/lookup` polls
+many executions at once.
 
 ## Capacity and failure behaviour
 

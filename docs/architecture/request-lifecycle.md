@@ -123,8 +123,8 @@ When a slot is available:
     - **Large Data**: If the request payload is large, it may be retrieved from the **Plasma Object Store** (shared memory).
 3.  **Asyncio Loop**: The request enters the actor's entrypoint (usually `__call__`).
 4.  **Replica Concurrency Limit**: The replica will not run more than `max_ongoing_requests` concurrently. Requests beyond that should not be dispatched to this replica; instead they remain queued at the caller-side handle.
-5.  **Batching** (Optional): If `@serve.batch` is used, the request may wait in a replica-local batching buffer until either `max_batch_size` is reached or `batch_wait_timeout_s` expires (see [Batching](batching.md)).
-6.  **Inference**: The model code runs (e.g. `model.predict(input)`).
+5.  **Batching**: The request waits in the replica's batching buffer until `batching.max_size` tiles are there or `batching.wait_s` has passed (see [Batching](batching.md)).
+6.  **Inference**: The served model's runtime runs on the batch, between its `pre:` and `post:` steps.
 
 ### 5. Response & Return
 

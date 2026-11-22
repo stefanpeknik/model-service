@@ -15,14 +15,20 @@ Requests only become eligible for batching after they:
 
 See also: **[Request lifecycle](request-lifecycle.md)**.
 
-## The API surface (what you configure)
+## What you configure
 
-In user code, batching is enabled by decorating an **async** method with `@serve.batch`:
+In plain Ray Serve code, batching is enabled by decorating an **async** method
+with `@serve.batch` and its `max_batch_size` and `batch_wait_timeout_s`.
+Served models don't need that code: the generic host batches with its own
+batcher (`src/model_service/served_model/batching.py`), which behaves the
+same way and runs off Serve too, so the host can be tested without Ray. A
+served-model file sets it:
 
-- `max_batch_size`: upper bound for how many requests are grouped into one batch execution
-- `batch_wait_timeout_s`: maximum time to wait (since the first queued item) before flushing a smaller batch
+- `batching.max_size`: the most tiles in one batch (`max_batch_size`);
+- `batching.wait_s`: how long the first tile waits for more before a smaller
+  batch leaves (`batch_wait_timeout_s`).
 
-Serve expects the batched handler to return **one result per input** (same batch length, same order).
+The runtime returns one output per tile, in order.
 
 ## What Serve actually does internally
 
@@ -72,11 +78,11 @@ For a deep dive into how batching interacts with concurrency limits (specificall
 
 Quick tips:
 
-- Increase `max_batch_size` if the model benefits from larger batches and you have headroom.
-- Increase `batch_wait_timeout_s` to favor fuller batches; decrease it to favor latency.
+- Increase `batching.max_size` if the model benefits from larger batches and you have headroom.
+- Increase `batching.wait_s` to favor fuller batches; decrease it to favor latency.
 
 ## Next
 
 - Request flow including queue points: [Request lifecycle](request-lifecycle.md)
 - Queueing and rejection controls: [Queues and backpressure](queues-and-backpressure.md)
-- “Knobs” reference and meanings: [Configuration reference](../guides/configuration-reference.md)
+- What each block of a served-model file sets: [How the chart deploys the catalog](deployment.md)
