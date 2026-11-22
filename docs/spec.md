@@ -129,7 +129,7 @@ The EMPAIA adapter reads a stored result back as the builder's outputs model.
 | `GET /v1/builders` | Builders: ID, accepted contract, inputs, outputs |
 | `POST /v1/builders/{builder}/models/{model}/run` | Synchronous run. Body: `inputs`, `input_access`, optional `output_path`, `deadline_at` |
 | `POST /v1/builders/{builder}/models/{model}/schedule` | Durable admission with shared-storage inputs. Body: `inputs`, `input_access`, optional `output_path`, optional `requested_timeout_seconds`; an `Idempotency-Key` header |
-| `POST /v1/empaia/builders/{builder}/models/{model}`, `GET`/`DELETE /v1/empaia/executions/{id}` | EMPAIA jobs from JES's HTTP execution backend (app registered as `http::<target>/builders/<builder>/models/<model>`): the body is what an app container gets (App API URL, job ID, token); the job's inputs and configuration come from the App API; submission is idempotent per job, and an `Idempotency-Key` header, when sent, must be the job ID (422 otherwise); the `Location` is polled and cancelled. A failure or cancellation reads as `running` until EMPAIA has been told; a running job's `message` explains a wait for capacity |
+| `POST /v1/empaia/analyses/{id}` (and, until the builders retire, `POST /v1/empaia/builders/{builder}/models/{model}`), `GET`/`DELETE /v1/empaia/executions/{id}` | EMPAIA jobs from JES's HTTP execution backend (app registered as `http::<target>/analyses/<id>`): the body is what an app container gets (App API URL, job ID, token); the job's inputs and configuration come from the App API; submission is idempotent per job, and an `Idempotency-Key` header, when sent, must be the job ID (422 otherwise); the `Location` is polled and cancelled. A failure or cancellation reads as `running` until EMPAIA has been told; a running job's `message` explains a wait for capacity |
 | `POST /v1/models/{model}/run` | Raw inference: one LZ4-compressed RGB tile of the model's `tile_size`, optional `x-output-dtype`/`x-pool-tokens`; checked, then the model's response is returned. Replaces the root `POST /{model}/` proxy |
 | `POST /v1/models/{model}/schedule` | Durable raw inference: the body `run` takes, an `Idempotency-Key` header, optional `timeout_seconds` |
 | `GET /v1/executions/{id}`, `POST …/cancel` | Views carry `operation` (`builder` or `inference`), `builder_id` (null for inference), `model_id`, `provider_pending` (a failure or cancellation not yet reported to the provider) and `message` (see below) |
@@ -157,19 +157,27 @@ mode and records it in the invocation's EMPAIA input state, but nothing acts on
 it yet. A preprocessing app, which EMPAIA starts with only a slide, thus runs
 the heatmap builder over the whole slide.
 
-EMPAIA apps are generated, not written by hand
-(`src/model_service/providers/empaia/apps.py`). A model file opts in with an
-`empaia` block: a display name (at most 22 characters, so `<name> <builder>`
-fits EMPAIA's 30), a short name (at most 10), a description of what the model
-finds, and the modes it runs in. Every builder that accepts the model's
-contract and is listed in `src/model_service/providers/empaia/io.py`, which
-gives the EAD `io` entry of its inputs and outputs (today the heatmap builder,
-not tile embeddings), becomes one app offering every listed mode: in
-standalone mode it takes the slide and a region of interest, in preprocessing
-mode only the slide. Names, namespaces (`org.empaia.rationai.<builder>_<model>.v3.0`),
-a sentence of the description per mode, and the image
-`http::<target>/builders/<builder>/models/<model>` are derived; each EAD is
-validated against the bundled EAD v3 schema.
+EMPAIA apps are generated, not written by hand. An analysis
+(`catalog/analyses/<id>.yaml`) becomes one app with an `expose.empaia`
+section: its name (at most 30 characters, checked at load), short name,
+description, modes (standalone `parameters`, the per-run settings users fill
+in; preprocessing `triggers`), optional input types (slide is `wsi` and
+region_of_interest `rectangle` by default), output types and viewer settings.
+Each input's type picks its converter component and each output's type, with
+its sink's format, its publisher component
+(`src/model_service/components/empaia/`); the EAD merges their `io`
+fragments. In standalone mode the app takes every input and the parameters,
+in preprocessing mode only the required inputs, so an analysis whose region of
+interest is required cannot offer preprocessing (a load error). The namespace
+`org.empaia.rationai.<analysis id>.v3.0`, a sentence of the description per
+mode, and the image `http::<target>/analyses/<id>` are derived; each EAD is
+validated against the bundled EAD v3 schema. Today only `prostate-heatmap` is
+exposed: the prostate cancer app, unchanged for pathologists except for its
+namespace and IDs (it was `org.empaia.rationai.heatmap_prostate_classifier_1.v3.0`
+when builders made apps from models' `empaia` blocks, which are no longer
+read). JES posts its jobs to `POST /v1/empaia/analyses/{id}`, which admits
+them as runs of the resolved analysis; `POST /v1/empaia/builders/{b}/models/{m}`
+still runs the builder for apps registered before, until the builders retire.
 
 At startup the API registers these apps in the marketplace set by
 `EMPAIA_MARKETPLACE_URL` (Helm `empaia.marketplace`), in the background and
@@ -182,7 +190,7 @@ interface: none by default, or client credentials from an identity provider
 (`EMPAIA_IDP_URL`, `EMPAIA_CLIENT_ID`, `EMPAIA_CLIENT_SECRET`), obtained the way
 `empaia-sender-auth` does.
 
-EMPAIA slide inputs reach builders as a link to the file named by the
+EMPAIA slide inputs (the `wsi` converter) reach analyses and builders as a link to the file named by the
 RationAI direct-access route (`/v3/rationai/{job}/slides/{input}/direct-access`),
 on the installation's slide volume, which model-service mounts read-only where
 its CDS does. A slide the route has nothing for is an error, as is a route that
@@ -321,20 +329,22 @@ through the mask; the grid still covers the whole level, so a model scoring
 every pixel, such as EPISeg, does not fit yet and has no app. The builder no longer renders a TIFF: EMPAIA never
 used it, and it took longer to write than the inference.
 
-EMPAIA outputs. Each builder output declares its media type (its `Artifact`
-in the builder's outputs model in its `spec.py`); EMPAIA's `io.py` gives its EMPAIA
-type, so builders know nothing of EMPAIA. Then
-`src/model_service/providers/empaia/publishers.py` maps each (type, media
-type) pair to a publisher: the four primitive types (inline values, checked
-against the declared type) and `continuous_pixelmap` from a score grid. The
-mapping is built once at API startup. App generation offers a model with a
-builder only if every output has a publisher that takes the model, and logs
-why it skips one. Finish publishes each output with the publisher of its
-declaration and fails the job, before any write, for an output that is not
-declared or not what was declared. The gateway is the transport only. Adding an
-EMPAIA type, annotations for example, takes a publisher, a gateway call to the
-SDK and one entry in `default_publishers`; offering a builder in EMPAIA takes
-its entry in `io.py`.
+EMPAIA outputs. A sink writes a data format and the analysis's
+`expose.empaia` names each published output's EAD type; at load the one
+publisher that reads that format and emits that type is picked, or the load
+fails with the types that would fit, and a publisher checks the bound shapes
+(a continuous pixelmap needs a one-channel score grid). Admission records each
+output's publisher in the job's protected context and each input's type in its
+input state, so a catalog change between run and finish swaps nothing. Finish
+validates the result against the analysis's sinks, prepares every output, then
+commits them in order; a failure after the first write is `outcome_unknown`.
+Day-one components: converters `wsi`, `rectangle`, `primitive` and publishers
+`primitive` (reads `value`) and `continuous_pixelmap` (reads `score_grid`).
+The gateway has one method per SDK call family (input reads, post an output
+body, upload a pixelmap pyramid, progress, finalize, failure). A new EMPAIA
+type is a new converter or publisher once the SDK can carry it. Builder runs
+through the transitional builder route publish the same way, their output
+types from `ead/builder_io.py`.
 
 The score-grid publisher publishes the grid only through the SDK's
 `ScalarImageOutput.to_pixelmap_pyramid` and `upload_pixelmap_pyramid`: from the

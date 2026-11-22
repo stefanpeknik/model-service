@@ -1,8 +1,9 @@
 # EMPAIA integration
 
-EMPAIA is a provider: it decides where a builder's inputs come from and where its
-outputs go. Builders, models and the scheduler are the same ones the standalone
-API uses; nothing in them names EMPAIA.
+EMPAIA is a provider: it decides where an analysis's inputs come from and
+where its outputs go. An analysis becomes one EMPAIA app through its
+`expose.empaia` section; served models, the analysis runner and the scheduler
+are the same ones the standalone API uses.
 
 ## One job
 
@@ -13,19 +14,20 @@ sequenceDiagram
   participant R as empaia.jobs.routes
   participant A as empaia.jobs.adapter
   participant S as scheduler
-  participant B as builder replica
+  participant N as analysis runner
   participant AS as EMPAIA App Service
 
-  Note over R,AS: at API start, empaia.registration posts one app per builder and<br/>model, carrying all its modes, to the marketplace (idempotent)
+  Note over R,AS: at API start, empaia.registration posts one app per exposed<br/>analysis, carrying all its modes, to the marketplace (idempotent)
   WD->>JES: start job for app (STANDALONE or PREPROCESSING)
-  JES->>R: POST /v1/empaia/builders/{b}/models/{m} (job token)
+  JES->>R: POST /v1/empaia/analyses/{id} (job token)
   R->>A: identify + prepare
-  A->>AS: read mode, inputs, slide info (SDK client)
-  A-->>S: PreparedInvocation, priority HIGH (standalone) or NORMAL (preprocessing)
-  S->>B: run builder (inputs fetched through the App Service)
-  B-->>S: result on shared storage
+  A->>AS: read configuration, mode, parameters, which inputs exist
+  A-->>S: PreparedInvocation (input types, publishers), priority HIGH or NORMAL
+  S->>N: run the resolved analysis document
+  N->>AS: inputs through their converters (slide link, rectangle mask), progress
+  N-->>S: outputs in the job's workspace
   S->>A: finish(outcome)
-  A->>AS: publish outputs (primitives, pixelmap pyramid), finalize or report failure
+  A->>AS: prepare every output, commit in order, finalize or report failure
   AS-->>JES: job state
   JES-->>WD: results visible in the viewer
 ```
@@ -34,22 +36,27 @@ sequenceDiagram
 
 | Module | Role |
 | --- | --- |
-| `providers/empaia/provider.py` | The provider: what EMPAIA adds to the API and to builder replicas |
-| `providers/empaia/registration.py` | Marketplace registration at startup, retried; logs an error after 3 failures in a row |
-| `providers/empaia/ead/` | Generates the EMPAIA App Description (EAD v3) per builder and model; `builder_io.py` maps builder inputs and outputs to EMPAIA types |
-| `providers/empaia/jobs/` | The JES-facing route, payload parsing, the scheduler adapter (`adapter.py`), input resolution |
-| `providers/empaia/app_service/` | The App Service gateway over the `rationai.empaia` SDK client |
-| `providers/empaia/publishing/` | Two-phase publication: prepare every output, then commit; pixelmaps are built as pyramids with the SDK's `ScalarImageOutput` |
+| `catalog/analyses/exposure.py` | `expose.empaia`: picks converters and publishers, and the load-time checks (EMPAIA's name limit, preprocessing without required inputs, parameters, bound shapes) |
+| `components/empaia/` | Converters (`wsi`, `rectangle`, `primitive`) and publishers (`primitive`, `continuous_pixelmap`), one per EAD type |
+| `providers/empaia/provider.py` | The provider: what EMPAIA adds to the API and to replicas |
+| `providers/empaia/ead/` | `apps.py` merges the components' fragments into each app's EAD v3; `vocabulary.py` holds modes, triggers and viewer settings |
+| `providers/empaia/registration.py`, `triggers.py` | Marketplace registration and preprocessing triggers at startup, retried |
+| `providers/empaia/jobs/` | The JES-facing routes, payload parsing, the scheduler adapter (`adapter.py`, which also runs the publication loop), input access |
+| `providers/empaia/app_service/` | The App Service gateway, one method per SDK call family, over the `rationai.empaia` SDK client |
 
 ## Modes and data types
 
-- **STANDALONE:** the user draws a region of interest; the job gets every
-  builder input, including the region, and runs at high priority.
-- **PREPROCESSING:** the job gets the slide only and runs at normal priority.
-- **Published types:** primitives and continuous pixelmaps today. A new type is
-  a publisher in `publishing/publishers.py` plus its mapping in
-  `ead/builder_io.py`; `tests/` fails if a builder output has neither a mapping
-  nor an entry in `NOT_OFFERED`.
+- **STANDALONE:** the user draws a region of interest and fills in the
+  parameters; the job gets every input and runs at high priority.
+- **PREPROCESSING:** the job gets the required inputs (the slide) only and
+  runs at normal priority.
+- **Types:** inputs `wsi`, `rectangle` and primitive parameters; outputs
+  primitives (from the `value` format) and one-channel continuous pixelmaps
+  (from `score_grid`). A new EMPAIA type is a new converter or publisher in
+  `components/empaia/` once the SDK can carry it.
+- **Transitional:** `POST /v1/empaia/builders/{b}/models/{m}` still runs the
+  builder for apps registered before analyses had apps; its output types come
+  from `ead/builder_io.py`. Both go with the builders.
 
 ## SDK use
 

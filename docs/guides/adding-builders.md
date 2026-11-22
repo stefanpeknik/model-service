@@ -134,11 +134,11 @@ and `/schedule`), scheduling, retries and the SDK with no further code.
 
 ### 4. Offer it in EMPAIA (optional)
 
-Add the builder's EAD `io` entries to `BUILDER_IO` in
-`src/model_service/providers/empaia/io.py`. Each output's EMPAIA type needs a
-publisher in `providers/empaia/publishers.py` for its (type, media type). An
-app whose outputs nothing can publish is not registered, and the reason is
-logged.
+Builders no longer become EMPAIA apps: an analysis does, through its
+`expose.empaia` section (see `catalog/analyses/prostate-heatmap.yaml`). A
+builder's EAD `io` entries in `src/model_service/providers/empaia/ead/builder_io.py`
+only serve jobs of apps registered before, through the transitional builder
+route.
 
 ### 5. Test it
 
