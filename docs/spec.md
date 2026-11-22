@@ -1,9 +1,11 @@
 # Model-service core: builders, model catalog and durable execution
 
-> **Partly superseded.** The builders, inference contracts and old model files
-> this specification describes were retired for served models and analyses;
-> [How model-service is put together](architecture/core.md) describes the
-> current design.
+> **Superseded** by [the components, served models and analyses
+> specification](spec-components.md). The builders, inference contracts and
+> model files described here are gone, and so are scheduled raw tiles. The
+> scheduler, durable executions and
+> provider finish it specifies were kept, and the acceptance evidence below
+> still stands as a record.
 
 Status: implemented and accepted live on 2026-10-14
 ([evidence](operations/core-acceptance-2026-10-14.md)); scheduled raw inference
