@@ -36,7 +36,8 @@ api = [
     "uvicorn>=0.30.0",
     "yoyo-migrations>=9.0.0,<10",
 ]
-# Builder replicas on Ray Serve, with the providers' input access.
+# The analysis runner on Ray Serve, with the providers' input access. Named
+# before analyses replaced the builders; renaming it needs a re-lock.
 builders = [
     "fastapi>=0.115.0",
     "h5py>=3.11,<4",
@@ -50,7 +51,7 @@ builders = [
     "ratiopath>=1.4.0",
     "ray[serve]>=2.58.0",
 ]
-# Model replicas on Ray Serve.
+# Served-model replicas on Ray Serve.
 inference = [
     "fastapi>=0.115.0",
     "lz4>=4.4.5",

@@ -10,9 +10,10 @@ USER root
 ARG UV_HTTP_TIMEOUT=300
 ARG UV_CONCURRENT_DOWNLOADS=4
 
-# The builders, inference and gpu extras, pinned by uv.lock. The base image's
-# Ray stays. The EMPAIA SDK is a git dependency on a GitLab fork, so build
-# with `--ssh default`.
+# The builders (the analysis runner's, named before analyses replaced the
+# builders), inference and gpu extras, pinned by uv.lock. The base image's Ray
+# stays. The EMPAIA SDK is a git dependency on a GitLab fork, so build with
+# `--ssh default`.
 COPY pyproject.toml uv.lock /tmp/project/
 RUN --mount=type=ssh cd /tmp/project \
     && export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new" \
@@ -43,7 +44,7 @@ import onnxruntime, timm, torch, torchvision; \
 from ratiopath.masks.mask_builders import MaskBuilder; \
 from ratiopath.openslide import OpenSlide; \
 from ratiopath.tiling import grid_tiles; \
-import model_service.builders.replica.serve; \
+import model_service.analysis_runner.serve; \
 import model_service.served_model.serve; \
 providers = onnxruntime.get_available_providers(); \
 assert 'TensorrtExecutionProvider' in providers, providers"
