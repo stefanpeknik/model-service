@@ -278,4 +278,4 @@ async def test_models_list_served_models_with_declarations_and_analyses() -> Non
         "mlflow-artifacts:/169/"
     )
     assert prostate["digest"] == served["prostate-classifier-1"].value.digest
-    assert by_id["virchow2"]["analyses"] == []
+    assert by_id["virchow2"]["analyses"] == ["virchow2-embeddings"]
