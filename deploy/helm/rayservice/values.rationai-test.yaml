@@ -12,8 +12,8 @@ servedModelSettings:
     # The public MLflow; the test cluster can't reach the internal one.
     MLFLOW_TRACKING_URI: https://mlflow.rationai.cloud.e-infra.cz
 
-# The prostate heatmap only, until the other analyses are checked here.
-analyses: [prostate-heatmap]
+# EPISeg's weights are out of reach here, so not its heatmap.
+analyses: [prostate-heatmap, virchow2-embeddings, prov-gigapath-embeddings]
 # Sized like the heatmap builder below, which stays until the runner replaces it.
 analysisRunner:
   deployment:

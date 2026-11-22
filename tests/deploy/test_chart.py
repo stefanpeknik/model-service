@@ -21,6 +21,7 @@ REPO = Path(__file__).resolve().parents[2]
 CHART = REPO / "deploy" / "helm" / "rayservice"
 CATALOG = REPO / "catalog"
 TEST_VALUES = CHART / "values.rationai-test.yaml"
+TEST_ANALYSES = ("prostate-heatmap", "virchow2-embeddings", "prov-gigapath-embeddings")
 OLD_MODELS = CHART / "models"
 TEST_MLFLOW = "https://mlflow.rationai.cloud.e-infra.cz"
 BASE_MLFLOW = "http://mlflow.rationai-mlflow:5000"
@@ -145,7 +146,9 @@ def test_the_api_catalog_carries_the_deployed_served_models() -> None:
             model_id: entries[model_id].document
             for model_id in ("prostate-classifier-1", "virchow2", "prov-gigapath")
         },
-        "analyses": {"prostate-heatmap": analyses["prostate-heatmap"].document},
+        "analyses": {
+            analysis_id: analyses[analysis_id].document for analysis_id in TEST_ANALYSES
+        },
     }
     assert data["model-catalog.json"] == []
     assert set(data["provider-blocks.json"]["prostate-classifier-1"]) == {"empaia"}
@@ -167,12 +170,16 @@ def test_the_api_reads_the_rendered_catalog(tmp_path: Path) -> None:
     )
     assert catalog.get("virchow2").contract == "tile-embedding"
     assert set(catalog.provider_block("empaia")) == {"prostate-classifier-1"}
-    assert list(catalog.resolved.entries("analyses")) == ["prostate-heatmap"]
+    assert sorted(catalog.resolved.entries("analyses")) == sorted(TEST_ANALYSES)
 
 
 def test_an_environment_deploys_a_named_subset_or_none() -> None:
     none = render(TEST_VALUES, servedModels=[], analyses=[])
-    named = render(TEST_VALUES, servedModels=["prostate-classifier-1"])
+    named = render(
+        TEST_VALUES,
+        servedModels=["prostate-classifier-1"],
+        analyses=["prostate-heatmap"],
+    )
 
     assert "prostate-classifier-1" not in applications(none)
     assert catalog_data(none)["catalog.json"] == {"served-models": {}, "analyses": {}}
