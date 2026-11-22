@@ -15,6 +15,7 @@ from model_service.api.scheduler.builder_dispatch import (
     RemoteFailureError,
     UnknownOutcomeError,
 )
+from model_service.contracts.analysis_http import AnalysisRunRequest
 from model_service.contracts.invocation import (
     ExecutionContext,
     InputAccessContext,
@@ -159,3 +160,64 @@ class HttpBuilderDispatchTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HttpAnalysisDispatchTests(unittest.IsolatedAsyncioTestCase):
+    async def dispatch(
+        self, handler: Callable[[httpx.Request], httpx.Response]
+    ) -> BuilderResult:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await HTTPBuilderDispatch(
+                client, origin="http://ray:8000/"
+            ).run_analysis(
+                AnalysisRunRequest(
+                    invocation=Invocation(
+                        inputs={"slide": SharedPathInput(path="slide.svs")},
+                        configuration={"stride_fraction": 1.0},
+                        input_access=InputAccessContext(
+                            kind="shared_storage", state={"root": "/mnt/data"}
+                        ),
+                        deadline_at=datetime.now(UTC) + timedelta(minutes=1),
+                    ),
+                    analysis={"id": "prostate-heatmap", "digest": "abc"},
+                )
+            )
+
+    async def test_a_run_goes_to_the_runner_with_the_resolved_document(
+        self,
+    ) -> None:
+        requests: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            return httpx.Response(
+                200, json={"outputs": {"score": {"kind": "inline", "value": 0.9}}}
+            )
+
+        result = await self.dispatch(handler)
+
+        self.assertEqual(result, BuilderResult(outputs={"score": InlineOutput(0.9)}))
+        [request] = requests
+        self.assertEqual(request.url, "http://ray:8000/analyses/")
+        body = json.loads(request.content)
+        self.assertEqual(body["analysis"], {"id": "prostate-heatmap", "digest": "abc"})
+        self.assertEqual(body["invocation"]["inputs"]["slide"]["path"], "slide.svs")
+        self.assertLessEqual(request.extensions["timeout"]["read"], 60)
+
+    async def test_the_runners_answers_are_classified_like_a_builders(self) -> None:
+        mismatch = httpx.Response(
+            422,
+            json={
+                "detail": {
+                    "code": "model_contract_mismatch",
+                    "message": "model changed",
+                    "retryable": False,
+                }
+            },
+        )
+        with self.assertRaises(RemoteFailureError) as raised:
+            await self.dispatch(respond(mismatch))
+        with self.assertRaises(ConfirmedRejectionError):
+            await self.dispatch(respond(httpx.Response(429)))
+
+        self.assertEqual(raised.exception.code, "model_contract_mismatch")

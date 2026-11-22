@@ -15,6 +15,7 @@ if TYPE_CHECKING:
         ScheduleRequest,
         ScheduleResult,
     )
+    from model_service.contracts.analysis_http import AnalysisRunRequest
     from model_service.contracts.invocation import ExecutionContext, Invocation
     from model_service.contracts.model_declarations import ModelBinding
     from model_service.contracts.result import BuilderResult
@@ -60,4 +61,12 @@ class BuilderDispatch(Protocol):
         execution_context: ExecutionContext,
     ) -> BuilderResult:
         """Run one builder invocation and return its result."""
+        ...
+
+
+class AnalysisDispatch(Protocol):
+    """How the API runs a resolved analysis on the analysis runner."""
+
+    async def run_analysis(self, request: AnalysisRunRequest) -> BuilderResult:
+        """Run one resolved analysis and return its result."""
         ...

@@ -1,4 +1,4 @@
-"""Send a builder run to its Ray Serve replica over HTTP, and how a send can end.
+"""Send a builder or analysis run to its Ray Serve replica over HTTP, and how a send can end.
 
 A 429 is a confirmed rejection before work started. Transport failures and
 malformed responses leave the outcome unknown, because the builder may have run.
@@ -13,11 +13,13 @@ from urllib.parse import quote
 import httpx
 from pydantic import TypeAdapter, ValidationError
 
+from model_service.contracts.analysis_http import ANALYSIS_RUN_REQUEST
 from model_service.contracts.builder_http import RUN_REQUEST, ErrorResponse, RunRequest
 from model_service.contracts.result import RESULT
 
 
 if TYPE_CHECKING:
+    from model_service.contracts.analysis_http import AnalysisRunRequest
     from model_service.contracts.invocation import ExecutionContext, Invocation
     from model_service.contracts.model_declarations import ModelBinding
     from model_service.contracts.result import BuilderResult
@@ -61,7 +63,7 @@ class RemoteFailureError(RuntimeError):
 
 
 class HTTPBuilderDispatch:
-    """Sends builder runs to builder replicas over Ray Serve's HTTP proxy."""
+    """Sends builder runs and analysis runs to their replicas over Ray Serve's HTTP proxy."""
 
     def __init__(self, client: httpx.AsyncClient, *, origin: str) -> None:
         """Dispatch builder runs to a Ray Serve origin.
@@ -100,15 +102,47 @@ class HTTPBuilderDispatch:
                 so the builder may have run.
             RemoteFailureError: The builder returned a well-formed error envelope.
         """
-        timeout = max(
-            (invocation.deadline_at - datetime.now(UTC)).total_seconds(), 0.001
+        return await self._post(
+            f"/builders/{quote(builder_id, safe='')}/",
+            RUN_REQUEST.dump_python(
+                RunRequest(invocation, model, execution_context), mode="json"
+            ),
+            invocation.deadline_at,
         )
-        request = RunRequest(invocation, model, execution_context)
+
+    async def run_analysis(self, request: AnalysisRunRequest) -> BuilderResult:
+        """Post one resolved analysis to the analysis runner and classify the outcome.
+
+        The runner answers in the builder deployment's format, so outcomes
+        are classified as for a builder.
+
+        Args:
+            request: The resolved document, the invocation and the attempt.
+
+        Returns:
+            The runner's result from a 200 response.
+
+        Raises:
+            ConfirmedRejectionError: The runner answered 429, or Ray Serve
+                answered a non-JSON 503, so the work never started.
+            UnknownOutcomeError: The transport failed or the response was
+                malformed, so the analysis may have run.
+            RemoteFailureError: The runner returned a well-formed error envelope.
+        """
+        return await self._post(
+            "/analyses/",
+            ANALYSIS_RUN_REQUEST.dump_python(request, mode="json"),
+            request.invocation.deadline_at,
+        )
+
+    async def _post(
+        self, path: str, payload: object, deadline_at: datetime
+    ) -> BuilderResult:
+        """Post a run request with the time left as timeout, and classify the answer."""
+        timeout = max((deadline_at - datetime.now(UTC)).total_seconds(), 0.001)
         try:
             response = await self._client.post(
-                f"{self._origin}/builders/{quote(builder_id, safe='')}/",
-                json=RUN_REQUEST.dump_python(request, mode="json"),
-                timeout=timeout,
+                f"{self._origin}{path}", json=payload, timeout=timeout
             )
         except httpx.TransportError as error:
             raise UnknownOutcomeError("builder dispatch transport failed") from error
