@@ -74,7 +74,7 @@ podman build -f deploy/images/Dockerfile.code-refresh \
   -t cerit.io/stefanpeknik/model-service-ray:core-$REV .
 podman build -f deploy/images/Dockerfile.code-refresh \
   --build-arg BASE=cerit.io/stefanpeknik/model-service-scheduler:checkpoint-20261008-a91b519 \
-  --build-arg RUN_USER=10001 --build-arg 'EXTRA_PACKAGES=lz4>=4.4.5 jsonschema>=4.23.0,<5 numpy imageio h5py' \
+  --build-arg RUN_USER=10001 --build-arg 'EXTRA_PACKAGES=lz4>=4.4.5 jsonschema>=4.23.0,<5 numpy imageio h5py pyyaml>=6.0.2' \
   --build-arg SOURCE_REVISION=$REV \
   -t cerit.io/stefanpeknik/model-service-api:core-$REV .
 podman push cerit.io/stefanpeknik/model-service-ray:core-$REV
