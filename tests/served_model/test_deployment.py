@@ -27,6 +27,7 @@ OLD_MODELS = REPO / "deploy" / "helm" / "rayservice" / "models"
         ("prostate-classifier-1", "rationai-test"),
         ("virchow2", None),
         ("virchow2", "rationai-test"),
+        ("prov-gigapath", None),
     ],
 )
 def test_served_models_deploy_with_todays_serve_options(

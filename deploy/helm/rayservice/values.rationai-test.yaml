@@ -5,7 +5,7 @@
 # model-service-db, mlflow-public-credentials and huggingface-secret.
 environment: rationai-test
 # Named, not ["*"]: EPISeg's weights sit on an MLflow this cluster can't reach.
-servedModels: [prostate-classifier-1, virchow2]
+servedModels: [prostate-classifier-1, virchow2, prov-gigapath]
 # Merged over values.yaml's: the cache root, setup timeout and HF_HOME stay.
 servedModelSettings:
   env:

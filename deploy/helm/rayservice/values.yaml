@@ -20,8 +20,7 @@ servedModelSettings:
 # Models not yet migrated to catalog/served-models/ (transitional): files
 # under models/ (without .yaml); the file name is the model ID. Each file
 # names the model's contract and implementation and its Ray Serve deployment.
-models:
-  - prov-gigapath
+models: []
 
 # Builders run `builders.replica.serve:app`; the key is the builder ID.
 # `builders: null` in an override file deploys the models for plain Ray Serve
