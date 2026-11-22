@@ -22,6 +22,7 @@ CHART = REPO / "deploy" / "helm" / "rayservice"
 CATALOG = REPO / "catalog"
 TEST_VALUES = CHART / "values.rationai-test.yaml"
 TEST_ANALYSES = ("prostate-heatmap", "virchow2-embeddings", "prov-gigapath-embeddings")
+BASE_VALUES = CHART / "values.yaml"
 OLD_MODELS = CHART / "models"
 TEST_MLFLOW = "https://mlflow.rationai.cloud.e-infra.cz"
 BASE_MLFLOW = "http://mlflow.rationai-mlflow:5000"
@@ -54,6 +55,11 @@ def applications(objects: dict[tuple[str, str], Any]) -> dict[str, Any]:
     service = objects[("RayService", "model-service")]
     config = yaml.safe_load(service["spec"]["serveConfigV2"])
     return {app["name"]: app for app in config["applications"]}
+
+
+def cpu_worker_resource() -> dict[str, Any]:
+    """The base values' `cpuWorkerResource`: the custom resource keeping CPU-only apps off GPU workers."""
+    return yaml.safe_load(BASE_VALUES.read_text(encoding="utf-8"))["cpuWorkerResource"]
 
 
 def catalog_data(objects: dict[tuple[str, str], Any]) -> dict[str, Any]:
@@ -219,6 +225,11 @@ def test_catalog_changes_reach_the_api_without_rolling_it() -> None:
 def test_one_analysis_runner_serves_the_deployed_analyses() -> None:
     values = yaml.safe_load(TEST_VALUES.read_text(encoding="utf-8"))
     sizing = values["analysisRunner"]
+    marker = cpu_worker_resource()
+    actor = {
+        **sizing["deployment"]["ray_actor_options"],
+        "resources": {marker["name"]: marker["perReplica"]},
+    }
 
     runner = applications(render(TEST_VALUES))["analysis-runner"]
 
@@ -230,6 +241,7 @@ def test_one_analysis_runner_serves_the_deployed_analyses() -> None:
             {
                 "name": "AnalysisRunner",
                 **sizing["deployment"],
+                "ray_actor_options": actor,
                 "user_config": {
                     "shared_storage_roots": ["/mnt/shared"],
                     **sizing["userConfig"],
@@ -276,3 +288,49 @@ def test_a_named_analysis_without_a_file_fails_the_render() -> None:
         render(TEST_VALUES, analyses=["no-such-analysis"])
 
     assert "no-such-analysis" in failed.value.stderr
+
+
+@pytest.mark.parametrize("values", [(TEST_VALUES,), ()])
+def test_cpu_only_apps_can_only_be_placed_on_cpu_workers(
+    values: tuple[Path, ...],
+) -> None:
+    # The autoscaler's own reading of each worker group, rayStartParams quoting included.
+    kuberay = pytest.importorskip("ray.autoscaler._private.kuberay.autoscaling_config")
+    name = cpu_worker_resource()["name"]
+    objects = render(*values)
+    service = objects[("RayService", "model-service")]
+    groups = {
+        group["groupName"]: kuberay._get_ray_resources_from_group_spec(group, False)
+        for group in service["spec"]["rayClusterConfig"]["workerGroupSpecs"]
+    }
+    apps = applications(objects)
+    cpu_only = [
+        deployment
+        for app_name, app in apps.items()
+        if app_name.startswith("builder-") or app_name == "analysis-runner"
+        for deployment in app["deployments"]
+    ]
+    served = [
+        deployment
+        for app in apps.values()
+        if app["import_path"] == "model_service.served_model.serve:app"
+        for deployment in app["deployments"]
+    ]
+    requested = [
+        d["ray_actor_options"].get("resources", {}).get(name, 0) for d in cpu_only
+    ]
+    co_located = sum(
+        amount * d["autoscaling_config"]["max_replicas"]
+        for amount, d in zip(requested, cpu_only, strict=True)
+    )
+    cpu_groups = {g: r for g, r in groups.items() if not r.get("GPU")}
+    gpu_groups = {g: r for g, r in groups.items() if r.get("GPU")}
+
+    assert {"builder-heatmap", "analysis-runner"} <= set(apps)
+    assert cpu_groups and gpu_groups
+    assert all(amount > 0 for amount in requested)
+    assert all(
+        resources.get(name, 0) >= co_located for resources in cpu_groups.values()
+    )
+    assert not any(name in resources for resources in gpu_groups.values())
+    assert not any(name in d["ray_actor_options"].get("resources", {}) for d in served)
