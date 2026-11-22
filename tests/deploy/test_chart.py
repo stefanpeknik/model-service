@@ -113,20 +113,22 @@ def test_an_environment_without_old_models_deploys_only_the_generic_host() -> No
     assert set(apps) == {
         "prostate-classifier-1",
         "virchow2",
+        "prov-gigapath",
         "builder-heatmap",
         "builder-tile-embeddings",
     }
-    assert {apps[i]["import_path"] for i in ("prostate-classifier-1", "virchow2")} == {
-        "model_service.served_model.serve:app"
-    }
+    assert {
+        apps[i]["import_path"]
+        for i in ("prostate-classifier-1", "virchow2", "prov-gigapath")
+    } == {"model_service.served_model.serve:app"}
 
 
-def test_the_base_values_still_deploy_the_other_models_the_old_way() -> None:
+def test_the_base_values_serve_every_model_on_the_generic_host() -> None:
     apps = applications(render())
 
-    assert apps["prov-gigapath"]["import_path"] == (
-        "model_service.inference.implementations.prov_gigapath:app"
-    )
+    assert {
+        app["import_path"] for app in apps.values() if "builder" not in app["name"]
+    } == {"model_service.served_model.serve:app"}
 
 
 def test_the_api_catalog_carries_the_deployed_served_models() -> None:
@@ -136,7 +138,7 @@ def test_the_api_catalog_carries_the_deployed_served_models() -> None:
     assert data["catalog.json"] == {
         "served-models": {
             model_id: entries[model_id].document
-            for model_id in ("prostate-classifier-1", "virchow2")
+            for model_id in ("prostate-classifier-1", "virchow2", "prov-gigapath")
         }
     }
     assert data["model-catalog.json"] == []
