@@ -176,12 +176,14 @@ empaia:
   dnsSearches: []
   # The API registers an app, with its modes, for every deployed analysis with
   # `expose.empaia`, at startup, in this marketplace (the marketplace mock that
-  # EMPAIA test installations run). Empty url: no registration.
+  # EMPAIA test installations run), and deletes the apps it registered there
+  # that no deployed analysis has any more. Empty url: no registration.
   marketplace:
     url: ""
     organizationId: ""
     # model-service's name in the installation's JES_HTTP_TARGETS. Unique per
-    # installation: it also marks the preprocessing triggers this deployment owns.
+    # installation: it also marks the apps and preprocessing triggers this
+    # deployment owns.
     jesTarget: model-service
     # The installation's Medical Data Service: the API keeps the preprocessing
     # triggers the analyses list there, with these client credentials.
