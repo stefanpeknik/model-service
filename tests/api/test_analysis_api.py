@@ -91,7 +91,9 @@ async def test_analyses_list_inputs_outputs_settings_and_models() -> None:
         response = await client.get("/v1/analyses")
 
     assert response.status_code == 200
-    (listed,) = response.json()
+    analyses = {item["id"]: item for item in response.json()}
+    assert set(analyses) == {"prostate-heatmap", "episeg-heatmap"}
+    listed = analyses["prostate-heatmap"]
     schema = listed.pop("settings_schema")
     assert listed == {
         "id": "prostate-heatmap",
