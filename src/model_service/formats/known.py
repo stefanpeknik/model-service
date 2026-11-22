@@ -1,10 +1,16 @@
-"""The data formats this repo knows, by the name sinks declare in `format`."""
+"""The data formats this repo knows, by the name sinks declare in `format`.
+
+Every module of this package that defines `NAME` and `MEDIA_TYPE` is a
+format; nothing lists them by hand.
+"""
 
 from __future__ import annotations
 
+import importlib
+import pkgutil
 from dataclasses import dataclass
 
-from model_service.formats import embedding_table, score_grid, value
+import model_service.formats
 
 
 @dataclass(frozen=True)
@@ -16,32 +22,35 @@ class Format:
         media_type: The versioned vendor media type.
         extension: The file name suffix, without the dot.
         known: Every media type its reader takes, older layouts included.
+        module: The module that declares it; its docstring is its reference page.
     """
 
     name: str
     media_type: str
     extension: str
     known: tuple[str, ...] = ()
+    module: str = ""
 
 
-FORMATS = {
-    f.name: f
-    for f in (
-        Format(
-            score_grid.NAME,
-            score_grid.MEDIA_TYPE,
-            score_grid.EXTENSION,
-            score_grid.KNOWN,
-        ),
-        Format(
-            embedding_table.NAME,
-            embedding_table.MEDIA_TYPE,
-            embedding_table.EXTENSION,
-            embedding_table.KNOWN,
-        ),
-        Format(value.NAME, value.MEDIA_TYPE, value.EXTENSION, value.KNOWN),
-    )
-}
+def _scan() -> dict[str, Format]:
+    """Import every format module of this package, by format name."""
+    found: dict[str, Format] = {}
+    package = model_service.formats
+    for info in sorted(pkgutil.iter_modules(package.__path__), key=lambda m: m.name):
+        module = importlib.import_module(f"{package.__name__}.{info.name}")
+        if not hasattr(module, "NAME") or not hasattr(module, "MEDIA_TYPE"):
+            continue
+        found[module.NAME] = Format(
+            module.NAME,
+            module.MEDIA_TYPE,
+            module.EXTENSION,
+            module.KNOWN,
+            module.__name__,
+        )
+    return found
+
+
+FORMATS = _scan()
 
 
 def get_format(name: str) -> Format:
