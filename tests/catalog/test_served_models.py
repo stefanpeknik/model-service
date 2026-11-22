@@ -48,18 +48,21 @@ def served(root: Path, model_id: str = "m1") -> ServedModel:
 
 
 @pytest.mark.parametrize(
-    ("environment", "old_file"),
+    ("model_id", "environment", "old_file"),
     [
-        (None, "prostate-classifier-1.yaml"),
-        ("rationai-test", "rationai-test/prostate-classifier-1.yaml"),
+        ("prostate-classifier-1", None, "prostate-classifier-1.yaml"),
+        (
+            "prostate-classifier-1",
+            "rationai-test",
+            "rationai-test/prostate-classifier-1.yaml",
+        ),
+        ("episeg-1", None, "episeg-1.yaml"),
     ],
 )
-def test_the_prostate_file_gives_the_binding_of_todays_model_file(
-    environment: str | None, old_file: str
+def test_a_migrated_file_gives_the_binding_of_todays_model_file(
+    model_id: str, environment: str | None, old_file: str
 ) -> None:
-    model = load_catalog(CATALOG, environment).entries("served-models")[
-        "prostate-classifier-1"
-    ]
+    model = load_catalog(CATALOG, environment).entries("served-models")[model_id]
     old = ModelDocument.model_validate(model_file(OLD_MODELS / old_file))
     old_config = old.deployment.user_config
 
@@ -112,3 +115,16 @@ def test_keys_of_todays_model_files_are_refused_with_what_fits(
         "this file: batching, input, output, post, pre, resources, runtime, "
         "serving, weights. Hint: remove it",
     ]
+
+
+def test_threads_are_refused_where_session_options_are_not_applied(
+    root: Path,
+) -> None:
+    runtime = "{use: onnx, apply_session_options: false, threads: 4}"
+    write(root, "served-models/m1.yaml", MODEL.replace("{use: onnx}", runtime))
+
+    with pytest.raises(CatalogInvalid) as raised:
+        load_catalog(root)
+
+    (error,) = raised.value.errors
+    assert "threads has no effect with apply_session_options: false" in str(error)
