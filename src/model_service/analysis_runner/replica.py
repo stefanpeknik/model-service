@@ -5,8 +5,10 @@ Per request, in order, before the deadline:
 1. the resolved document is read back and its digest checked;
 2. each served model it names is asked for `describe()`, and a digest that
    differs from the document's is `model_contract_mismatch`;
-3. the inputs and outputs are resolved below the request's shared-storage
-   root, which must lie within the replica's allowed roots;
+3. the provider's input access opens the inputs and says where outputs
+   go: below the request's shared-storage root, which must lie within the
+   replica's allowed roots, or in an EMPAIA job's workspace, with each input
+   converted by its recorded EAD type;
 4. `run_analysis` runs it, with progress passed to the access;
 5. the result names each output's file and its format's media type.
 
@@ -17,9 +19,10 @@ it fakes.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, cast
 
 from model_service.analysis_runner.models import RayServedModel
 from model_service.analysis_runner.run import Concurrency, run_analysis
@@ -31,15 +34,14 @@ from model_service.contracts.failures import (
     FailureCode,
     InvalidInvocation,
 )
-from model_service.contracts.invocation import SHARED_STORAGE, ExecutionContext
+from model_service.contracts.invocation import ExecutionContext
 from model_service.contracts.log_context import logging_execution
 from model_service.contracts.result import BuilderResult, SharedArtifact
 from model_service.formats.known import get_format
-from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Awaitable, Callable, Mapping
     from pathlib import Path
 
     from model_service.analysis_runner.models import DescribedModel
@@ -54,11 +56,11 @@ logger = logging.getLogger(__name__)
 
 
 class AccessFactory(Protocol):
-    """Creates the input access of one attempt (shared storage today)."""
+    """Creates the input access of one attempt: shared storage or a provider's."""
 
     def create(
         self, invocation: Invocation, execution_context: ExecutionContext
-    ) -> InputAccess:
+    ) -> InputAccess | Awaitable[InputAccess]:
         """Create the access for one attempt.
 
         Args:
@@ -66,7 +68,7 @@ class AccessFactory(Protocol):
             execution_context: Attempt identity, which scopes outputs.
 
         Returns:
-            The access.
+            The access, or an awaitable giving it.
         """
         ...
 
@@ -79,6 +81,7 @@ class AnalysisReplica:
         settings: ReplicaSettings,
         *,
         models: Callable[[str], DescribedModel] = RayServedModel,
+        access: Mapping[InputAccessKind, AccessFactory] | None = None,
         progress_interval_seconds: float = 10,
         cleanup_timeout_seconds: float = 10,
     ) -> None:
@@ -88,6 +91,8 @@ class AnalysisReplica:
             settings: Threads and tiles in flight per run, and the
                 shared-storage roots requests may name.
             models: Gives a served model's handle by ID.
+            access: The input access by kind; by default every provider's, as
+                builder replicas compose them.
             progress_interval_seconds: Time between two progress sends.
             cleanup_timeout_seconds: Time allowed for closing the access.
         """
@@ -95,9 +100,7 @@ class AnalysisReplica:
             read_threads=settings.num_threads,
             in_flight=settings.max_concurrent_tasks,
         )
-        self._access: Mapping[InputAccessKind, AccessFactory] = {
-            SHARED_STORAGE: SharedStorageAccessFactory(settings.shared_storage_roots)
-        }
+        self._access = access if access is not None else _provider_access(settings)
         self._models = models
         self._progress_interval_seconds = progress_interval_seconds
         self._cleanup_timeout_seconds = cleanup_timeout_seconds
@@ -153,7 +156,8 @@ class AnalysisReplica:
         factory = self._access.get(invocation.input_access.kind)
         if factory is None:
             raise InvalidInvocation("unsupported input access kind")
-        access = factory.create(invocation, request.execution_context)
+        created = factory.create(invocation, request.execution_context)
+        access = await created if inspect.isawaitable(created) else created
         try:
             inputs = _inputs(analysis, invocation, access)
             outputs = _outputs(analysis, invocation, access)
@@ -210,6 +214,21 @@ class AnalysisReplica:
             raise
         except Exception as error:
             logger.warning("input access cleanup failed: %s", type(error).__name__)
+
+
+def _provider_access(
+    settings: ReplicaSettings,
+) -> dict[InputAccessKind, AccessFactory]:
+    """Every provider's input access, as builder replicas compose them."""
+    from model_service.providers.registry import PROVIDERS
+
+    access: dict[InputAccessKind, AccessFactory] = {}
+    for provider in PROVIDERS:
+        # Their factories take the attempt alone; the model argument defaults.
+        access.update(
+            cast("Mapping[str, AccessFactory]", provider.input_access(settings))
+        )
+    return access
 
 
 def _inputs(
