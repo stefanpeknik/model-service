@@ -10,10 +10,10 @@ Release `model-service`, values `deploy/helm/rayservice/values.rationai-test.yam
 
 - API Deployment `model-service-api` with PostgreSQL
   `model-service-postgres`.
-- RayService with one CPU worker group (builders and the analysis runner) and
-  one MIG GPU worker group (served models) that scales to zero. Builders and
-  the runner request the `cpu_worker` Ray resource, which only the CPU group
-  advertises, so they never take the GPU worker's 4 CPUs that
+- RayService with one CPU worker group (the analysis runner) and
+  one MIG GPU worker group (served models) that scales to zero. The runner
+  requests the `cpu_worker` Ray resource, which only the CPU group
+  advertises, so it never takes the GPU worker's 4 CPUs that
   `prostate-classifier-1` needs (`cpuWorkerResource` in the chart's
   `values.yaml`). GPUs are scarce on the cluster: after testing, check that no
   `gpu-workers` pod remains (it goes about six minutes after the last request).
@@ -31,8 +31,7 @@ Release `model-service`, values `deploy/helm/rayservice/values.rationai-test.yam
   model-service doesn't have yet.
 
 Objects outside the chart, in `deploy/k8s/rationai-test-ns/`: PostgreSQL
-and its claim, the raw-inference claim, and the TensorRT and Hugging Face cache
-claims. Secrets: `model-service-db` (`postgres-password`, `database-url`,
+and its claim, and the TensorRT and Hugging Face cache claims. Secrets: `model-service-db` (`postgres-password`, `database-url`,
 `provider-context-key`, generated at install), `huggingface-secret` (the
 namespace's own), `mlflow-public-credentials` (GPU workers, for MLflow
 weights).
@@ -51,11 +50,12 @@ helm install model-service deploy/helm/rayservice -n rationai-infra-test-ns \
 
 Upgrades use `helm upgrade` with the same arguments.
 
-Served models come from `catalog/`: the values deploy the IDs named in
-`servedModels` (`prostate-classifier-1` and `virchow2`; EPISeg's weights sit
-on an MLflow this cluster can't reach) with the `catalog/environments/rationai-test/`
-patches; no model comes from an old file under `models:` any more. A
-catalog-only change needs no image rebuild and doesn't restart the API: kubelet
+Served models and analyses come from `catalog/`: the values deploy the IDs
+named in `servedModels` (`prostate-classifier-1`, `virchow2` and
+`prov-gigapath`; EPISeg's weights sit on an MLflow this cluster can't reach)
+and in `analyses` (`prostate-heatmap`, `virchow2-embeddings` and
+`prov-gigapath-embeddings`), with the `catalog/environments/rationai-test/`
+patches. A catalog-only change needs no image rebuild and doesn't restart the API: kubelet
 updates the mounted catalog ConfigMap (within about a minute) and the API
 reloads it. If the new catalog doesn't load, the API keeps the old one and
 `/healthz/catalog` answers 503 with the reason; the API log says the same.
@@ -105,25 +105,22 @@ curl localhost:18080/healthz/deployments
 curl localhost:18080/healthz/catalog
 ```
 
-`constant-classifier` exercises the heatmap builder and the scheduler on the CPU
-worker only. `prostate-classifier-1` and `virchow2` start the GPU worker.
-
-Scheduled tiles are cheap to test on `constant-classifier` (128x128 tiles):
+`prostate-classifier-1`, `virchow2` and `prov-gigapath` start the GPU
+worker. To warm a served model with one blank tile, or start a job of the
+prostate app from EMPAIA, run these scripts in an API pod:
 
 ```sh
-uv run python -c "import lz4.frame, sys; sys.stdout.buffer.write(lz4.frame.compress(bytes(128*128*3)))" > tile.lz4
-curl -s -XPOST localhost:18080/v1/models/constant-classifier/schedule \
-  -H 'Idempotency-Key: try-1' --data-binary @tile.lz4
-curl -s localhost:18080/v1/executions/<id>/result
+oc exec -i deploy/model-service-api -- python - virchow2 224 < scripts/warm_model.py
+oc exec -i deploy/model-service-api -- python - SLIDE_ID 120 < scripts/request_preprocessing.py
 ```
 
 ## Logs
 
 - API: refused submissions and ignored EMPAIA configuration keys, with
   reasons.
-- Builder progress and errors: the builder replica's log
-  (`/tmp/ray/session_latest/logs/serve/replica_builder-heatmap_*.log` on the CPU
-  worker, or the Ray dashboard's Serve page); model calls in the model
-  replica's log; Python tracebacks also in `/tmp/ray/session_latest/logs/worker-*.err`.
+- Analysis progress and errors: the analysis runner's JSON lines on the CPU
+  worker pod's stdout (`oc logs`), each naming its execution, and the Ray
+  dashboard's Serve page; model calls in the served model's replica log;
+  Python tracebacks also in `/tmp/ray/session_latest/logs/worker-*.err`.
 - EMPAIA side: `test-jobs-jes` (job start and end) and `test-jobs-app-api`
   (every App API call of a job).
