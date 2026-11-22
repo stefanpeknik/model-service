@@ -11,7 +11,9 @@ from typing import Any
 import pytest
 import yaml
 
+from model_service.api.catalog_mount import MountedCatalog
 from model_service.catalog import load_catalog
+from model_service.contracts.model_declarations import SpatialScoresModel
 from model_service.served_model.deployment import serve_application
 
 
@@ -115,6 +117,24 @@ def test_the_api_catalog_carries_the_deployed_served_models() -> None:
     }
     assert [model["id"] for model in data["model-catalog.json"]] == ["virchow2"]
     assert set(data["provider-blocks.json"]["prostate-classifier-1"]) == {"empaia"}
+
+
+def test_the_api_reads_the_rendered_catalog(tmp_path: Path) -> None:
+    data = render(TEST_VALUES)[("ConfigMap", "model-service-model-catalog")]["data"]
+    for name, text in data.items():
+        (tmp_path / name).write_text(text, encoding="utf-8")
+
+    catalog = MountedCatalog(tmp_path, provider_blocks=["empaia"])
+
+    assert catalog.get("prostate-classifier-1") == SpatialScoresModel(
+        id="prostate-classifier-1",
+        tile_size=512,
+        output_tile_size=1,
+        n_channels=1,
+        mpp=0.468,
+    )
+    assert catalog.get("virchow2").contract == "tile-embedding"
+    assert set(catalog.provider_block("empaia")) == {"prostate-classifier-1"}
 
 
 def test_an_environment_deploys_a_named_subset_or_none() -> None:
