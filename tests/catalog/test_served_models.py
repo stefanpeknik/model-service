@@ -48,18 +48,21 @@ def served(root: Path, model_id: str = "m1") -> ServedModel:
 
 
 @pytest.mark.parametrize(
-    ("environment", "old_file"),
+    ("model_id", "environment", "old_file"),
     [
-        (None, "prostate-classifier-1.yaml"),
-        ("rationai-test", "rationai-test/prostate-classifier-1.yaml"),
+        ("prostate-classifier-1", None, "prostate-classifier-1.yaml"),
+        (
+            "prostate-classifier-1",
+            "rationai-test",
+            "rationai-test/prostate-classifier-1.yaml",
+        ),
+        ("episeg-1", None, "episeg-1.yaml"),
     ],
 )
-def test_the_prostate_file_gives_the_binding_of_todays_model_file(
-    environment: str | None, old_file: str
+def test_a_migrated_file_gives_the_binding_of_todays_model_file(
+    model_id: str, environment: str | None, old_file: str
 ) -> None:
-    model = load_catalog(CATALOG, environment).entries("served-models")[
-        "prostate-classifier-1"
-    ]
+    model = load_catalog(CATALOG, environment).entries("served-models")[model_id]
     old = ModelDocument.model_validate(model_file(OLD_MODELS / old_file))
     old_config = old.deployment.user_config
 
