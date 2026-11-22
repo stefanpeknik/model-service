@@ -29,33 +29,34 @@ cd model-service
 ```
 
 ---
-## Step 2: Add your model code
-If you want to deploy your own model, start by adding the model code and Ray Serve application entry point. Follow the [Adding New Models](../guides/adding-models.md) guide for a step-by-step walkthrough of this process.
+## Step 2: Add your model
+A model the existing components can run (an ONNX graph, a timm encoder) needs only a YAML file in `catalog/served-models/`; see the [Configuration Reference](../guides/configuration-reference.md#2-served-model-files). For your first deployment, use the models already there.
 
 ## Step 3: Review the Configuration
 
-In Model Service, configurations are managed using **Helm**. The environment configuration is split into values and applications inside the `deploy/helm/rayservice/` directory.
+In Model Service, configurations are managed using **Helm**. The chart and its values files are in `deploy/helm/rayservice/`; the chart reads the models from the repo's `catalog/`.
 
-Models are configured by YAML files in the `deploy/helm/rayservice/models/` folder.
+Each model is one YAML file in `catalog/served-models/`, named by its model ID.
 
-Let's look at a sample model file (`deploy/helm/rayservice/models/prostate-classifier-1.yaml`):
+Let's look at a sample model file (`catalog/served-models/prostate-classifier-1.yaml`):
 
 ```yaml
-inference:
-  contract: spatial-scores
-serve:
-  name: prostate-classifier-1
-  import_path: models.binary_classifier:app
-  route_prefix: /prostate-classifier-1
-  # ...
+weights: {use: mlflow, uri: "mlflow-artifacts:/65/…/prostate_model_norm.onnx"}
+runtime: {use: onnx, tensorrt: true, workspace_gib: 8, optimization_level: 3, threads: 4}
+input: {tile_size: 512, mpp: 0.468}
+output: {kind: scores, channels: 1, size: 1, range: [0, 1]}
+batching: {max_size: 256, wait_s: 0.05}
+resources: {gpus: 1, cpus: 4, memory_gib: 12}
 ```
 
-**Let's break down the application config:**
+**Let's break down the file:**
 
-- `name`: Logical app name (visible in the Ray dashboard and logs).
-- `import_path`: Python entrypoint (`module.path:variable`).
-- `route_prefix`: HTTP path under the Serve gateway.
-- `inference.contract`: how builders call the model; `heatmap` accepts `spatial-scores`.
+- `weights`: where the trained weights come from.
+- `runtime`: what runs them, here ONNX Runtime with TensorRT.
+- `input`, `output`: the tile the model takes (size in pixels, resolution in µm per pixel) and what it returns, here one score per tile.
+- `batching`, `resources`: how many tiles one call takes, and what one replica reserves.
+
+The chart turns the file into a Ray Serve application named `prostate-classifier-1` under the route `/prostate-classifier-1`. The values file's `servedModels` picks which files deploy (`["*"]` for all).
 
 For your first deployment, we will use the existing configuration without changes.
 

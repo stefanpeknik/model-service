@@ -68,7 +68,7 @@ The main components are:
 3. **Infrastructure Actors**:
    - **Controller**: Manages the control plane, API calls, and autoscaling (does not handle requests).
    - **HTTP Proxy**: Ingress point that routes requests to applications.
-4. **Serve Application (The Service Boundary)**: A standalone version of your code, including all its deployments and logic. Defined by an import path (e.g., `models.binary_classifier:app`).
+4. **Serve Application (The Service Boundary)**: A standalone version of your code, including all its deployments and logic. Defined by an import path (e.g., `model_service.served_model.serve:app`, which every served model uses).
 5. **Serve Deployment (The Functional Unit)**: A managed group of replicas. It defines scaling rules (`num_replicas`, `num_cpus`) and versioning.
 6. **Replica (The Execution Unit)**: A single Ray actor process running the deployment code inside a Worker Node.
 

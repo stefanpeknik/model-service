@@ -50,13 +50,17 @@ src/model_service/
   builders/model_clients/ one client per inference contract
   builders/implementations/  the builders: heatmap/, embeddings/
   builders/replica/       the Ray Serve app that hosts builders
-  inference/              MLflow loader; implementations/: model code served by Ray Serve
+  served_model/           the generic host that serves every catalog/served-models/ file
+  inference/              MLflow loader; implementations/: EPISeg's old class, kept for a test
   providers/              where builders read input and publish output: standalone, empaia/
   contracts/              data shapes processes hand each other
 deploy/
-  helm/rayservice/models/<id>.yaml   one file per trained model
+  helm/rayservice/                   the chart; reads catalog/ through a symlink
   images/                            Dockerfiles
   k8s/                               manifests the chart does not create
+catalog/
+  served-models/<id>.yaml            one file per served model
+  analyses/, environments/<env>/     analyses; per-environment patches
 tests/           unit and PostgreSQL tests
 ```
 
@@ -69,9 +73,9 @@ Start with [what this thesis added](docs/thesis-scope.md), then
 A model the existing components can run needs only YAML: add
 `catalog/served-models/<id>.yaml`, check it with `uv run pytest tests/catalog`,
 and `helm upgrade`; every file is deployed unless the environment's values
-name a subset in `servedModels`. Models not yet migrated still use
-`deploy/helm/rayservice/models/<id>.yaml` listed under `models:`; see
-[Adding models](docs/guides/adding-models.md).
+name a subset in `servedModels`. See the
+[Configuration Reference](docs/guides/configuration-reference.md) for the
+file's blocks.
 
 ## Add a builder
 

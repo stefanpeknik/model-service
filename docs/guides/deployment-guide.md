@@ -1,5 +1,11 @@
 # Deployment Guide
 
+> **Out of date.** Every deployed model is now a file in
+> `catalog/served-models/` on the generic host; the Python classes and
+> `deploy/helm/rayservice/models/` files this guide describes are gone, except
+> EPISeg's, kept for a test. Add a model as in the
+> [Configuration Reference](configuration-reference.md#2-served-model-files).
+
 This guide focuses on one goal: get a model running on Kubernetes through the Helm chart, verify it, and update it safely.
 
 ## What This Guide Covers

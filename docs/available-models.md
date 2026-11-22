@@ -16,6 +16,10 @@ All endpoints receive and return data over HTTP using `POST` requests. To minimi
 | **Virchow2**              | `/virchow2`              | Foundation Model / Embeddings |
 | **Prov-GigaPath**         | `/prov-gigapath`         | Foundation Model / Embeddings |
 
+Each model is a file in `catalog/served-models/` (the route is its file name),
+served by the one generic host; the reply format follows from the file's
+`output:`.
+
 ---
 
 ## Model Specifications
