@@ -180,13 +180,15 @@ class _Run:
         analysis = self.analysis
         started = time.monotonic()
         with ExitStack() as stack:
-            self.pool = stack.enter_context(
-                ThreadPoolExecutor(max_workers=self.concurrency.read_threads)
-            )
             scratch = Path(stack.enter_context(tempfile.TemporaryDirectory()))
             staging = stack.enter_context(Staging(outputs))
             opened = stack.enter_context(
                 analysis.source.open(dict(inputs), Run(scratch, analysis.last_model))
+            )
+            # Entered after the source, so a cancelled run waits for the
+            # reads still in the pool before the slide closes under them.
+            self.pool = stack.enter_context(
+                ThreadPoolExecutor(max_workers=self.concurrency.read_threads)
             )
             keys = list(opened.keys)
             sinks = _OpenSinks()

@@ -192,6 +192,29 @@ def test_cancelling_a_run_leaves_no_output(
     assert list(out.iterdir()) == []
 
 
+def test_cancelling_a_run_waits_for_running_reads_before_closing_the_source(
+    tmp_path: Path, slide: Path, out: Path
+) -> None:
+    resolved = analysis(
+        tmp_path,
+        "[{use: key_log, output: keys}]",
+        source="{use: slow_tiles, load_s: 0.5}",
+        steps="[]",
+    )
+
+    async def cancel_while_reading() -> None:
+        task = asyncio.create_task(
+            run_analysis(resolved, {"slide": slide}, {"keys": out / "keys.npy"}, {})
+        )
+        await asyncio.sleep(0.1)
+        task.cancel()
+        await task
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(cancel_while_reading())
+    assert list(out.iterdir()) == []
+
+
 def test_several_sinks_write_all_their_outputs_or_none(
     tmp_path: Path, slide: Path, out: Path
 ) -> None:
