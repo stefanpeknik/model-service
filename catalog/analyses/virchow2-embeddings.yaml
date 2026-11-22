@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=../.schemas/analyses.schema.json
 # Today's tile-embeddings builder on virchow2: the builder's defaults, tiles
 # at the model's 224 px and 0.5 µm/px side by side, an optional region of
 # interest. Each row holds both summaries, global and local_mean.

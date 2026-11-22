@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=../.schemas/served-models.schema.json
 # Prostate cancer classifier: one score in [0, 1] per 512 px tile at 0.468 mpp.
 # The ONNX graph takes uint8 RGB tiles (N, 3, 512, 512) and normalises inside.
 weights: {use: mlflow, uri: "mlflow-artifacts:/65/aebc892f526047249b972f200bef4381/artifacts/checkpoints/epoch=0-step=6972/prostate_model_norm.onnx"}

@@ -1,0 +1,734 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "Batching": {
+      "additionalProperties": false,
+      "description": "How requests are batched for the runtime.",
+      "properties": {
+        "max_size": {
+          "description": "The largest batch the runtime gets.",
+          "exclusiveMinimum": 0,
+          "title": "Max Size",
+          "type": "integer"
+        },
+        "wait_s": {
+          "description": "Seconds a batch waits to fill up.",
+          "minimum": 0,
+          "title": "Wait S",
+          "type": "number"
+        }
+      },
+      "title": "Batching",
+      "type": "object"
+    },
+    "EmbeddingOutput": {
+      "additionalProperties": false,
+      "description": "One feature vector per summary for each tile.",
+      "properties": {
+        "kind": {
+          "const": "embedding",
+          "description": "`scores` or `embedding`.",
+          "title": "Kind",
+          "type": "string"
+        },
+        "summaries": {
+          "description": "Summary names, one vector each, e.g. `[global, local_mean]`; with one summary a tile's output is one vector.",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Summaries",
+          "type": "array"
+        },
+        "dtype": {
+          "const": "float32",
+          "default": "float32",
+          "description": "`float32`.",
+          "title": "Dtype",
+          "type": "string"
+        }
+      },
+      "title": "EmbeddingOutput",
+      "type": "object"
+    },
+    "Input": {
+      "additionalProperties": false,
+      "description": "What the model takes: RGB uint8 tiles, `(3, tile_size, tile_size)` per tile.",
+      "properties": {
+        "tile_size": {
+          "description": "Tile edge in pixels.",
+          "exclusiveMinimum": 0,
+          "title": "Tile Size",
+          "type": "integer"
+        },
+        "mpp": {
+          "description": "Microns per pixel of the tiles.",
+          "exclusiveMinimum": 0,
+          "title": "Mpp",
+          "type": "number"
+        }
+      },
+      "title": "Input",
+      "type": "object"
+    },
+    "Output": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ScoresOutput"
+        },
+        {
+          "$ref": "#/$defs/EmbeddingOutput"
+        }
+      ]
+    },
+    "Resources": {
+      "additionalProperties": false,
+      "description": "What one replica reserves.",
+      "properties": {
+        "gpus": {
+          "default": 0,
+          "description": "GPUs per replica; 0.5 shares one.",
+          "minimum": 0,
+          "title": "Gpus",
+          "type": "number"
+        },
+        "cpus": {
+          "default": 1,
+          "description": "CPUs per replica.",
+          "exclusiveMinimum": 0,
+          "title": "Cpus",
+          "type": "number"
+        },
+        "memory_gib": {
+          "description": "Memory per replica in GiB.",
+          "exclusiveMinimum": 0,
+          "title": "Memory Gib",
+          "type": "number"
+        }
+      },
+      "title": "Resources",
+      "type": "object"
+    },
+    "ScoresOutput": {
+      "additionalProperties": false,
+      "description": "A score map per tile: `(channels, size, size)`.",
+      "properties": {
+        "kind": {
+          "const": "scores",
+          "description": "`scores` or `embedding`.",
+          "title": "Kind",
+          "type": "string"
+        },
+        "channels": {
+          "default": 1,
+          "description": "Score channels.",
+          "exclusiveMinimum": 0,
+          "title": "Channels",
+          "type": "integer"
+        },
+        "size": {
+          "default": 1,
+          "description": "Edge of the score map; 1 for one score per tile.",
+          "exclusiveMinimum": 0,
+          "title": "Size",
+          "type": "integer"
+        },
+        "dtype": {
+          "default": "float32",
+          "description": "The scores' dtype: `float32` or `float16`.",
+          "enum": [
+            "float32",
+            "float16"
+          ],
+          "title": "Dtype",
+          "type": "string"
+        },
+        "range": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "`[low, high]` every score must lie in, e.g. `[0, 1]` for probabilities; a model returning logits then fails on its first batch.",
+          "title": "Range"
+        }
+      },
+      "title": "ScoresOutput",
+      "type": "object"
+    },
+    "Serving": {
+      "additionalProperties": false,
+      "description": "Scaling and queue limits; left out, they follow from `batching.max_size`.",
+      "properties": {
+        "min_replicas": {
+          "default": 0,
+          "description": "Replicas kept when idle.",
+          "minimum": 0,
+          "title": "Min Replicas",
+          "type": "integer"
+        },
+        "max_replicas": {
+          "default": 4,
+          "description": "The most replicas.",
+          "minimum": 1,
+          "title": "Max Replicas",
+          "type": "integer"
+        },
+        "target_ongoing_requests": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Requests per replica the autoscaler aims at; half a batch.",
+          "title": "Target Ongoing Requests"
+        },
+        "max_ongoing_requests": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Requests one replica takes at once; two batches.",
+          "title": "Max Ongoing Requests"
+        },
+        "max_queued_requests": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Requests queued before callers are refused; sixteen batches.",
+          "title": "Max Queued Requests"
+        },
+        "downscale_delay_s": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds of low load before the autoscaler removes a replica; Ray Serve's default (600) when left out.",
+          "title": "Downscale Delay S"
+        },
+        "max_concurrent_runs": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Scheduled analysis runs using this model at once; the API's PER_MODEL_LIMIT when left out.",
+          "title": "Max Concurrent Runs"
+        }
+      },
+      "title": "Serving",
+      "type": "object"
+    },
+    "Triple": {
+      "maxItems": 3,
+      "minItems": 3,
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "type": "array"
+    },
+    "loader_huggingface": {
+      "additionalProperties": false,
+      "description": "Downloads one commit of a Hugging Face Hub repository.",
+      "properties": {
+        "repo": {
+          "description": "The repository ID, `<owner>/<name>`, e.g. `paige-ai/Virchow2`.",
+          "pattern": "^[\\w.-]+/[\\w.-]+$",
+          "title": "Repo",
+          "type": "string"
+        },
+        "revision": {
+          "description": "The full 40-character commit hash to download. A branch or tag can move, so the weights would change under the same file.",
+          "pattern": "^[0-9a-f]{40}$",
+          "title": "Revision",
+          "type": "string"
+        },
+        "files": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Glob patterns of the files to download, e.g. `[config.json, model.safetensors]`; left out, the whole repository.",
+          "title": "Files"
+        },
+        "use": {
+          "const": "huggingface",
+          "description": "The loader `huggingface`.",
+          "title": "Use",
+          "type": "string"
+        }
+      },
+      "title": "huggingface (loader)",
+      "type": "object"
+    },
+    "loader_local": {
+      "additionalProperties": false,
+      "description": "Weights at a path on the machine running the model, for tests and trials.",
+      "properties": {
+        "path": {
+          "description": "The weights file or directory on the machine running the model.",
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "use": {
+          "const": "local",
+          "description": "The loader `local`.",
+          "title": "Use",
+          "type": "string"
+        }
+      },
+      "title": "local (loader)",
+      "type": "object"
+    },
+    "loader_mlflow": {
+      "additionalProperties": false,
+      "description": "Downloads one artifact (e.g. an ONNX file) from MLflow.",
+      "properties": {
+        "uri": {
+          "description": "The artifact's URI, e.g. `mlflow-artifacts:/<experiment>/<run>/artifacts/<path>`; it names one run's file, so it pins the weights.",
+          "minLength": 1,
+          "title": "Uri",
+          "type": "string"
+        },
+        "use": {
+          "const": "mlflow",
+          "description": "The loader `mlflow`.",
+          "title": "Use",
+          "type": "string"
+        }
+      },
+      "title": "mlflow (loader)",
+      "type": "object"
+    },
+    "runtime_onnx": {
+      "additionalProperties": false,
+      "description": "Runs an ONNX graph on ONNX Runtime, optionally through TensorRT.",
+      "properties": {
+        "tensorrt": {
+          "default": false,
+          "description": "Try TensorRT first, then CUDA, then CPU. The engine is built on the first start and cached; `describe()` shows which provider is active.",
+          "title": "Tensorrt",
+          "type": "boolean"
+        },
+        "workspace_gib": {
+          "default": 8,
+          "description": "GPU memory TensorRT may use to choose kernels; too little rules out the fast ones for large tiles.",
+          "exclusiveMinimum": 0,
+          "title": "Workspace Gib",
+          "type": "number"
+        },
+        "optimization_level": {
+          "default": 1,
+          "description": "TensorRT builder optimisation level: higher builds slower and may run faster.",
+          "maximum": 5,
+          "minimum": 0,
+          "title": "Optimization Level",
+          "type": "integer"
+        },
+        "fp16": {
+          "default": true,
+          "description": "Let TensorRT use FP16 kernels.",
+          "title": "Fp16",
+          "type": "boolean"
+        },
+        "apply_session_options": {
+          "default": true,
+          "description": "Give the session `threads`, all graph optimisations and sequential execution. `false` leaves ONNX Runtime's defaults (intra-op threads for every core), as EPISeg's original class did by passing its options under a keyword ONNX Runtime ignores.",
+          "title": "Apply Session Options",
+          "type": "boolean"
+        },
+        "threads": {
+          "default": 1,
+          "description": "ONNX Runtime's intra-op threads.",
+          "minimum": 1,
+          "title": "Threads",
+          "type": "integer"
+        },
+        "output_dtype": {
+          "anyOf": [
+            {
+              "enum": [
+                "float32",
+                "float16"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Cast the graph's output to this dtype, e.g. `float16` to halve a score map; left out, the output keeps the graph's dtype.",
+          "title": "Output Dtype"
+        },
+        "use": {
+          "const": "onnx",
+          "description": "The runtime `onnx`.",
+          "title": "Use",
+          "type": "string"
+        }
+      },
+      "title": "onnx (runtime)",
+      "type": "object"
+    },
+    "runtime_timm": {
+      "additionalProperties": false,
+      "description": "Runs a timm model on PyTorch, on the GPU when there is one.",
+      "properties": {
+        "num_classes": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Classifier outputs, passed to timm's constructor; 0 removes the head, so the model returns its features. Left out, the folder's config decides.",
+          "title": "Num Classes"
+        },
+        "mlp_layer": {
+          "anyOf": [
+            {
+              "const": "swiglu_packed",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The MLP block, passed to timm's constructor: `swiglu_packed` (timm's SwiGLUPacked, as Virchow2 needs). Left out, timm's default.",
+          "title": "Mlp Layer"
+        },
+        "act_layer": {
+          "anyOf": [
+            {
+              "const": "silu",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The activation, passed to timm's constructor: `silu` (torch's SiLU). Left out, timm's default.",
+          "title": "Act Layer"
+        },
+        "autocast": {
+          "default": "none",
+          "description": "`fp16` runs the forward pass under autocast: float16 on a GPU, bfloat16 on CPU, which has no float16 autocast. `none` runs float32.",
+          "enum": [
+            "fp16",
+            "none"
+          ],
+          "title": "Autocast",
+          "type": "string"
+        },
+        "transform": {
+          "default": "none",
+          "description": "`pretrained` applies the transform timm derives from the folder's config (resize, crop, normalise) to each uint8 tile. `none` passes the batch as given, e.g. as `pre:` steps left it.",
+          "enum": [
+            "pretrained",
+            "none"
+          ],
+          "title": "Transform",
+          "type": "string"
+        },
+        "use": {
+          "const": "timm",
+          "description": "The runtime `timm`.",
+          "title": "Use",
+          "type": "string"
+        }
+      },
+      "title": "timm (runtime)",
+      "type": "object"
+    },
+    "step_center_crop": {
+      "additionalProperties": false,
+      "description": "Keeps the centre square of each uint8 tile, as torchvision's `CenterCrop`.",
+      "properties": {
+        "size": {
+          "description": "The edge of the centre square kept, in pixels.",
+          "exclusiveMinimum": 0,
+          "title": "Size",
+          "type": "integer"
+        },
+        "use": {
+          "const": "center_crop",
+          "description": "The step `center_crop`.",
+          "title": "Use",
+          "type": "string"
+        }
+      },
+      "title": "center_crop (step)",
+      "type": "object"
+    },
+    "step_cls_mean_pool": {
+      "additionalProperties": false,
+      "description": "Pools a ViT's tokens into two vectors: the class token and the patch mean.",
+      "properties": {
+        "registers": {
+          "default": 0,
+          "description": "Register tokens after the class token, left out of the mean and of unpooled tokens (Virchow2 has 4).",
+          "minimum": 0,
+          "title": "Registers",
+          "type": "integer"
+        },
+        "use": {
+          "const": "cls_mean_pool",
+          "description": "The step `cls_mean_pool`.",
+          "title": "Use",
+          "type": "string"
+        }
+      },
+      "title": "cls_mean_pool (step)",
+      "type": "object"
+    },
+    "step_normalize": {
+      "additionalProperties": false,
+      "description": "Turns uint8 RGB tiles into the float32 input most PyTorch models expect.",
+      "properties": {
+        "preset": {
+          "anyOf": [
+            {
+              "const": "imagenet",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Named mean and std: `imagenet` is mean (0.485, 0.456, 0.406), std (0.229, 0.224, 0.225). Give either this or `mean` and `std`.",
+          "title": "Preset"
+        },
+        "mean": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Triple"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Per-channel (RGB) mean, on the [0, 1] scale."
+        },
+        "std": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Triple"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Per-channel (RGB) standard deviation, on the [0, 1] scale."
+        },
+        "use": {
+          "const": "normalize",
+          "description": "The step `normalize`.",
+          "title": "Use",
+          "type": "string"
+        }
+      },
+      "title": "normalize (step)",
+      "type": "object"
+    },
+    "step_resize": {
+      "additionalProperties": false,
+      "description": "Resizes uint8 RGB tiles, as torchvision's `Resize` does to a PIL image.",
+      "properties": {
+        "size": {
+          "description": "The shorter edge after resizing, in pixels; the longer edge keeps the aspect ratio, so a square tile becomes `size` x `size`.",
+          "exclusiveMinimum": 0,
+          "title": "Size",
+          "type": "integer"
+        },
+        "interpolation": {
+          "default": "bilinear",
+          "description": "The resampling filter: `bilinear`, `bicubic` or `nearest`.",
+          "enum": [
+            "bilinear",
+            "bicubic",
+            "nearest"
+          ],
+          "title": "Interpolation",
+          "type": "string"
+        },
+        "use": {
+          "const": "resize",
+          "description": "The step `resize`.",
+          "title": "Use",
+          "type": "string"
+        }
+      },
+      "title": "resize (step)",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Served-model files: a loader, a runtime, steps, and what goes in and out.",
+  "properties": {
+    "weights": {
+      "description": "A loader: `{use: mlflow, uri: …}`.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/loader_huggingface"
+        },
+        {
+          "$ref": "#/$defs/loader_local"
+        },
+        {
+          "$ref": "#/$defs/loader_mlflow"
+        }
+      ],
+      "title": "Weights"
+    },
+    "runtime": {
+      "description": "A runtime: `{use: onnx, …}`.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/runtime_onnx"
+        },
+        {
+          "$ref": "#/$defs/runtime_timm"
+        }
+      ],
+      "title": "Runtime"
+    },
+    "pre": {
+      "default": null,
+      "description": "Steps run on each tile before the runtime.",
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/step_center_crop"
+          },
+          {
+            "$ref": "#/$defs/step_cls_mean_pool"
+          },
+          {
+            "$ref": "#/$defs/step_normalize"
+          },
+          {
+            "$ref": "#/$defs/step_resize"
+          }
+        ]
+      },
+      "title": "Pre",
+      "type": "array"
+    },
+    "post": {
+      "default": null,
+      "description": "Steps run on each output after the runtime.",
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/step_center_crop"
+          },
+          {
+            "$ref": "#/$defs/step_cls_mean_pool"
+          },
+          {
+            "$ref": "#/$defs/step_normalize"
+          },
+          {
+            "$ref": "#/$defs/step_resize"
+          }
+        ]
+      },
+      "title": "Post",
+      "type": "array"
+    },
+    "input": {
+      "$ref": "#/$defs/Input",
+      "description": "`{tile_size: …, mpp: …}`."
+    },
+    "output": {
+      "$ref": "#/$defs/Output",
+      "description": "`{kind: scores, …}` or `{kind: embedding, summaries: […]}`."
+    },
+    "batching": {
+      "$ref": "#/$defs/Batching",
+      "description": "`{max_size: …, wait_s: …}`."
+    },
+    "resources": {
+      "$ref": "#/$defs/Resources",
+      "description": "`{gpus: …, cpus: …, memory_gib: …}`."
+    },
+    "serving": {
+      "$ref": "#/$defs/Serving",
+      "description": "Scaling and queue limits."
+    }
+  },
+  "title": "served model",
+  "type": "object"
+}
