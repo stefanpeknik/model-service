@@ -119,6 +119,7 @@ class Serving(Block):
         target_ongoing_requests: Requests per replica the autoscaler aims at.
         max_ongoing_requests: Requests one replica takes at once.
         max_queued_requests: Requests queued before callers are refused.
+        downscale_delay_s: Idle seconds before the autoscaler removes a replica.
     """
 
     min_replicas: int = Field(0, ge=0, description="Replicas kept when idle.")
@@ -135,6 +136,14 @@ class Serving(Block):
         None,
         gt=0,
         description="Requests queued before callers are refused; sixteen batches.",
+    )
+    downscale_delay_s: float | None = Field(
+        None,
+        ge=0,
+        description=(
+            "Seconds of low load before the autoscaler removes a replica; Ray "
+            "Serve's default (600) when left out."
+        ),
     )
 
 
