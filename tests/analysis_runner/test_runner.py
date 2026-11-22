@@ -197,14 +197,14 @@ def test_cancelling_a_run_waits_for_running_reads_before_closing_the_source(
 ) -> None:
     resolved = analysis(
         tmp_path,
-        "[{use: key_log, output: keys}]",
+        "[{use: score_table, output: table}]",
         source="{use: slow_tiles, load_s: 0.5}",
-        steps="[]",
+        steps="[{use: mean_intensity}]",
     )
 
     async def cancel_while_reading() -> None:
         task = asyncio.create_task(
-            run_analysis(resolved, {"slide": slide}, {"keys": out / "keys.npy"}, {})
+            run_analysis(resolved, {"slide": slide}, {"table": out / "t.npz"}, {})
         )
         await asyncio.sleep(0.1)
         task.cancel()

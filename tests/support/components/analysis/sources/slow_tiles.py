@@ -31,12 +31,11 @@ class SlowTiles(Source):
 
     name = "slow_tiles"
     Options = SlowTilesOptions
-    adds: ClassVar[dict[str, Col]] = {
-        "tile": Col("uint8", (3, 8, 8)),
-        "tile_x": Col("int64"),
-        "tile_y": Col("int64"),
+    adds: ClassVar[dict[str, Col]] = {"tile": Col("uint8", (3, 64, 64))}
+    frame: ClassVar[dict[str, Col]] = {
+        "extent_x": Col("int64"),
+        "extent_y": Col("int64"),
     }
-    frame: ClassVar[dict[str, Col]] = {}
 
     def inputs(self) -> dict[str, bool]:
         """A slide, which it never reads."""
@@ -57,14 +56,11 @@ class SlowTiles(Source):
             time.sleep(delay)
             with lock:
                 loading -= 1
-            return {
-                "tile": np.zeros((len(chosen), 3, 8, 8), np.uint8),
-                "tile_x": np.array(chosen, np.int64),
-                "tile_y": np.zeros(len(chosen), np.int64),
-            }
+            return {"tile": np.zeros((len(chosen), 3, 64, 64), np.uint8)}
 
+        frame = {"extent_x": 512, "extent_y": 64}
         try:
-            yield Opened(frame={}, keys=list(range(8)), load=load)
+            yield Opened(frame=frame, keys=list(range(8)), load=load)
         finally:
             with lock:
                 if loading:
