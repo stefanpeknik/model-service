@@ -1,9 +1,13 @@
-"""Model steps at run time: a served model's handle per tile, with failure codes."""
+"""Model steps at run time: a served model's handle per tile, with failure codes.
+
+`RayServedModel` is the handle on the cluster: the served model's Serve
+application, called through `infer` and `describe`.
+"""
 
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import numpy as np
 
@@ -31,6 +35,51 @@ class ModelHandle(Protocol):
             The tile's scores or embedding.
         """
         ...
+
+
+class DescribedModel(ModelHandle, Protocol):
+    """A served model's handle that also says what it runs: the host's `describe()`."""
+
+    async def describe(self) -> dict[str, Any]:
+        """Report what the replica runs.
+
+        Returns:
+            At least `digest`, the served model's declaration digest.
+        """
+        ...
+
+
+class RayServedModel:
+    """A served model's Ray Serve application handle, as the runner calls it."""
+
+    def __init__(self, model_id: str) -> None:
+        """Look up the application named after the served model.
+
+        Args:
+            model_id: The served-model ID, also its application's name.
+        """
+        from ray import serve
+
+        self._handle = serve.get_app_handle(model_id)
+
+    async def infer(self, tile: np.ndarray) -> np.ndarray:
+        """Infer one tile on the served model.
+
+        Args:
+            tile: uint8 `(3, tile_size, tile_size)`.
+
+        Returns:
+            The tile's output.
+        """
+        return cast("np.ndarray", await self._handle.infer.remote(tile))
+
+    async def describe(self) -> dict[str, Any]:
+        """Ask the served model what it runs.
+
+        Returns:
+            Its `describe()` reply.
+        """
+        return cast("dict[str, Any]", await self._handle.describe.remote())
 
 
 def model_call(
