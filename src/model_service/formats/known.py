@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from model_service.formats import score_grid
+from model_service.formats import embedding_table, score_grid
 
 
 @dataclass(frozen=True)
@@ -24,7 +24,12 @@ class Format:
 
 FORMATS = {
     f.name: f
-    for f in (Format(score_grid.NAME, score_grid.MEDIA_TYPE, score_grid.EXTENSION),)
+    for f in (
+        Format(score_grid.NAME, score_grid.MEDIA_TYPE, score_grid.EXTENSION),
+        Format(
+            embedding_table.NAME, embedding_table.MEDIA_TYPE, embedding_table.EXTENSION
+        ),
+    )
 }
 
 
