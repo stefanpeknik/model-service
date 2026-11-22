@@ -112,3 +112,25 @@ def test_keys_of_todays_model_files_are_refused_with_what_fits(
         "this file: batching, input, output, post, pre, resources, runtime, "
         "serving, weights. Hint: remove it",
     ]
+
+
+def test_a_hugging_face_revision_must_be_a_commit(root: Path) -> None:
+    write(
+        root,
+        "served-models/m1.yaml",
+        MODEL.replace(
+            "{use: local, path: /weights/model.onnx}",
+            "{use: huggingface, repo: paige-ai/Virchow2, revision: main}",
+        ),
+    )
+
+    with pytest.raises(CatalogInvalid) as raised:
+        load_catalog(root)
+
+    assert [str(e) for e in raised.value.errors] == [
+        "catalog/served-models/m1.yaml:weights.revision: `main` is invalid: string "
+        "should match pattern '^[0-9a-f]{40}$'. revision: The full 40-character "
+        "commit hash to download. A branch or tag can move, so the weights would "
+        "change under the same file. Hint: copy the full commit hash from the "
+        "history of the repository's files on huggingface.co"
+    ]
