@@ -127,8 +127,8 @@ empaia:
     existingClaim: test-data-storage-pvc
     mountPath: /data/Projects
   # Registers the prostate app in the instance's marketplace mock, with JES's
-  # own service client (the mds-client); only prostate-classifier-1 has an
-  # empaia block (provider-blocks/).
+  # own service client (the mds-client); prostate-heatmap is the only analysis
+  # with `expose.empaia`.
   marketplace:
     url: http://test-core-marketplace:10010
     organizationId: 1a305195-6b85-45bd-85f3-1f96a1a5684c

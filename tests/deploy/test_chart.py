@@ -151,7 +151,9 @@ def test_the_api_catalog_carries_the_deployed_served_models() -> None:
         },
     }
     assert data["model-catalog.json"] == []
-    assert set(data["provider-blocks.json"]["prostate-classifier-1"]) == {"empaia"}
+    # The prostate app is the prostate-heatmap analysis's `expose.empaia` now.
+    assert data["provider-blocks.json"] == {}
+    assert "empaia" in data["catalog.json"]["analyses"]["prostate-heatmap"]["expose"]
 
 
 def test_the_api_reads_the_rendered_catalog(tmp_path: Path) -> None:
@@ -169,7 +171,9 @@ def test_the_api_reads_the_rendered_catalog(tmp_path: Path) -> None:
         mpp=0.468,
     )
     assert catalog.get("virchow2").contract == "tile-embedding"
-    assert set(catalog.provider_block("empaia")) == {"prostate-classifier-1"}
+    assert catalog.provider_block("empaia") == {}
+    prostate = catalog.resolved.entries("analyses")["prostate-heatmap"].value
+    assert prostate.empaia is not None
     assert sorted(catalog.resolved.entries("analyses")) == sorted(TEST_ANALYSES)
 
 

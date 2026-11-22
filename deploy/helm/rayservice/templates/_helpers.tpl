@@ -200,9 +200,9 @@ runtime_env.config. Takes dict "id", "document" and "settings".
 
 {{/*
 Provider blocks (e.g. `empaia`) of the deployed served models, as JSON
-{id: {block: value}}, from provider-blocks/<id>.yaml. Transitional: today's
-model files carry them and served-model files don't, until the blocks move
-to the analyses' `expose`.
+{id: {block: value}}, from provider-blocks/<id>.yaml. Transitional and empty:
+the prostate app moved to the prostate-heatmap analysis's `expose.empaia`,
+and the API no longer reads `empaia` blocks.
 */}}
 {{- define "model-service.providerBlocks" -}}
 {{- $models := include "model-service.servedModels" . | fromJson }}

@@ -162,10 +162,9 @@ empaia:
   # Extra DNS search domains for pods that call AppService, when the
   # installation hands out short host names from another namespace.
   dnsSearches: []
-  # The API registers an app, with its listed modes, for every model with an
-  # `empaia` block (in provider-blocks/<id>.yaml or its old model file), at
-  # startup, in this marketplace (the marketplace mock that EMPAIA test
-  # installations run). Empty url: no registration.
+  # The API registers an app, with its modes, for every deployed analysis with
+  # `expose.empaia`, at startup, in this marketplace (the marketplace mock that
+  # EMPAIA test installations run). Empty url: no registration.
   marketplace:
     url: ""
     organizationId: ""
@@ -173,7 +172,7 @@ empaia:
     # installation: it also marks the preprocessing triggers this deployment owns.
     jesTarget: model-service
     # The installation's Medical Data Service: the API keeps the preprocessing
-    # triggers the model files list there, with these client credentials.
+    # triggers the analyses list there, with these client credentials.
     # Empty: triggers are left alone.
     mdsUrl: ""
     # Client credentials for the marketplace, from a Secret; empty idpUrl: none.
