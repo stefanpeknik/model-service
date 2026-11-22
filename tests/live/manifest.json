@@ -1,0 +1,47 @@
+{
+  "recorded": "2026-11-21",
+  "image_tag": "empaia-36",
+  "source_revision": "0352fa6",
+  "shared_root": "/mnt/shared/golden",
+  "slides": [
+    "67df0411-395d-5d73-9c2f-3e0ffef45491.mrxs",
+    "97b654fd-d0b4-58e2-84d6-7b599f1ed331.mrxs"
+  ],
+  "models": {
+    "prostate-classifier-1": {
+      "weights": "mlflow-artifacts:/169/17dda4dc3f7449478208e87016ce7d86/artifacts/checkpoints/epoch=0-step=6972/prostate_model_norm.onnx",
+      "runtime": "onnxruntime TensorRT EP, max batch 256"
+    },
+    "virchow2": {
+      "weights": "hf:paige-ai/Virchow2",
+      "revision": "3158645804b69e3f3bc4439d4116edddf0840a72 (main on 2026-11-22; the class does not pin it)"
+    },
+    "prov-gigapath": {
+      "weights": "hf:prov-gigapath/prov-gigapath",
+      "revision": "64f9e26c15019f2d4f6d9113c6822f88bb16b01b (main on 2026-11-22; the class does not pin it)",
+      "deployment": "temporary test copy, max batch 64, 0.5 GPU"
+    },
+    "episeg-1": {
+      "weights": "mlflow-artifacts:/10/39f821ed5b964c71a603cc6db196f9fd/... on the internal MLflow",
+      "recorded": false,
+      "reason": "the test cluster cannot reach the internal MLflow and the public one lacks the run"
+    }
+  },
+  "files": {
+    "raw/prostate-classifier-1/case.json": "de7bbc66bb82273fddaabbeb12b80dbe026ed50d861113db402849cf188917c1",
+    "raw/prostate-classifier-1/replies.npz": "73d053f368f2d511dd55dbe847fb2c2d54dcfde6dcd6dc05774f20d856fe20dc",
+    "raw/prostate-classifier-1/tiles.npy": "9b78567fe91ca7ceccf33d3187bcec9730de2fe1285d3285e7051f18d1361ffa",
+    "raw/prov-gigapath/case.json": "4ee735df3ae5b8b2665381c4a0aac4c6f5857231cd55ec3af250ef7a1e18afb9",
+    "raw/prov-gigapath/replies.npz": "b7c6179293921a4b44301e871aec044355d8034f9a82a1089c3d80832359e976",
+    "raw/prov-gigapath/tiles.npy": "0a9c7428031d5c5daabd8f91fc25ec3f1e9d131f122b0aa304a08542b1efec4e",
+    "raw/virchow2/case.json": "0855a03e945b2d0e59aa5e30fe45d0cb192159160253d6abc924e86b07fa89e9",
+    "raw/virchow2/replies.npz": "e09a5d000737c7d7add2505686c4df9f92ea4c68a5d6c94014b5f4683994182e",
+    "raw/virchow2/tiles.npy": "0a9c7428031d5c5daabd8f91fc25ec3f1e9d131f122b0aa304a08542b1efec4e",
+    "runs/prostate-heatmap/67df0411-395d-5d73-9c2f-3e0ffef45491.npz": "fd1e11c6d27a30b18872bdee44ddb16ba0b541e7be3329be06160d54a411def2",
+    "runs/prostate-heatmap/97b654fd-d0b4-58e2-84d6-7b599f1ed331.npz": "f4ddc0d0a74002038f7adf346bcd1c036b5abdd80cf40090d02069a2ccd35ec5",
+    "runs/prov-gigapath-embeddings/67df0411-395d-5d73-9c2f-3e0ffef45491.h5": "c0c5e853f49b965abb41dfab6b01684c4fc61138e67921fe27e3b81956deb43b",
+    "runs/prov-gigapath-embeddings/97b654fd-d0b4-58e2-84d6-7b599f1ed331.h5": "5f35420e58dfef4fbe873ace82c4018325e002fafa0e38493341a2b404df7062",
+    "runs/virchow2-embeddings/67df0411-395d-5d73-9c2f-3e0ffef45491.h5": "91751f93f5298299c86698a9f5018ac9e488b24115c1e0f993d02f74c94b0064",
+    "runs/virchow2-embeddings/97b654fd-d0b4-58e2-84d6-7b599f1ed331.h5": "532e43d304e6f4f111715eb0a938f1187db357edbe7074e8c0a526cc7e3b405d"
+  }
+}
