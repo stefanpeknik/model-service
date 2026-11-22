@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import textwrap
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -10,7 +9,9 @@ import pytest
 
 from model_service.builders.implementations.heatmap.spec import HeatmapConfiguration
 from model_service.catalog import CatalogInvalid, load_catalog
-from model_service.components import Col, Registry, default_registry
+from model_service.components import Col
+from tests.support.analysis_catalog import REGISTRY, write
+from tests.support.analysis_catalog import served_model as model
 
 
 if TYPE_CHECKING:
@@ -18,24 +19,6 @@ if TYPE_CHECKING:
 
 
 CATALOG = Path(__file__).resolve().parents[2] / "catalog"
-REGISTRY = Registry(
-    {
-        (c.kind, c.name): c
-        for c in [*default_registry(), *Registry.scan("tests.support.components")]
-    }
-)
-
-
-def model(tile_size: int = 64, mpp: float = 0.5, output: str = "kind: scores") -> str:
-    return f"""
-        weights: {{use: local, path: /weights/model.onnx}}
-        runtime: {{use: onnx}}
-        input: {{tile_size: {tile_size}, mpp: {mpp}}}
-        output: {{{output}}}
-        batching: {{max_size: 8, wait_s: 0.01}}
-        resources: {{memory_gib: 2}}
-    """
-
 
 HEATMAP = """
     source: {use: slide_tiles}
@@ -49,12 +32,6 @@ def root(tmp_path: Path) -> Path:
     catalog = tmp_path / "catalog"
     write(catalog, "served-models/m1.yaml", model())
     return catalog
-
-
-def write(root: Path, name: str, text: str) -> None:
-    path = root / name
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(textwrap.dedent(text))
 
 
 def analysis(root: Path, analysis_id: str = "a1") -> Analysis:
