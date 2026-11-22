@@ -45,21 +45,31 @@ def errors(root: Path) -> list[str]:
 
 
 @pytest.mark.parametrize("environment", [None, "rationai-test"])
-def test_prostate_heatmap_is_todays_heatmap_builder_on_prostate(
+@pytest.mark.parametrize(
+    ("analysis_id", "model_id", "score_map"),
+    [
+        ("prostate-heatmap", "prostate-classifier-1", (1, 1, 1)),
+        ("episeg-heatmap", "episeg-1", (1, 1024, 1024)),
+    ],
+)
+def test_heatmap_analyses_are_todays_heatmap_builder_on_their_model(
     environment: str | None,
+    analysis_id: str,
+    model_id: str,
+    score_map: tuple[int, int, int],
 ) -> None:
     catalog = load_catalog(CATALOG, environment)
-    prostate = catalog.entries("served-models")["prostate-classifier-1"].value
-    heatmap = catalog.entries("analyses")["prostate-heatmap"].value
+    served = catalog.entries("served-models")[model_id].value
+    heatmap = catalog.entries("analyses")[analysis_id].value
 
     assert heatmap.settings() == HeatmapConfiguration().model_dump()
     assert heatmap.inputs == {"slide": True, "region_of_interest": False}
-    assert list(heatmap.models) == ["prostate-classifier-1"]
+    assert list(heatmap.models) == [model_id]
     assert (heatmap.source.options.tile_size, heatmap.source.options.mpp) == (
-        prostate.input.tile_size,
-        prostate.input.mpp,
+        served.input.tile_size,
+        served.input.mpp,
     )
-    assert heatmap.columns["scores"] == Col("float32", (1, 1, 1))
+    assert heatmap.columns["scores"] == Col("float32", score_map)
     assert [(s.name, s.options.output) for s in heatmap.sinks] == [
         ("score_grid", "heatmap")
     ]
