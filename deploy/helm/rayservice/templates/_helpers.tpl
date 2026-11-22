@@ -81,3 +81,98 @@ off to once a day. Not -1: Ray 2.58's GCS then dumps in a tight loop
 - name: RAY_ROTATION_BACKUP_COUNT
   value: "1"
 {{- end -}}
+
+{{/*
+Deep-merge `patch` over `base` the way the catalog loader does
+(model_service.catalog.merge): mappings merge key by key, any other value
+replaces, null removes the key. Not sprig's mergeOverwrite, which keeps the
+base value when the patch says false, 0 or "". Renders JSON.
+*/}}
+{{- define "model-service.deepMerge" -}}
+{{- $merged := deepCopy .base }}
+{{- range $key, $value := .patch }}
+{{- if kindIs "invalid" $value }}
+{{- $_ := unset $merged $key }}
+{{- else if and (kindIs "map" $value) (kindIs "map" (get $merged $key)) }}
+{{- $_ := set $merged $key (include "model-service.deepMerge" (dict "base" (get $merged $key) "patch" $value) | fromJson) }}
+{{- else }}
+{{- $_ := set $merged $key $value }}
+{{- end }}
+{{- end }}
+{{- toJson $merged }}
+{{- end }}
+
+{{/*
+The served models this release deploys, as JSON {id: document}: each
+catalog/served-models/<id>.yaml (through the chart's `catalog` symlink to the
+repo's catalog/) that `servedModels` selects, with its
+catalog/environments/<environment>/served-models/<id>.yaml patch merged in.
+*/}}
+{{- define "model-service.servedModels" -}}
+{{- $selected := .Values.servedModels | default list }}
+{{- $env := .Values.environment | default "" }}
+{{- $models := dict }}
+{{- range $path, $_ := .Files.Glob "catalog/served-models/*.yaml" }}
+{{- $id := base $path | trimSuffix ".yaml" }}
+{{- if or (has "*" $selected) (has $id $selected) }}
+{{- $document := $.Files.Get $path | fromYaml | default dict }}
+{{- if hasKey $document "Error" }}{{ fail (printf "%s is not valid YAML: %s" $path $document.Error) }}{{ end }}
+{{- $patch := $.Files.Get (printf "catalog/environments/%s/served-models/%s" $env (base $path)) }}
+{{- if and $env $patch }}
+{{- $document = include "model-service.deepMerge" (dict "base" $document "patch" (fromYaml $patch | default dict)) | fromJson }}
+{{- end }}
+{{- $_ := set $models $id $document }}
+{{- end }}
+{{- end }}
+{{- range $path, $_ := .Files.Glob (printf "catalog/environments/%s/served-models/*.yaml" $env) }}
+{{- if not ($.Files.Get (printf "catalog/served-models/%s" (base $path))) }}{{ fail (printf "%s patches a served model that has no file" $path) }}{{ end }}
+{{- end }}
+{{- range $selected }}
+{{- if and (ne . "*") (not (hasKey $models .)) }}{{ fail (printf "servedModels names %s, but catalog/served-models/%s.yaml does not exist" . .) }}{{ end }}
+{{- end }}
+{{- range $.Values.models }}
+{{- if hasKey $models (base .) }}{{ fail (printf "%s is deployed from catalog/served-models/ and from models/%s.yaml; drop it from models:" (base .) .) }}{{ end }}
+{{- end }}
+{{- toJson $models }}
+{{- end }}
+
+{{/*
+One served model's Serve application, as
+model_service.served_model.deployment.serve_application builds it, plus the
+environment's env vars (servedModelSettings.env) as the replica's runtime_env.
+Takes dict "id", "document" and "settings".
+*/}}
+{{- define "model-service.servedModelApplication" -}}
+{{- $id := .id }}
+{{- $model := .document }}
+{{- $batch := int64 (required (printf "served model %s needs batching.max_size" $id) (dig "batching" "max_size" nil $model)) }}
+{{- $serving := $model.serving | default dict }}
+{{- $resources := $model.resources | default dict }}
+{{- $memory := required (printf "served model %s needs resources.memory_gib" $id) $resources.memory_gib }}
+{{- $actor := dict "num_cpus" ($resources.cpus | default 1) "num_gpus" ($resources.gpus | default 0) "memory" (mulf $memory 1073741824 | int64) }}
+{{- with .settings.env }}
+{{- $_ := set $actor "runtime_env" (dict "env_vars" .) }}
+{{- end }}
+{{- $autoscaling := dict "min_replicas" ($serving.min_replicas | default 0) "max_replicas" ($serving.max_replicas | default 4) "target_ongoing_requests" ($serving.target_ongoing_requests | default (max (div $batch 2) 1)) }}
+{{- $userConfig := dict "id" $id "declaration" $model "cache_root" (required "servedModelSettings.cacheRoot is required" .settings.cacheRoot) }}
+{{- $deployment := dict "name" "ServedModel" "max_ongoing_requests" ($serving.max_ongoing_requests | default (mul 2 $batch)) "max_queued_requests" ($serving.max_queued_requests | default (mul 16 $batch)) "autoscaling_config" $autoscaling "ray_actor_options" $actor "user_config" $userConfig }}
+{{- toYaml (dict "name" $id "route_prefix" (printf "/%s" $id) "import_path" "model_service.served_model.serve:app" "deployments" (list $deployment)) }}
+{{- end }}
+
+{{/*
+Provider blocks (e.g. `empaia`) of the deployed served models, as JSON
+{id: {block: value}}, from provider-blocks/<id>.yaml. Transitional: today's
+model files carry them and served-model files don't, until the blocks move
+to the analyses' `expose`.
+*/}}
+{{- define "model-service.providerBlocks" -}}
+{{- $models := include "model-service.servedModels" . | fromJson }}
+{{- $blocks := dict }}
+{{- range $path, $_ := .Files.Glob "provider-blocks/*.yaml" }}
+{{- $id := base $path | trimSuffix ".yaml" }}
+{{- if hasKey $models $id }}
+{{- $_ := set $blocks $id ($.Files.Get $path | fromYaml) }}
+{{- end }}
+{{- end }}
+{{- toJson $blocks }}
+{{- end }}
