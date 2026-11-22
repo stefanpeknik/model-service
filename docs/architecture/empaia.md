@@ -17,7 +17,7 @@ sequenceDiagram
   participant N as analysis runner
   participant AS as EMPAIA App Service
 
-  Note over R,AS: at API start, empaia.registration posts one app per exposed<br/>analysis, carrying all its modes, to the marketplace (idempotent)
+  Note over R,AS: at API start, empaia.registration posts one app per exposed<br/>analysis, carrying all its modes, to the marketplace (idempotent),<br/>aligns triggers, and deletes its own apps no analysis has
   WD->>JES: start job for app (STANDALONE or PREPROCESSING)
   JES->>R: POST /v1/empaia/analyses/{id} (job token)
   R->>A: identify + prepare
@@ -40,7 +40,7 @@ sequenceDiagram
 | `components/empaia/` | Converters (`wsi`, `rectangle`, `primitive`) and publishers (`primitive`, `continuous_pixelmap`), one per EAD type |
 | `providers/empaia/provider.py` | The provider: what EMPAIA adds to the API and to replicas |
 | `providers/empaia/ead/` | `apps.py` merges the components' fragments into each app's EAD v3; `vocabulary.py` holds modes, triggers and viewer settings |
-| `providers/empaia/registration.py`, `triggers.py` | Marketplace registration and preprocessing triggers at startup, retried |
+| `providers/empaia/registration.py`, `triggers.py` | At startup, retried: register the apps, align the preprocessing triggers, delete owned apps no analysis has (namespace `org.empaia.rationai.…` and image on this JES target) |
 | `providers/empaia/jobs/` | The JES-facing routes, payload parsing, the scheduler adapter (`adapter.py`, which also runs the publication loop), input access |
 | `providers/empaia/app_service/` | The App Service gateway, one method per SDK call family, over the `rationai.empaia` SDK client |
 

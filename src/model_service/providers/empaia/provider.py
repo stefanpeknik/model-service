@@ -50,7 +50,8 @@ class EmpaiaProvider(Provider):
         Registration runs in the background, and only when a marketplace is
         configured, so the API serves while the marketplace is down; it
         aligns the preprocessing triggers too when a Medical Data Service is
-        configured. Models' `empaia` blocks are no longer read.
+        configured, then deletes the apps it owns that no analysis has.
+        Models' `empaia` blocks are no longer read.
 
         Args:
             catalog: The deployed served models and analyses.
@@ -84,7 +85,7 @@ class EmpaiaProvider(Provider):
         async def register() -> None:
             """Register the apps until done, when a marketplace is configured.
 
-            It runs with no apps too, so triggers of removed apps go.
+            It runs with no apps too, so removed apps and their triggers go.
             """
             if marketplace is not None:
                 await register_until_done(marketplace, apps, triggers)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -220,13 +221,15 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_registration_is_retried_until_the_marketplace_answers(self) -> None:
-        # The app: the portal app, then its viewer configuration.
+        # The app: the portal app, then its viewer configuration, then the
+        # marketplace's apps, none to retire.
         answers = [
             httpx.Response(503),
             httpx.Response(401),
             httpx.Response(401),
             httpx.Response(201),
             httpx.Response(200),
+            httpx.Response(200, json={"items": []}),
         ]
 
         def handle(request: httpx.Request) -> httpx.Response:
@@ -261,6 +264,132 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
     def test_a_medical_data_service_needs_a_marketplace(self) -> None:
         with self.assertRaises(SettingsError):
             EmpaiaSettings(mds_url="http://mds.example")
+
+
+def listed_app(portal_app_id: str, namespace: str, image: str) -> dict[str, object]:
+    """A portal app as the marketplace mock lists it, trimmed to what owning reads."""
+    return {
+        "id": portal_app_id,
+        "active_app_views": {
+            "v1": None,
+            "v3": {
+                "app": {
+                    "id": f"app-of-{portal_app_id}",
+                    "ead": {"namespace": namespace},
+                    "registry_image_url": image,
+                }
+            },
+        },
+    }
+
+
+# The builder-era prostate app, as ticket 11 left it in the test marketplace.
+BUILDER_ERA_APP = listed_app(
+    "builder-era",
+    OLD_NAMESPACE,
+    "http::model-service/builders/heatmap/models/prostate-classifier-1",
+)
+# Apps model-service never registered: a RationAI container app under the same
+# namespace prefix, another model-service deployment's app, another vendor's.
+FOREIGN_APPS = [
+    listed_app(
+        "container",
+        "org.empaia.rationai.gigapath_embed_score.v3.0",
+        "registry.example/rationai/gigapath-embed-score:1.0",
+    ),
+    listed_app(
+        "other-deployment",
+        "org.empaia.rationai.constant.v3.0",
+        "http::model-service-dev/analyses/constant",
+    ),
+    listed_app(
+        "other-vendor", "org.empaia.vendor.app.v3.0", "registry.example/vendor/app:1"
+    ),
+]
+
+
+class FakeMarketplace:
+    """The marketplace mock's portal-app routes, in memory, shared by every client."""
+
+    def __init__(self, *apps: dict[str, object]) -> None:
+        self.apps = {str(app["id"]): app for app in apps}
+        self.deleted: list[str] = []
+
+    def client(self) -> Marketplace:
+        async def handle(request: httpx.Request) -> httpx.Response:
+            # Let other clients' requests interleave, as against a real service.
+            await asyncio.sleep(0)
+            path = request.url.path.removeprefix("/v1")
+            if request.method == "POST" and path == "/custom-mock/portal-apps":
+                body = json.loads(request.content)
+                self.apps[body["id"]] = body
+                return httpx.Response(200)
+            if request.method == "PUT" and path.startswith("/custom-mock/apps/"):
+                return httpx.Response(200)
+            if request.method == "PUT" and path == "/customer/portal-apps/query":
+                assert request.headers["organization-id"] == "org-1"
+                items = list(self.apps.values())
+                return httpx.Response(
+                    200, json={"item_count": len(items), "items": items}
+                )
+            if request.method == "DELETE" and path.startswith(
+                "/custom-mock/portal-apps/"
+            ):
+                portal_app_id = path.rsplit("/", 1)[1]
+                if self.apps.pop(portal_app_id, None) is None:
+                    return httpx.Response(404)
+                self.deleted.append(portal_app_id)
+                return httpx.Response(200)
+            return httpx.Response(405)
+
+        return Marketplace(
+            "https://marketplace.example",
+            "org-1",
+            "model-service",
+            NoCredentials(),
+            transport=httpx.MockTransport(handle),
+        )
+
+
+class ReconcileTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_renamed_app_replaces_the_old_and_foreign_apps_stay(
+        self,
+    ) -> None:
+        marketplace = FakeMarketplace(BUILDER_ERA_APP, *FOREIGN_APPS)
+        app = prostate_app()
+
+        await register_until_done(marketplace.client(), [app], retry_seconds=0)
+
+        self.assertEqual(
+            sorted(marketplace.apps),
+            sorted([app.portal_app_id, *(a["id"] for a in FOREIGN_APPS)]),
+        )
+        self.assertEqual(marketplace.deleted, ["builder-era"])
+
+    async def test_replicas_reconciling_together_and_again_agree(self) -> None:
+        marketplace = FakeMarketplace(BUILDER_ERA_APP, *FOREIGN_APPS)
+        app = prostate_app()
+        expected = sorted([app.portal_app_id, *(a["id"] for a in FOREIGN_APPS)])
+
+        # Both retire the old app; neither takes the other's success as a failure.
+        with self.assertNoLogs(
+            "model_service.providers.empaia.registration", level="WARNING"
+        ):
+            await asyncio.gather(
+                register_until_done(marketplace.client(), [app], retry_seconds=0),
+                register_until_done(marketplace.client(), [app], retry_seconds=0),
+            )
+        self.assertEqual(sorted(marketplace.apps), expected)
+
+        # A replica restarting later replaces the app with itself, nothing more.
+        await register_until_done(marketplace.client(), [app], retry_seconds=0)
+
+        self.assertEqual(sorted(marketplace.apps), expected)
+        self.assertEqual(marketplace.deleted, ["builder-era"])
+        registered = marketplace.apps[app.portal_app_id]["active_app_views"]["v3"]
+        self.assertEqual(
+            (registered["app"]["id"], registered["app"]["ead"]), (app.app_id, app.ead)
+        )
 
 
 class TriggerTests(unittest.IsolatedAsyncioTestCase):
@@ -326,6 +455,39 @@ class TriggerTests(unittest.IsolatedAsyncioTestCase):
 
         await self.mds(ours).ensure([])
         self.assertEqual([item["id"] for item in self.items], ["b", "d"])
+
+    async def test_each_analysis_triggers_its_own_app_only(self) -> None:
+        ours = "model-service:model-service"
+        # Ours, for the builder-era app the prostate analysis replaces.
+        self.items[:] = [
+            {**self.trigger("a", ours, "PROSTATE"), "portal_app_id": "builder-era"}
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            other = tmp_app(
+                Path(tmp),
+                "modes:\n"
+                "  preprocessing:\n"
+                "    triggers: [{tissue: PROSTATE, stain: H_AND_E}]",
+            )
+        marketplace = FakeMarketplace(BUILDER_ERA_APP)
+
+        await register_until_done(
+            marketplace.client(), [self.app, other], self.mds(ours), retry_seconds=0
+        )
+
+        self.assertEqual(
+            sorted((item["portal_app_id"], item["tissue"]) for item in self.items),
+            sorted(
+                [
+                    (self.app.portal_app_id, "PROSTATE"),
+                    (other.portal_app_id, "PROSTATE"),
+                ]
+            ),
+        )
+        self.assertEqual(
+            sorted(marketplace.apps),
+            sorted([self.app.portal_app_id, other.portal_app_id]),
+        )
 
     async def test_replicas_starting_together_end_with_one_trigger(self) -> None:
         ours = "model-service:model-service"
