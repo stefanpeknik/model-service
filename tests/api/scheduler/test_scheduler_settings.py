@@ -28,7 +28,8 @@ class SchedulerSettingsTests(unittest.TestCase):
         settings = load(
             {
                 **self.environment,
-                "MODEL_CATALOG_PATH": "/etc/catalog.json",
+                "MODEL_CATALOG_DIR": "/etc/catalog",
+                "CATALOG_RELOAD_SECONDS": "2",
                 "BUILDER_IDS": '["heatmap", "tile-embeddings"]',
                 "SHARED_STORAGE_ROOTS": '["/mnt/data", "/mnt/projects"]',
                 "LEASE_SECONDS": "12.5",
@@ -38,7 +39,8 @@ class SchedulerSettingsTests(unittest.TestCase):
             }
         )
 
-        self.assertEqual(settings.model_catalog_path, Path("/etc/catalog.json"))
+        self.assertEqual(settings.model_catalog_dir, Path("/etc/catalog"))
+        self.assertEqual(settings.catalog_reload_seconds, 2)
         self.assertEqual(settings.builder_ids, {"heatmap", "tile-embeddings"})
         self.assertEqual(
             settings.shared_storage_roots, (Path("/mnt/data"), Path("/mnt/projects"))

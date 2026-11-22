@@ -17,8 +17,9 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
 spec:
   replicas: {{ .Values.api.replicas }}
-  # A model or config change restarts the API; replace it one pod at a time,
-  # never dropping below the set replicas, so the API stays up.
+  # A config or image change restarts the API; replace it one pod at a time,
+  # never dropping below the set replicas, so the API stays up. Catalog
+  # changes don't: the API reloads the mounted ConfigMap in place.
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -30,8 +31,6 @@ spec:
       app.kubernetes.io/instance: {{ .Release.Name }}
   template:
     metadata:
-      annotations:
-        checksum/model-catalog: {{ include (print $.Template.BasePath "/model-catalog.yaml") . | sha256sum }}
       labels:
         app.kubernetes.io/name: model-service-api
         app.kubernetes.io/instance: {{ .Release.Name }}
@@ -66,8 +65,8 @@ spec:
                   key: {{ .Values.api.encryption.keyKey }}
             - name: RAY_SERVE_ORIGIN
               value: {{ default (printf "http://%s-serve-svc.%s.svc.cluster.local:8000" .Release.Name (.Release.Namespace | default "rationai-jobs-ns")) .Values.api.rayServeOrigin | quote }}
-            - name: MODEL_CATALOG_PATH
-              value: /etc/model-service/model-catalog.json
+            - name: MODEL_CATALOG_DIR
+              value: /etc/model-service
             - name: BUILDER_IDS
               value: {{ keys (.Values.builders | default dict) | sortAlpha | toJson | quote }}
             - name: SHARED_STORAGE_ROOTS
@@ -142,6 +141,8 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            # The whole ConfigMap, never a subPath or items: kubelet then
+            # updates the files in place and the API reloads them.
             - name: model-catalog
               mountPath: /etc/model-service
               readOnly: true

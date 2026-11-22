@@ -139,3 +139,18 @@ def test_a_model_deployed_both_ways_fails_the_render() -> None:
         render(TEST_VALUES, models=["prostate-classifier-1"])
 
     assert "prostate-classifier-1" in failed.value.stderr
+
+
+def test_catalog_changes_reach_the_api_without_rolling_it() -> None:
+    api = render(TEST_VALUES)[("Deployment", "model-service-api")]
+    pod = api["spec"]["template"]
+    container = pod["spec"]["containers"][0]
+    (mount,) = [m for m in container["volumeMounts"] if m["name"] == "model-catalog"]
+    (volume,) = [v for v in pod["spec"]["volumes"] if v["name"] == "model-catalog"]
+    env = {e["name"]: e.get("value") for e in container["env"]}
+
+    assert "annotations" not in pod["metadata"]
+    # kubelet updates a ConfigMap volume in place only without subPath or items.
+    assert "subPath" not in mount
+    assert "items" not in volume["configMap"]
+    assert env["MODEL_CATALOG_DIR"] == mount["mountPath"]

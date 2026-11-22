@@ -13,7 +13,7 @@ from httpx import HTTPError
 
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Callable, Iterable
 
     import httpx
 
@@ -44,18 +44,23 @@ class DeploymentHealth:
     """Checks Ray Serve exposes the route of every builder and model."""
 
     def __init__(
-        self, client: httpx.AsyncClient, *, origin: str, routes: Iterable[str]
+        self,
+        client: httpx.AsyncClient,
+        *,
+        origin: str,
+        routes: Callable[[], Iterable[str]],
     ) -> None:
         """Configure the Ray Serve origin and the routes that must be deployed.
 
         Args:
             client: Shared HTTP client, owned by the caller.
             origin: Ray Serve origin.
-            routes: Route prefixes every builder and model must expose.
+            routes: Gives the route prefixes every builder and model must
+                expose, asked on each check, so a reloaded catalog counts.
         """
         self._client = client
         self._origin = origin.rstrip("/")
-        self._routes = tuple(sorted(set(routes)))
+        self._routes = routes
 
     async def check(self) -> DeploymentStatus:
         """Compare Ray Serve's `/-/routes` with the expected routes.
@@ -73,7 +78,8 @@ class DeploymentHealth:
             return DeploymentStatus(DeploymentState.UNREACHABLE)
         # Ray returns {route_prefix: application_name}.
         deployed = {str(prefix).rstrip("/") or "/" for prefix in routes}
-        missing = tuple(route for route in self._routes if route not in deployed)
+        expected = sorted(set(self._routes()))
+        missing = tuple(route for route in expected if route not in deployed)
         return DeploymentStatus(
             DeploymentState.MISSING_APPLICATIONS if missing else DeploymentState.READY,
             missing,

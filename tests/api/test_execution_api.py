@@ -617,7 +617,7 @@ class HealthAndAvailabilityTests(ApiTestCase):
         return DeploymentHealth(
             client,
             origin="http://ray",
-            routes=["/builders/heatmap", "/prostate-classifier-1"],
+            routes=lambda: ["/builders/heatmap", "/prostate-classifier-1"],
         )
 
     async def test_an_api_without_a_running_worker_is_not_live(self) -> None:
