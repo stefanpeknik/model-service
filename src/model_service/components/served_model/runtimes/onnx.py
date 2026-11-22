@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field
 
@@ -25,6 +25,7 @@ class OnnxOptions(Options):
         optimization_level: TensorRT's builder optimisation level.
         fp16: Whether TensorRT may use FP16 kernels.
         threads: ONNX Runtime's intra-op threads.
+        output_dtype: The dtype the graph's output is cast to, if any.
     """
 
     tensorrt: bool = Field(
@@ -53,6 +54,13 @@ class OnnxOptions(Options):
     )
     fp16: bool = Field(True, description="Let TensorRT use FP16 kernels.")
     threads: int = Field(1, ge=1, description="ONNX Runtime's intra-op threads.")
+    output_dtype: Literal["float32", "float16"] | None = Field(
+        None,
+        description=(
+            "Cast the graph's output to this dtype, e.g. `float16` to halve a "
+            "score map; left out, the output keeps the graph's dtype."
+        ),
+    )
 
 
 class Onnx(Runtime):
@@ -103,8 +111,11 @@ class Onnx(Runtime):
         input_name = session.get_inputs()[0].name
         output_name = session.get_outputs()[0].name
 
+        dtype = self.options.output_dtype
+
         def run(batch: Any) -> Any:
-            return session.run([output_name], {input_name: batch})[0]
+            output = session.run([output_name], {input_name: batch})[0]
+            return output if dtype is None else output.astype(dtype)
 
         return run
 
