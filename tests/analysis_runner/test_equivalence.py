@@ -226,6 +226,9 @@ def test_todays_concurrency_matches_within_the_last_bit(
     )
 
     expected, actual = arrays(old), arrays(new)
-    np.testing.assert_allclose(actual["values"], expected["values"], rtol=0, atol=1e-7)
+    # Concurrency changes the order in which up to four overlapping tiles are
+    # summed into a cell, so allow four float32 steps at the top of [0, 1].
+    atol = 4 * float(np.spacing(np.float32(0.5)))
+    np.testing.assert_allclose(actual["values"], expected["values"], rtol=0, atol=atol)
     for key in ("scored", "level", "level_size", "cell_size", "mpp"):
         assert actual[key].tobytes() == expected[key].tobytes(), key
