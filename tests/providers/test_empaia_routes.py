@@ -48,8 +48,9 @@ JOB = {
 def view(status: ExecutionStatus, **fields: object) -> ExecutionView:
     return ExecutionView(
         id="execution-1",
-        builder_id="heatmap",
-        model_id=PROSTATE.id,
+        analysis_id="prostate-heatmap",
+        models=[PROSTATE.id],
+        analysis_digest=None,
         status=status,
         **fields,  # type: ignore[arg-type]
     )

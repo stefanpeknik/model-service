@@ -51,8 +51,9 @@ class Scheduler:
     async def get(self, execution_id: str) -> ExecutionView:
         return ExecutionView(
             id=execution_id,
-            builder_id="heatmap",
-            model_id="classifier",
+            analysis_id="heatmap:classifier",
+            models=["classifier"],
+            analysis_digest=None,
             status=ExecutionStatus.QUEUED,
         )
 

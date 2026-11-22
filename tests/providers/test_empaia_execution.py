@@ -27,6 +27,7 @@ from model_service.api.scheduler.public import (
     SchedulingUnavailableError,
 )
 from model_service.api.scheduler.running_work import ActiveWorkRegistry
+from model_service.api.scheduler.targets import ExecutionTarget
 from model_service.api.scheduler.worker import ExecutionWorker
 from model_service.builders.base import Builder, BuilderSettings
 from model_service.builders.implementations.heatmap.spec import HeatmapOutputs
@@ -375,8 +376,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
 
         # Provenance: the builder's defaults, fixed when the job is accepted.
         self.assertEqual(execution.invocation.configuration, DEFAULT_CONFIGURATION)
-        self.assertEqual(execution.builder_id, "heatmap")
-        self.assertEqual(execution.model_id, MODEL.id)
+        self.assertEqual(execution.target, ExecutionTarget.builder("heatmap", MODEL.id))
 
     async def test_configuration_keys_the_builder_does_not_take_are_ignored(
         self,

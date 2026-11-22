@@ -1,4 +1,4 @@
-"""Claiming due work and renewing its lease, under per-model advisory locks."""
+"""Claiming due work and renewing its lease, under advisory locks per capacity key."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 
 from model_service.api.scheduler.internal_state import (
     ExecutionRecord,
@@ -15,6 +15,11 @@ from model_service.api.scheduler.internal_state import (
     WorkKind,
 )
 from model_service.api.scheduler.store.rows import ExecutionRow
+from model_service.api.scheduler.targets import (
+    CapacityKey,
+    CapacityKind,
+    ExecutionTarget,
+)
 
 
 if TYPE_CHECKING:
@@ -158,17 +163,20 @@ class ClaimOperations:
     async def _select_processing(
         self, session: AsyncSession, now: datetime
     ) -> ExecutionRow | None:
-        """Lock the oldest eligible processing row within its model's capacity.
+        """Lock the oldest eligible processing row with a free slot in every pool it uses.
 
-        A transaction-scoped advisory lock per model serializes the capacity check
-        across scheduler replicas; a model whose lock is held elsewhere is skipped.
+        Rows are grouped by the served models they call (a model-free
+        analysis by its ID). For each group, a transaction-scoped advisory
+        lock per capacity key is tried in sorted order, so two claims never
+        wait on each other; a group with a key locked elsewhere or full is
+        skipped.
 
         Args:
             session: Session of the caller's transaction.
             now: Current database time.
 
         Returns:
-            The locked row, by model priority and age, or None.
+            The locked row, by group priority and age, or None.
         """
         eligible = (
             ExecutionRow.work_kind == WorkKind.PROCESSING,
@@ -176,42 +184,33 @@ class ClaimOperations:
             ExecutionRow.next_attempt_at <= now,
             ExecutionRow.deadline_at > now,
         )
-        models = await session.scalars(
-            select(ExecutionRow.model_id)
+        model_free = func.cardinality(ExecutionRow.models) == 0
+        # The analysis ID only tells model-free groups apart.
+        model_free_id = case((model_free, ExecutionRow.analysis_id))
+        groups = await session.execute(
+            select(ExecutionRow.models, model_free_id)
             .where(*eligible)
-            .group_by(ExecutionRow.model_id)
+            .group_by(ExecutionRow.models, model_free_id)
             .order_by(
                 func.max(ExecutionRow.priority).desc(),
                 func.min(ExecutionRow.created_at),
             )
         )
-        for model_id in models.all():
-            locked = await session.scalar(
-                select(
-                    func.pg_try_advisory_xact_lock(
-                        func.hashtextextended(f"builder:{model_id}", 0)
-                    )
-                )
-            )
-            if not locked:
-                continue
-            active = (
-                await session.execute(
-                    select(func.count())
-                    .select_from(ExecutionRow)
-                    .where(
-                        ExecutionRow.model_id == model_id,
-                        ExecutionRow.work_kind == WorkKind.PROCESSING,
-                        ExecutionRow.fencing_token.is_not(None),
-                        ExecutionRow.lease_expires_at > now,
-                    )
-                )
-            ).scalar_one()
-            if active >= self._db.per_model_limit:
+        unavailable: set[CapacityKey] = set()
+        for models, analysis_id in groups.all():
+            target = ExecutionTarget(analysis_id or "", tuple(models))
+            keys = target.capacity_keys
+            if unavailable.intersection(keys) or not await self._reserve(
+                session, keys, now, unavailable
+            ):
                 continue
             row = await session.scalar(
                 select(ExecutionRow)
-                .where(ExecutionRow.model_id == model_id, *eligible)
+                .where(
+                    ExecutionRow.models == list(models),
+                    *([ExecutionRow.analysis_id == analysis_id] if not models else []),
+                    *eligible,
+                )
                 .order_by(
                     ExecutionRow.priority.desc(),
                     ExecutionRow.next_attempt_at,
@@ -223,6 +222,61 @@ class ClaimOperations:
             if row is not None:
                 return row
         return None
+
+    async def _reserve(
+        self,
+        session: AsyncSession,
+        keys: tuple[CapacityKey, ...],
+        now: datetime,
+        unavailable: set[CapacityKey],
+    ) -> bool:
+        """Lock each capacity key in order and check it has a free slot.
+
+        Args:
+            session: Session of the caller's transaction.
+            keys: The group's keys, sorted.
+            now: Current database time.
+            unavailable: Keys found locked elsewhere or full; extended here.
+
+        Returns:
+            Whether every key is locked by this transaction and has a slot.
+        """
+        for key in keys:
+            locked = await session.scalar(
+                select(
+                    func.pg_try_advisory_xact_lock(
+                        func.hashtextextended(key.lock_name, 0)
+                    )
+                )
+            )
+            if not locked:
+                unavailable.add(key)
+                return False
+        for key in keys:
+            uses_key = (
+                ExecutionRow.models.contains([key.id])
+                if key.kind is CapacityKind.MODEL
+                else and_(
+                    func.cardinality(ExecutionRow.models) == 0,
+                    ExecutionRow.analysis_id == key.id,
+                )
+            )
+            active = (
+                await session.execute(
+                    select(func.count())
+                    .select_from(ExecutionRow)
+                    .where(
+                        uses_key,
+                        ExecutionRow.work_kind == WorkKind.PROCESSING,
+                        ExecutionRow.fencing_token.is_not(None),
+                        ExecutionRow.lease_expires_at > now,
+                    )
+                )
+            ).scalar_one()
+            if active >= self._db.capacity_limit(key):
+                unavailable.add(key)
+                return False
+        return True
 
     async def _claimable(
         self, session: AsyncSession, row: ExecutionRow, now: datetime

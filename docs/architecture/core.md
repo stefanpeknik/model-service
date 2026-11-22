@@ -10,7 +10,7 @@ behind one public API that can also run builders durably.
 │ API process (model_service/api/, one Deployment, outside Ray)      │
 │  /v1/models   /v1/models/{m}/run|schedule (raw tiles)              │
 │  /v1/builders   /v1/builders/{b}/models/{m}/run|schedule           │
-│  /v1/analyses   /v1/analyses/{a}/run (resolved at admission)       │
+│  /v1/analyses   /v1/analyses/{a}/run|schedule                      │
 │  /v1/executions/{id}[/cancel|/result]   /v1/executions/lookup      │
 │  /v1/empaia/builders/{b}/models/{m}  (JES HTTP execution backend)  │
 │  model catalog ◄── ConfigMap from deploy/helm/rayservice/models/   │
@@ -97,6 +97,23 @@ build on its request body. Adding a provider means a package and one entry in
    removes the execution's attempt directories; EMPAIA publishes to the
    AppService.
 
+A scheduled analysis (`POST /v1/analyses/{a}/schedule`, the synchronous
+run's body with `requested_timeout_seconds` instead of a deadline and an
+`Idempotency-Key` header) is resolved once, at admission: the scheduler
+resolves the analysis with the caller's settings, checks the inputs and
+stores the resolved document and its digest on the execution. Every attempt,
+retries included, sends that stored document to the analysis runner, so a
+catalog change after admission doesn't change what runs; the runner's
+`describe()` check turns a changed served model into `model_contract_mismatch`.
+An execution's identity is its analysis ID, the analysis digest and the
+served models it calls (migration `0009`). Builder runs (the builder routes
+and EMPAIA, until its app moves to analyses) store no document: their
+analysis ID is the day-one analysis of their builder and model
+(`heatmap` × `prostate-classifier-1` is `prostate-heatmap`, and so on, see
+`api/scheduler/targets.py`) or `<builder>:<model>`, and each attempt runs
+that builder with the model's current catalog entry. `GET /v1/models` lists
+each served model's declaration, digest and the analyses calling it.
+
 A scheduled tile (`POST /v1/models/{m}/schedule`) is the same lifecycle with a
 different payload: the API checks the tile against the model's `tile_size`,
 writes its bytes to a file on the inference storage volume that the execution
@@ -120,12 +137,14 @@ contract is `invalid_model_output` (not retried).
 
 ## Capacity and failure behaviour
 
-- One API process runs up to `MAX_CONCURRENT_EXECUTIONS` builder claims and,
-  separately, `MAX_CONCURRENT_INFERENCE` tile claims. At most `PER_MODEL_LIMIT`
-  builder attempts and `PER_MODEL_INFERENCE_LIMIT` tile attempts per model run
-  at once, across all API replicas (PostgreSQL advisory lock per operation
-  and model). Tiles are claimed in batches; one 1-CPU API replica handles
-  about 100 tiles/s.
+- One API process runs up to `MAX_CONCURRENT_EXECUTIONS` claims. A scheduled
+  attempt takes a slot in every served model its analysis calls, and is
+  claimable only while each has one free, across all API replicas. A model's
+  slots are its file's `serving.max_concurrent_runs`, or `PER_MODEL_LIMIT`
+  (default 1) when left out. An analysis calling no model has its own pool,
+  keyed by its ID, with `PER_MODEL_LIMIT` slots. Claims take one PostgreSQL
+  advisory lock per pool, tried in sorted order, so overlapping claims
+  never wait on each other.
 - Builder replicas return 429 when full; the scheduler requeues without
   spending an attempt. Ray Serve's own non-JSON 503 (replica queue full, none
   running) counts the same. Synchronous callers get 429 with `Retry-After`.

@@ -318,7 +318,7 @@ class EmbeddingBuilderTests(unittest.IsolatedAsyncioTestCase):
                 await asyncio.sleep(0.01)
 
         self.assertEqual(view["status"], "succeeded", view)
-        self.assertEqual(view["model_id"], "encoder")
+        self.assertEqual(view["models"], ["encoder"])
         # Provenance: every setting it ran with, not only the one sent.
         self.assertEqual(
             view["configuration"],

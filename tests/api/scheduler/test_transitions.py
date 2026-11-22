@@ -14,6 +14,7 @@ from model_service.api.scheduler.internal_state import (
 )
 from model_service.api.scheduler.public import SubmissionIdentity
 from model_service.api.scheduler.status import ExecutionErrorCode, ExecutionStatus
+from model_service.api.scheduler.targets import ExecutionTarget
 from model_service.api.scheduler.transitions.execution_transitions import (
     ExecutionTransitions,
 )
@@ -35,8 +36,7 @@ def publishing() -> ExecutionRecord:
     admitted = TRANSITIONS.admission.admit(
         Admission(
             identity=SubmissionIdentity("external", "job", "job"),
-            builder_id="heatmap",
-            model_id="model",
+            target=ExecutionTarget.builder("heatmap", "model"),
             invocation=Invocation(
                 inputs={},
                 configuration=None,

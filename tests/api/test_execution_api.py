@@ -123,8 +123,9 @@ class RecordingScheduler:
         return ScheduleResult(
             execution=ExecutionView(
                 id="execution-1",
-                builder_id=request.builder_id,
-                model_id=request.model_id,
+                analysis_id=f"{request.builder_id}:{request.model_id}",
+                models=[request.model_id],
+                analysis_digest=None,
                 status=ExecutionStatus.QUEUED,
             ),
             created=True,
@@ -245,6 +246,9 @@ class CatalogRouteTests(ApiTestCase):
             [
                 {
                     "id": "prostate-classifier-1",
+                    "declaration": None,
+                    "digest": None,
+                    "analyses": [],
                     "contract": "spatial-scores",
                     "parameters": {
                         "tile_size": 512,
@@ -256,6 +260,9 @@ class CatalogRouteTests(ApiTestCase):
                 },
                 {
                     "id": "virchow2",
+                    "declaration": None,
+                    "digest": None,
+                    "analyses": [],
                     "contract": "tile-embedding",
                     "parameters": {
                         "tile_size": 224,
@@ -313,8 +320,9 @@ class ScheduleRouteTests(ApiTestCase):
             polled.json(),
             {
                 "id": execution_id,
-                "builder_id": "heatmap",
-                "model_id": "prostate-classifier-1",
+                "analysis_id": "prostate-heatmap",
+                "models": ["prostate-classifier-1"],
+                "analysis_digest": None,
                 "status": "queued",
                 "configuration": HEATMAP_DEFAULTS,
                 "result": None,

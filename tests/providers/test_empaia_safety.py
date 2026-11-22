@@ -17,6 +17,7 @@ from model_service.api.scheduler.public import (
     ProviderSuccess,
     ScheduleRequest,
 )
+from model_service.api.scheduler.targets import ExecutionTarget
 from model_service.contracts.result import BuilderResult, SharedArtifact
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
@@ -119,7 +120,7 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
                             )
                         }
                     ),
-                    "heatmap",
+                    ExecutionTarget.builder("heatmap", "prostate-classifier-1"),
                 ),
             )
 
@@ -190,7 +191,7 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
                                     )
                                 }
                             ),
-                            "heatmap",
+                            ExecutionTarget.builder("heatmap", "prostate-classifier-1"),
                         ),
                     )
             finally:
@@ -224,7 +225,10 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
                         "job_id": "j",
                         "credential": "c",
                     },
-                    ProviderSuccess(BuilderResult(outputs={}), "heatmap"),
+                    ProviderSuccess(
+                        BuilderResult(outputs={}),
+                        ExecutionTarget.builder("heatmap", "prostate-classifier-1"),
+                    ),
                 )
 
             self.assertTrue(artifact.exists())

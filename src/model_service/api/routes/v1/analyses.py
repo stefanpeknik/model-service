@@ -1,22 +1,32 @@
-"""`/v1/analyses`: the deployed analyses, and synchronous runs of one.
+"""`/v1/analyses`: the deployed analyses, and synchronous and scheduled runs of one.
 
 `POST /v1/analyses/{id}/run` takes the builder run's request (inputs, their
 access, settings as `configuration`, output path, deadline) without a model:
 the analysis names its served models. The API resolves the analysis with the
 settings and sends the resolved document to the analysis runner.
+
+`POST /v1/analyses/{id}/schedule` takes the same request with a timeout
+instead of a deadline, and the `Idempotency-Key` header. Admission resolves
+the analysis and stores the document on the execution; every attempt sends
+that document. `/v1/executions` reads and cancels it.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request, Response, status
 
 from model_service.api.http.auth import Access, Action
 from model_service.api.http.errors import ERRORS
+from model_service.api.http.scheduling import require_idempotency_key, submit
 from model_service.api.http.synchronous import run_synchronously, runs_unavailable
-from model_service.api.routes.v1.builders import ImmediateBuilderRequest
+from model_service.api.routes.v1.builders import (
+    ImmediateBuilderRequest,
+    ScheduledBuilderRequest,
+)
+from model_service.api.scheduler.public import AnalysisScheduleRequest, ScheduleResult
 from model_service.catalog.analyses import FOLDER
 from model_service.contracts.json_values import JsonValue
 from model_service.contracts.result import BuilderResult, OutputKind
@@ -26,6 +36,8 @@ from model_service.formats.known import get_format
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from model_service.api.scheduler.protocols import Scheduler
+    from model_service.api.scheduler.public import ProviderName
     from model_service.api.synchronous_runs import SynchronousAnalysisService
     from model_service.catalog import Catalog
     from model_service.catalog.analyses import Analysis
@@ -115,14 +127,18 @@ def analysis_view(analysis: Analysis) -> AnalysisView:
 def create_router(
     catalog: Callable[[], Catalog],
     runner: SynchronousAnalysisService | None,
+    scheduler: Scheduler,
     access: Access,
+    provider: ProviderName,
 ) -> APIRouter:
-    """Build the `/v1/analyses` router: the catalog and synchronous runs.
+    """Build the `/v1/analyses` router: the catalog, synchronous and scheduled runs.
 
     Args:
         catalog: Gives the catalog in use.
         runner: Runs analyses synchronously; None makes `/run` answer 503.
+        scheduler: Admits durable executions.
         access: Guards the routes.
+        provider: The provider whose files scheduled executions read and write.
 
     Returns:
         The router.
@@ -169,5 +185,43 @@ def create_router(
         if runner is None:
             raise runs_unavailable("synchronous analysis runs")
         return await run_synchronously(request, runner.run(analysis_id, body))
+
+    @router.post(
+        "/{analysis_id}/schedule",
+        status_code=status.HTTP_202_ACCEPTED,
+        responses={200: {"model": ScheduleResult}, **ERRORS},
+        dependencies=[access.require(Action.SCHEDULE)],
+    )
+    async def schedule_analysis(
+        analysis_id: str,
+        body: ScheduledBuilderRequest,
+        response: Response,
+        idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+    ) -> ScheduleResult:
+        """Schedule an analysis run as a durable execution.
+
+        Args:
+            analysis_id: The analysis to run.
+            body: Inputs, settings (`configuration`), output path and
+                requested timeout.
+            response: The response, 202 for a new execution or 200 for a
+                repeat.
+            idempotency_key: The caller's key; repeating it returns the same
+                execution.
+
+        Returns:
+            The execution's ID and status.
+        """
+        return await submit(
+            scheduler,
+            AnalysisScheduleRequest(
+                analysis_id=analysis_id,
+                provider=provider,
+                body=body.builder_request(),
+                requested_timeout_seconds=body.requested_timeout_seconds,
+                idempotency_key=idempotency_key,
+            ),
+            response,
+        )
 
     return router

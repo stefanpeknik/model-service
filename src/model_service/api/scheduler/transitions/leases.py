@@ -93,8 +93,7 @@ class LeaseTransitions:
             execution=claimed,
             claim=WorkClaim(
                 execution_id=claimed.id,
-                builder_id=claimed.builder_id,
-                model_id=claimed.model_id,
+                target=claimed.target,
                 provider=claimed.identity.provider,
                 kind=work_kind,
                 invocation=claimed.invocation,

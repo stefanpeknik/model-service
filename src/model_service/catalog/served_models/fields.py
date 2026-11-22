@@ -120,6 +120,7 @@ class Serving(Block):
         max_ongoing_requests: Requests one replica takes at once.
         max_queued_requests: Requests queued before callers are refused.
         downscale_delay_s: Idle seconds before the autoscaler removes a replica.
+        max_concurrent_runs: Scheduled analysis runs using the model at once.
     """
 
     min_replicas: int = Field(0, ge=0, description="Replicas kept when idle.")
@@ -143,6 +144,14 @@ class Serving(Block):
         description=(
             "Seconds of low load before the autoscaler removes a replica; Ray "
             "Serve's default (600) when left out."
+        ),
+    )
+    max_concurrent_runs: int | None = Field(
+        None,
+        gt=0,
+        description=(
+            "Scheduled analysis runs using this model at once; the API's "
+            "PER_MODEL_LIMIT when left out."
         ),
     )
 

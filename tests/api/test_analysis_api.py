@@ -10,7 +10,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from model_service.api.app_factory import create_app
-from model_service.api.model_catalog import ModelCatalog
+from model_service.api.model_catalog import ModelCatalog, served_model_binding
 from model_service.api.scheduler.builder_dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,
@@ -247,3 +247,35 @@ async def test_runs_are_unavailable_without_a_runner() -> None:
     status, body = await post(None)
 
     assert (status, body["detail"]["code"]) == (503, "builder_unavailable")  # type: ignore[index]
+
+
+async def test_models_list_served_models_with_declarations_and_analyses() -> None:
+    served = CATALOG.entries("served-models")
+    catalog = ModelCatalog(
+        [served_model_binding(entry.value) for entry in served.values()],
+        resolved=CATALOG,
+    )
+    app = create_app(NoScheduler(), catalog=catalog)  # type: ignore[arg-type]
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://model-service"
+    ) as client:
+        listed = (await client.get("/v1/models")).json()
+        single = (await client.get("/v1/models/prostate-classifier-1")).json()
+
+    by_id = {model["id"]: model for model in listed}
+    assert sorted(by_id) == [
+        "episeg-1",
+        "prostate-classifier-1",
+        "prov-gigapath",
+        "virchow2",
+    ]
+    prostate = by_id["prostate-classifier-1"]
+    assert single == prostate
+    assert prostate["analyses"] == ["prostate-heatmap"]
+    assert prostate["declaration"]["input"] == {"tile_size": 512, "mpp": 0.468}
+    # The environment's patch is part of the declaration.
+    assert prostate["declaration"]["weights"]["uri"].startswith(
+        "mlflow-artifacts:/169/"
+    )
+    assert prostate["digest"] == served["prostate-classifier-1"].value.digest
+    assert by_id["virchow2"]["analyses"] == ["virchow2-embeddings"]

@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from model_service.api.scheduler.store.protected_context import (
         ProtectedContextCipher,
     )
+    from model_service.api.scheduler.targets import CapacityLimits
 
 
 class PostgresExecutionRepository(ExecutionRepository):
@@ -50,6 +51,7 @@ class PostgresExecutionRepository(ExecutionRepository):
         cipher: ProtectedContextCipher,
         schema: str = DEFAULT_SCHEMA,
         per_model_limit: int = 1,
+        capacity_limits: CapacityLimits | None = None,
         processing_policy: RetryPolicy | None = None,
         finish_policy: RetryPolicy | None = None,
         pool_size: int = 10,
@@ -60,7 +62,10 @@ class PostgresExecutionRepository(ExecutionRepository):
             dsn: libpq DSN or PostgreSQL URL.
             cipher: Cipher for the stored provider context.
             schema: PostgreSQL schema holding the execution table.
-            per_model_limit: Concurrent builder executions allowed per model.
+            per_model_limit: Attempts allowed at once per capacity key when
+                `capacity_limits` is None.
+            capacity_limits: Attempts allowed at once per capacity key (a served
+                model, or a model-free analysis).
             processing_policy: Processing retry policy; defaults to 3 attempts, 5 s to 1 min backoff.
             finish_policy: Provider finish retry policy; same default.
             pool_size: Pooled connections, with as many again allowed as overflow.
@@ -73,6 +78,7 @@ class PostgresExecutionRepository(ExecutionRepository):
             cipher=cipher,
             schema=schema,
             per_model_limit=per_model_limit,
+            capacity_limits=capacity_limits,
             processing_policy=processing_policy,
             finish_policy=finish_policy,
             pool_size=pool_size,

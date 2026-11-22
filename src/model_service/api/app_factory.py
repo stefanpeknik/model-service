@@ -38,12 +38,15 @@ from model_service.api.scheduler.store.postgres.repository import (
     PostgresExecutionRepository,
 )
 from model_service.api.scheduler.store.protected_context import ProtectedContextCipher
+from model_service.api.scheduler.targets import CapacityKind
 from model_service.api.synchronous_runs import (
     SynchronousAnalysisService,
     SynchronousBuilderService,
 )
 from model_service.builders.registry import BUILDERS, get_builder
 from model_service.catalog.analyses import FOLDER as ANALYSES
+from model_service.catalog.analyses import resolve_run
+from model_service.catalog.served_models import FOLDER as SERVED_MODELS
 from model_service.providers.registry import PROVIDERS
 from model_service.providers.standalone.provider import STANDALONE_PROVIDER
 
@@ -55,7 +58,10 @@ if TYPE_CHECKING:
 
     from model_service.api.model_catalog import ModelCatalogView
     from model_service.api.scheduler.protocols import Scheduler
-    from model_service.api.scheduler.public import ModelResolver
+    from model_service.api.scheduler.public import AnalysisResolver, ModelResolver
+    from model_service.api.scheduler.targets import CapacityKey, CapacityLimits
+    from model_service.catalog.analyses import ResolvedAnalysis
+    from model_service.contracts.json_values import JsonObject
     from model_service.contracts.model_declarations import ModelBinding
     from model_service.providers.provider import RouteFactory
 
@@ -92,6 +98,65 @@ def model_resolver(catalog: ModelCatalogView) -> ModelResolver:
         return model
 
     return resolve
+
+
+def analysis_resolver(catalog: ModelCatalogView) -> AnalysisResolver:
+    """Make the scheduler's resolver of a deployed analysis with a run's settings.
+
+    Args:
+        catalog: The catalog in use; it may reload between admissions.
+
+    Returns:
+        A function giving the resolved analysis, raising `UnknownAnalysisError`
+        or `InvalidInvocation`.
+    """
+
+    def resolve(analysis_id: str, settings: JsonObject | None) -> ResolvedAnalysis:
+        """Resolve an analysis of the current catalog.
+
+        Args:
+            analysis_id: The analysis.
+            settings: Per-run settings; None keeps the file's.
+
+        Returns:
+            The analysis and its document.
+        """
+        return resolve_run(catalog.resolved, analysis_id, settings)
+
+    return resolve
+
+
+def capacity_limits(catalog: ModelCatalogView, default: int) -> CapacityLimits:
+    """Make the scheduler's slots per capacity key.
+
+    A served model's `serving.max_concurrent_runs` sets its slots; a model
+    without it, one no longer deployed and a model-free analysis get the
+    default.
+
+    Args:
+        catalog: The catalog in use; it may reload between claims.
+        default: Slots where the catalog sets none (`PER_MODEL_LIMIT`).
+
+    Returns:
+        The limits.
+    """
+
+    def limit(key: CapacityKey) -> int:
+        """Slots of one capacity key in the current catalog.
+
+        Args:
+            key: A served model or a model-free analysis.
+
+        Returns:
+            How many attempts may hold a slot at once.
+        """
+        if key.kind is CapacityKind.MODEL:
+            entry = catalog.resolved.entries(SERVED_MODELS).get(key.id)
+            if entry is not None and entry.value.serving.max_concurrent_runs:
+                return int(entry.value.serving.max_concurrent_runs)
+        return default
+
+    return limit
 
 
 def create_app(
@@ -228,7 +293,13 @@ def create_app(
 
     app.include_router(models.create_router(catalog, access))
     app.include_router(
-        analyses.create_router(lambda: catalog.resolved, analysis_runner, access)
+        analyses.create_router(
+            lambda: catalog.resolved,
+            analysis_runner,
+            scheduler,
+            access,
+            STANDALONE_PROVIDER,
+        )
     )
     app.include_router(
         builders.create_router(scheduler, builder_runner, access, STANDALONE_PROVIDER)
@@ -272,7 +343,7 @@ def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
         config.database_url,
         cipher=cipher,
         pool_size=config.database_pool_size,
-        per_model_limit=config.per_model_limit,
+        capacity_limits=capacity_limits(catalog, config.per_model_limit),
         processing_policy=RetryPolicy(
             max_attempts=config.processing_attempts,
             initial_backoff=config.initial_backoff,
@@ -292,6 +363,7 @@ def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
         dispatch=dispatch,
         providers={c.adapter.name: c.adapter for c in contributions},
         resolve_model=model_resolver(catalog),
+        resolve_analysis=analysis_resolver(catalog),
         default_timeout=config.default_deadline,
         maximum_timeout=config.maximum_deadline,
         lease_duration=config.lease_duration,

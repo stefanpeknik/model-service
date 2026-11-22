@@ -32,11 +32,11 @@ if TYPE_CHECKING:
     from model_service.api.model_catalog import ModelCatalogView
     from model_service.api.scheduler.protocols import Scheduler
     from model_service.api.scheduler.public import (
+        AnyScheduleRequest,
         BeforeMutation,
         PreparedInvocation,
         ProviderFinishOutcome,
         ProviderName,
-        ScheduleRequest,
         SubmissionIdentity,
     )
     from model_service.api.scheduler.settings import SchedulerSettings
@@ -53,7 +53,7 @@ class ProviderAdapter(ABC):
     name: ProviderName
 
     @abstractmethod
-    def identify(self, request: ScheduleRequest) -> SubmissionIdentity:
+    def identify(self, request: AnyScheduleRequest) -> SubmissionIdentity:
         """Compute submission identity locally without I/O or external side effects.
 
         Args:
@@ -67,7 +67,7 @@ class ProviderAdapter(ABC):
     @abstractmethod
     async def prepare(
         self,
-        request: ScheduleRequest,
+        request: AnyScheduleRequest,
         deadline_at: datetime,
     ) -> PreparedInvocation:
         """Resolve and validate new inputs and configuration before admission.
