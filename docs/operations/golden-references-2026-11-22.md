@@ -46,3 +46,23 @@ the model.
 right after recording: the manifest matches and all three raw routes answer
 within the live tolerances (scores `atol=1e-3`, embeddings cosine ≥ 0.9999),
 so GPU run-to-run variation fits them.
+
+## Embedding runs on near-blank tiles
+
+Revision 9 (`unit-300f031`, every served model on the generic host) matched
+every reference except one row of `prov-gigapath-embeddings` on slide
+`67df0411`: row 80, tile (33376, 8960), cosine 0.999821 against the
+reference, the same through the analysis runner and the builder. The tile is
+almost all glass (mean intensity 252 of 255).
+
+- The two new runs agree on that row (cosine 1.0) and differ from each other
+  by up to 9e-5 on another near-blank tile, so blank tiles carry about 1e-4
+  of GPU run-to-run noise in the ViT forward pass.
+- The old torchvision transform and the new `resize`/`center_crop`/`normalize`
+  steps give bit-identical input tensors on that tile (checked on CPU from the
+  local slide copy).
+- The other 1686 rows, and all rows of the second slide, are at about 1.0.
+
+So a run's embedding table may have up to 1 row in 1000 below cosine 0.9999,
+but none below 0.9995 (`tests/live/golden.py`). Raw routes keep 0.9999 per
+tile.

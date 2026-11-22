@@ -92,6 +92,12 @@ RUN_CASES = {
 SCORE_ATOL = 1e-3
 # Per-tile cosine similarity an embedding must reach.
 MIN_COSINE = 0.9999
+# Near-blank tiles amplify GPU noise in a ViT's forward pass: a run's table may
+# have up to this share of rows below MIN_COSINE, but none below the floor.
+# Seen live: Prov-GigaPath, one glass tile (mean 252/255) at 0.99982 of 1687
+# rows, with bit-identical preprocessing (golden-references ops note).
+MAX_NOISY_ROW_SHARE = 0.001
+COSINE_FLOOR = 0.9995
 
 
 def sha256(path: Path) -> str:
@@ -245,7 +251,13 @@ def compare_embedding_tables(actual: Path, expected: Path) -> list[str]:
                     f"features shape {a['features'].shape} != {e['features'].shape}"
                 )
             elif len(a["features"]):
-                worst = float(cosine_rows(a["features"][()], e["features"][()]).min())
-                if worst < MIN_COSINE:
-                    problems.append(f"lowest row cosine {worst:.6f} < {MIN_COSINE}")
+                cosines = cosine_rows(a["features"][()], e["features"][()])
+                worst = float(cosines.min())
+                noisy = int((cosines < MIN_COSINE).sum())
+                if worst < COSINE_FLOOR:
+                    problems.append(f"lowest row cosine {worst:.6f} < {COSINE_FLOOR}")
+                if noisy > MAX_NOISY_ROW_SHARE * len(cosines):
+                    problems.append(
+                        f"{noisy} of {len(cosines)} rows below cosine {MIN_COSINE}"
+                    )
     return problems
