@@ -34,3 +34,19 @@ class Step(Component):
         Returns:
             A batch with the same number of rows and the declared `adds`.
         """
+
+    def skipped(self, batch: Batch) -> Batch:
+        """The batch a caller gets when it skips this step.
+
+        The raw-inference route's `x-pool-tokens: false` skips a served
+        model's `post:` steps. By default the batch passes unchanged; a
+        pooling step may still drop what such callers never got, as
+        `cls_mean_pool` drops register tokens.
+
+        Args:
+            batch: Columns keyed by name.
+
+        Returns:
+            The batch as a caller skipping this step sees it.
+        """
+        return batch
