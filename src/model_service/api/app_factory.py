@@ -28,7 +28,7 @@ from model_service.api.health import (
 )
 from model_service.api.http.auth import Access
 from model_service.api.http.errors import ApiErrorCode, http_error
-from model_service.api.routes.v1 import builders, executions, models
+from model_service.api.routes.v1 import analyses, builders, executions, models
 from model_service.api.scheduler.builder_dispatch import HTTPBuilderDispatch
 from model_service.api.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.api.scheduler.internal_state import RetryPolicy
@@ -38,8 +38,12 @@ from model_service.api.scheduler.store.postgres.repository import (
     PostgresExecutionRepository,
 )
 from model_service.api.scheduler.store.protected_context import ProtectedContextCipher
-from model_service.api.synchronous_runs import SynchronousBuilderService
+from model_service.api.synchronous_runs import (
+    SynchronousAnalysisService,
+    SynchronousBuilderService,
+)
 from model_service.builders.registry import BUILDERS, get_builder
+from model_service.catalog.analyses import FOLDER as ANALYSES
 from model_service.providers.registry import PROVIDERS
 from model_service.providers.standalone.provider import STANDALONE_PROVIDER
 
@@ -95,6 +99,7 @@ def create_app(
     *,
     catalog: ModelCatalogView,
     builder_runner: SynchronousBuilderService | None = None,
+    analysis_runner: SynchronousAnalysisService | None = None,
     lifespan: Lifespan[FastAPI] | None = None,
     deployment_health: DeploymentHealth | None = None,
     catalog_status: Callable[[], CatalogStatus] | None = None,
@@ -105,8 +110,11 @@ def create_app(
 
     Args:
         scheduler: Admits, reads and cancels durable executions.
-        catalog: Deployed models served under `/v1/models`.
+        catalog: Deployed models served under `/v1/models`, and analyses
+            under `/v1/analyses`.
         builder_runner: Runs builders synchronously; None makes `/run` answer 503.
+        analysis_runner: Runs analyses synchronously; None makes
+            `/v1/analyses/{id}/run` answer 503.
         lifespan: Startup and shutdown context for the app.
         deployment_health: Checks Ray Serve routes; None reports `not_configured`.
         catalog_status: Whether the mounted catalog is the one in use; None
@@ -220,6 +228,9 @@ def create_app(
 
     app.include_router(models.create_router(catalog, access))
     app.include_router(
+        analyses.create_router(lambda: catalog.resolved, analysis_runner, access)
+    )
+    app.include_router(
         builders.create_router(scheduler, builder_runner, access, STANDALONE_PROVIDER)
     )
     for routes in provider_routes:
@@ -325,6 +336,7 @@ def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
         scheduler,
         catalog=catalog,
         builder_runner=SynchronousBuilderService(catalog, dispatch),
+        analysis_runner=SynchronousAnalysisService(lambda: catalog.resolved, dispatch),
         lifespan=lifespan,
         provider_routes=[c.routes for c in contributions if c.routes is not None],
         deployment_health=DeploymentHealth(
@@ -333,6 +345,7 @@ def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
             routes=lambda: (
                 [f"/builders/{builder_id}" for builder_id in builder_ids]
                 + [f"/{model.id}" for model in catalog]
+                + (["/analyses"] if catalog.resolved.entries(ANALYSES) else [])
             ),
         ),
         catalog_status=catalog.status,

@@ -5,6 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, cast
 
+from pydantic import ConfigDict, create_model
+from pydantic.fields import FieldInfo
+
 from model_service.catalog.analyses.model_step import ModelStep
 from model_service.components import per_run_fields, with_overrides
 
@@ -65,6 +68,29 @@ class Analysis:
             for component in self._components()
             for name in sorted(per_run_fields(type(component.options)))
         }
+
+    def settings_schema(self) -> dict[str, Any]:
+        """The JSON Schema of the settings a run may send.
+
+        Returns:
+            An object schema with one property per setting: the option's
+            type, limits and description, and the file's value as default.
+        """
+        fields: dict[str, Any] = {}
+        for component in self._components():
+            options = type(component.options)
+            for name in sorted(per_run_fields(options)):
+                info = options.model_fields[name]
+                fields[name] = (
+                    info.annotation,
+                    FieldInfo.merge_field_infos(
+                        info, default=getattr(component.options, name)
+                    ),
+                )
+        model = create_model(
+            f"{self.id} settings", __config__=ConfigDict(extra="forbid"), **fields
+        )
+        return model.model_json_schema()
 
     def with_settings(self, values: Mapping[str, Any]) -> Analysis:
         """The analysis with a caller's per-run settings applied.

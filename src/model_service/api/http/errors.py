@@ -8,7 +8,11 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException
 
-from model_service.contracts.failures import UnknownBuilderError, UnknownModelError
+from model_service.contracts.failures import (
+    UnknownAnalysisError,
+    UnknownBuilderError,
+    UnknownModelError,
+)
 
 
 if TYPE_CHECKING:
@@ -21,6 +25,7 @@ class ApiErrorCode(StrEnum):
     INVALID_REQUEST = "invalid_request"
     UNKNOWN_BUILDER = "unknown_builder"
     UNKNOWN_MODEL = "unknown_model"
+    UNKNOWN_ANALYSIS = "unknown_analysis"
     INCOMPATIBLE_MODEL = "incompatible_model"
     SCHEDULE_CONFLICT = "schedule_conflict"
     SCHEDULING_UNAVAILABLE = "scheduling_unavailable"
@@ -77,19 +82,24 @@ def unavailable(error: SchedulingUnavailableError) -> HTTPException:
 
 
 def lookup_error(error: Exception) -> HTTPException:
-    """Map a builder or model lookup failure to an HTTP error.
+    """Map a builder, model or analysis lookup failure to an HTTP error.
 
     Args:
-        error: An `UnknownBuilderError`, `UnknownModelError` or
-            `IncompatibleModelError`.
+        error: An `UnknownBuilderError`, `UnknownModelError`,
+            `UnknownAnalysisError` or `IncompatibleModelError`.
 
     Returns:
-        404 for an unknown builder or model; otherwise 422 for an incompatible model.
+        404 for an unknown builder, model or analysis; otherwise 422 for an
+        incompatible model.
     """
     if isinstance(error, UnknownBuilderError):
         return http_error(404, ApiErrorCode.UNKNOWN_BUILDER, "builder does not exist")
     if isinstance(error, UnknownModelError):
         return http_error(404, ApiErrorCode.UNKNOWN_MODEL, "model is not deployed")
+    if isinstance(error, UnknownAnalysisError):
+        return http_error(
+            404, ApiErrorCode.UNKNOWN_ANALYSIS, "analysis is not deployed"
+        )
     return http_error(422, ApiErrorCode.INCOMPATIBLE_MODEL, str(error))
 
 

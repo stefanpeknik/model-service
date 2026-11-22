@@ -142,6 +142,11 @@ def served_model_binding(model: ServedModel) -> ModelBinding:
 class ModelCatalogView(Protocol):
     """What the API's parts read from the catalog, whether fixed or reloaded."""
 
+    @property
+    def resolved(self) -> Catalog:
+        """The served models and analyses, as the catalog loader resolved them."""
+        ...
+
     def get(self, model_id: str) -> ModelBinding:
         """Look up a deployed model.
 
