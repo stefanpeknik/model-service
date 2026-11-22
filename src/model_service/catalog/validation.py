@@ -48,6 +48,19 @@ def problems(
                 "missing_" + noun, f"missing {noun} `{key}`", _fits(model, key), detail
             )
             hint = f"add `{key}: …`"
+        elif item["type"] == "union_tag_invalid":
+            # A wrong `kind:` of a block with variants: point at the tag itself.
+            tag_key = str(item["ctx"]["discriminator"]).strip("'")
+            loc = (*loc, tag_key)
+            detail["value"] = item["ctx"]["tag"]
+            problem = Problem(
+                "invalid_" + noun,
+                f"`{item['ctx']['tag']}` is invalid: input should be "
+                f"{item['ctx']['expected_tags'].replace(', ', ' or ')}",
+                _fits(model, key),
+                detail,
+            )
+            hint = f"change `{tag_key}`"
         else:
             message = item["msg"][:1].lower() + item["msg"][1:]
             problem = Problem(

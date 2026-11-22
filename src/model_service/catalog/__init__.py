@@ -10,8 +10,9 @@ ONNX Runtime, torch or OpenSlide.
 
 from model_service.catalog.catalog import Catalog, Entry
 from model_service.catalog.context import ResolveContext
+from model_service.catalog.default_kinds import DEFAULT_KINDS
 from model_service.catalog.errors import CatalogError, CatalogInvalid
-from model_service.catalog.kinds import DEFAULT_KINDS, DocumentKind
+from model_service.catalog.kinds import DocumentKind
 from model_service.catalog.loader import environments, load_catalog
 
 

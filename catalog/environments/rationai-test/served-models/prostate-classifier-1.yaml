@@ -1,0 +1,2 @@
+# The test cluster reaches only the public MLflow, where experiment 169 copies 65.
+weights: {uri: "mlflow-artifacts:/169/17dda4dc3f7449478208e87016ce7d86/artifacts/checkpoints/epoch=0-step=6972/prostate_model_norm.onnx"}

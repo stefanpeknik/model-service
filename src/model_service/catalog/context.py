@@ -54,6 +54,7 @@ class ResolveContext:
         registry: Registry,
         references: References,
         file_of: Callable[[YamlPath], str],
+        document_id: str = "",
     ) -> None:
         """Bind the registry, earlier documents and file attribution.
 
@@ -61,7 +62,9 @@ class ResolveContext:
             registry: The components catalog files may name.
             references: The documents of earlier kinds.
             file_of: The file that supplied the value at a path.
+            document_id: The document's ID, its file name without `.yaml`.
         """
+        self.document_id = document_id
         self.registry = registry
         self.references = references
         self.file_of = file_of

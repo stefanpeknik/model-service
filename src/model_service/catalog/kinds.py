@@ -38,7 +38,3 @@ class DocumentKind(ABC):
         Returns:
             The resolved document; ignored if `ctx` collected errors.
         """
-
-
-DEFAULT_KINDS: tuple[DocumentKind, ...] = ()
-"""The document kinds of this repo's catalog, in resolution order."""

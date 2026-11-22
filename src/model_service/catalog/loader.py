@@ -20,8 +20,8 @@ import yaml
 
 from model_service.catalog.catalog import Catalog, Entry
 from model_service.catalog.context import References, ResolveContext
+from model_service.catalog.default_kinds import DEFAULT_KINDS
 from model_service.catalog.errors import CatalogError, CatalogInvalid
-from model_service.catalog.kinds import DEFAULT_KINDS
 from model_service.catalog.merge import deep_merge
 from model_service.components.registry import default_registry
 
@@ -191,7 +191,7 @@ class _Loader:
             hit = any(at[:n] in patched for n in range(1, len(at) + 1))
             return self.show(patch_path if hit and patch_path else path)
 
-        ctx = ResolveContext(self.registry, references, file_of)
+        ctx = ResolveContext(self.registry, references, file_of, path.stem)
         value = kind.resolve(merged, ctx)
         if ctx.errors:
             self.errors += ctx.errors

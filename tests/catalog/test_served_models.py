@@ -1,0 +1,114 @@
+"""Served-model files: what they resolve to, their digest and their mistakes."""
+
+from __future__ import annotations
+
+import textwrap
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+import pytest
+
+from model_service.api.model_catalog import ModelDocument, model_binding
+from model_service.catalog import CatalogInvalid, load_catalog
+from model_service.catalog.served_models import legacy_config
+from tests.support.model_documents import model_file
+
+
+if TYPE_CHECKING:
+    from model_service.catalog.served_models import ServedModel
+
+
+REPO = Path(__file__).resolve().parents[2]
+CATALOG = REPO / "catalog"
+OLD_MODELS = REPO / "deploy" / "helm" / "rayservice" / "models"
+
+MODEL = """
+    weights: {use: local, path: /weights/model.onnx}
+    runtime: {use: onnx}
+    input: {tile_size: 64, mpp: 0.5}
+    output: {kind: scores, channels: 1, size: 1, range: [0, 1]}
+    batching: {max_size: 8, wait_s: 0.01}
+    resources: {cpus: 1, memory_gib: 2}
+"""
+
+
+@pytest.fixture
+def root(tmp_path: Path) -> Path:
+    return tmp_path / "catalog"
+
+
+def write(root: Path, name: str, text: str) -> None:
+    path = root / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(textwrap.dedent(text))
+
+
+def served(root: Path, model_id: str = "m1") -> ServedModel:
+    return load_catalog(root).entries("served-models")[model_id].value
+
+
+@pytest.mark.parametrize(
+    ("environment", "old_file"),
+    [
+        (None, "prostate-classifier-1.yaml"),
+        ("rationai-test", "rationai-test/prostate-classifier-1.yaml"),
+    ],
+)
+def test_the_prostate_file_gives_the_binding_of_todays_model_file(
+    environment: str | None, old_file: str
+) -> None:
+    model = load_catalog(CATALOG, environment).entries("served-models")[
+        "prostate-classifier-1"
+    ]
+    old = ModelDocument.model_validate(model_file(OLD_MODELS / old_file))
+    old_config = old.deployment.user_config
+
+    assert model.value.weights.options.uri == old_config["model"]["artifact_uri"]
+    assert model_binding(old).model_dump(exclude={"id", "contract"}) == legacy_config(
+        model.value
+    )
+
+
+def test_the_digest_follows_what_the_model_computes_not_how_it_is_scheduled(
+    root: Path,
+) -> None:
+    write(root, "served-models/m1.yaml", MODEL)
+    digest = served(root).digest
+
+    def digest_with(text: str) -> str:
+        write(root, "served-models/m1.yaml", text)
+        return served(root).digest
+
+    assert digest_with(MODEL.replace("{use: onnx}", "{use: onnx, threads: 1}")) == (
+        digest
+    )
+    assert digest_with(MODEL.replace("cpus: 1", "cpus: 2, gpus: 1")) == digest
+    assert digest_with(MODEL.replace("wait_s: 0.01", "wait_s: 0.5")) == digest
+    assert digest_with(MODEL + "    serving: {max_replicas: 1}\n") == digest
+    assert digest_with(MODEL.replace("model.onnx", "model-2.onnx")) != digest
+    assert digest_with(MODEL.replace("max_size: 8", "max_size: 16")) != digest
+    assert digest_with(MODEL.replace("{use: onnx}", "{use: onnx, fp16: false}")) != (
+        digest
+    )
+
+
+def test_keys_of_todays_model_files_are_refused_with_what_fits(
+    root: Path,
+) -> None:
+    write(
+        root,
+        "served-models/m1.yaml",
+        MODEL.replace("kind: scores", "kind: score") + "    contract: spatial-scores\n",
+    )
+
+    with pytest.raises(CatalogInvalid) as raised:
+        load_catalog(root)
+
+    assert [str(e) for e in raised.value.errors] == [
+        "catalog/served-models/m1.yaml:output.kind: `score` is invalid: input "
+        "should be 'scores' or 'embedding'. output: `{kind: scores, …}` or "
+        "`{kind: embedding, summaries: […]}`. Hint: change `kind`",
+        "catalog/served-models/m1.yaml:contract: unknown key `contract`. Keys of "
+        "this file: batching, input, output, post, pre, resources, runtime, "
+        "serving, weights. Hint: remove it",
+    ]
