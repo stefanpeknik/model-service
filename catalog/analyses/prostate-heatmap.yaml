@@ -6,3 +6,30 @@ steps:
   - {model: prostate-classifier-1}
 sinks:
   - {use: score_grid, output: heatmap}
+# The prostate cancer app pathologists use; the API registers it at startup.
+expose:
+  empaia:
+    name: Prostate cancer heatmap
+    name_short: ProstHM
+    description: Classifies prostate tissue and shows the scores as a heatmap over the slide.
+    modes:
+      standalone:
+      preprocessing:
+        # EMPAIA preprocesses slides with these EMPAIA tags (or ANY) with the app.
+        triggers:
+          - {tissue: PROSTATE, stain: H_AND_E}
+    # slide is a wsi and region_of_interest a rectangle without saying so.
+    outputs:
+      heatmap: {type: continuous_pixelmap}
+    # The AigoPath case browser's display settings (xOpat shader and its params).
+    viewer:
+      inputs:
+        slide: {target: xopat, lossless: false}
+      outputs:
+        heatmap:
+          render: shader
+          label: Prostate Heatmap
+          visible: true
+          shader:
+            type: heatmap
+            params: {threshold: 65, opacity: 0.5, color: "#ffff00"}

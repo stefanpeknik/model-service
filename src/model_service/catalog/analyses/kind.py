@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from model_service.catalog.analyses import checks
 from model_service.catalog.analyses.declaration import Analysis
+from model_service.catalog.analyses.exposure import resolve_exposure
 from model_service.catalog.analyses.model_step import ModelStep
 from model_service.catalog.kinds import DocumentKind
 from model_service.catalog.served_models import FOLDER as SERVED_MODELS
@@ -36,6 +38,7 @@ class Fields(BaseModel):
         source: The source.
         steps: Steps, in order.
         sinks: Sinks.
+        expose: How the analysis is offered beyond the API, e.g. in EMPAIA.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -46,6 +49,9 @@ class Fields(BaseModel):
         None, description="Steps in order: `{model: <id>}` or `{use: <step>, …}`."
     )
     sinks: Any = Field(None, description="Sinks: `[{use: score_grid, output: …}, …]`.")
+    expose: Any = Field(
+        None, description="How the analysis is offered: `{empaia: {…}}` for an app."
+    )
 
 
 class Analyses(DocumentKind):
@@ -87,7 +93,7 @@ class Analyses(DocumentKind):
         checks.check_outputs(ctx, sink_list)
         if ctx.errors:
             return None
-        return Analysis(
+        analysis = Analysis(
             id=ctx.document_id,
             summary=fields.summary,
             source=filled,
@@ -96,6 +102,10 @@ class Analyses(DocumentKind):
             inputs=filled.inputs(),
             columns=columns,
         )
+        empaia = resolve_exposure(ctx, document.get("expose"), analysis)
+        if ctx.errors:
+            return None
+        return replace(analysis, empaia=empaia)
 
 
 def _steps(ctx: ResolveContext, value: object) -> list[AnalysisStep] | None:

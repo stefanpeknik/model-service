@@ -15,6 +15,7 @@ from model_service.components import per_run_fields, with_overrides
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from model_service.catalog.analyses.exposure import EmpaiaExposure
     from model_service.catalog.served_models import ServedModel
     from model_service.components import Col, Component, Sink, Source, Step
 
@@ -35,6 +36,8 @@ class Analysis:
         inputs: Input name to whether a run must give it; the union of what
             the components read.
         columns: The columns that reach the sinks, with every dimension known.
+        empaia: The EMPAIA app it becomes, from `expose.empaia`; None if
+            it is not offered in EMPAIA.
     """
 
     id: str
@@ -44,6 +47,7 @@ class Analysis:
     sinks: tuple[Sink, ...]
     inputs: Mapping[str, bool]
     columns: Mapping[str, Col]
+    empaia: EmpaiaExposure | None = None
 
     @property
     def models(self) -> dict[str, ServedModel]:
