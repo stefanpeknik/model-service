@@ -49,9 +49,9 @@ helm install model-service deploy/helm/rayservice -n rationai-infra-test-ns \
 Upgrades use `helm upgrade` with the same arguments.
 
 Served models come from `catalog/`: the values deploy the IDs named in
-`servedModels` (only `prostate-classifier-1`; EPISeg's weights sit on an
-MLflow this cluster can't reach) with the `catalog/environments/rationai-test/`
-patches, and `virchow2` still from its old model file under `models:`. A
+`servedModels` (`prostate-classifier-1` and `virchow2`; EPISeg's weights sit
+on an MLflow this cluster can't reach) with the `catalog/environments/rationai-test/`
+patches; no model comes from an old file under `models:` any more. A
 catalog-only change needs no image rebuild and doesn't restart the API: kubelet
 updates the mounted catalog ConfigMap (within about a minute) and the API
 reloads it. If the new catalog doesn't load, the API keeps the old one and

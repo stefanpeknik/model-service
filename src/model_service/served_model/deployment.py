@@ -23,7 +23,9 @@ DEFAULT_CACHE_ROOT = "/mnt/cache/trt_cache"
 GIB = 1024**3
 
 
-def serve_application(entry: Entry, *, cache_root: str) -> dict[str, Any]:
+def serve_application(
+    entry: Entry, *, cache_root: str, setup_timeout_seconds: int | None = None
+) -> dict[str, Any]:
     """One `serveConfigV2` application for a served model.
 
     Helm adds `ray_actor_options.runtime_env` (e.g. `MLFLOW_TRACKING_URI`)
@@ -32,17 +34,26 @@ def serve_application(entry: Entry, *, cache_root: str) -> dict[str, Any]:
     Args:
         entry: The served model's catalog entry.
         cache_root: The environment's cache root, on a shared volume.
+        setup_timeout_seconds: The environment's limit on setting up a
+            replica's runtime environment (Ray's default, 600, when None).
 
     Returns:
         The application: name and route prefix are the model ID, the import
         path is the same for every served model, and its one deployment
-        carries the Serve options and the `user_config`.
+        carries the Serve options and the `user_config`. With a setup
+        timeout, the application's `runtime_env.config` carries it.
     """
     model: ServedModel = entry.value
-    return {
+    application: dict[str, Any] = {
         "name": model.id,
         "route_prefix": f"/{model.id}",
         "import_path": IMPORT_PATH,
+    }
+    if setup_timeout_seconds is not None:
+        application["runtime_env"] = {
+            "config": {"setup_timeout_seconds": setup_timeout_seconds}
+        }
+    return application | {
         "deployments": [
             {
                 "name": DEPLOYMENT_NAME,
