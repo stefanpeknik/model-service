@@ -1,7 +1,7 @@
 """`slide_tiles`: grid tiles of the slide level closest to the model's resolution.
 
 The geometry is the team's code: `ratiopath.tiling.grid_tiles` places the
-tiles, and the heatmap builder's `TileReader` picks the level and drops tiles
+tiles, and `model_service.slides.tile_reader.TileReader` picks the level and drops tiles
 outside the tissue or the region of interest. Frame fields follow ratiopath's
 slide rows; `tile` is channels-first, as served models take it.
 """
@@ -9,15 +9,10 @@ slide rows; `tile` is channels-first, as served models take it.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal
 
 from pydantic import Field
 
-from model_service.builders.declarations import (
-    SkipBackground,
-    StrideFraction,
-    TissueFraction,
-)
 from model_service.components import Col, Opened, Options, PerRun, Problem, Source
 
 
@@ -32,6 +27,44 @@ if TYPE_CHECKING:
 
 SLIDE = "slide"
 REGION_OF_INTEREST = "region_of_interest"
+
+# The per-run settings. Their descriptions are what users read: in the public
+# API's settings schema, and in EMPAIA's job form when an app offers them.
+StrideFraction = Annotated[
+    float,
+    Field(
+        gt=0,
+        le=1,
+        allow_inf_nan=False,
+        description=(
+            "How far apart tiles are, as a share of the tile size: above 0, up "
+            "to 1. 1 places tiles side by side; 0.5 overlaps them by half, for "
+            "a finer result that takes about four times as long."
+        ),
+    ),
+]
+SkipBackground = Annotated[
+    bool,
+    Field(
+        description=(
+            "Whether tiles without tissue are skipped; they get no result. "
+            "Skipping is faster and leaves empty glass out. On by default."
+        )
+    ),
+]
+TissueFraction = Annotated[
+    float,
+    Field(
+        ge=0,
+        lt=1,
+        allow_inf_nan=False,
+        description=(
+            "How much of a tile must be tissue for it to be analysed, when "
+            "background is skipped: from 0 up to but not including 1. 0 "
+            "analyses every tile with any tissue; 0.5 needs at least half."
+        ),
+    ),
+]
 
 
 class SlideTilesOptions(Options):
@@ -145,7 +178,7 @@ class SlideTiles(Source):
         import numpy as np
         from ratiopath.tiling import grid_tiles
 
-        from model_service.builders.slides.tile_reader import TileReader, open_slide
+        from model_service.slides.tile_reader import TileReader, open_slide
 
         tile_size, mpp = self.options.tile_size, self.options.mpp
         if tile_size is None or mpp is None:

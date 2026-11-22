@@ -1,4 +1,4 @@
-"""Find tissue on a slide's coarse level so builders can skip empty glass.
+"""Find tissue on a slide's coarse level so tiles of empty glass can be skipped.
 
 Detection is ratiopath's `tissue_mask` (grayscale, multi-Otsu, closing and
 opening) on the level ratiopath's `read_tile` reads, with transparent regions

@@ -97,7 +97,7 @@ async def build_heatmap(
     from ratiopath.masks.mask_builders import MaskBuilder
     from ratiopath.tiling import grid_tiles
 
-    from model_service.builders.slides.tile_reader import TileReader, open_slide
+    from model_service.slides.tile_reader import TileReader, open_slide
 
     model = client.declaration
     tile_size = model.tile_size

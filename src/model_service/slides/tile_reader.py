@@ -3,7 +3,7 @@
 With a mask, a tile is read only when its mask window contains a nonzero pixel;
 with a tissue mask, only when more than `min_tissue_fraction` of its window is
 tissue (any tissue at 0). Reads are synchronous
-and run in the builder's thread pool; x/y are coordinates at the selected slide
+and run in the analysis runner's read threads; x/y are coordinates at the selected slide
 level.
 """
 
@@ -16,8 +16,8 @@ import numpy as np
 from openslide import PROPERTY_NAME_MPP_X, PROPERTY_NAME_MPP_Y, OpenSlideError
 from ratiopath.openslide import OpenSlide
 
-from model_service.builders.slides.tissue import find_tissue
 from model_service.contracts.failures import InvalidInvocation
+from model_service.slides.tissue import find_tissue
 
 
 if TYPE_CHECKING:
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
     from numpy.typing import NDArray
 
-    from model_service.builders.slides.tissue import TissueMask
+    from model_service.slides.tissue import TissueMask
 
 
 @contextmanager

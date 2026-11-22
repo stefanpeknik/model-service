@@ -10,9 +10,9 @@ from unittest import mock
 import numpy as np
 from ratiopath.openslide import OpenSlide
 
-from model_service.builders.slides import tissue
-from model_service.builders.slides.tile_reader import TileReader
 from model_service.contracts.failures import InvalidInvocation
+from model_service.slides import tissue
+from model_service.slides.tile_reader import TileReader
 from model_service.testing import fake_slide
 
 

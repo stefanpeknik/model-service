@@ -148,8 +148,8 @@ class HeatmapBuilderTests(unittest.IsolatedAsyncioTestCase):
 
 class UnreadableInputTests(unittest.TestCase):
     def test_a_file_that_is_not_a_slide_is_an_invalid_input(self) -> None:
-        from model_service.builders.slides.tile_reader import open_slide
         from model_service.contracts.failures import InvalidInvocation
+        from model_service.slides.tile_reader import open_slide
 
         with TemporaryDirectory() as directory:
             path = Path(directory) / "notes.txt"

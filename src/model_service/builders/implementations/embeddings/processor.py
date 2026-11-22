@@ -60,7 +60,7 @@ async def build_embeddings(
     import h5py
     from ratiopath.tiling import grid_tiles
 
-    from model_service.builders.slides.tile_reader import TileReader, open_slide
+    from model_service.slides.tile_reader import TileReader, open_slide
 
     model = client.declaration
     tile_size = model.tile_size
