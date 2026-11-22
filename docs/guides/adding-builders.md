@@ -1,5 +1,11 @@
 # Adding a builder or an inference contract
 
+> **Retired.** The builders, the inference contracts and their model clients
+> are gone: a slide-level output is an analysis file in `catalog/analyses/`
+> (see [How model-service is put together](../architecture/core.md)), and code
+> is needed only for a missing component under `src/model_service/components/`.
+> This guide is kept until the new guides replace it.
+
 A model answers one tile at a time. A builder turns a whole slide into an
 output by calling a model tile by tile. The two meet in an **inference
 contract**: what a model of that kind takes and returns. A builder accepts one

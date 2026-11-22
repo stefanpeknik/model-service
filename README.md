@@ -1,9 +1,8 @@
 # Model Service
 
-RationAI's service for running pathology models on Ray Serve: **builders** run
-a chosen model over a whole slide, either
-synchronously or as durable executions you can poll, cancel, or leave queued
-until a GPU frees up.
+RationAI's service for running pathology models on Ray Serve: **analyses** run
+served models over a whole slide, either synchronously or as durable
+executions you can poll, cancel, or leave queued until a GPU frees up.
 
 ## In short
 
@@ -43,16 +42,15 @@ later standalone run showed its result.
 
 ```text
 src/model_service/
-  api/                    the public API process: routes/v1/, model catalog, synchronous runs
+  api/                    the public API process: routes/v1/, mounted catalog, synchronous runs
   api/http/               auth, error mapping, scheduling calls (API and provider routes)
   api/scheduler/          durable executions on PostgreSQL (runs inside the API process)
-  builders/               builder contract, registry, shared slides/
-  builders/model_clients/ one client per inference contract
-  builders/implementations/  the builders: heatmap/, embeddings/
-  builders/replica/       the Ray Serve app that hosts builders
   served_model/           the generic host that serves every catalog/served-models/ file
-  inference/              MLflow loader; implementations/: EPISeg's old class, kept for a test
-  providers/              where builders read input and publish output: standalone, empaia/
+  analysis_runner/        the one Ray Serve app that runs every catalog/analyses/ file
+  catalog/, components/   catalog loading and the components catalog files name
+  formats/                data formats sinks write and readers open
+  slides/                 slide reading and tissue detection for analysis sources
+  providers/              where runs read input and publish output: standalone, empaia/
   contracts/              data shapes processes hand each other
 deploy/
   helm/rayservice/                   the chart; reads catalog/ through a symlink
@@ -77,13 +75,12 @@ name a subset in `servedModels`. See the
 [Configuration Reference](docs/guides/configuration-reference.md) for the
 file's blocks.
 
-## Add a builder
+## Add an analysis
 
-A new slide-level output is a builder package under
-`src/model_service/builders/` (a declaration and a `Builder`), one line in
-`registry.py` and an entry under `builders:` in the values file. A new kind of
-model adds an inference contract and its model client. See
-[Adding a builder or an inference contract](docs/guides/adding-builders.md).
+A new slide-level output is a file in `catalog/analyses/`: a source, steps
+(`{model: <id>}` calls a served model) and sinks, by component name. Check it
+with `uv run pytest tests/catalog` and `helm upgrade`. Code is needed only for
+a missing component, under `src/model_service/components/`.
 
 ## Use it
 

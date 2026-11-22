@@ -42,7 +42,7 @@ the top-level `models/` to `src/model_service/inference/implementations/`.
 
 Removed because something replaced them: the stand-alone
 `builders/heatmap_builder.py` (now the heatmap builder),
-`misc/fetch_tissue_tile.py` (now `builders/slides/`) and
+`misc/fetch_tissue_tile.py` (now `slides/`) and
 `providers/model_provider.py` (now the provider contract).
 
 ## How traffic flows

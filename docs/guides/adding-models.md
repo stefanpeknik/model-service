@@ -2,8 +2,8 @@
 
 > **Out of date.** Every deployed model is now a file in
 > `catalog/served-models/` on the generic host; the Python classes and
-> `deploy/helm/rayservice/models/` files this guide describes are gone, except
-> EPISeg's, kept for a test. Add a model as in the
+> `deploy/helm/rayservice/models/` files this guide describes are gone. Add a
+> model as in the
 > [Configuration Reference](configuration-reference.md#2-served-model-files).
 
 ## A model that fits an existing implementation: YAML only

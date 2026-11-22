@@ -54,9 +54,6 @@ sequenceDiagram
   primitives (from the `value` format) and one-channel continuous pixelmaps
   (from `score_grid`). A new EMPAIA type is a new converter or publisher in
   `components/empaia/` once the SDK can carry it.
-- **Transitional:** `POST /v1/empaia/builders/{b}/models/{m}` still runs the
-  builder for apps registered before analyses had apps; its output types come
-  from `ead/builder_io.py`. Both go with the builders.
 
 ## SDK use
 

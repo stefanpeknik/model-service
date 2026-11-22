@@ -1,5 +1,10 @@
 # Model-service core: builders, model catalog and durable execution
 
+> **Partly superseded.** The builders, inference contracts and old model files
+> this specification describes were retired for served models and analyses;
+> [How model-service is put together](architecture/core.md) describes the
+> current design.
+
 Status: implemented and accepted live on 2026-10-14
 ([evidence](operations/core-acceptance-2026-10-14.md)); scheduled raw inference
 added and accepted on 2026-10-15
