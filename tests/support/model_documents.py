@@ -49,6 +49,18 @@ def embedding_document(model_id: str = "virchow2") -> dict[str, Any]:
     }
 
 
+def served_document(tile_size: int = 64) -> dict[str, Any]:
+    """A small served-model document, as the chart puts it in `catalog.json`."""
+    return {
+        "weights": {"use": "local", "path": "/weights/model.onnx"},
+        "runtime": {"use": "onnx"},
+        "input": {"tile_size": tile_size, "mpp": 0.5},
+        "output": {"kind": "embedding", "summaries": ["global"]},
+        "batching": {"max_size": 8, "wait_s": 0},
+        "resources": {"memory_gib": 1},
+    }
+
+
 def model_file(path: Path) -> dict[str, Any]:
     """Read a model file as Helm renders it into the catalog: its name is its `id`."""
     document: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8"))

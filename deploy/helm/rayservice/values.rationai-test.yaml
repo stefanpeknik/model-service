@@ -1,10 +1,19 @@
 # rationai-infra-test-ns, beside the EMPAIA test instance, as release
-# `model-service`. Same models, builders, workers and images as peknik-ns;
+# `model-service`. Same builders, workers and images as peknik-ns;
 # slides come from the instance's slide volume instead of the App API.
 # Other objects it needs: deploy/k8s/rationai-test-ns/ and the Secrets
 # model-service-db, mlflow-public-credentials and huggingface-secret.
+environment: rationai-test
+# Named, not ["*"]: EPISeg's weights sit on an MLflow this cluster can't reach.
+servedModels: [prostate-classifier-1]
+# Merged over values.yaml's: the cache root and HF_HOME stay.
+servedModelSettings:
+  env:
+    # The public MLflow; the test cluster can't reach the internal one.
+    MLFLOW_TRACKING_URI: https://mlflow.rationai.cloud.e-infra.cz
+
+# Not yet migrated to catalog/served-models/ (transitional).
 models:
-  - rationai-test/prostate-classifier-1
   - rationai-test/virchow2
 
 builders:
@@ -97,7 +106,8 @@ empaia:
     existingClaim: test-data-storage-pvc
     mountPath: /data/Projects
   # Registers the prostate app in the instance's marketplace mock, with JES's
-  # own service client (the mds-client); only that model file has an empaia block.
+  # own service client (the mds-client); only prostate-classifier-1 has an
+  # empaia block (provider-blocks/).
   marketplace:
     url: http://test-core-marketplace:10010
     organizationId: 1a305195-6b85-45bd-85f3-1f96a1a5684c

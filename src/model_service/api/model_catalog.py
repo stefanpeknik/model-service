@@ -1,8 +1,12 @@
-"""Model catalog derived from the deployed model YAML files.
+"""Model catalog derived from the deployed served-model and model files.
 
-Helm renders every `deploy/helm/rayservice/models/<id>.yaml` into one JSON list,
-adding each file's name as its `id`. The same files become the RayService's
-applications, so the catalog and the running models cannot drift apart.
+Served models (`catalog/served-models/<id>.yaml`) give their binding through
+`served_model_binding`; `api/catalog_files.py` reads them from the mounted
+catalog. Models not yet migrated still come from their old model file: Helm
+renders every listed `deploy/helm/rayservice/models/<id>.yaml` into one JSON
+list, adding each file's name as its `id`. The same files become the
+RayService's applications, so the catalog and the running models cannot
+drift apart.
 
 Contract parameters come from the deployment's `user_config`, which the model
 implementation reads too; `contract` names the contract. Any other top-level
@@ -18,10 +22,11 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from model_service.catalog.served_models import ScoresOutput, legacy_config
 from model_service.contracts.failures import UnknownModelError
 from model_service.contracts.model_declarations import (
     MODEL_BINDING,
@@ -34,6 +39,7 @@ if TYPE_CHECKING:
     from collections.abc import Collection, Iterator, Mapping
     from pathlib import Path
 
+    from model_service.catalog.served_models import ServedModel
     from model_service.contracts.model_declarations import ModelBinding
 
 
@@ -108,6 +114,73 @@ def model_binding(document: ModelDocument) -> ModelBinding:
         raise CatalogError(
             f"model {document.id!r} declaration is invalid: {error}"
         ) from error
+
+
+def served_model_binding(model: ServedModel) -> ModelBinding:
+    """Derive today's model binding from a served model (transitional).
+
+    A scores output binds as `spatial-scores`, an embedding as
+    `tile-embedding`, with the fields the host's `get_config()` reports.
+
+    Args:
+        model: The resolved served model.
+
+    Returns:
+        The binding builders verify the hosted model against.
+    """
+    contract = (
+        InferenceContract.SPATIAL_SCORES
+        if isinstance(model.output, ScoresOutput)
+        else InferenceContract.TILE_EMBEDDING
+    )
+    return MODEL_BINDING.validate_python(
+        {"id": model.id, "contract": contract, **legacy_config(model)}
+    )
+
+
+class ModelCatalogView(Protocol):
+    """What the API's parts read from the catalog, whether fixed or reloaded."""
+
+    def get(self, model_id: str) -> ModelBinding:
+        """Look up a deployed model.
+
+        Args:
+            model_id: The model ID.
+
+        Returns:
+            The model binding.
+
+        Raises:
+            UnknownModelError: If no model has this ID.
+        """
+        ...
+
+    def provider_block(self, key: str) -> dict[str, object]:
+        """Return each model's `key` block, by model ID.
+
+        Args:
+            key: The provider's top-level block key.
+
+        Returns:
+            Model IDs mapped to their block.
+        """
+        ...
+
+    def __iter__(self) -> Iterator[ModelBinding]:
+        """Iterate over the model bindings.
+
+        Returns:
+            An iterator over the bindings in catalog order.
+        """
+        ...
+
+    def __len__(self) -> int:
+        """Count the models.
+
+        Returns:
+            The number of models.
+        """
+        ...
 
 
 class ModelCatalog:

@@ -1,9 +1,24 @@
-# Model deployments: files under models/ (without .yaml); the file name is the
-# model ID. Each file names the model's contract and implementation and its
-# Ray Serve deployment. Adding a compatible model = add a file here and list it.
+# Served models come from the repo's catalog/ (the chart's `catalog` symlink):
+# every catalog/served-models/<id>.yaml is one Serve application of the
+# generic host, with no list to edit. `environment` names the
+# catalog/environments/<env>/ patches merged over the base files (empty: the
+# base files alone); `servedModels` deploys all files (["*"]) or the IDs listed.
+environment: ""
+servedModels: ["*"]
+
+# Environment-wide settings every served model gets: `cacheRoot` on a shared
+# volume (ONNX Runtime keeps TensorRT engines in <cacheRoot>/<id>/<digest>),
+# and `env` as each replica's environment variables.
+servedModelSettings:
+  cacheRoot: /mnt/cache/trt_cache
+  env:
+    MLFLOW_TRACKING_URI: http://mlflow.rationai-mlflow:5000
+    HF_HOME: /mnt/huggingface_cache
+
+# Models not yet migrated to catalog/served-models/ (transitional): files
+# under models/ (without .yaml); the file name is the model ID. Each file
+# names the model's contract and implementation and its Ray Serve deployment.
 models:
-  - prostate-classifier-1
-  - episeg-1
   - virchow2
   - prov-gigapath
 
@@ -120,9 +135,10 @@ empaia:
   # Extra DNS search domains for pods that call AppService, when the
   # installation hands out short host names from another namespace.
   dnsSearches: []
-  # The API registers an app, with its listed modes, for every model whose
-  # file has an `empaia` block, at startup, in this marketplace (the marketplace mock that
-  # EMPAIA test installations run). Empty url: no registration.
+  # The API registers an app, with its listed modes, for every model with an
+  # `empaia` block (in provider-blocks/<id>.yaml or its old model file), at
+  # startup, in this marketplace (the marketplace mock that EMPAIA test
+  # installations run). Empty url: no registration.
   marketplace:
     url: ""
     organizationId: ""

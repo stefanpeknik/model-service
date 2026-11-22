@@ -22,7 +22,7 @@ from model_service.contracts.model_declarations import (
 
 
 if TYPE_CHECKING:
-    from model_service.api.model_catalog import ModelCatalog
+    from model_service.api.model_catalog import ModelCatalogView
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,7 +59,7 @@ def model_view(model: ModelBinding) -> ModelView:
     )
 
 
-def create_router(catalog: ModelCatalog, access: Access) -> APIRouter:
+def create_router(catalog: ModelCatalogView, access: Access) -> APIRouter:
     """Build the `/v1/models` catalog router.
 
     Args:

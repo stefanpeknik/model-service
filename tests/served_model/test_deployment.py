@@ -21,19 +21,20 @@ OLD_MODELS = REPO / "deploy" / "helm" / "rayservice" / "models"
 
 
 @pytest.mark.parametrize(
-    ("environment", "old_file"),
+    ("model_id", "environment"),
     [
-        (None, "prostate-classifier-1.yaml"),
-        ("rationai-test", "rationai-test/prostate-classifier-1.yaml"),
+        ("prostate-classifier-1", None),
+        ("prostate-classifier-1", "rationai-test"),
+        ("virchow2", None),
+        ("virchow2", "rationai-test"),
     ],
 )
-def test_prostate_deploys_with_todays_serve_options(
-    environment: str | None, old_file: str
+def test_served_models_deploy_with_todays_serve_options(
+    model_id: str, environment: str | None
 ) -> None:
-    entry = load_catalog(CATALOG, environment).entries("served-models")[
-        "prostate-classifier-1"
-    ]
-    old = model_file(OLD_MODELS / old_file)["deployment"]
+    entry = load_catalog(CATALOG, environment).entries("served-models")[model_id]
+    old_dir = OLD_MODELS / environment if environment else OLD_MODELS
+    old = model_file(old_dir / f"{model_id}.yaml")["deployment"]
     del old["user_config"], old["ray_actor_options"]["runtime_env"]
 
     app = serve_application(entry, cache_root="/mnt/cache/trt_cache")
@@ -41,13 +42,13 @@ def test_prostate_deploys_with_todays_serve_options(
     user_config = deployment.pop("user_config")
 
     assert app == {
-        "name": "prostate-classifier-1",
-        "route_prefix": "/prostate-classifier-1",
+        "name": model_id,
+        "route_prefix": f"/{model_id}",
         "import_path": "model_service.served_model.serve:app",
     }
     assert deployment == {"name": "ServedModel", **old}
     assert user_config == {
-        "id": "prostate-classifier-1",
+        "id": model_id,
         "declaration": entry.document,
         "cache_root": "/mnt/cache/trt_cache",
     }

@@ -16,6 +16,11 @@ from fastapi import FastAPI, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from model_service.api.catalog_mount import (
+    CatalogState,
+    CatalogStatus,
+    MountedCatalog,
+)
 from model_service.api.health import (
     DeploymentHealth,
     DeploymentState,
@@ -23,7 +28,6 @@ from model_service.api.health import (
 )
 from model_service.api.http.auth import Access
 from model_service.api.http.errors import ApiErrorCode, http_error
-from model_service.api.model_catalog import ModelCatalog
 from model_service.api.routes.v1 import builders, executions, models
 from model_service.api.scheduler.builder_dispatch import HTTPBuilderDispatch
 from model_service.api.scheduler.execution_scheduler import ExecutionScheduler
@@ -41,17 +45,18 @@ from model_service.providers.standalone.provider import STANDALONE_PROVIDER
 
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Sequence
+    from collections.abc import AsyncIterator, Callable, Sequence
 
     from starlette.types import Lifespan
 
+    from model_service.api.model_catalog import ModelCatalogView
     from model_service.api.scheduler.protocols import Scheduler
     from model_service.api.scheduler.public import ModelResolver
     from model_service.contracts.model_declarations import ModelBinding
     from model_service.providers.provider import RouteFactory
 
 
-def model_resolver(catalog: ModelCatalog) -> ModelResolver:
+def model_resolver(catalog: ModelCatalogView) -> ModelResolver:
     """Make the scheduler's resolver from builder and model IDs to a validated model.
 
     Args:
@@ -88,10 +93,11 @@ def model_resolver(catalog: ModelCatalog) -> ModelResolver:
 def create_app(
     scheduler: Scheduler,
     *,
-    catalog: ModelCatalog,
+    catalog: ModelCatalogView,
     builder_runner: SynchronousBuilderService | None = None,
     lifespan: Lifespan[FastAPI] | None = None,
     deployment_health: DeploymentHealth | None = None,
+    catalog_status: Callable[[], CatalogStatus] | None = None,
     access: Access | None = None,
     provider_routes: Sequence[RouteFactory] = (),
 ) -> FastAPI:
@@ -103,6 +109,8 @@ def create_app(
         builder_runner: Runs builders synchronously; None makes `/run` answer 503.
         lifespan: Startup and shutdown context for the app.
         deployment_health: Checks Ray Serve routes; None reports `not_configured`.
+        catalog_status: Whether the mounted catalog is the one in use; None
+            for a catalog that never reloads, always `loaded`.
         access: Guards the public API; the default lets everyone in. Providers
             guard their own routes.
         provider_routes: Router factories contributed by providers.
@@ -193,6 +201,23 @@ def create_app(
             response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return result
 
+    @app.get("/healthz/catalog")
+    async def catalog_health(response: Response) -> CatalogStatus:
+        """Report whether the mounted catalog loaded, or why the API kept an older one.
+
+        Args:
+            response: The response, set to 503 after a failed reload.
+
+        Returns:
+            The catalog's state and the reload error, if any.
+        """
+        result = (
+            catalog_status() if catalog_status else CatalogStatus(CatalogState.LOADED)
+        )
+        if result.status is not CatalogState.LOADED:
+            response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return result
+
     app.include_router(models.create_router(catalog, access))
     app.include_router(
         builders.create_router(scheduler, builder_runner, access, STANDALONE_PROVIDER)
@@ -216,14 +241,14 @@ def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
         The FastAPI application served by Uvicorn.
 
     Raises:
-        CatalogError: If the model catalog file cannot be read or is not a list.
+        CatalogError: If the mounted catalog does not load.
         UnknownBuilderError: If `BUILDER_IDS` names a builder that is not registered.
         ValueError: If the provider context key is not a valid base64 key.
     """
     config = settings or SchedulerSettings()
     providers = PROVIDERS
-    catalog = ModelCatalog.from_file(
-        config.model_catalog_path,
+    catalog = MountedCatalog(
+        config.model_catalog_dir,
         [p.catalog_block for p in providers if p.catalog_block is not None],
     )
     builder_ids = (
@@ -284,6 +309,9 @@ def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
                 for c in contributions
                 if c.background is not None
             ]
+            background.append(
+                asyncio.create_task(catalog.watch(config.catalog_reload_seconds))
+            )
             async with scheduler.running():
                 yield
         finally:
@@ -302,7 +330,10 @@ def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
         deployment_health=DeploymentHealth(
             client,
             origin=config.ray_serve_origin,
-            routes=[f"/builders/{builder_id}" for builder_id in builder_ids]
-            + [f"/{model.id}" for model in catalog],
+            routes=lambda: (
+                [f"/builders/{builder_id}" for builder_id in builder_ids]
+                + [f"/{model.id}" for model in catalog]
+            ),
         ),
+        catalog_status=catalog.status,
     )

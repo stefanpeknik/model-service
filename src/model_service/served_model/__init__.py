@@ -25,6 +25,7 @@ each; `deployment.serve_application` is the reference):
         min_replicas: <serving.min_replicas, 0>
         max_replicas: <serving.max_replicas, 4>
         target_ongoing_requests: <serving.target_ongoing_requests or batching.max_size / 2>
+        downscale_delay_s: <serving.downscale_delay_s, only when given>
       ray_actor_options:
         num_cpus: <resources.cpus>
         num_gpus: <resources.gpus>

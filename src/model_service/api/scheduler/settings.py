@@ -45,9 +45,13 @@ class SchedulerSettings(BaseSettings):
         validation_alias="PROVIDER_CONTEXT_KEY", repr=False
     )
     ray_serve_origin: _RequiredString = Field(validation_alias="RAY_SERVE_ORIGIN")
-    model_catalog_path: Path = Field(
-        default=Path("/etc/model-service/model-catalog.json"),
-        validation_alias="MODEL_CATALOG_PATH",
+    # The mounted catalog ConfigMap (see api/catalog_files.py), looked at for
+    # changes every catalog_reload_seconds.
+    model_catalog_dir: Path = Field(
+        default=Path("/etc/model-service"), validation_alias="MODEL_CATALOG_DIR"
+    )
+    catalog_reload_seconds: FiniteFloat = Field(
+        default=10, gt=0, validation_alias="CATALOG_RELOAD_SECONDS"
     )
     # Deployed builders; unset means all registered, empty means none.
     builder_ids: frozenset[_RequiredString] | None = Field(

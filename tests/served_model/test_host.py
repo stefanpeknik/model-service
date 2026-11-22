@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 
 from model_service.catalog.served_models import resolve_served_model
-from model_service.components import Registry, Runtime, Step, default_registry
+from model_service.components import Registry, Runtime, default_registry
 from model_service.served_model.guards import ModelInputError, ModelOutputError
 from model_service.served_model.host import ServedModelHost
 from tests.support import onnx_graphs
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-    from model_service.components import Batch, BatchFunction, RuntimeContext
+    from model_service.components import BatchFunction, RuntimeContext
 
 
 TILE = 8
@@ -45,20 +45,7 @@ class Recording(Runtime):
         return run
 
 
-class ClsAndMean(Step):
-    """Test step: the first token and the mean of the others, like Virchow2's."""
-
-    name = "cls_and_mean"
-
-    def __call__(self, batch: Batch) -> Batch:
-        tokens = batch["output"]
-        pooled = np.stack([tokens[:, 0], tokens[:, 1:].mean(axis=1)], axis=1)
-        return batch | {"output": pooled}
-
-
-REGISTRY = Registry(
-    {(c.kind, c.name): c for c in [*default_registry(), Recording, ClsAndMean]}
-)
+REGISTRY = Registry({(c.kind, c.name): c for c in [*default_registry(), Recording]})
 
 
 def declaration(weights: Path, **blocks: Any) -> dict[str, Any]:
@@ -186,12 +173,29 @@ def test_a_score_map_replies_as_lz4_bytes(tmp_path: Path) -> None:
     np.testing.assert_allclose(scores.reshape(1, TILE, TILE), [expected], rtol=1e-6)
 
 
-def test_an_embedding_replies_pooled_or_as_tokens_in_the_asked_dtype(
+def test_the_onnx_runtime_casts_its_output_to_the_asked_dtype(
+    tmp_path: Path,
+) -> None:
+    graph = onnx_graphs.scores(tmp_path / "m.onnx", per_pixel=True)
+    output = {"kind": "scores", "channels": 1, "size": TILE, "dtype": "float16"}
+    document = declaration(
+        graph, runtime={"use": "onnx", "output_dtype": "float16"}, output=output
+    )
+    tile = tiles(1)[0]
+
+    scores = run(host(document, tmp_path), lambda s: s.infer(tile))
+
+    expected = 1 / (1 + np.exp(-(8 * tile.mean(axis=0) / 255 - 4)))
+    assert scores.dtype == np.float16
+    np.testing.assert_allclose(scores, [expected], rtol=1e-3)
+
+
+def test_an_embedding_replies_pooled_or_as_tokens_without_registers(
     tmp_path: Path,
 ) -> None:
     document = declaration(
         onnx_graphs.tokens(tmp_path / "m.onnx"),
-        post=[{"use": "cls_and_mean"}],
+        post=[{"use": "cls_mean_pool", "registers": 2}],
         output={"kind": "embedding", "summaries": ["global", "local_mean"]},
     )
     tile = tiles(1)[0]
@@ -210,12 +214,14 @@ def test_an_embedding_replies_pooled_or_as_tokens_in_the_asked_dtype(
     assert pooled.headers == {"x-output-shape": "(2, 3)"}
     np.testing.assert_allclose(
         features(pooled, np.float32).reshape(2, 3),
-        [tokens[0], tokens[1:].mean(axis=0)],
+        [tokens[0], tokens[3:].mean(axis=0)],
         rtol=1e-6,
     )
-    assert unpooled.headers == {"x-output-shape": f"({TILE}, 3)"}
+    assert unpooled.headers == {"x-output-shape": f"({TILE - 2}, 3)"}
     np.testing.assert_allclose(
-        features(unpooled, np.float16).reshape(TILE, 3), tokens, rtol=1e-3
+        features(unpooled, np.float16).reshape(TILE - 2, 3),
+        np.delete(tokens, [1, 2], axis=0),
+        rtol=1e-3,
     )
 
 

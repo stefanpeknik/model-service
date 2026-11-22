@@ -16,7 +16,7 @@ from model_service.providers.standalone.shared_storage import SharedStorageAcces
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from model_service.api.model_catalog import ModelCatalog
+    from model_service.api.model_catalog import ModelCatalogView
     from model_service.api.scheduler.settings import SchedulerSettings
     from model_service.builders.base import ReplicaSettings
     from model_service.builders.input_access import InputAccessFactory
@@ -33,7 +33,7 @@ class StandaloneProvider(Provider):
     catalog_block = None
 
     def api(
-        self, catalog: ModelCatalog, settings: SchedulerSettings
+        self, catalog: ModelCatalogView, settings: SchedulerSettings
     ) -> ApiContribution:
         """Contribute the standalone scheduler adapter, with no routes or background work.
 

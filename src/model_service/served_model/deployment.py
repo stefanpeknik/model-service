@@ -62,7 +62,8 @@ def deployment_options(model: ServedModel) -> dict[str, Any]:
 
     A `serving` limit left out follows from `batching.max_size`: the
     autoscaler aims at half a batch per replica, a replica takes two batches
-    at once and sixteen wait in its queue.
+    at once and sixteen wait in its queue. `downscale_delay_s` is passed
+    only when given.
 
     Args:
         model: The served model.
@@ -73,15 +74,18 @@ def deployment_options(model: ServedModel) -> dict[str, Any]:
     """
     batch = model.batching.max_size
     serving = model.serving
+    autoscaling: dict[str, Any] = {
+        "min_replicas": serving.min_replicas,
+        "max_replicas": serving.max_replicas,
+        "target_ongoing_requests": serving.target_ongoing_requests
+        or max(batch // 2, 1),
+    }
+    if serving.downscale_delay_s is not None:
+        autoscaling["downscale_delay_s"] = serving.downscale_delay_s
     return {
         "max_ongoing_requests": serving.max_ongoing_requests or 2 * batch,
         "max_queued_requests": serving.max_queued_requests or 16 * batch,
-        "autoscaling_config": {
-            "min_replicas": serving.min_replicas,
-            "max_replicas": serving.max_replicas,
-            "target_ongoing_requests": serving.target_ongoing_requests
-            or max(batch // 2, 1),
-        },
+        "autoscaling_config": autoscaling,
         "ray_actor_options": {
             "num_cpus": model.resources.cpus,
             "num_gpus": model.resources.gpus,

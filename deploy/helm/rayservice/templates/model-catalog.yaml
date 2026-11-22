@@ -1,10 +1,20 @@
-{{- /* The API's model catalog, rendered from the same files as the Serve config. */}}
+{{- /*
+The API's catalog, rendered from the same files as the Serve config. The API
+mounts it as a directory and reloads it when kubelet updates the files, so a
+catalog change does not restart the API.
+
+- catalog.json: the deployed served models after the environment's patches;
+- model-catalog.json: models not yet migrated, from models/ (transitional);
+- provider-blocks.json: the served models' provider blocks (transitional).
+*/}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ .Release.Name }}-model-catalog
   namespace: {{ .Release.Namespace }}
 data:
+  catalog.json: |
+    {{- dict "served-models" (include "model-service.servedModels" . | fromJson) | toJson | nindent 4 }}
   model-catalog.json: |
     {{- $models := list }}
     {{- range $path := .Values.models }}
@@ -13,3 +23,5 @@ data:
     {{- $models = append $models (set $model "id" (base $path)) }}
     {{- end }}
     {{- toJson $models | nindent 4 }}
+  provider-blocks.json: |
+    {{- include "model-service.providerBlocks" . | nindent 4 }}

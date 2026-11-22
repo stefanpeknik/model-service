@@ -66,9 +66,12 @@ Start with [what this thesis added](docs/thesis-scope.md), then
 
 ## Add a model
 
-A model that fits an existing implementation needs only YAML: add
-`deploy/helm/rayservice/models/<id>.yaml`, list it under `models:` in the values file,
-and `helm upgrade`. See [Adding models](docs/guides/adding-models.md).
+A model the existing components can run needs only YAML: add
+`catalog/served-models/<id>.yaml`, check it with `uv run pytest tests/catalog`,
+and `helm upgrade`; every file is deployed unless the environment's values
+name a subset in `servedModels`. Models not yet migrated still use
+`deploy/helm/rayservice/models/<id>.yaml` listed under `models:`; see
+[Adding models](docs/guides/adding-models.md).
 
 ## Add a builder
 

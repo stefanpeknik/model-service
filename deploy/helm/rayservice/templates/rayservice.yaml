@@ -68,6 +68,10 @@ spec:
       encoding: JSON
       enable_access_log: false
     applications:
+{{- range $id, $document := include "model-service.servedModels" . | fromJson }}
+      - {{ include "model-service.servedModelApplication" (dict "id" $id "document" $document "settings" $.Values.servedModelSettings) | nindent 8 | trim }}
+{{- end }}
+{{- /* Models not yet migrated to catalog/served-models/ (transitional). */}}
 {{- range $path := .Values.models }}
 {{- $model := tpl (printf "models/%s.yaml" $path | $.Files.Get) $ | fromYaml }}
 {{- if not (and $model.implementation $model.deployment) }}{{ fail (printf "models/%s.yaml needs implementation and deployment" $path) }}{{ end }}

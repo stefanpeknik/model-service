@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
     from fastapi import APIRouter
 
-    from model_service.api.model_catalog import ModelCatalog
+    from model_service.api.model_catalog import ModelCatalogView
     from model_service.api.scheduler.protocols import Scheduler
     from model_service.api.scheduler.public import (
         BeforeMutation,
@@ -141,7 +141,7 @@ class Provider(ABC):
 
     @abstractmethod
     def api(
-        self, catalog: ModelCatalog, settings: SchedulerSettings
+        self, catalog: ModelCatalogView, settings: SchedulerSettings
     ) -> ApiContribution:
         """Build what this provider adds to the API.
 
