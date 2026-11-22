@@ -55,6 +55,7 @@ def served(root: Path, model_id: str = "m1") -> ServedModel:
         ("episeg-1", None, "uri", "artifact_uri"),
         ("virchow2", None, "repo", "repo_id"),
         ("virchow2", "rationai-test", "repo", "repo_id"),
+        ("prov-gigapath", None, "repo", "repo_id"),
     ],
 )
 def test_a_migrated_file_gives_the_binding_of_todays_model_file(
