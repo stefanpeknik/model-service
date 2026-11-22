@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Any, cast
 
 from model_service.builders.base import _atomic_artifact as atomic_artifact
 from model_service.builders.declarations import InputSpec
-from model_service.builders.input_access import InputAccess, InputAccessFactory
 from model_service.builders.replica.runner import BuilderApplication
 from model_service.contracts.failures import (
     BuilderFailure,
@@ -28,6 +27,7 @@ from model_service.contracts.result import (
     InlineOutput,
     SharedArtifact,
 )
+from model_service.providers.input_access import InputAccess, InputAccessFactory
 from tests.support.builder_fixtures import (
     DECLARED,
     EMBEDDING_MODEL,

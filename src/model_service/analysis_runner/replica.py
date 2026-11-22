@@ -25,9 +25,8 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Protocol, cast
 
 from model_service.analysis_runner.models import RayServedModel
+from model_service.analysis_runner.progress import reporting_progress
 from model_service.analysis_runner.run import Concurrency, run_analysis
-from model_service.builders.input_access import close_resource
-from model_service.builders.replica.progress import reporting_progress
 from model_service.catalog.analyses import ResolvedAnalysisInvalid, load_resolved
 from model_service.contracts.failures import (
     BuilderFailure,
@@ -38,6 +37,7 @@ from model_service.contracts.invocation import ExecutionContext
 from model_service.contracts.log_context import logging_execution
 from model_service.contracts.result import BuilderResult, SharedArtifact
 from model_service.formats.known import get_format
+from model_service.providers.input_access import close_resource
 
 
 if TYPE_CHECKING:
@@ -45,11 +45,11 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from model_service.analysis_runner.models import DescribedModel
-    from model_service.builders.base import ReplicaSettings
-    from model_service.builders.input_access import InputAccess
+    from model_service.analysis_runner.settings import ReplicaSettings
     from model_service.catalog.analyses import Analysis, ResolvedAnalysis
     from model_service.contracts.analysis_http import AnalysisRunRequest
     from model_service.contracts.invocation import InputAccessKind, Invocation
+    from model_service.providers.input_access import InputAccess
 
 
 logger = logging.getLogger(__name__)

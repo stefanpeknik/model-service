@@ -14,8 +14,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 import numpy as np
 
-from model_service.builders.base import ReplicaSettings
-from model_service.builders.input_access import InputAccess, InputAccessFactory
+from model_service.analysis_runner.settings import ReplicaSettings
 from model_service.builders.registry import get_builder
 from model_service.builders.replica.runner import BuilderApplication
 from model_service.contracts.failures import (
@@ -26,6 +25,7 @@ from model_service.contracts.failures import (
 from model_service.contracts.invocation import SharedPathInput
 from model_service.contracts.model_declarations import InferenceContract
 from model_service.contracts.result import SharedArtifact
+from model_service.providers.input_access import InputAccess, InputAccessFactory
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from model_service.testing import fake_slide
 from tests.support.builder_fixtures import (

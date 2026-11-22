@@ -14,12 +14,12 @@ import httpx
 import numpy as np
 from fastapi import FastAPI
 
+from model_service.analysis_runner.settings import ReplicaSettings
 from model_service.api.app_factory import create_app, model_resolver
 from model_service.api.model_catalog import ModelCatalog
 from model_service.api.scheduler.builder_dispatch import HTTPBuilderDispatch
 from model_service.api.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.api.synchronous_runs import SynchronousBuilderService
-from model_service.builders.base import ReplicaSettings
 from model_service.builders.implementations.embeddings.builder import EmbeddingBuilder
 from model_service.builders.implementations.embeddings.spec import (
     EmbeddingConfiguration,

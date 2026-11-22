@@ -29,7 +29,6 @@ from model_service.api.scheduler.public import (
     ProviderSuccess,
     SubmissionIdentity,
 )
-from model_service.builders.directories import make_shared_directory, remove_directory
 from model_service.builders.registry import get_builder
 from model_service.contracts.caller_request import BuilderRequest
 from model_service.contracts.failures import InvalidInvocation
@@ -39,6 +38,7 @@ from model_service.contracts.invocation import (
     SharedPathInput,
 )
 from model_service.contracts.result import BuilderResult, SharedArtifact
+from model_service.directories import make_shared_directory, remove_directory
 from model_service.providers.provider import ProviderAdapter
 from model_service.providers.standalone.provider import STANDALONE_PROVIDER
 from model_service.providers.standalone.shared_storage import (

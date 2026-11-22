@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from model_service.builders.directories import make_shared_directory
+from model_service.directories import make_shared_directory
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.app_service.types import (
     DirectAccess,

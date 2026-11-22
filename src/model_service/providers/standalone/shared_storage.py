@@ -14,9 +14,9 @@ from typing import TYPE_CHECKING, Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from model_service.builders.input_access import InputAccess, InputAccessFactory
 from model_service.contracts.failures import InvalidInvocation
 from model_service.contracts.invocation import SharedPathInput
+from model_service.providers.input_access import InputAccess, InputAccessFactory
 
 
 if TYPE_CHECKING:

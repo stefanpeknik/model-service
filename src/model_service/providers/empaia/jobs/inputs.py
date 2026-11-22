@@ -15,12 +15,6 @@ from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
-from model_service.builders.directories import make_shared_directory, remove_directory
-from model_service.builders.input_access import (
-    InputAccess,
-    InputAccessFactory,
-    close_resource,
-)
 from model_service.components import EmpaiaInput
 from model_service.components.empaia import converter
 from model_service.contracts.failures import (
@@ -29,10 +23,16 @@ from model_service.contracts.failures import (
     InvalidInvocation,
 )
 from model_service.contracts.invocation import ExecutionContext, ProviderInput
+from model_service.directories import make_shared_directory, remove_directory
 from model_service.providers.empaia.app_service.gateway import (
     EmpaiaGatewayError,
     EmpaiaInputState,
     EmpaiaJobContext,
+)
+from model_service.providers.input_access import (
+    InputAccess,
+    InputAccessFactory,
+    close_resource,
 )
 
 

@@ -13,8 +13,8 @@ import shutil
 from typing import TYPE_CHECKING, Self
 from uuid import uuid4
 
-from model_service.builders.directories import make_shared_directory
 from model_service.contracts.failures import InvalidInvocation
+from model_service.directories import make_shared_directory
 
 
 if TYPE_CHECKING:

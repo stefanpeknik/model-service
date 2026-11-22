@@ -1,4 +1,4 @@
-"""Log a builder replica's model-service lines as JSON on stdout.
+"""Log an analysis-runner replica's model-service lines as JSON on stdout.
 
 Serve configures only its own logger, and in Ray 2.58 its stream handler
 writes text whatever the encoding, which applies to its files only. So the

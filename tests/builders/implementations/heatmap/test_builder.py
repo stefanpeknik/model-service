@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock
 
 import numpy as np
 
-from model_service.builders.base import ReplicaSettings
+from model_service.analysis_runner.settings import ReplicaSettings
 from model_service.builders.implementations.heatmap.builder import HeatmapBuilder
 from model_service.builders.registry import get_builder
 from model_service.builders.replica.runner import BuilderApplication

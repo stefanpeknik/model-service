@@ -9,7 +9,7 @@ of them. A provider writes:
 - a `ProviderAdapter` (here): `identify`, `prepare` and `finish`, admitting a
   job and finishing it, with the types they take and return in
   api/scheduler/public.py;
-- an `InputAccessFactory` (builders/input_access.py) whose `create` returns an
+- an `InputAccessFactory` (providers/input_access.py) whose `create` returns an
   `InputAccess`: `input_path`, `output_path`, `is_visible_artifact`, `aclose`.
 
 Each provider imports what only one process needs inside the method for it:
@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
     from fastapi import APIRouter
 
+    from model_service.analysis_runner.settings import ReplicaSettings
     from model_service.api.model_catalog import ModelCatalogView
     from model_service.api.scheduler.protocols import Scheduler
     from model_service.api.scheduler.public import (
@@ -40,11 +41,10 @@ if TYPE_CHECKING:
         SubmissionIdentity,
     )
     from model_service.api.scheduler.settings import SchedulerSettings
-    from model_service.builders.base import ReplicaSettings
-    from model_service.builders.input_access import InputAccessFactory
     from model_service.contracts.invocation import InputAccessKind
     from model_service.contracts.json_values import JsonValue
     from model_service.contracts.result import BuilderResult
+    from model_service.providers.input_access import InputAccessFactory
 
 
 class ProviderAdapter(ABC):

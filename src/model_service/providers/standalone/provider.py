@@ -16,10 +16,10 @@ from model_service.providers.standalone.shared_storage import SharedStorageAcces
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from model_service.analysis_runner.settings import ReplicaSettings
     from model_service.api.model_catalog import ModelCatalogView
     from model_service.api.scheduler.settings import SchedulerSettings
-    from model_service.builders.base import ReplicaSettings
-    from model_service.builders.input_access import InputAccessFactory
+    from model_service.providers.input_access import InputAccessFactory
     from model_service.providers.provider import ApiContribution
 
 

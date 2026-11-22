@@ -13,14 +13,14 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import Field
 from ray import serve
 
-from model_service.builders.base import ReplicaSettings
+from model_service.analysis_runner.logs import configure_replica_logging
+from model_service.analysis_runner.settings import ReplicaSettings
 from model_service.builders.registry import get_builder
 from model_service.builders.replica.http_handler import (
     error,
     invalid_request,
     run_http,
 )
-from model_service.builders.replica.logs import configure_replica_logging
 from model_service.builders.replica.runner import BuilderApplication
 from model_service.contracts.builder_http import ErrorCode, ErrorResponse, RunRequest
 from model_service.contracts.result import BuilderResult
@@ -28,7 +28,7 @@ from model_service.providers.registry import PROVIDERS
 
 
 if TYPE_CHECKING:
-    from model_service.builders.input_access import InputAccessFactory
+    from model_service.providers.input_access import InputAccessFactory
 
 
 fastapi = FastAPI()

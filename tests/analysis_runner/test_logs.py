@@ -9,7 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
-from model_service.builders.replica.logs import configure_replica_logging
+from model_service.analysis_runner.logs import configure_replica_logging
 from model_service.builders.replica.runner import BuilderApplication
 from model_service.contracts.invocation import ExecutionContext
 from model_service.contracts.result import BuilderResult, InlineOutput

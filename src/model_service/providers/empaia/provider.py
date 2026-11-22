@@ -19,13 +19,13 @@ from model_service.providers.provider import ApiContribution, Provider
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from model_service.analysis_runner.settings import ReplicaSettings
     from model_service.api.model_catalog import ModelCatalogView
     from model_service.api.scheduler.settings import SchedulerSettings
-    from model_service.builders.base import ReplicaSettings
-    from model_service.builders.input_access import InputAccessFactory
     from model_service.providers.empaia.credentials import OutgoingCredentials
     from model_service.providers.empaia.registration import Marketplace
     from model_service.providers.empaia.triggers import PreprocessingTriggers
+    from model_service.providers.input_access import InputAccessFactory
 
 
 # The model files' block of the earlier EMPAIA offering; still accepted so old

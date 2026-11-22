@@ -629,7 +629,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(completed.status, "succeeded")
 
     async def test_a_job_whose_progress_empaia_refuses_still_succeeds(self) -> None:
-        with self.assertLogs("model_service.builders.replica", "WARNING") as logs:
+        with self.assertLogs("model_service.analysis_runner.progress", "WARNING") as logs:
             completed, service = await self._run_halfway_job(reject_progress=True)
 
         self.assertGreater(service.progress_failures, 0)

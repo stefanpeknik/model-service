@@ -36,7 +36,6 @@ from model_service.api.scheduler.public import (
     ProviderSuccess,
     SubmissionIdentity,
 )
-from model_service.builders.directories import remove_directory
 from model_service.builders.registry import get_builder
 from model_service.components import EmpaiaInput, EmpaiaOutput
 from model_service.components.empaia import converter, publisher
@@ -47,6 +46,7 @@ from model_service.contracts.invocation import (
 )
 from model_service.contracts.json_values import is_json_value
 from model_service.contracts.result import SharedArtifact
+from model_service.directories import remove_directory
 from model_service.formats.known import format_of
 from model_service.providers.empaia.app_service.gateway import (
     INPUT_ACCESS_KIND,

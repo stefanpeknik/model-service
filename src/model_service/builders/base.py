@@ -13,16 +13,16 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 from model_service.builders.declarations import BuilderInputs, BuilderOutputs
-from model_service.builders.directories import make_shared_directory
 from model_service.builders.model_clients.base import ModelClient
 from model_service.contracts.failures import InvalidInvocation
 from model_service.contracts.result import SharedArtifact
+from model_service.directories import make_shared_directory
 
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping
 
-    from model_service.builders.input_access import InputAccess
+    from model_service.providers.input_access import InputAccess
 
 
 class BuilderSettings(BaseModel):
@@ -32,12 +32,6 @@ class BuilderSettings(BaseModel):
 
     num_threads: int = Field(default=2, gt=0)
     max_concurrent_tasks: int = Field(default=4, gt=0)
-
-
-class ReplicaSettings(BuilderSettings):
-    """A builder's settings plus what the replica's providers need."""
-
-    shared_storage_roots: tuple[Path, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

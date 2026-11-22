@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from model_service.analysis_runner.replica import AnalysisReplica
-from model_service.builders.base import ReplicaSettings
+from model_service.analysis_runner.settings import ReplicaSettings
 from model_service.catalog import load_catalog
 from model_service.catalog.analyses import resolve_run
 from model_service.contracts.analysis_http import AnalysisRunRequest

@@ -1,6 +1,6 @@
-"""Pass a builder's progress to its provider: throttled, and never failing the run.
+"""Pass a run's progress to its provider: throttled, and never failing the run.
 
-A builder reports as often as it likes; only the latest value is kept, and it
+A run reports as often as it likes; only the latest value is kept, and it
 is sent once per interval when it moved by at least a percentage point. A
 failed send is logged once and the run goes on. Sending stops when the run
 ends, before the provider's access is closed; a run that finishes then sends
@@ -94,7 +94,7 @@ async def reporting_progress(
         interval_seconds: Time between two sends.
 
     Yields:
-        The function the builder reports progress with; after the block it
+        The function the run reports progress with; after the block it
         still accepts reports but sends none. A block that raises skips the
         final send, so a failed run keeps the last progress it reached.
     """

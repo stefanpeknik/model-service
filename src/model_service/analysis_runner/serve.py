@@ -8,8 +8,8 @@ roots (`ReplicaSettings`); each request carries the resolved analysis. The
 wrapper only adapts Serve to `AnalysisReplica`:
 
 - `reconfigure(user_config)` builds a new replica core;
-- `POST /`: one `AnalysisRunRequest`, answered with the result or the builder
-  deployment's error envelope, so the API's dispatch reads both alike.
+- `POST /`: one `AnalysisRunRequest`, answered with the result or the error
+  envelope of `contracts/analysis_http.py`.
 
 Served models are reached through their Serve applications by ID
 (`RayServedModel`).
@@ -23,16 +23,19 @@ from fastapi import FastAPI, status
 from fastapi.exceptions import RequestValidationError
 from ray import serve
 
-from model_service.analysis_runner.replica import AnalysisReplica
-from model_service.builders.base import ReplicaSettings
-from model_service.builders.replica.http_handler import (
+from model_service.analysis_runner.http_errors import (
     answer_http,
     error,
     invalid_request,
 )
-from model_service.builders.replica.logs import configure_replica_logging
-from model_service.contracts.analysis_http import AnalysisRunRequest
-from model_service.contracts.builder_http import ErrorCode, ErrorResponse
+from model_service.analysis_runner.logs import configure_replica_logging
+from model_service.analysis_runner.replica import AnalysisReplica
+from model_service.analysis_runner.settings import ReplicaSettings
+from model_service.contracts.analysis_http import (
+    AnalysisRunRequest,
+    ErrorCode,
+    ErrorResponse,
+)
 from model_service.contracts.result import BuilderResult
 
 
