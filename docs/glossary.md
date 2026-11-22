@@ -3,56 +3,97 @@
 This context names the work model-service runs and how callers track it,
 independently of the system that supplies the data.
 
+## Building blocks
+
+**Component**:
+A small reusable piece of code that catalog files name by its name. Its kind
+decides where it may be used: a **loader** fetches weights, a **runtime** runs
+them, a **step** transforms data item by item, a **source** produces an
+analysis's items from its inputs, a **sink** collects results, an **input
+converter** turns an EMPAIA input into a run input, and a **publisher** carries
+an output into EMPAIA.
+_Avoid_: Unit, plug-in, module
+
+**Sink**:
+The component that collects an analysis's results into one output file of a
+data format. An analysis may have several, written all or nothing.
+_Avoid_: Writer, output builder
+
+**Data format**:
+A named, versioned file shape that sinks write and readers open, identified by
+a media type with a version. Readers refuse a version they don't know.
+_Avoid_: Output type, schema (for the file layout)
+
+**Catalog**:
+The served-model and analysis files of one deployment, checked together, with
+the environment's patches applied.
+_Avoid_: Model catalog, config
+
+**Environment patch**:
+A catalog file holding only what differs on one cluster, merged over the
+base file of the same name.
+_Avoid_: Override file, copy
+
 ## Work
 
+**Served model**:
+One trained model deployed behind the generic host, assembled from a loader,
+a runtime and optional steps, and declaring the tiles it takes and what it
+returns. Its file name is its model ID.
+_Avoid_: Model deployment, inference implementation, model class
+
+**Model output**:
+What a served model declares it returns per tile: scores (a score map of
+some channels) or an embedding (one vector per summary). It replaces the
+inference contract.
+_Avoid_: Inference contract, model type
+
+**Model digest**:
+A fingerprint of everything that decides what a served model computes. A run
+whose model's digest differs from the one it was admitted with fails rather
+than produce results from another model.
+
 **Model inference**:
-A call to one deployed model with model-ready input that returns a prediction.
+A call to one served model with one model-ready tile that returns its output.
 It does not orchestrate whole-slide processing.
 _Avoid_: Model operation, low-level model call
 
-**Inference implementation**:
-Code in `src/model_service/inference/implementations/` that serves one kind of model-ready input and output. It can
-serve any trained model that fits it.
-_Avoid_: Model, when meaning the code rather than a deployment
+**Analysis**:
+One slide-in, results-out job described in one catalog file: a source, steps
+that may call served models, and sinks. Its file name is its public ID.
+_Avoid_: Builder, pipeline, workflow, scenario
 
-**Model deployment**:
-One trained model served through an inference implementation, identified by its
-model ID and declared in one `deploy/helm/rayservice/models/` file.
-_Avoid_: Model workflow
+**Setting**:
+An option of an analysis's components that a caller may change for one run,
+such as the stride between tiles. EMPAIA offers settings as job parameters.
+_Avoid_: Builder configuration, parameter (outside EMPAIA)
 
-**Inference contract**:
-The model-ready input and prediction structure a model deployment declares:
-`spatial-scores` or `tile-embedding`. Builders accept one contract.
-_Avoid_: Model type
+**Exposure**:
+How an analysis is offered beyond the API. Exposing an analysis to EMPAIA
+makes it one EMPAIA app.
+_Avoid_: Registration, publishing (for the app itself)
 
-**Model catalog**:
-The API's list of model deployments and their contracts, rendered from the
-same files that deploy the models.
+**Run**:
+One request to execute an analysis with concrete inputs, settings and an
+output path. It executes the analysis as it was resolved when the run was
+admitted.
+_Avoid_: Job, inside model-service
 
-**Builder**:
-Reusable whole-slide processing that calls one compatible model deployment and
-writes declared outputs, for example `heatmap` or `tile-embeddings`.
-_Avoid_: Workflow, pipeline, scenario
-
-**Invocation**:
-One request to run a builder with concrete inputs. The model is chosen per
-request; processing settings are the builder's current defaults, or the
-EMPAIA job's configuration.
-
-**Builder result**:
-The named outputs of an invocation. Each output is an inline value or a shared
+**Result**:
+The named outputs of a run. Each output is an inline value or a shared
 artifact.
+_Avoid_: Builder result
 
 **Shared artifact**:
 A result reference to a completed file on shared storage, distinct from an
 inline string value.
 _Avoid_: Bare output path
 
-## Invocation and execution
+## Runs and executions
 
-**Synchronous invocation**:
-An invocation for which the caller keeps the request open and receives
-the result directly. It has no durable execution record.
+**Synchronous run**:
+A run for which the caller keeps the request open and receives the result
+directly. It has no durable execution record.
 _Avoid_: Real-time request, direct request
 
 **Schedule request**:
@@ -62,24 +103,17 @@ _Avoid_: Batch request, job submission
 
 **Submission identity**:
 The provider-scoped identity used to recognize repeated schedule requests.
-Standalone and raw-inference schedule requests name it with the
-`Idempotency-Key` header; EMPAIA schedule requests use the EMPAIA job
-identity, and JES's `Idempotency-Key`, when sent, must equal the job ID.
+Standalone schedule requests name it with the `Idempotency-Key` header;
+EMPAIA schedule requests use the EMPAIA job identity.
 
 **Scheduled execution**:
 The durable model-service lifecycle created by one schedule request, including
 any repeated processing attempts and provider finish.
 _Avoid_: Batch job, model-service job
 
-**Scheduled inference**:
-A scheduled execution of one raw model request (one tile) instead of a
-builder. It has no provider finish; its stored response is downloaded
-separately and expires after a retention period.
-_Avoid_: Batch inference, tile job
-
 **Processing attempt**:
-One try to produce the builder result of a scheduled execution. A scheduled
-execution may have several processing attempts but only one accepted result.
+One try to produce the result of a scheduled execution. A scheduled execution
+may have several processing attempts but only one accepted result.
 _Avoid_: Job attempt
 
 **Execution status**:
@@ -102,29 +136,39 @@ The part of model-service that owns schedule requests and advances scheduled
 executions through processing and provider finish.
 _Avoid_: Demand controller, control plane, job scheduler
 
+**Model capacity**:
+How many scheduled runs may use one served model at once. A run is claimed
+only when every served model it calls has room; an analysis without models
+has capacity of its own.
+
 **Synchronous headroom**:
-The best-effort share of model capacity left available to synchronous
-invocations while scheduled executions run.
+The best-effort share of model capacity left available to synchronous runs
+while scheduled executions run.
 
 ## Provider integration
 
 **Provider**:
-The integration context that supplies builder inputs and consumes the builder
-result or terminal state. The current providers are standalone shared storage
-and EMPAIA.
+The integration context that supplies a run's inputs and consumes its result
+or terminal state. The current providers are standalone shared storage and
+EMPAIA.
 
 **Provider adapter**:
 The translation between provider-specific scheduling and finish behavior and
 the common scheduled-execution model.
 
 **Standalone provider**:
-The provider used by RationAI SDK callers that exchange builder inputs and
-artifacts through shared storage without an external job lifecycle.
+The provider used by RationAI SDK callers that exchange inputs and artifacts
+through shared storage without an external job lifecycle.
 _Avoid_: Direct provider, filesystem mode
 
 **EMPAIA provider**:
 The provider that relates a scheduled execution to an EMPAIA job and its input
 and publication conventions.
+
+**EMPAIA app**:
+What EMPAIA lists and starts jobs of. Each analysis exposed to EMPAIA is one
+app.
+_Avoid_: App, when meaning a Ray Serve application
 
 **EMPAIA job**:
 The external unit of work owned by EMPAIA and JES. One EMPAIA job refers to one
@@ -141,33 +185,38 @@ The expiry of the original EMPAIA job credential, which bounds the related
 scheduled execution.
 
 **EMPAIA publication**:
-The successful EMPAIA provider finish that uploads the builder result and
-finalizes the EMPAIA job.
+The successful EMPAIA provider finish that uploads the result and finalizes
+the EMPAIA job.
+
+**EMPAIA application definition (EAD)**:
+The EMPAIA declaration of one app, generated from the analysis's EMPAIA
+exposure and the fragments its converters and publishers contribute.
+_Avoid_: EAD configuration, model configuration
 
 **Input access**:
-The provider-neutral view through which a builder reads its named inputs.
-Provider transport details do not change builder logic.
+The provider-neutral view through which a run reads its named inputs.
+Provider transport details do not change the analysis.
 
 **Shared-storage path**:
-A path that both a standalone caller and the builder runtime resolve to the
+A path that both a standalone caller and the analysis runner resolve to the
 same file on shared storage.
 _Avoid_: Local path
 
-## Configuration and deployment
-
-**Builder configuration**:
-A builder's processing settings (stride, background skipping) with defaults
-in the builder's `spec.py`. Standalone requests do not set them; EMPAIA jobs may.
-_Avoid_: Execution spec, model parameters
+## Slides
 
 **Model target MPP**:
-The physical pixel resolution a model expects based on its training data.
-It is a property of the model deployment, not a provider setting.
+The physical pixel resolution a served model expects, from its training data.
+Analyses read the slide level closest to it.
 
-**EMPAIA application definition (EAD)**:
-The EMPAIA declaration of one app, generated from an analysis's
-`expose.empaia` section by merging its converters' and publishers' fragments.
-_Avoid_: EAD configuration, model configuration
+**Region of interest**:
+A mask limiting an analysis to part of a slide. An analysis requires it,
+accepts it, or ignores it.
+
+**Tissue mask**:
+A mask separating tissue from background, so an analysis can skip empty
+glass. Analyses compute their own from colour saturation until QC publishes
+one.
+_Avoid_: Coverage mask
 
 ## Quality control
 
@@ -185,24 +234,16 @@ A downsampled QC output marking where a QC check found artifacts; any non-zero
 value means an artifact. The residual check's "coverage mask" is one.
 _Avoid_: Coverage mask, when meaning tissue; tissue mask
 
-**Tissue mask**:
-A mask separating tissue from background, so a builder can skip empty glass.
-The heatmap builder computes its own from colour saturation
-(`src/model_service/slides/tissue.py`) until QC publishes one; QC computes one
-internally to filter its tiles but does not publish it.
-_Avoid_: Coverage mask
-
 ## Named clients and JES
 
 **RationAI SDK**:
-The public client library for model inference and builder runs through
-model-service.
+The public client library for served models, analyses and executions in
+model-service, with readers for every data format.
 _Avoid_: SDK, when the intended library is ambiguous
 
 **EMPAIA client**:
 The SDK's `rationai.empaia.Client`, used inside the EMPAIA provider
-integration to access job inputs and publish outcomes. The integration needs
-a build of the SDK with raw job data, a request timeout and a write guard.
+integration to access job inputs and publish outcomes.
 _Avoid_: EMPAIA SDK
 
 **Execution backend**:
