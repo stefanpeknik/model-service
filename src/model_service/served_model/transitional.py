@@ -24,7 +24,7 @@ def legacy_prediction(model: ServedModel, output: np.ndarray) -> float | np.ndar
         output: What `infer` returned for the tile.
 
     Returns:
-        A Python float for one score per tile, as `BinaryClassifier` returns;
+        A Python float for one score per tile, as the old binary classifier returned;
         the array otherwise.
     """
     declared = model.output

@@ -1,9 +1,7 @@
-"""Model implementations: the Ray Serve code that serves trained models.
+"""Model implementations: the Ray Serve code that served trained models before the generic host.
 
-A model is a trained model with an ID, declared by one file in
-deploy/helm/rayservice/models/ (weights, tile size, mpp, inference contract)
-that names the implementation serving it. An implementation here serves every
-model of its kind: binary_classifier.py any binary classifier, virchow2.py the
-Virchow2 foundation model. The API reads the catalog of models in
-api/model_catalog.py; builders call the models through builders/model_clients/.
+Only semantic_segmentation.py is left, for EPISeg's file in
+deploy/helm/rayservice/models/ (weights, tile size, mpp, inference contract).
+Every other model is a served-model file in catalog/served-models/ on the
+generic host in served_model/.
 """

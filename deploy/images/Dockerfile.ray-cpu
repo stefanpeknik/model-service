@@ -42,5 +42,5 @@ from ratiopath.masks.mask_builders import MaskBuilder; \
 from ratiopath.openslide import OpenSlide; \
 from ratiopath.tiling import grid_tiles; \
 import model_service.builders.replica.serve; \
-import model_service.inference.implementations.binary_classifier; \
+import model_service.served_model.serve; \
 assert torch.__version__.endswith('+cpu'), torch.__version__"

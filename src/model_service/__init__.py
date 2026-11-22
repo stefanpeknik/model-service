@@ -9,9 +9,9 @@ One top-level package per process, plus what they share:
 - builders/: generic builder code and slides/; the concrete builders in
   builders/implementations/; builders/model_clients/ call and check the models;
   builders/replica/ is the Ray Serve deployment that hosts a builder.
-- inference/: the Ray Serve code that serves trained models
-  (inference/implementations/, each named by one file in
-  deploy/helm/rayservice/models/) and the MLflow loader (artifacts.py).
+- inference/: the MLflow loader (artifacts.py) and the one model class not yet
+  on the generic host (inference/implementations/, EPISeg's, named by its file
+  in deploy/helm/rayservice/models/).
 - providers/: where inputs come from and results go (standalone, EMPAIA); they
   plug into both the API and builder replicas.
 - contracts/: data shapes processes hand each other (invocation, result, failures, model
