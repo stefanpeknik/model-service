@@ -3,8 +3,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import numpy as np
+from pydantic import Field
 
-from model_service.components import Col, Sink
+from model_service.components import Col, Sink, SinkOptions
 
 
 if TYPE_CHECKING:
@@ -13,11 +14,18 @@ if TYPE_CHECKING:
     from model_service.components import Batch
 
 
+class ScoreTableOptions(SinkOptions):
+    fail_on_close: bool = Field(
+        False, description="Raise instead of writing, like a full disk."
+    )
+
+
 class ScoreTable(Sink):
     """Test sink: every row's scores in one .npz file."""
 
     name = "score_table"
     format = "test_score_table"
+    Options = ScoreTableOptions
     reads: ClassVar[dict[str, Col]] = {"scores": Col("float32", (None, 1, 1))}
     frame_reads = frozenset({"extent_x", "extent_y"})
     example_options: ClassVar[dict[str, Any]] = {"output": "scores"}
@@ -34,6 +42,9 @@ class ScoreTable(Sink):
 
     def close(self) -> Path:
         """Write all scores, possibly none."""
+        assert isinstance(self.options, ScoreTableOptions)
+        if self.options.fail_on_close:
+            raise OSError("no space left on device")
         scores = np.concatenate(self.parts) if self.parts else np.empty((0, 0))
         np.savez(self.path, scores=scores, extent=np.array(self.extent))
         return self.path

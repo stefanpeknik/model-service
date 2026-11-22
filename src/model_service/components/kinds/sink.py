@@ -52,7 +52,8 @@ class Sink(Component):
 
         Args:
             frame: The source's frame row.
-            run: The run's context; `run.work_dir` is where to write.
+            run: The run's `Run`: `run.work_dir` is where to write, and
+                `run.columns` gives the shapes of the columns it reads.
         """
 
     @abstractmethod
@@ -69,4 +70,11 @@ class Sink(Component):
 
         Returns:
             The path of the written artifact.
+        """
+
+    def abort(self) -> None:
+        """Release what was collected; called instead of `close` when the run fails.
+
+        The runner removes `run.work_dir` afterwards, so only resources held
+        elsewhere (temporary files, memory maps) need releasing here.
         """
