@@ -48,6 +48,15 @@ helm install model-service deploy/helm/rayservice -n rationai-infra-test-ns \
 
 Upgrades use `helm upgrade` with the same arguments.
 
+Served models come from `catalog/`: the values deploy the IDs named in
+`servedModels` (only `prostate-classifier-1`; EPISeg's weights sit on an
+MLflow this cluster can't reach) with the `catalog/environments/rationai-test/`
+patches, and `virchow2` still from its old model file under `models:`. A
+catalog-only change needs no image rebuild and doesn't restart the API: kubelet
+updates the mounted catalog ConfigMap (within about a minute) and the API
+reloads it. If the new catalog doesn't load, the API keeps the old one and
+`/healthz/catalog` answers 503 with the reason; the API log says the same.
+
 ## Ship code
 
 Dependencies rarely change, so images are a thin code layer over the October
@@ -90,6 +99,7 @@ with the renamed chart needs this entry changed too.
 oc -n rationai-infra-test-ns port-forward svc/model-service-api 18080:8080
 curl localhost:18080/v1/models
 curl localhost:18080/healthz/deployments
+curl localhost:18080/healthz/catalog
 ```
 
 `constant-classifier` exercises the heatmap builder and the scheduler on the CPU
