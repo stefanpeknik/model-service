@@ -5,16 +5,15 @@
 # model-service-db, mlflow-public-credentials and huggingface-secret.
 environment: rationai-test
 # Named, not ["*"]: EPISeg's weights sit on an MLflow this cluster can't reach.
-servedModels: [prostate-classifier-1]
-# Merged over values.yaml's: the cache root and HF_HOME stay.
+servedModels: [prostate-classifier-1, virchow2]
+# Merged over values.yaml's: the cache root, setup timeout and HF_HOME stay.
 servedModelSettings:
   env:
     # The public MLflow; the test cluster can't reach the internal one.
     MLFLOW_TRACKING_URI: https://mlflow.rationai.cloud.e-infra.cz
 
-# Not yet migrated to catalog/served-models/ (transitional).
-models:
-  - rationai-test/virchow2
+# Every model this cluster runs is in catalog/served-models/.
+models: []
 
 builders:
   heatmap:

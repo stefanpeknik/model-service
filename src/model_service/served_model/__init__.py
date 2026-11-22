@@ -17,6 +17,7 @@ each; `deployment.serve_application` is the reference):
 - name: <id>                     # the file name
   route_prefix: /<id>
   import_path: model_service.served_model.serve:app   # the same for every model
+  runtime_env: {config: {setup_timeout_seconds: …}}   # the environment's, only when set
   deployments:
     - name: ServedModel
       max_ongoing_requests: <serving.max_ongoing_requests or 2 x batching.max_size>

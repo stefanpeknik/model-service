@@ -140,7 +140,8 @@ catalog/environments/<environment>/served-models/<id>.yaml patch merged in.
 One served model's Serve application, as
 model_service.served_model.deployment.serve_application builds it, plus the
 environment's env vars (servedModelSettings.env) as the replica's runtime_env.
-Takes dict "id", "document" and "settings".
+servedModelSettings.setupTimeoutSeconds, when set, goes to the application's
+runtime_env.config. Takes dict "id", "document" and "settings".
 */}}
 {{- define "model-service.servedModelApplication" -}}
 {{- $id := .id }}
@@ -154,9 +155,16 @@ Takes dict "id", "document" and "settings".
 {{- $_ := set $actor "runtime_env" (dict "env_vars" .) }}
 {{- end }}
 {{- $autoscaling := dict "min_replicas" ($serving.min_replicas | default 0) "max_replicas" ($serving.max_replicas | default 4) "target_ongoing_requests" ($serving.target_ongoing_requests | default (max (div $batch 2) 1)) }}
+{{- if not (kindIs "invalid" $serving.downscale_delay_s) }}
+{{- $_ := set $autoscaling "downscale_delay_s" $serving.downscale_delay_s }}
+{{- end }}
 {{- $userConfig := dict "id" $id "declaration" $model "cache_root" (required "servedModelSettings.cacheRoot is required" .settings.cacheRoot) }}
 {{- $deployment := dict "name" "ServedModel" "max_ongoing_requests" ($serving.max_ongoing_requests | default (mul 2 $batch)) "max_queued_requests" ($serving.max_queued_requests | default (mul 16 $batch)) "autoscaling_config" $autoscaling "ray_actor_options" $actor "user_config" $userConfig }}
-{{- toYaml (dict "name" $id "route_prefix" (printf "/%s" $id) "import_path" "model_service.served_model.serve:app" "deployments" (list $deployment)) }}
+{{- $application := dict "name" $id "route_prefix" (printf "/%s" $id) "import_path" "model_service.served_model.serve:app" "deployments" (list $deployment) }}
+{{- with .settings.setupTimeoutSeconds }}
+{{- $_ := set $application "runtime_env" (dict "config" (dict "setup_timeout_seconds" (int64 .))) }}
+{{- end }}
+{{- toYaml $application }}
 {{- end }}
 
 {{/*
