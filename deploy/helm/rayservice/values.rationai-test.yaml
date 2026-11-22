@@ -1,10 +1,11 @@
 # rationai-infra-test-ns, beside the EMPAIA test instance, as release
-# `model-service`. Same models, builders, workers and images as peknik-ns;
+# `model-service`. Same builders, workers and images as peknik-ns;
 # slides come from the instance's slide volume instead of the App API.
 # Other objects it needs: deploy/k8s/rationai-test-ns/ and the Secrets
 # model-service-db, mlflow-public-credentials and huggingface-secret.
 environment: rationai-test
-servedModels: ["*"]
+# Named, not ["*"]: EPISeg's weights sit on an MLflow this cluster can't reach.
+servedModels: [prostate-classifier-1]
 # Merged over values.yaml's: the cache root and HF_HOME stay.
 servedModelSettings:
   env:

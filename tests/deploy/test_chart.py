@@ -57,24 +57,28 @@ def catalog_data(objects: dict[tuple[str, str], Any]) -> dict[str, Any]:
 
 
 @pytest.mark.parametrize(
-    ("values", "environment", "mlflow"),
+    ("values", "environment", "model_id", "mlflow"),
     [
-        ((TEST_VALUES,), "rationai-test", "https://mlflow.rationai.cloud.e-infra.cz"),
-        ((), None, "http://mlflow.rationai-mlflow:5000"),
+        (
+            (TEST_VALUES,),
+            "rationai-test",
+            "prostate-classifier-1",
+            "https://mlflow.rationai.cloud.e-infra.cz",
+        ),
+        ((), None, "prostate-classifier-1", "http://mlflow.rationai-mlflow:5000"),
+        ((), None, "episeg-1", "http://mlflow.rationai-mlflow:5000"),
     ],
 )
-def test_prostate_deploys_as_serve_application_builds_it(
-    values: tuple[Path, ...], environment: str | None, mlflow: str
+def test_a_served_model_deploys_as_serve_application_builds_it(
+    values: tuple[Path, ...], environment: str | None, model_id: str, mlflow: str
 ) -> None:
-    entry = load_catalog(CATALOG, environment).entries("served-models")[
-        "prostate-classifier-1"
-    ]
+    entry = load_catalog(CATALOG, environment).entries("served-models")[model_id]
     expected = serve_application(entry, cache_root="/mnt/cache/trt_cache")
     expected["deployments"][0]["ray_actor_options"]["runtime_env"] = {
         "env_vars": {"MLFLOW_TRACKING_URI": mlflow, "HF_HOME": "/mnt/huggingface_cache"}
     }
 
-    assert applications(render(*values))["prostate-classifier-1"] == expected
+    assert applications(render(*values))[model_id] == expected
 
 
 def test_models_not_yet_migrated_still_deploy_from_their_old_files() -> None:
@@ -94,7 +98,10 @@ def test_models_not_yet_migrated_still_deploy_from_their_old_files() -> None:
 def test_the_base_values_still_deploy_the_other_models_the_old_way() -> None:
     apps = applications(render())
 
-    assert {"episeg-1", "virchow2", "prov-gigapath"} <= set(apps)
+    assert apps["virchow2"]["import_path"] == (
+        "model_service.inference.implementations.virchow2:app"
+    )
+    assert {"virchow2", "prov-gigapath"} <= set(apps)
 
 
 def test_the_api_catalog_carries_the_deployed_served_models() -> None:
