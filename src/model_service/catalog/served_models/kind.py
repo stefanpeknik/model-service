@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
+from pydantic import Field, create_model
+
 from model_service.catalog.context import References, ResolveContext
 from model_service.catalog.errors import CatalogInvalid
 from model_service.catalog.kinds import DocumentKind
+from model_service.catalog.schema import first_paragraph, usable
 from model_service.catalog.served_models.declaration import ServedModel
 from model_service.catalog.served_models.fields import Fields
 from model_service.components import Loader, Runtime, Step, slots
@@ -14,6 +17,8 @@ from model_service.components.registry import default_registry
 
 
 if TYPE_CHECKING:
+    from pydantic import BaseModel
+
     from model_service.catalog.errors import YamlPath
     from model_service.components import Slot
     from model_service.components.registry import Registry
@@ -67,6 +72,35 @@ class ServedModels(DocumentKind):
             resources=fields.resources,
             serving=fields.serving,
         )
+
+    def schema(self, registry: Registry) -> type[BaseModel]:
+        """A served-model file, with the loaders, runtimes and steps there are.
+
+        Args:
+            registry: The components files may name.
+
+        Returns:
+            The file's model.
+        """
+        pre = list[usable(registry, slots.PRE)]  # type: ignore[misc, valid-type]
+        post = list[usable(registry, slots.POST)]  # type: ignore[misc, valid-type]
+        return create_model(
+            "served model",
+            __base__=Fields,
+            __doc__=first_paragraph(ServedModels.__doc__),
+            weights=(usable(registry, slots.WEIGHTS), _field("weights")),
+            runtime=(usable(registry, slots.RUNTIME), _field("runtime")),
+            pre=(pre, _field("pre")),
+            post=(post, _field("post")),
+        )
+
+
+def _field(name: str) -> Any:
+    """A component field of the file schema, with `Fields`' description and default."""
+    info = Fields.model_fields[name]
+    if info.is_required():
+        return Field(description=info.description)
+    return Field(info.default, description=info.description)
 
 
 def _steps(

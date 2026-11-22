@@ -5,13 +5,14 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, cast
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, create_model
 
 from model_service.catalog.analyses import checks
 from model_service.catalog.analyses.declaration import Analysis
-from model_service.catalog.analyses.exposure import resolve_exposure
+from model_service.catalog.analyses.exposure import exposure_schema, resolve_exposure
 from model_service.catalog.analyses.model_step import ModelStep
 from model_service.catalog.kinds import DocumentKind
+from model_service.catalog.schema import first_paragraph, usable
 from model_service.catalog.served_models import FOLDER as SERVED_MODELS
 from model_service.components import slots
 
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
     from model_service.catalog.errors import YamlPath
     from model_service.catalog.served_models import ServedModel
     from model_service.components import Sink, Source, Step
+    from model_service.components.registry import Registry
 
 
 FOLDER = "analyses"
@@ -51,6 +53,16 @@ class Fields(BaseModel):
     sinks: Any = Field(None, description="Sinks: `[{use: score_grid, output: …}, …]`.")
     expose: Any = Field(
         None, description="How the analysis is offered: `{empaia: {…}}` for an app."
+    )
+
+
+class ModelStepFields(BaseModel):
+    """A model step: calls a served model on every tile."""
+
+    model_config = ConfigDict(extra="forbid", title="model step")
+
+    model: str = Field(
+        description="A served-model ID, the name of a file in `served-models/`."
     )
 
 
@@ -106,6 +118,40 @@ class Analyses(DocumentKind):
         if ctx.errors:
             return None
         return replace(analysis, empaia=empaia)
+
+    def schema(self, registry: Registry) -> type[BaseModel]:
+        """An analysis file, with the sources, steps and sinks there are.
+
+        Args:
+            registry: The components files may name.
+
+        Returns:
+            The file's model.
+        """
+        step = usable(registry, slots.STEPS) | ModelStepFields
+        sink = usable(registry, slots.SINKS)
+        info = Fields.model_fields
+        return create_model(
+            "analysis",
+            __base__=Fields,
+            __doc__=first_paragraph(Analyses.__doc__),
+            source=(
+                usable(registry, slots.SOURCE),
+                Field(description=info["source"].description),
+            ),
+            steps=(
+                list[step],  # type: ignore[valid-type]
+                Field(None, description=info["steps"].description),
+            ),
+            sinks=(
+                list[sink],  # type: ignore[valid-type]
+                Field(min_length=1, description=info["sinks"].description),
+            ),
+            expose=(
+                exposure_schema(registry),
+                Field(None, description=info["expose"].description),
+            ),
+        )
 
 
 def _steps(ctx: ResolveContext, value: object) -> list[AnalysisStep] | None:

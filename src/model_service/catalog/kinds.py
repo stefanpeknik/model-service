@@ -3,7 +3,8 @@
 A kind owns one folder (`served-models/`, `analyses/`) and turns each merged
 document into its resolved form through a `ResolveContext`, which reports
 mistakes in the standard format. Kinds resolve in order, so a later kind can
-refer to documents of an earlier one.
+refer to documents of an earlier one. A kind also describes its files as a
+pydantic model, from which `scripts/generate.py` writes their JSON Schema.
 """
 
 from __future__ import annotations
@@ -13,7 +14,10 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 
 if TYPE_CHECKING:
+    from pydantic import BaseModel
+
     from model_service.catalog.context import ResolveContext
+    from model_service.components.registry import Registry
 
 
 class DocumentKind(ABC):
@@ -38,3 +42,17 @@ class DocumentKind(ABC):
         Returns:
             The resolved document; ignored if `ctx` collected errors.
         """
+
+    def schema(self, registry: Registry) -> type[BaseModel] | None:
+        """The model of this kind's files, for their JSON Schema.
+
+        Component slots are unions of what the registry has
+        (`model_service.catalog.schema.usable`).
+
+        Args:
+            registry: The components files may name.
+
+        Returns:
+            The model, or None if the kind's files get no schema.
+        """
+        return None
