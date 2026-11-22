@@ -84,31 +84,41 @@ model adds an inference contract and its model client. See
 ## Use it
 
 ```python
-from rationai import Client
-from rationai.types import BuilderRequest, InputAccess, SharedPathInput
+from rationai import Client, formats
+from rationai.types import AnalysisRequest, InputAccess, SharedPathInput
 
 with Client(base_url="http://<model-service>:8080") as client:
-    print([(m.id, m.builders) for m in client.models.list()])
-    scheduled = client.builders.schedule(
-        "heatmap",
-        BuilderRequest(
-            model_id="prostate-classifier-1",
+    print([(a.id, a.models) for a in client.analyses.list()])
+    print([(m.id, m.analyses) for m in client.models.list()])
+    scheduled = client.analyses.schedule(
+        "prostate-heatmap",
+        AnalysisRequest(
             inputs={"slide": SharedPathInput("slides/slide.mrxs")},
             input_access=InputAccess("shared_storage", {"root": "/mnt/data"}),
             output_path="outputs/heatmap.npz",
         ),
+        idempotency_key="heatmap-slide-001",
     )
-    print(client.executions.get(scheduled.execution.id).status)
+    (execution,) = client.executions.wait([scheduled.execution.id])
+    print(execution.status, execution.analysis_digest)
+
+heatmap = execution.result.outputs["heatmap"]
+grid = formats.read(heatmap.path, heatmap.media_type)
 ```
+
+`client.analyses.run` takes the same request and waits for the outputs.
+`formats.read` refuses a format version it doesn't know; reading an
+`embedding_table` needs the SDK's `hdf5` extra.
 
 For one raw tile, skip the API: post a single LZ4-compressed
 `tile_size`×`tile_size`×3 uint8 tile to the model's Ray Serve ingress,
 `POST http://<ray-serve>:8000/<model-id>/`. `GET /v1/models/<id>` gives the
-model's `tile_size` and contract.
+model's declaration, with `tile_size` and `mpp` under `input`.
 
-The heatmap is a score grid: `numpy.load("heatmap.npz")` gives the scores per
-cell (`values`), which cells were scored, and the slide level, cell size and
-microns per pixel to place them on the slide.
+The heatmap is a score grid (`score_grid` v1): its scores per cell (`values`),
+which cells were scored, and the slide level, cell size and microns per pixel
+to place them on the slide. Without the SDK, `numpy.load("heatmap.npz")`
+reads it too.
 
 ## Develop
 
