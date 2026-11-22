@@ -83,7 +83,7 @@ off to once a day. Not -1: Ray 2.58's GCS then dumps in a tight loop
 {{- end -}}
 
 {{/*
-A CPU-only Serve deployment (a builder or the analysis runner): `deployment`
+A CPU-only Serve deployment (the analysis runner): `deployment`
 with cpuWorkerResource.perReplica of the cpuWorkerResource.name Ray resource
 added to its ray_actor_options.resources, so Ray places its replicas only on
 CPU worker groups. Takes dict "root" ($) and "deployment". Renders YAML.
@@ -168,11 +168,7 @@ The served models this release deploys, as JSON {id: document}: the
 catalog/served-models/ files `servedModels` selects, patched for `environment`.
 */}}
 {{- define "model-service.servedModels" -}}
-{{- $models := include "model-service.catalogDocuments" (dict "root" . "folder" "served-models" "key" "servedModels") | fromJson }}
-{{- range $.Values.models }}
-{{- if hasKey $models (base .) }}{{ fail (printf "%s is deployed from catalog/served-models/ and from models/%s.yaml; drop it from models:" (base .) .) }}{{ end }}
-{{- end }}
-{{- toJson $models }}
+{{- include "model-service.catalogDocuments" (dict "root" . "folder" "served-models" "key" "servedModels") }}
 {{- end }}
 
 {{/*
@@ -225,20 +221,3 @@ runtime_env.config. Takes dict "id", "document" and "settings".
 {{- toYaml $application }}
 {{- end }}
 
-{{/*
-Provider blocks (e.g. `empaia`) of the deployed served models, as JSON
-{id: {block: value}}, from provider-blocks/<id>.yaml. Transitional and empty:
-the prostate app moved to the prostate-heatmap analysis's `expose.empaia`,
-and the API no longer reads `empaia` blocks.
-*/}}
-{{- define "model-service.providerBlocks" -}}
-{{- $models := include "model-service.servedModels" . | fromJson }}
-{{- $blocks := dict }}
-{{- range $path, $_ := .Files.Glob "provider-blocks/*.yaml" }}
-{{- $id := base $path | trimSuffix ".yaml" }}
-{{- if hasKey $models $id }}
-{{- $_ := set $blocks $id ($.Files.Get $path | fromYaml) }}
-{{- end }}
-{{- end }}
-{{- toJson $blocks }}
-{{- end }}

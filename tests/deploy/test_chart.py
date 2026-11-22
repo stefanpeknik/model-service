@@ -13,7 +13,6 @@ import yaml
 
 from model_service.api.catalog_mount import MountedCatalog
 from model_service.catalog import load_catalog
-from model_service.contracts.model_declarations import SpatialScoresModel
 from model_service.served_model.deployment import serve_application
 
 
@@ -91,7 +90,7 @@ def test_a_served_model_deploys_as_serve_application_builds_it(
     assert applications(render(*values))[model_id] == expected
 
 
-def test_an_environment_without_old_models_deploys_only_the_generic_host() -> None:
+def test_an_environment_deploys_its_served_models_and_one_runner() -> None:
     apps = applications(render(TEST_VALUES))
 
     assert set(apps) == {
@@ -99,8 +98,6 @@ def test_an_environment_without_old_models_deploys_only_the_generic_host() -> No
         "virchow2",
         "prov-gigapath",
         "analysis-runner",
-        "builder-heatmap",
-        "builder-tile-embeddings",
     }
     assert {
         apps[i]["import_path"]
@@ -111,10 +108,12 @@ def test_an_environment_without_old_models_deploys_only_the_generic_host() -> No
 def test_the_base_values_serve_every_model_on_the_generic_host() -> None:
     apps = applications(render())
 
+    assert set(apps) == {
+        *load_catalog(CATALOG).entries("served-models"),
+        "analysis-runner",
+    }
     assert {
-        app["import_path"]
-        for app in apps.values()
-        if not app["name"].startswith(("builder-", "analysis-"))
+        app["import_path"] for app in apps.values() if app["name"] != "analysis-runner"
     } == {"model_service.served_model.serve:app"}
 
 
@@ -133,9 +132,8 @@ def test_the_api_catalog_carries_the_deployed_served_models() -> None:
             analysis_id: analyses[analysis_id].document for analysis_id in TEST_ANALYSES
         },
     }
-    assert data["model-catalog.json"] == []
-    # The prostate app is the prostate-heatmap analysis's `expose.empaia` now.
-    assert data["provider-blocks.json"] == {}
+    # The catalog is all the API reads.
+    assert set(data) == {"catalog.json"}
     assert "empaia" in data["catalog.json"]["analyses"]["prostate-heatmap"]["expose"]
 
 
@@ -144,17 +142,11 @@ def test_the_api_reads_the_rendered_catalog(tmp_path: Path) -> None:
     for name, text in data.items():
         (tmp_path / name).write_text(text, encoding="utf-8")
 
-    catalog = MountedCatalog(tmp_path, provider_blocks=["empaia"])
+    catalog = MountedCatalog(tmp_path)
 
-    assert catalog.get("prostate-classifier-1") == SpatialScoresModel(
-        id="prostate-classifier-1",
-        tile_size=512,
-        output_tile_size=1,
-        n_channels=1,
-        mpp=0.468,
-    )
-    assert catalog.get("virchow2").contract == "tile-embedding"
-    assert catalog.provider_block("empaia") == {}
+    served = catalog.resolved.entries("served-models")
+    assert sorted(served) == ["prostate-classifier-1", "prov-gigapath", "virchow2"]
+    assert served["prostate-classifier-1"].value.input.tile_size == 512
     prostate = catalog.resolved.entries("analyses")["prostate-heatmap"].value
     assert prostate.empaia is not None
     assert sorted(catalog.resolved.entries("analyses")) == sorted(TEST_ANALYSES)
@@ -170,7 +162,6 @@ def test_an_environment_deploys_a_named_subset_or_none() -> None:
 
     assert "prostate-classifier-1" not in applications(none)
     assert catalog_data(none)["catalog.json"] == {"served-models": {}, "analyses": {}}
-    assert catalog_data(none)["provider-blocks.json"] == {}
     assert "prostate-classifier-1" in applications(named)
 
 
@@ -181,13 +172,6 @@ def test_a_named_served_model_without_a_file_fails_the_render() -> None:
     assert "no-such-model" in failed.value.stderr
 
 
-def test_a_model_deployed_both_ways_fails_the_render() -> None:
-    with pytest.raises(subprocess.CalledProcessError) as failed:
-        render(TEST_VALUES, models=["prostate-classifier-1"])
-
-    assert "prostate-classifier-1" in failed.value.stderr
-
-
 def test_catalog_changes_reach_the_api_without_rolling_it() -> None:
     api = render(TEST_VALUES)[("Deployment", "model-service-api")]
     pod = api["spec"]["template"]
@@ -195,6 +179,8 @@ def test_catalog_changes_reach_the_api_without_rolling_it() -> None:
     (mount,) = [m for m in container["volumeMounts"] if m["name"] == "model-catalog"]
     (volume,) = [v for v in pod["spec"]["volumes"] if v["name"] == "model-catalog"]
     env = {e["name"]: e.get("value") for e in container["env"]}
+    # The catalog alone says what is deployed.
+    assert "BUILDER_IDS" not in env
 
     assert "annotations" not in pod["metadata"]
     # kubelet updates a ConfigMap volume in place only without subPath or items.
@@ -230,15 +216,6 @@ def test_one_analysis_runner_serves_the_deployed_analyses() -> None:
             }
         ],
     }
-
-
-def test_the_runner_is_sized_like_todays_heatmap_builder_on_the_test_cluster() -> None:
-    apps = applications(render(TEST_VALUES))
-    (runner,) = apps["analysis-runner"]["deployments"]
-    (builder,) = apps["builder-heatmap"]["deployments"]
-
-    del runner["name"], builder["name"], builder["user_config"]["builder_id"]
-    assert runner == builder
 
 
 def test_without_analyses_there_is_no_runner() -> None:
@@ -288,7 +265,7 @@ def test_cpu_only_apps_can_only_be_placed_on_cpu_workers(
     cpu_only = [
         deployment
         for app_name, app in apps.items()
-        if app_name.startswith("builder-") or app_name == "analysis-runner"
+        if app_name == "analysis-runner"
         for deployment in app["deployments"]
     ]
     served = [
@@ -307,7 +284,7 @@ def test_cpu_only_apps_can_only_be_placed_on_cpu_workers(
     cpu_groups = {g: r for g, r in groups.items() if not r.get("GPU")}
     gpu_groups = {g: r for g, r in groups.items() if r.get("GPU")}
 
-    assert {"builder-heatmap", "analysis-runner"} <= set(apps)
+    assert "analysis-runner" in apps
     assert cpu_groups and gpu_groups
     assert all(amount > 0 for amount in requested)
     assert all(

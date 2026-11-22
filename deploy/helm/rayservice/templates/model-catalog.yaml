@@ -4,9 +4,7 @@ mounts it as a directory and reloads it when kubelet updates the files, so a
 catalog change does not restart the API.
 
 - catalog.json: the deployed served models and analyses after the
-  environment's patches;
-- model-catalog.json: models not yet migrated, from models/ (transitional);
-- provider-blocks.json: the served models' provider blocks (transitional).
+  environment's patches.
 */}}
 apiVersion: v1
 kind: ConfigMap
@@ -16,13 +14,3 @@ metadata:
 data:
   catalog.json: |
     {{- dict "served-models" (include "model-service.servedModels" . | fromJson) "analyses" (include "model-service.analyses" . | fromJson) | toJson | nindent 4 }}
-  model-catalog.json: |
-    {{- $models := list }}
-    {{- range $path := .Values.models }}
-    {{- $model := tpl (printf "models/%s.yaml" $path | $.Files.Get) $ | fromYaml }}
-    {{- /* The model ID is the file name, as in rayservice.yaml. */}}
-    {{- $models = append $models (set $model "id" (base $path)) }}
-    {{- end }}
-    {{- toJson $models | nindent 4 }}
-  provider-blocks.json: |
-    {{- include "model-service.providerBlocks" . | nindent 4 }}

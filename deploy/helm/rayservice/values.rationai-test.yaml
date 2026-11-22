@@ -1,5 +1,5 @@
 # rationai-infra-test-ns, beside the EMPAIA test instance, as release
-# `model-service`. Same builders, workers and images as peknik-ns;
+# `model-service`. Same workers and images as peknik-ns;
 # slides come from the instance's slide volume instead of the App API.
 # Other objects it needs: deploy/k8s/rationai-test-ns/ and the Secrets
 # model-service-db, mlflow-public-credentials and huggingface-secret.
@@ -14,7 +14,7 @@ servedModelSettings:
 
 # EPISeg's weights are out of reach here, so not its heatmap.
 analyses: [prostate-heatmap, virchow2-embeddings, prov-gigapath-embeddings]
-# Sized like the heatmap builder below, which stays until the runner replaces it.
+# Sized like the heatmap builder it replaced.
 analysisRunner:
   deployment:
     max_ongoing_requests: 1
@@ -33,47 +33,6 @@ analysisRunner:
   userConfig:
     num_threads: 2
     max_concurrent_tasks: 32
-
-# Every model this cluster runs is in catalog/served-models/.
-models: []
-
-builders:
-  heatmap:
-    deployment:
-      max_ongoing_requests: 1
-      max_queued_requests: 2
-      backpressure_config:
-        status_code: 429
-        retry_after_s: 5
-      autoscaling_config:
-        min_replicas: 0
-        max_replicas: 1
-        target_ongoing_requests: 1
-        downscale_delay_s: 120
-      ray_actor_options:
-        num_cpus: 2
-        memory: 4294967296
-    userConfig:
-      num_threads: 2
-      max_concurrent_tasks: 32
-  tile-embeddings:
-    deployment:
-      max_ongoing_requests: 1
-      max_queued_requests: 2
-      backpressure_config:
-        status_code: 429
-        retry_after_s: 5
-      autoscaling_config:
-        min_replicas: 0
-        max_replicas: 1
-        target_ongoing_requests: 1
-        downscale_delay_s: 120
-      ray_actor_options:
-        num_cpus: 1
-        memory: 2147483648
-    userConfig:
-      num_threads: 1
-      max_concurrent_tasks: 32
 
 sharedStorageRoots: [/mnt/shared]
 

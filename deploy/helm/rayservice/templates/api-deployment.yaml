@@ -5,7 +5,7 @@
 {{- $empaia := .Values.empaia.apiUrls }}
 {{- $workspaceClaim := "" }}
 {{- if $empaia }}
-{{- $workspaceClaim = required "empaia.workspaceClaim is required with apiUrls: the API publishes EMPAIA results the builders wrote there" .Values.empaia.workspaceClaim }}
+{{- $workspaceClaim = required "empaia.workspaceClaim is required with apiUrls: the API publishes EMPAIA results the analysis runner wrote there" .Values.empaia.workspaceClaim }}
 {{- end }}
 apiVersion: apps/v1
 kind: Deployment
@@ -67,8 +67,6 @@ spec:
               value: {{ default (printf "http://%s-serve-svc.%s.svc.cluster.local:8000" .Release.Name (.Release.Namespace | default "rationai-jobs-ns")) .Values.api.rayServeOrigin | quote }}
             - name: MODEL_CATALOG_DIR
               value: /etc/model-service
-            - name: BUILDER_IDS
-              value: {{ keys (.Values.builders | default dict) | sortAlpha | toJson | quote }}
             - name: SHARED_STORAGE_ROOTS
               value: {{ .Values.sharedStorageRoots | toJson | quote }}
             - name: LEASE_SECONDS

@@ -67,12 +67,15 @@ spec:
     logging_config:
       encoding: JSON
       enable_access_log: false
-    applications:
-{{- range $id, $document := include "model-service.servedModels" . | fromJson }}
+{{- $served := include "model-service.servedModels" . | fromJson }}
+{{- $analyses := include "model-service.analyses" . | fromJson }}
+    {{- /* Serve needs a list, even an empty one. */}}
+    applications:{{ if not (or $served $analyses) }} []{{ end }}
+{{- range $id, $document := $served }}
       - {{ include "model-service.servedModelApplication" (dict "id" $id "document" $document "settings" $.Values.servedModelSettings) | nindent 8 | trim }}
 {{- end }}
 {{- /* One analysis runner executes every deployed analysis; none without analyses. */}}
-{{- if include "model-service.analyses" . | fromJson }}
+{{- if $analyses }}
       - name: analysis-runner
         route_prefix: /analyses
         import_path: model_service.analysis_runner.serve:app
@@ -82,38 +85,6 @@ spec:
             user_config:
               shared_storage_roots: {{ toJson .Values.sharedStorageRoots }}
               {{- with .Values.analysisRunner.userConfig }}
-              {{- toYaml . | nindent 14 }}
-              {{- end }}
-{{- end }}
-{{- /* Models not yet migrated to catalog/served-models/ (transitional). */}}
-{{- range $path := .Values.models }}
-{{- $model := tpl (printf "models/%s.yaml" $path | $.Files.Get) $ | fromYaml }}
-{{- if not (and $model.implementation $model.deployment) }}{{ fail (printf "models/%s.yaml needs implementation and deployment" $path) }}{{ end }}
-{{- /* The model ID is the file name; `implementation` is module.Class. */}}
-{{- $id := base $path }}
-{{- $module := first (splitList "." $model.implementation) }}
-{{- $class := last (splitList "." $model.implementation) }}
-      - name: {{ $id }}
-        route_prefix: /{{ $id }}
-        import_path: model_service.inference.implementations.{{ $module }}:app
-        {{- with $model.application }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-        deployments:
-          - name: {{ $class }}
-            {{- toYaml $model.deployment | nindent 12 }}
-{{- end }}
-{{- range $id, $builder := .Values.builders }}
-      - name: builder-{{ $id }}
-        import_path: model_service.builders.replica.serve:app
-        route_prefix: /builders/{{ $id }}
-        deployments:
-          - name: BuilderDeployment
-            {{- include "model-service.cpuOnlyDeployment" (dict "root" $ "deployment" $builder.deployment) | nindent 12 }}
-            user_config:
-              builder_id: {{ $id }}
-              shared_storage_roots: {{ toJson $.Values.sharedStorageRoots }}
-              {{- with $builder.userConfig }}
               {{- toYaml . | nindent 14 }}
               {{- end }}
 {{- end }}
