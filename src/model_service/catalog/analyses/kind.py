@@ -99,6 +99,7 @@ class Analyses(DocumentKind):
 
 
 def _steps(ctx: ResolveContext, value: object) -> list[AnalysisStep] | None:
+    """Resolve `steps:`; None if any step failed."""
     if value is None:
         return []
     if not isinstance(value, list):
@@ -136,6 +137,7 @@ def _steps(ctx: ResolveContext, value: object) -> list[AnalysisStep] | None:
 def _list(
     ctx: ResolveContext, slot: slots.Slot, value: object, *, required: bool
 ) -> list[Any]:
+    """Resolve a list of components under `slot`, reporting a missing one."""
     key = slot.key
     if value is None or (required and value == []):
         if required:
@@ -154,6 +156,7 @@ def _list(
 
 
 def _not_a_list(ctx: ResolveContext, slot: slots.Slot, path: YamlPath) -> None:
+    """Report a slot that holds something other than a list."""
     ctx.error(
         path,
         "not a list",

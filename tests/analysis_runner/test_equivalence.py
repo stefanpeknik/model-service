@@ -78,7 +78,9 @@ async def old_heatmap(
     settings: BuilderSettings,
 ) -> Path:
     served = load_catalog(CATALOG).entries("served-models")[MODEL_ID].value
-    client.declaration = SpatialScoresModel(id=MODEL_ID, **legacy_config(served))  # type: ignore[attr-defined]
+    # Today's API binds the model with these fields; the processor reads them.
+    binding = SpatialScoresModel(id=MODEL_ID, **legacy_config(served))
+    client.declaration = binding  # type: ignore[attr-defined]
     await build_heatmap(
         slide,
         roi,

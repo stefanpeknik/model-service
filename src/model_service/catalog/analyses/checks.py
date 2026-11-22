@@ -187,6 +187,7 @@ def check_outputs(ctx: ResolveContext, sinks: Sequence[Sink]) -> None:
 
 
 def _geometry(model: ServedModel) -> tuple[int, float]:
+    """A served model's tile size and mpp."""
     return model.input.tile_size, model.input.mpp
 
 
@@ -198,6 +199,7 @@ def _check_reads(
     reads: dict[str, Col],
     available: dict[str, tuple[Col, str]],
 ) -> None:
+    """Report columns a component reads that are missing or don't fit."""
     for name, want in reads.items():
         if name not in available:
             producers = [MODEL_COLUMNS[name]] if name in MODEL_COLUMNS else []
@@ -237,13 +239,15 @@ def _check_reads(
                 path,
                 reader,
                 problem,
-                f"pick a model or step whose `{name}` fits, or a sink that reads {have}",
+                f"pick a model or step whose `{name}` fits, "
+                f"or a sink that reads {have}",
             )
 
 
 def _check_frame(
     ctx: ResolveContext, path: YamlPath, sink: Sink, source: Source
 ) -> None:
+    """Report frame fields a sink reads that the source doesn't give."""
     missing = sorted(sink.frame_reads - source.frame.keys())
     if not missing:
         return
@@ -264,11 +268,13 @@ def _check_frame(
 
 
 def _from(col: Col) -> str:
+    """Where a column's dimensions came from, in parentheses, if known."""
     return f" ({col.origin})" if col.origin else ""
 
 
 def _report(
     ctx: ResolveContext, path: YamlPath, component: Any, problem: Problem, hint: str
 ) -> None:
+    """Record a problem with the component's own hint, else `hint`."""
     own = component.hint(problem) if hasattr(component, "hint") else None
     ctx.error(path, problem.message, problem.fits, own or hint)

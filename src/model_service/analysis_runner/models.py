@@ -1,4 +1,4 @@
-"""Model steps at run time: call a served model's handle per tile, with failure codes."""
+"""Model steps at run time: a served model's handle per tile, with failure codes."""
 
 from __future__ import annotations
 

@@ -65,7 +65,7 @@ class SlideTilesOptions(Options):
 
 
 class SlideTiles(Source):
-    """Tiles of one slide level on a regular grid, skipping background and tiles outside the region of interest.
+    """Grid tiles of one slide level, without background or tiles outside the ROI.
 
     Every grid position is a key, so skipped tiles still count toward
     progress. The grid covers at least one tile, even on a slide smaller

@@ -109,6 +109,24 @@ class ProcessBoundaryTests(unittest.TestCase):
             [],
         )
 
+    def test_the_analysis_runner_core_loads_without_ray(self) -> None:
+        """Only its Serve wrapper may need Ray; slide libraries load per run."""
+        modules = loaded_modules("model_service.analysis_runner")
+
+        self.assertEqual(
+            under(
+                modules,
+                "ray",
+                "onnxruntime",
+                "torch",
+                "openslide",
+                "pyvips",
+                "ratiopath",
+                "model_service.api",
+            ),
+            [],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
