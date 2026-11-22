@@ -7,7 +7,7 @@ import os
 import stat
 import unittest
 from pathlib import Path
-from tempfile import TemporaryDirectory
+from tempfile import TemporaryDirectory, mkdtemp
 from typing import TYPE_CHECKING
 
 import httpx
@@ -33,6 +33,7 @@ from model_service.contracts.invocation import (
 )
 from model_service.contracts.result import BuilderResult, InlineOutput
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
+from model_service.providers.empaia.app_service.types import DirectAccess
 from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessFactory
 from tests.support.builder_fixtures import (
     DECLARED,
@@ -44,6 +45,11 @@ from tests.support.builder_fixtures import (
     spec,
 )
 from tests.support.empaia_fixtures import StrictGateway
+
+
+# A slide on the slide volume, which direct access names.
+SLIDE = Path(mkdtemp()) / "slide.svs"
+SLIDE.write_bytes(b"slide")
 
 
 if TYPE_CHECKING:
@@ -61,7 +67,7 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
         closed = asyncio.Event()
 
         class Gateway(StrictGateway):
-            async def materialize_input(self, name: str, directory: str) -> str:
+            async def direct_access(self, name: str) -> DirectAccess | None:
                 started.set()
                 await asyncio.Event().wait()
                 raise AssertionError("the event is never set")
@@ -110,7 +116,7 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
             class Gateway(StrictGateway):
                 error = failure
 
-                async def materialize_input(self, name: str, directory: str) -> str:
+                async def direct_access(self, name: str) -> DirectAccess | None:
                     raise self.error
 
                 async def close(self) -> None:
@@ -193,10 +199,8 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
         seen_requests: list[RunRequest] = []
 
         class Gateway(StrictGateway):
-            async def materialize_input(self, name: str, directory: str) -> str:
-                path = Path(directory) / "slide.svs"
-                path.write_bytes(b"slide")
-                return str(path)
+            async def direct_access(self, name: str) -> DirectAccess | None:
+                return DirectAccess(SLIDE, supported=True)
 
             async def close(self) -> None:
                 closed.append(True)
@@ -268,10 +272,8 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
         modes: dict[str, int] = {}
 
         class Gateway(StrictGateway):
-            async def materialize_input(self, name: str, directory: str) -> str:
-                path = Path(directory) / "slide.svs"
-                path.write_bytes(b"slide")
-                return str(path)
+            async def direct_access(self, name: str) -> DirectAccess | None:
+                return DirectAccess(SLIDE, supported=True)
 
             async def close(self) -> None:
                 return None

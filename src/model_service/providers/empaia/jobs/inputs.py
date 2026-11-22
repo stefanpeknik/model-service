@@ -1,7 +1,8 @@
 """Materialize provider inputs in an isolated workspace for one processing attempt.
 
-The public job identity must match protected dispatch context. The builder receives
-local paths while the gateway owns provider communication.
+The public job identity must match protected dispatch context. Each input's
+EAD type, recorded at admission, picks the converter that makes its file;
+the analysis or builder receives local paths.
 """
 
 from __future__ import annotations
@@ -20,6 +21,8 @@ from model_service.builders.input_access import (
     InputAccessFactory,
     close_resource,
 )
+from model_service.components import EmpaiaInput
+from model_service.components.empaia import converter
 from model_service.contracts.failures import (
     BuilderFailure,
     FailureCode,
@@ -34,6 +37,9 @@ from model_service.providers.empaia.app_service.gateway import (
 
 
 logger = logging.getLogger(__name__)
+
+# The EAD types of builder inputs admitted before they were recorded.
+LEGACY_INPUT_TYPES = {"slide": "wsi", "region_of_interest": "rectangle"}
 
 
 if TYPE_CHECKING:
@@ -219,17 +225,34 @@ class EmpaiaInputAccessFactory(InputAccessFactory):
             / hashlib.sha256(processing_attempt_id.encode()).hexdigest()
         )
         paths: dict[str, Path] = {}
+        uses = state.inputs or {
+            name: {"type": LEGACY_INPUT_TYPES.get(name, "")}
+            for name in invocation.inputs
+        }
+        slide = next((n for n, u in uses.items() if u.get("type") == "wsi"), None)
         try:
             make_shared_directory(root)
             for name, value in invocation.inputs.items():
-                if not isinstance(value, ProviderInput):
+                if not isinstance(value, ProviderInput) or name not in uses:
                     raise InvalidInvocation(
                         "EMPAIA input access requires provider inputs"
                     )
+                try:
+                    found = converter(uses[name])
+                except (LookupError, ValidationError) as error:
+                    raise InvalidInvocation(
+                        f"EMPAIA input {name!r} has no converter"
+                    ) from error
                 directory = root / "inputs" / name
                 make_shared_directory(directory)
-                path = Path(await gateway.materialize_input(value.name, str(directory)))
-                if not path.is_relative_to(directory) or not path.is_file():
+                path = await found.materialize(
+                    gateway, EmpaiaInput(value.name, slide), directory
+                )
+                if (
+                    not isinstance(path, Path)
+                    or not path.is_relative_to(directory)
+                    or not path.is_file()
+                ):
                     raise InvalidInvocation(
                         f"EMPAIA input {name!r} was not materialized"
                     )

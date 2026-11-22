@@ -22,13 +22,7 @@ from model_service.contracts.result import BuilderResult, SharedArtifact
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
 from model_service.providers.empaia.jobs.inputs import job_workspace
-from model_service.providers.empaia.publishing.publishers import PublisherRegistry
-
-
-# Publishes nothing: these tests are about the workspace.
-PUBLISHERS = PublisherRegistry(
-    {("continuous_pixelmap", "application/x-npz"): AsyncMock()}
-)
+from tests.support.empaia_fixtures import slide_info, write_score_grid
 
 
 def unused_gateway_factory(_context: object) -> object:
@@ -89,7 +83,7 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
         job = job_workspace(root, "https://empaia.invalid", "j")
         artifact = job / "attempt-2" / "outputs" / "heatmap.npz"
         artifact.parent.mkdir(parents=True)
-        artifact.write_bytes(b"npz")
+        write_score_grid(artifact)
         (job / "attempt-1" / "outputs").mkdir(parents=True)
         other_job = job_workspace(root, "https://empaia.invalid", "other")
         other_job.mkdir()
@@ -100,6 +94,7 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         gateway = AsyncMock()
         gateway.set_before_mutation = lambda _callback: None
+        gateway.slide_info.return_value = slide_info()
         with TemporaryDirectory() as directory:
             root = Path(directory)
             job, artifact, other_job = self.job_workspaces(root)
@@ -107,7 +102,6 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
                 lambda _context: gateway,
                 allowed_api_urls=("https://empaia.invalid",),
                 workspace_root=root,
-                publishers=PUBLISHERS,
             )
 
             await provider.finish(
@@ -143,7 +137,6 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
                 lambda _context: gateway,
                 allowed_api_urls=("https://empaia.invalid",),
                 workspace_root=root,
-                publishers=PUBLISHERS,
             )
 
             with self.assertRaises(ProviderFinishFailureError):
@@ -163,6 +156,7 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
     async def test_a_workspace_that_cannot_be_removed_is_reported(self) -> None:
         gateway = AsyncMock()
         gateway.set_before_mutation = lambda _callback: None
+        gateway.slide_info.return_value = slide_info()
         with TemporaryDirectory() as directory:
             root = Path(directory)
             _job, artifact, _other = self.job_workspaces(root)
@@ -170,7 +164,6 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
                 lambda _context: gateway,
                 allowed_api_urls=("https://empaia.invalid",),
                 workspace_root=root,
-                publishers=PUBLISHERS,
             )
             # As if another user had created it without letting others in.
             artifact.parent.chmod(0o555)
@@ -215,7 +208,6 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
                 lambda _context: gateway,
                 allowed_api_urls=("https://empaia.invalid",),
                 workspace_root=root,
-                publishers=PUBLISHERS,
             )
 
             with self.assertRaises(ProviderFinishFailureError):

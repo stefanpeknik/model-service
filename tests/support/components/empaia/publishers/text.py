@@ -1,17 +1,12 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
-from model_service.components import Commit, Publisher
+from model_service.components import Commit, EmpaiaOutput, Publisher
 
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-
-class _Noop:
-    def commit(self) -> None:
-        pass
 
 
 class Text(Publisher):
@@ -19,12 +14,19 @@ class Text(Publisher):
 
     name = "text"
     reads_format = "value"
-    ead_type = "string"
+    emits = frozenset({"string"})
+    example_options: ClassVar[dict[str, Any]] = {"type": "string"}
 
-    def ead_fragment(self) -> dict[str, Any]:
+    def io_fragment(self, item: EmpaiaOutput) -> dict[str, Any]:
         """Declare a string output."""
         return {"type": "string"}
 
-    def prepare(self, artifact: Path, target: Any) -> Commit:
+    async def prepare(
+        self, gateway: Any, item: EmpaiaOutput, artifact: Path, media_type: str
+    ) -> Commit:
         """Nothing to prepare."""
-        return _Noop()
+
+        async def commit() -> None:
+            pass
+
+        return commit

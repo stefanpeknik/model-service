@@ -8,12 +8,17 @@ from aiohttp import web
 from aiohttp.test_utils import TestServer
 from rationai.empaia import Client
 
+from model_service.components.empaia.publishers.primitive import primitive_body
 from model_service.providers.empaia.app_service.gateway import (
     EmpaiaGatewayError,
+    PrimitiveType,
 )
 from model_service.providers.empaia.app_service.http import (
     HttpEmpaiaGateway,
 )
+
+
+SCORE = primitive_body("score", "job-1", PrimitiveType.FLOAT, 0.75)
 
 
 class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
@@ -63,7 +68,7 @@ class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
             )
             try:
                 with self.assertRaises(EmpaiaGatewayError) as raised:
-                    await gateway.post_primitive("score", "float", 0.75)
+                    await gateway.post_output("score", SCORE)
                 self.assertTrue(raised.exception.outcome_unknown)
                 self.assertFalse(raised.exception.retryable)
                 self.assertNotIn("private", raised.exception.safe_message)
@@ -90,7 +95,7 @@ class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):
                     )
                     self.addAsyncCleanup(gateway.close)
                     with self.assertRaises(EmpaiaGatewayError) as raised:
-                        await gateway.post_primitive("score", "float", 0.75)
+                        await gateway.post_output("score", SCORE)
                     self.assertTrue(raised.exception.outcome_unknown)
                     self.assertFalse(raised.exception.retryable)
                     await gateway.close()

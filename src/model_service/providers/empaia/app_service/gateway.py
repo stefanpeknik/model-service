@@ -9,16 +9,18 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from enum import StrEnum
-from typing import TYPE_CHECKING, Annotated, Protocol
+from typing import TYPE_CHECKING, Annotated, Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from model_service.contracts.json_values import JsonValue
 
 
 if TYPE_CHECKING:
     from rationai.empaia.typing import SlideInfo
     from rationai.empaia.utils.scalar_output import PixelmapTileSet
 
-    from model_service.contracts.json_values import JsonValue
+    from model_service.providers.empaia.app_service.types import DirectAccess
 
 
 type MutationGuard = Callable[[], Awaitable[None]]
@@ -96,8 +98,22 @@ class EmpaiaJobMode(StrEnum):
     REPORT = "REPORT"
 
 
+type ComponentUse = dict[str, JsonValue]
+"""A converter or publisher as recorded at admission: `{"type": ..., **options}`."""
+
+
 class EmpaiaInputState(BaseModel):
-    """Carry the non-secret API origin and job ID used to select provider input access."""
+    """Carry the non-secret API origin and job ID used to select provider input access.
+
+    Attributes:
+        api_url: The job's App Service URL.
+        job_id: The EMPAIA job ID.
+        mode: How the job was started; None for executions admitted before
+            it was recorded.
+        inputs: Each file input's EAD type and converter options, by input
+            name, as admitted; None for builder runs admitted before they
+            were recorded, whose inputs keep the builder's EAD types.
+    """
 
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 
@@ -106,28 +122,68 @@ class EmpaiaInputState(BaseModel):
     # Recorded at admission; nothing depends on it yet. Executions admitted
     # before it was recorded have none.
     mode: Annotated[EmpaiaJobMode | None, Field(strict=False)] = None
+    inputs: dict[str, ComponentUse] | None = None
+
+
+class Publications(BaseModel):
+    """What admission fixed about publishing an analysis's outputs.
+
+    Attributes:
+        slide: The app's slide input, which outputs reference.
+        outputs: Each published output's EAD type and publisher options, by
+            output name, in publication order.
+    """
+
+    model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
+
+    slide: Annotated[str, Field(min_length=1)]
+    outputs: dict[str, ComponentUse]
 
 
 class EmpaiaJobContext(EmpaiaInputState):
-    """Add a private job credential to the public job identity; the credential is hidden from repr."""
+    """Add a private job credential to the public job identity; the credential is hidden from repr.
+
+    Attributes:
+        credential: The job's App Service token.
+        publications: How the analysis's outputs are published, as
+            admitted; None for a builder run, whose outputs keep the
+            builder's EAD types.
+    """
 
     credential: Annotated[str, Field(min_length=1, repr=False)]
+    publications: Publications | None = None
 
     def protected_values(self) -> dict[str, JsonValue]:
-        """Extract API origin, job ID, and credential for encrypted durable context and internal dispatch.
+        """Extract API origin, job ID, credential and publications for encrypted durable context.
 
         Returns:
-            The values by field name, credential included.
+            The values by field name, credential included; publications only
+            when set.
         """
-        return {
+        values: dict[str, JsonValue] = {
             "api_url": self.api_url,
             "job_id": self.job_id,
             "credential": self.credential,
         }
+        if self.publications is not None:
+            values["publications"] = self.publications.model_dump(mode="json")
+        return values
 
 
 class EmpaiaGateway(ABC):
-    """Abstract AppService configuration, input acquisition, result publication, and terminal reporting."""
+    """The App Service calls of one job, one method per SDK call family.
+
+    Configuration and mode; input reads (presence, raw input data, the
+    slide-volume path, the typed slide); posting an output body; uploading a
+    pixelmap pyramid; progress, finalization and failure. Converters and
+    publishers build on these, so a new EMPAIA type needs no new method.
+    """
+
+    @property
+    @abstractmethod
+    def job_id(self) -> str:
+        """The EMPAIA job, which creates the outputs."""
+        ...
 
     @abstractmethod
     def set_before_mutation(self, callback: MutationGuard) -> None:
@@ -146,44 +202,54 @@ class EmpaiaGateway(ABC):
 
     @abstractmethod
     async def has_input(self, name: str) -> bool:
-        """Check whether the job has the named input; optional builder inputs depend on the app's mode."""
+        """Check whether the job has the named input; optional inputs depend on the app's mode."""
         ...
 
     @abstractmethod
-    async def get_primitive_input(self, name: str) -> JsonValue:
-        """Fetch the value of the job's named primitive input, e.g. a parameter.
+    async def get_input_data(self, name: str) -> JsonValue:
+        """Fetch the job's named input as the App Service gives it.
 
         Args:
             name: The EMPAIA input key.
 
         Returns:
-            The primitive's value.
-
-        Raises:
-            EmpaiaGatewayError: If the input is not a primitive or the request
-                fails.
+            The decoded input data, e.g. a primitive or a rectangle.
         """
         ...
 
     @abstractmethod
-    async def materialize_input(
-        self,
-        name: str,
-        directory: str,
-    ) -> str:
-        """Make a named job input available inside `directory`."""
+    async def direct_access(self, name: str) -> DirectAccess | None:
+        """Fetch where the named input lies on the slide volume.
+
+        Args:
+            name: The EMPAIA input key.
+
+        Returns:
+            The path and whether direct access is supported, or None if the
+            input has no path there.
+        """
         ...
 
     @abstractmethod
-    async def post_primitive(
-        self, name: str, output_type: str, value: JsonValue
-    ) -> None:
-        """Post one output as a primitive of the given EMPAIA type."""
+    async def slide_info(self, name: str) -> SlideInfo:
+        """Fetch the job's named slide with every level's downsample factor.
+
+        Args:
+            name: The EMPAIA input key of the slide.
+
+        Returns:
+            The slide, as the SDK types it.
+        """
         ...
 
     @abstractmethod
-    async def slide_info(self) -> SlideInfo:
-        """Fetch the job's slide with every level's downsample factor."""
+    async def post_output(self, name: str, body: Any) -> None:
+        """Post one output's body, e.g. a primitive.
+
+        Args:
+            name: The EMPAIA output key.
+            body: The SDK's request model of the output.
+        """
         ...
 
     @abstractmethod

@@ -1,181 +1,309 @@
-"""Each declared output is published by the publisher of its EMPAIA type."""
+"""Publishers carry stored outputs into EMPAIA, and finish publishes all or nothing.
+
+The equivalence test replays the score grid of the recorded fixture through
+`continuous_pixelmap`; the fixture holds what today's `ScoreGridPublisher`
+uploaded for it (recorded at e91f62d, before that publisher was replaced).
+"""
 
 from __future__ import annotations
 
 import unittest
-from dataclasses import replace
-from unittest.mock import AsyncMock, patch
-from zipfile import BadZipFile
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from typing import Any
+from unittest.mock import AsyncMock
+
+import numpy as np
+from rationai.empaia.typing import SlideInfo
 
 from model_service.api.scheduler.public import (
     ProviderFinishFailureError,
     ProviderSuccess,
 )
 from model_service.api.scheduler.targets import ExecutionTarget
-from model_service.builders.declarations import OutputSpec
-from model_service.builders.registry import get_builder
-from model_service.contracts.model_declarations import SpatialScoresModel
-from model_service.contracts.result import (
-    BuilderResult,
-    InlineOutput,
-    OutputKind,
-    SharedArtifact,
-)
-from model_service.contracts.score_grid import MEDIA_TYPE
+from model_service.components import EmpaiaOutput
+from model_service.components.empaia import publisher
+from model_service.contracts.result import BuilderResult, SharedArtifact
+from model_service.formats import score_grid, value
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
-from model_service.providers.empaia.app_service.input_files import _clip
-from model_service.providers.empaia.ead.apps import app_definitions
-from model_service.providers.empaia.ead.builder_io import BUILDER_IO
-from model_service.providers.empaia.ead.listing import EmpaiaListing
 from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
-from model_service.providers.empaia.publishing.publishers import (
-    PrimitivePublisher,
-    PublisherRegistry,
-    default_publishers,
-)
-from tests.support.builder_fixtures import outputs_model
+from tests.support.empaia_fixtures import SLIDE_ID, slide_info
 
 
-PUBLISHERS = default_publishers()
-HEATMAP = get_builder("heatmap").outputs["heatmap"]
-LISTING = EmpaiaListing(
-    name="Prostate cancer",
-    name_short="ProstHM",
-    description="Finds things.",
-    modes={"preprocessing": {}},
-)
+FIXTURES = Path(__file__).parent / "fixtures"
+HEATMAP = EmpaiaOutput("heatmap", "slide")
+CONTEXT = {"api_url": "https://empaia.invalid", "job_id": "j", "credential": "c"}
 
 
-def model(n_channels: int) -> SpatialScoresModel:
-    return SpatialScoresModel(
-        id="prostate-classifier-1",
-        tile_size=512,
-        output_tile_size=1,
-        n_channels=n_channels,
-        mpp=0.468,
+class PyramidGateway:
+    """Serves one slide and records each pixelmap and each posted body."""
+
+    job_id = "job-1"
+
+    def __init__(self, slide: SlideInfo | None = None) -> None:
+        self.slide = slide or slide_info()
+        self.published: list[tuple[str, str, tuple[Any, ...]]] = []
+        self.posted: list[tuple[str, Any]] = []
+        self.slides_read: list[str] = []
+
+    async def slide_info(self, name: str) -> SlideInfo:
+        self.slides_read.append(name)
+        return self.slide
+
+    async def publish_pixelmap(
+        self, name: str, slide_id: str, tile_sets: tuple[Any, ...]
+    ) -> None:
+        self.published.append((name, slide_id, tile_sets))
+
+    async def post_output(self, name: str, body: Any) -> None:
+        self.posted.append((name, body))
+
+
+def grid(values: np.ndarray, scored: np.ndarray) -> score_grid.ScoreGrid:
+    # 64 px per score at level 0: 4 px at level 4, 2 px at level 5.
+    return score_grid.ScoreGrid(
+        values=values,
+        scored=scored,
+        level=0,
+        level_size=(384, 256),
+        cell_size=64.0,
+        mpp=(0.25, 0.25),
     )
 
 
-class PublisherTests(unittest.IsolatedAsyncioTestCase):
-    async def test_a_primitive_is_posted_as_its_declared_type(self) -> None:
-        gateway = AsyncMock()
+async def publish_grid(
+    path: Path,
+    gateway: PyramidGateway,
+    media_type: str = score_grid.MEDIA_TYPE,
+    tile_size: int = 256,
+) -> None:
+    pixelmap = publisher(
+        {"type": "continuous_pixelmap", "tile_size": tile_size}, "score_grid"
+    )
+    commit = await pixelmap.prepare(gateway, HEATMAP, path, media_type)
+    assert gateway.published == []
+    await commit()
 
-        commit = await PrimitivePublisher("float").prepare(
-            gateway, "score", InlineOutput(1)
-        )
-        gateway.post_primitive.assert_not_awaited()
-        await commit()
 
-        gateway.post_primitive.assert_awaited_once_with("score", "float", 1)
+class ContinuousPixelmapTests(unittest.IsolatedAsyncioTestCase):
+    async def test_publisher_calls_match_todays_for_the_same_score_grid(self) -> None:
+        before = np.load(FIXTURES / "prostate-heatmap-pixelmap-before.npz")
+        gateway = PyramidGateway(slide_info(2048, 1536, 7))
+
+        await publish_grid(FIXTURES / "prostate-heatmap-grid.npz", gateway)
+
+        [(name, slide_id, tile_sets)] = gateway.published
+        assert (name, slide_id) == (str(before["name"]), str(before["slide_id"]))
+        assert len(tile_sets) == sum(1 for k in before.files if k.endswith("_header"))
+        for i, tile_set in enumerate(tile_sets):
+            header = [
+                tile_set.level,
+                tile_set.tile_width,
+                tile_set.tile_height,
+                tile_set.min_tile_x,
+                tile_set.min_tile_y,
+                tile_set.max_tile_x,
+                tile_set.max_tile_y,
+            ]
+            assert header == before[f"set{i}_header"].tolist()
+            positions = [[t.x, t.y] for t in tile_set.tiles]
+            assert positions == before[f"set{i}_positions"].tolist()
+            np.testing.assert_array_equal(
+                np.stack([np.asarray(t.data) for t in tile_set.tiles]),
+                before[f"set{i}_data"],
+            )
+
+    async def test_scores_are_published_exactly_from_the_coarsest_level_keeping_four_pixels_per_score(
+        self,
+    ) -> None:
+        values = np.zeros((1, 4, 6), dtype=np.float32)
+        scored = np.zeros((4, 6), dtype=bool)
+        values[0, 1, 2], scored[1, 2] = 0.75, True
+        values[0, 3, 5], scored[3, 5] = 0.25, True
+        gateway = PyramidGateway()
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "heatmap.npz"
+            score_grid.write(path, grid(values, scored))
+            await publish_grid(path, gateway)
+
+        [(name, slide_id, tile_sets)] = gateway.published
+        assert (name, slide_id, gateway.slides_read) == ("heatmap", SLIDE_ID, ["slide"])
+        assert [tile_set.level for tile_set in tile_sets] == [4, 5]
+        [tile] = tile_sets[0].tiles
+        data = np.asarray(tile.data)
+        assert data[4:8, 8:12].tolist() == [[0.75] * 4] * 4
+        assert data[12:16, 20:24].tolist() == [[0.25] * 4] * 4
+        # Cells the model never scored are 0 in the tile, not scores.
+        assert float(data[0:4, 0:4].max()) == 0.0
+        assert float(data.max()) == 0.75
+
+    async def test_grids_it_cannot_publish_are_invalid_before_any_write(self) -> None:
+        nothing_scored = grid(np.zeros((1, 4, 6), np.float32), np.zeros((4, 6), bool))
+        two_channels = grid(np.zeros((2, 4, 6), np.float32), np.ones((4, 6), bool))
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            score_grid.write(root / "nothing.npz", nothing_scored)
+            score_grid.write(root / "two.npz", two_channels)
+            (root / "unreadable.npz").write_bytes(b"not an npz")
+            cases = {
+                "nothing scored": (root / "nothing.npz", score_grid.MEDIA_TYPE),
+                "two channels": (root / "two.npz", score_grid.MEDIA_TYPE),
+                "unreadable": (root / "unreadable.npz", score_grid.MEDIA_TYPE),
+                "a version it doesn't know": (
+                    root / "two.npz",
+                    "application/vnd.rationai.score-grid+npz; version=9",
+                ),
+            }
+            for case, (path, media_type) in cases.items():
+                gateway = PyramidGateway()
+                with (
+                    self.subTest(case),
+                    self.assertRaises(EmpaiaGatewayError) as raised,
+                ):
+                    await publish_grid(path, gateway, media_type)
+                assert not raised.exception.retryable
+                assert not raised.exception.outcome_unknown
+                assert gateway.published == []
+
+
+class PrimitiveTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_value_is_posted_as_the_named_primitive_created_by_the_job(
+        self,
+    ) -> None:
+        gateway = PyramidGateway()
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "score.json"
+            value.write(path, 1)
+            primitive = publisher({"type": "float"}, "value")
+            commit = await primitive.prepare(
+                gateway, EmpaiaOutput("score"), path, value.MEDIA_TYPE
+            )
+            assert gateway.posted == []
+            await commit()
+
+        [(name, body)] = gateway.posted
+        assert name == "score"
+        assert {k: v for k, v in body.model_dump().items() if v is not None} == {
+            "name": "score",
+            "type": "float",
+            "value": 1,
+            "creator_id": "job-1",
+            "creator_type": "job",
+        }
 
     async def test_a_value_of_another_type_is_rejected_before_any_write(self) -> None:
-        for output_type, value in (
+        for output_type, scalar in (
             ("integer", True),
             ("integer", 0.5),
             ("float", False),
             ("bool", 1),
             ("string", ""),
         ):
-            with self.subTest(output_type=output_type, value=value):
-                gateway = AsyncMock()
-                with self.assertRaises(EmpaiaGatewayError) as raised:
-                    await PrimitivePublisher(output_type).prepare(
-                        gateway, "score", InlineOutput(value)
-                    )
-                self.assertFalse(raised.exception.retryable)
-                gateway.post_primitive.assert_not_awaited()
-
-    def test_an_output_unlike_its_declaration_is_rejected(self) -> None:
-        for output in (
-            InlineOutput(0.5),
-            SharedArtifact(path="/shared/heatmap.h5", media_type="application/x-hdf5"),
-        ):
+            gateway = PyramidGateway()
             with (
-                self.subTest(output=output),
-                self.assertRaises(EmpaiaGatewayError),
+                self.subTest(output_type=output_type, value=scalar),
+                TemporaryDirectory() as directory,
             ):
-                PUBLISHERS.publisher_for(
-                    "heatmap", "continuous_pixelmap", HEATMAP, output
-                )
-
-    def test_an_output_without_a_known_empaia_type_has_no_publisher(self) -> None:
-        inline = OutputSpec(kind=OutputKind.INLINE)
-
-        self.assertIsNone(PUBLISHERS.resolve(None, HEATMAP))
-        self.assertIsNone(PUBLISHERS.resolve("polygon", inline))
-        self.assertIsNotNone(PUBLISHERS.resolve("continuous_pixelmap", HEATMAP))
+                path = Path(directory) / "score.json"
+                value.write(path, scalar)
+                with self.assertRaises(EmpaiaGatewayError) as raised:
+                    await publisher({"type": output_type}, "value").prepare(
+                        gateway, EmpaiaOutput("score"), path, value.MEDIA_TYPE
+                    )
+                assert not raised.exception.retryable
+                assert gateway.posted == []
 
 
-class RectangleTests(unittest.TestCase):
-    def test_a_rectangle_is_clipped_to_the_slide(self) -> None:
-        self.assertEqual(_clip(10, 20, 100), (10, 20))
-        self.assertEqual(_clip(-100, 200, 1000), (0, 100))
-        self.assertEqual(_clip(90, 20, 100), (90, 10))
-        # Nothing on the slide: not positive, so the writer refuses it.
-        self.assertLessEqual(_clip(-500, 100, 1000)[1], 0)
+def analysis_success(
+    outputs: dict[str, SharedArtifact], sinks: list[str]
+) -> ProviderSuccess:
+    return ProviderSuccess(
+        BuilderResult(outputs=dict(outputs)),
+        ExecutionTarget(
+            "a1",
+            ("m1",),
+            "digest",
+            {"sinks": [{"use": "x", "output": name} for name in sinks]},
+        ),
+    )
 
 
-class AppPublishabilityTests(unittest.TestCase):
-    def test_only_models_their_publishers_take_become_apps(self) -> None:
-        single = app_definitions(
-            [model(1)], {"prostate-classifier-1": LISTING}, PUBLISHERS
-        )
-        with self.assertLogs(
-            "model_service.providers.empaia.ead.apps", "WARNING"
-        ) as logs:
-            multi = app_definitions(
-                [model(3)], {"prostate-classifier-1": LISTING}, PUBLISHERS
-            )
+def admitted(**outputs: dict[str, Any]) -> dict[str, Any]:
+    """A protected context with the publications admission recorded."""
+    return {**CONTEXT, "publications": {"slide": "slide", "outputs": outputs}}
 
-        self.assertEqual(len(single), 1)
-        self.assertEqual(multi, [])
-        # The skipped builder is visible to operators.
-        self.assertEqual([r.levelname for r in logs.records], ["WARNING"])
 
-    def test_an_output_nothing_publishes_withholds_the_app(self) -> None:
-        heatmap = BUILDER_IO["heatmap"]
-        with_polygons = replace(
-            heatmap, outputs={**heatmap.outputs, "glands": {"type": "polygon"}}
-        )
-        spec = get_builder("heatmap")
-        spec = replace(
-            spec,
-            output_model=outputs_model(
-                {**spec.outputs, "glands": OutputSpec(kind=OutputKind.INLINE)}
-            ),
-        )
-
-        with self.assertLogs("model_service.providers.empaia.ead.apps", "WARNING"):
-            apps = app_definitions(
-                [model(1)],
-                {"prostate-classifier-1": LISTING},
-                PUBLISHERS,
-                [spec],
-                {"heatmap": with_polygons},
-            )
-
-        self.assertEqual(apps, [])
+def heatmap_file(directory: str, name: str = "heatmap.npz") -> Path:
+    path = Path(directory) / name
+    values = np.full((1, 4, 6), 0.5, np.float32)
+    score_grid.write(path, grid(values, np.ones((4, 6), bool)))
+    return path
 
 
 class FinishTests(unittest.IsolatedAsyncioTestCase):
+    def provider(self, gateway: Any) -> EmpaiaProviderAdapter:
+        gateway.set_before_mutation = lambda _callback: None
+        return EmpaiaProviderAdapter(
+            lambda _context: gateway, allowed_api_urls=("https://empaia.invalid",)
+        )
+
+    async def test_an_analysis_publishes_the_outputs_it_was_admitted_with(
+        self,
+    ) -> None:
+        gateway = AsyncMock()
+        gateway.slide_info.return_value = slide_info()
+        with TemporaryDirectory() as directory:
+            await self.provider(gateway).finish(
+                admitted(heatmap={"type": "continuous_pixelmap", "tile_size": 512}),
+                analysis_success(
+                    {
+                        "heatmap": SharedArtifact(
+                            str(heatmap_file(directory)), score_grid.MEDIA_TYPE
+                        ),
+                        # Not listed under `outputs`, so not published.
+                        "other": SharedArtifact(
+                            str(heatmap_file(directory, "other.npz")),
+                            score_grid.MEDIA_TYPE,
+                        ),
+                    },
+                    ["heatmap", "other"],
+                ),
+            )
+
+        [call] = gateway.publish_pixelmap.await_args_list
+        assert call.args[:2] == ("heatmap", SLIDE_ID)
+        gateway.slide_info.assert_awaited_once_with("slide")
+        gateway.finalize.assert_awaited_once()
+
+    async def test_a_result_unlike_the_analysis_is_never_published(self) -> None:
+        gateway = AsyncMock()
+
+        with self.assertRaises(ProviderFinishFailureError) as raised:
+            await self.provider(gateway).finish(
+                admitted(heatmap={"type": "continuous_pixelmap"}),
+                analysis_success(
+                    {"extra": SharedArtifact("/shared/x.npz", score_grid.MEDIA_TYPE)},
+                    ["heatmap"],
+                ),
+            )
+
+        assert not raised.exception.retryable
+        assert not raised.exception.outcome_unknown
+        gateway.finalize.assert_not_awaited()
+
     async def test_an_output_the_builder_does_not_declare_is_never_published(
         self,
     ) -> None:
         gateway = AsyncMock()
-        gateway.set_before_mutation = lambda _callback: None
-        provider = EmpaiaProviderAdapter(
-            lambda _context: gateway,
-            allowed_api_urls=("https://empaia.invalid",),
-        )
 
         with self.assertRaises(ProviderFinishFailureError) as raised:
-            await provider.finish(
-                {"api_url": "https://empaia.invalid", "job_id": "j", "credential": "c"},
+            await self.provider(gateway).finish(
+                CONTEXT,
                 ProviderSuccess(
                     BuilderResult(
                         outputs={
                             "extra": SharedArtifact(
-                                path="/shared/x.npz", media_type=MEDIA_TYPE
+                                path="/shared/x.npz", media_type=score_grid.MEDIA_TYPE
                             )
                         }
                     ),
@@ -183,31 +311,22 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
                 ),
             )
 
-        self.assertFalse(raised.exception.retryable)
-        self.assertFalse(raised.exception.outcome_unknown)
+        assert not raised.exception.retryable
+        assert not raised.exception.outcome_unknown
         gateway.finalize.assert_not_awaited()
 
-    async def test_an_unreadable_artifact_is_invalid_not_retried(self) -> None:
-        pixelmaps = AsyncMock()
-        pixelmaps.prepare.side_effect = BadZipFile("truncated")
+    async def test_a_builder_heatmap_is_published_as_before(self) -> None:
         gateway = AsyncMock()
-        gateway.set_before_mutation = lambda _callback: None
-        provider = EmpaiaProviderAdapter(
-            lambda _context: gateway,
-            allowed_api_urls=("https://empaia.invalid",),
-            publishers=PublisherRegistry(
-                {("continuous_pixelmap", MEDIA_TYPE): pixelmaps}
-            ),
-        )
-
-        with self.assertRaises(ProviderFinishFailureError) as raised:
-            await provider.finish(
-                {"api_url": "https://empaia.invalid", "job_id": "j", "credential": "c"},
+        gateway.slide_info.return_value = slide_info()
+        with TemporaryDirectory() as directory:
+            await self.provider(gateway).finish(
+                CONTEXT,
                 ProviderSuccess(
                     BuilderResult(
                         outputs={
                             "heatmap": SharedArtifact(
-                                path="/shared/heatmap.npz", media_type=MEDIA_TYPE
+                                str(heatmap_file(directory)),
+                                score_grid.LEGACY_MEDIA_TYPE,
                             )
                         }
                     ),
@@ -215,66 +334,63 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
                 ),
             )
 
-        self.assertFalse(raised.exception.retryable)
-        self.assertFalse(raised.exception.outcome_unknown)
+        [call] = gateway.publish_pixelmap.await_args_list
+        assert call.args[:2] == ("heatmap", SLIDE_ID)
+        gateway.finalize.assert_awaited_once()
+
+    async def test_an_unreadable_artifact_is_invalid_not_retried(self) -> None:
+        gateway = AsyncMock()
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "heatmap.npz"
+            path.write_bytes(b"truncated")
+
+            with self.assertRaises(ProviderFinishFailureError) as raised:
+                await self.provider(gateway).finish(
+                    CONTEXT,
+                    ProviderSuccess(
+                        BuilderResult(
+                            outputs={
+                                "heatmap": SharedArtifact(
+                                    str(path), score_grid.LEGACY_MEDIA_TYPE
+                                )
+                            }
+                        ),
+                        ExecutionTarget.builder("heatmap", "prostate-classifier-1"),
+                    ),
+                )
+
+        assert not raised.exception.retryable
+        assert not raised.exception.outcome_unknown
 
     async def test_an_invalid_output_stops_the_job_before_any_write(self) -> None:
-        heatmap = get_builder("heatmap")
-        with_score = replace(
-            heatmap,
-            output_model=outputs_model(
-                {**heatmap.outputs, "score": OutputSpec(kind=OutputKind.INLINE)}
-            ),
-        )
-        io = BUILDER_IO["heatmap"]
-        io = replace(io, outputs={**io.outputs, "score": {"type": "float"}})
-        pixelmaps = AsyncMock()
-        publishers = PublisherRegistry(
-            {
-                ("continuous_pixelmap", MEDIA_TYPE): pixelmaps,
-                ("float", None): PrimitivePublisher("float"),
-            }
-        )
         gateway = AsyncMock()
-        gateway.set_before_mutation = lambda _callback: None
-        provider = EmpaiaProviderAdapter(
-            lambda _context: gateway,
-            allowed_api_urls=("https://empaia.invalid",),
-            publishers=publishers,
-            io={"heatmap": io},
-        )
+        gateway.slide_info.return_value = slide_info()
+        with TemporaryDirectory() as directory:
+            score = Path(directory) / "score.json"
+            value.write(score, "high")
 
-        with (
-            patch(
-                "model_service.providers.empaia.jobs.adapter.get_builder",
-                return_value=with_score,
-            ),
-            patch(
-                "model_service.builders.registry.get_builder",
-                return_value=with_score,
-            ),
-            self.assertRaises(ProviderFinishFailureError) as raised,
-        ):
-            await provider.finish(
-                {"api_url": "https://empaia.invalid", "job_id": "j", "credential": "c"},
-                ProviderSuccess(
-                    BuilderResult(
-                        outputs={
-                            "heatmap": SharedArtifact(
-                                path="/shared/heatmap.npz", media_type=MEDIA_TYPE
-                            ),
-                            "score": InlineOutput("high"),
-                        }
+            with self.assertRaises(ProviderFinishFailureError) as raised:
+                await self.provider(gateway).finish(
+                    admitted(
+                        heatmap={"type": "continuous_pixelmap"},
+                        score={"type": "float"},
                     ),
-                    ExecutionTarget.builder("heatmap", "prostate-classifier-1"),
-                ),
-            )
+                    analysis_success(
+                        {
+                            "heatmap": SharedArtifact(
+                                str(heatmap_file(directory)), score_grid.MEDIA_TYPE
+                            ),
+                            "score": SharedArtifact(str(score), value.MEDIA_TYPE),
+                        },
+                        ["heatmap", "score"],
+                    ),
+                )
 
         # The heatmap was prepared, but its write never ran.
-        pixelmaps.prepare.assert_awaited_once()
-        pixelmaps.prepare.return_value.assert_not_awaited()
-        gateway.post_primitive.assert_not_awaited()
-        self.assertFalse(raised.exception.outcome_unknown)
+        gateway.slide_info.assert_awaited_once()
+        gateway.publish_pixelmap.assert_not_awaited()
+        gateway.post_output.assert_not_awaited()
+        assert not raised.exception.outcome_unknown
 
 
 if __name__ == "__main__":

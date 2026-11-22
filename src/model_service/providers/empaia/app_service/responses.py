@@ -6,11 +6,17 @@ checked before data reaches input preparation or image publication.
 
 from __future__ import annotations
 
+import math
 from typing import Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
+from model_service.providers.empaia.app_service.types import (
+    Rectangle,
+    SlideLevel,
+    SlideMetadata,
+)
 
 
 type NonEmptyString = Annotated[str, Field(min_length=1)]
@@ -104,3 +110,50 @@ class RectangleResponse(EmpaiaResponse):
     upper_left: Annotated[list[FiniteNumber], Field(min_length=2, max_length=2)]
     width: PositiveNumber
     height: PositiveNumber
+
+
+def slide_metadata(value: object) -> SlideMetadata:
+    """Convert validated slide input data into local geometry values.
+
+    Args:
+        value: The decoded slide input data.
+
+    Returns:
+        The slide's identity, size, pixel size and levels.
+
+    Raises:
+        EmpaiaGatewayError: Not retryable if the data is not a valid slide.
+    """
+    slide = SlideResponse.parse(value)
+    return SlideMetadata(
+        identifier=slide.id,
+        width=slide.extent.x,
+        height=slide.extent.y,
+        pixel_size_nm_x=slide.pixel_size_nm.x,
+        pixel_size_nm_y=slide.pixel_size_nm.y,
+        levels=tuple(
+            SlideLevel(index=index, width=level.extent.x, height=level.extent.y)
+            for index, level in enumerate(slide.levels)
+        ),
+    )
+
+
+def rectangle(value: object) -> Rectangle:
+    """Floor rectangle origins and ceil dimensions when converting provider geometry to integer pixels.
+
+    Args:
+        value: The decoded rectangle input data.
+
+    Returns:
+        The rectangle in integer pixels.
+
+    Raises:
+        EmpaiaGatewayError: Not retryable if the data is not a valid rectangle.
+    """
+    parsed = RectangleResponse.parse(value)
+    return Rectangle(
+        x=math.floor(parsed.upper_left[0]),
+        y=math.floor(parsed.upper_left[1]),
+        width=math.ceil(parsed.width),
+        height=math.ceil(parsed.height),
+    )

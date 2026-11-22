@@ -1,8 +1,14 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from model_service.components import InputConverter
+from model_service.components import EmpaiaInput, InputConverter
+
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from model_service.contracts.json_values import JsonValue
 
 
 class Text(InputConverter):
@@ -10,11 +16,14 @@ class Text(InputConverter):
 
     name = "text"
     ead_type = "string"
+    gives_file = False
 
-    def ead_fragment(self) -> dict[str, Any]:
+    def io_fragment(self, item: EmpaiaInput) -> dict[str, Any]:
         """Declare a string input."""
         return {"type": "string"}
 
-    def convert(self, value: Any, context: Any) -> Any:
-        """Return the value as a string."""
-        return str(value)
+    async def materialize(
+        self, gateway: Any, item: EmpaiaInput, directory: Path
+    ) -> Path | JsonValue:
+        """Read the value as a string."""
+        return str(await gateway.get_input_data(item.name))

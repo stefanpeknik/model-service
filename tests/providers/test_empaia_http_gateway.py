@@ -1,4 +1,4 @@
-"""Check AppService HTTP shapes, input materialization, and uncertain publication outcomes."""
+"""Check AppService HTTP shapes, converters and publishers over the SDK, and uncertain outcomes."""
 
 from __future__ import annotations
 
@@ -13,35 +13,24 @@ from aiohttp import web
 from aiohttp.test_utils import TestServer
 from rationai.empaia import Client
 
-from model_service.contracts.result import SharedArtifact
-from model_service.contracts.score_grid import (
-    MEDIA_TYPE,
-    ScoreGrid,
-    write_score_grid,
+from model_service.components import EmpaiaInput, EmpaiaOutput
+from model_service.components.empaia.input_converters.rectangle import Rectangle
+from model_service.components.empaia.input_converters.wsi import Wsi
+from model_service.components.empaia.publishers.continuous_pixelmap import (
+    ContinuousPixelmap,
 )
-from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
+from model_service.components.empaia.publishers.primitive import primitive_body
+from model_service.formats.score_grid import MEDIA_TYPE, ScoreGrid
+from model_service.formats.score_grid import write as write_score_grid
+from model_service.providers.empaia.app_service.gateway import (
+    EmpaiaGatewayError,
+    PrimitiveType,
+)
 from model_service.providers.empaia.app_service.http import HttpEmpaiaGateway
-from model_service.providers.empaia.app_service.types import Rectangle, SlideMetadata
-from model_service.providers.empaia.publishing.pixelmap import ScoreGridPublisher
 from tests.support.empaia_fixtures import PIXELMAP_ID, SLIDE_ID, created
 
 
-class RecordingRectangleWriter:
-    """Record rectangle-mask requests and create placeholder destination files."""
-
-    def __init__(self) -> None:
-        """Start an empty list of mask destinations and geometry requests."""
-        self.calls: list[tuple[Path, SlideMetadata, Rectangle]] = []
-
-    def __call__(
-        self,
-        destination: Path,
-        slide: SlideMetadata,
-        rectangle: Rectangle,
-    ) -> None:
-        """Record requested slide/rectangle geometry and create a placeholder mask file."""
-        self.calls.append((destination, slide, rectangle))
-        destination.touch()
+RECTANGLE = Rectangle(Rectangle.Options())
 
 
 # Six levels from 384x256, each half the size of the one before.
@@ -107,7 +96,6 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
         """Verify invalid rectangle geometry is a safe integration error."""
         for coordinate in [float("nan"), float("inf"), True, "10"]:
             with self.subTest(coordinate=coordinate), TemporaryDirectory() as directory:
-                writer = RecordingRectangleWriter()
 
                 def handle(
                     request: httpx.Request, coordinate: object = coordinate
@@ -141,13 +129,14 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
                     "job-1",
                     "credential",
                     client=await self.appservice(httpx.MockTransport(handle)),
-                    rectangle_writer=writer,
                 )
                 try:
                     with self.assertRaises(EmpaiaGatewayError) as raised:
-                        await gateway.materialize_input("roi", directory)
+                        await RECTANGLE.materialize(
+                            gateway, EmpaiaInput("roi", "slide"), Path(directory)
+                        )
                     self.assertFalse(raised.exception.retryable)
-                    self.assertEqual(writer.calls, [])
+                    self.assertEqual(list(Path(directory).iterdir()), [])
                 finally:
                     await gateway.close()
 
@@ -239,7 +228,9 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             workspace = Path(directory) / "workspace"
 
             configuration = await gateway.get_configuration()
-            destination = Path(await gateway.materialize_input("slide", str(workspace)))
+            destination = await Wsi(Wsi.Options()).materialize(
+                gateway, EmpaiaInput("slide"), workspace
+            )
 
             self.assertEqual(configuration, {"stride": 0.5, "tiles": 8})
             self.assertEqual(destination, workspace / source.name)
@@ -267,7 +258,9 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             client=await self.appservice(httpx.MockTransport(handle)),
         )
 
-        await gateway.post_primitive("score", "float", 0.75)
+        await gateway.post_output(
+            "score", primitive_body("score", "job-1", PrimitiveType.FLOAT, 0.75)
+        )
         await gateway.finalize()
         await gateway.report_failure("failed safely")
         await gateway.close()
@@ -322,11 +315,10 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await gateway.close()
 
-    async def test_rectangle_input_is_materialized_when_direct_access_is_absent(
+    async def test_a_rectangle_becomes_a_mask_and_a_slide_needs_the_slide_volume(
         self,
     ) -> None:
-        """Verify rectangle input is materialized when direct access is absent."""
-        writer = RecordingRectangleWriter()
+        """A rectangle is a mask of the slide's size; a slide is never downloaded."""
 
         def handle(request: httpx.Request) -> httpx.Response:
             """Return scenario-specific mock HTTP responses and record or assert requests for this gateway test."""
@@ -355,23 +347,28 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
                 "job-1",
                 "credential",
                 client=await self.appservice(httpx.MockTransport(handle)),
-                rectangle_writer=writer,
             )
 
-            destination = Path(
-                await gateway.materialize_input("region_of_interest", directory)
+            destination = await RECTANGLE.materialize(
+                gateway, EmpaiaInput("region_of_interest", "slide"), Path(directory)
             )
 
+            import pyvips
+
+            mask = pyvips.Image.new_from_file(str(destination))
             self.assertEqual(destination, Path(directory) / "mask.tiff")
-            self.assertTrue(destination.is_file())
-            self.assertEqual(len(writer.calls), 1)
-            _, slide, rectangle = writer.calls[0]
-            self.assertEqual(slide.identifier, "slide-1")
-            self.assertEqual(rectangle, Rectangle(10, 20, 100, 50))
+            self.assertEqual((mask.width, mask.height), (1200, 600))
+            # Origins floor and sizes ceil: x 10..109, y 20..69.
+            self.assertEqual(mask.getpoint(10, 20), [255.0])
+            self.assertEqual(mask.getpoint(109, 69), [255.0])
+            self.assertEqual(mask.getpoint(110, 20), [0.0])
+            self.assertEqual(mask.getpoint(10, 19), [0.0])
 
             # A slide must be on the slide volume; there is no download.
             with self.assertRaises(EmpaiaGatewayError) as raised:
-                await gateway.materialize_input("slide", directory)
+                await Wsi(Wsi.Options()).materialize(
+                    gateway, EmpaiaInput("slide"), Path(directory) / "slide"
+                )
             self.assertFalse(raised.exception.retryable)
             await gateway.close()
 
@@ -409,11 +406,9 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
                 "credential",
                 client=await self.appservice(httpx.MockTransport(handle)),
             )
-            commit = await ScoreGridPublisher().prepare(
-                gateway,
-                "heatmap",
-                SharedArtifact(path=str(path), media_type=MEDIA_TYPE),
-            )
+            commit = await ContinuousPixelmap.from_options(
+                {"type": "continuous_pixelmap"}
+            ).prepare(gateway, EmpaiaOutput("heatmap", "slide"), path, MEDIA_TYPE)  # type: ignore[attr-defined]
             await commit()
             await gateway.close()
 

@@ -1,4 +1,4 @@
-"""How an EMPAIA job maps onto a builder: its configuration and its inputs."""
+"""How an EMPAIA job maps onto what it runs: its configuration and its inputs."""
 
 from __future__ import annotations
 
@@ -10,11 +10,12 @@ from model_service.api.scheduler.public import (
     SchedulingUnavailableError,
 )
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
-from model_service.providers.empaia.ead.listing import VIEWER_CONFIG_KEY
+from model_service.providers.empaia.ead.vocabulary import VIEWER_CONFIG_KEY
 
 
 if TYPE_CHECKING:
-    from model_service.builders.declarations import BuilderSpec
+    from collections.abc import Collection, Mapping
+
     from model_service.contracts.json_values import JsonValue
     from model_service.providers.empaia.app_service.gateway import EmpaiaGateway
 
@@ -23,44 +24,44 @@ logger = logging.getLogger(__name__)
 
 
 def known_settings(
-    spec: BuilderSpec, configuration: dict[str, JsonValue], job_id: str
+    known: Collection[str],
+    runs: str,
+    configuration: dict[str, JsonValue],
+    job_id: str,
 ) -> dict[str, JsonValue]:
-    """Take the settings of a job's app configuration the builder knows.
+    """Take the settings of a job's app configuration that what it runs knows.
 
     Installation admins may configure an app with keys meant for something
-    else; the builder takes only the ones it knows, and the rest are logged.
-    The viewer's settings are expected and meant for the case browser. The
-    values are not checked here: the attempt checks them, so a bad one ends
-    the job with a message for the user (EMPAIA's failure endpoint).
+    else; only known ones are taken, and the rest are logged. The viewer's
+    settings are expected and meant for the case browser.
 
     Args:
-        spec: The builder the job runs.
+        known: The setting names of the analysis or builder.
+        runs: What the job runs, for the log, e.g. `analysis prostate-heatmap`.
         configuration: The app configuration EMPAIA gave the job.
         job_id: The job, for the log.
 
     Returns:
-        The settings the builder takes, as given.
+        The known settings, as given.
     """
-    known = spec.configuration.model_fields
-    if ignored := sorted(configuration.keys() - known.keys() - {VIEWER_CONFIG_KEY}):
+    if ignored := sorted(configuration.keys() - set(known) - {VIEWER_CONFIG_KEY}):
         logger.warning(
-            "EMPAIA job %s: ignoring configuration keys the %s builder "
-            "does not take: %s",
+            "EMPAIA job %s: ignoring configuration keys the %s does not take: %s",
             job_id,
-            spec.id,
+            runs,
             ", ".join(ignored),
         )
     return {k: v for k, v in configuration.items() if k in known}
 
 
-async def job_inputs(spec: BuilderSpec, gateway: EmpaiaGateway) -> list[str]:
-    """Name the builder inputs the job supplies.
+async def job_inputs(inputs: Mapping[str, bool], gateway: EmpaiaGateway) -> list[str]:
+    """Name the inputs the job supplies.
 
     Required inputs always; optional ones only if the job has them, so a
-    preprocessing app, for example, gets only a slide.
+    preprocessing job, for example, gets only a slide.
 
     Args:
-        spec: The builder the job runs.
+        inputs: Each input and whether it is required, in declaration order.
         gateway: The job's gateway.
 
     Returns:
@@ -71,9 +72,9 @@ async def job_inputs(spec: BuilderSpec, gateway: EmpaiaGateway) -> list[str]:
         SchedulingUnavailableError: If it is temporarily unavailable.
     """
     names = []
-    for name, input_spec in spec.inputs.items():
+    for name, required in inputs.items():
         try:
-            if input_spec.required or await gateway.has_input(name):
+            if required or await gateway.has_input(name):
                 names.append(name)
         except EmpaiaGatewayError as error:
             raise_preparation_error(error)
