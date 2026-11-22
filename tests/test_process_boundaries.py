@@ -96,6 +96,19 @@ class ProcessBoundaryTests(unittest.TestCase):
 
         self.assertEqual(under(modules, "model_service.api"), [])
 
+    def test_the_served_model_host_core_loads_without_ray(self) -> None:
+        """Only the Serve wrapper needs Ray; the chart's tests and tools use the rest."""
+        modules = loaded_modules(
+            "model_service.served_model.deployment, model_service.served_model.host"
+        )
+
+        self.assertEqual(
+            under(
+                modules, "ray", "onnxruntime", "torch", "mlflow", "model_service.api"
+            ),
+            [],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
