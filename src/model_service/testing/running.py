@@ -39,6 +39,8 @@ class SourceRun:
 def fake_batch(columns: Mapping[str, Col], rows: int, seed: int = 0) -> Batch:
     """Random data for declared columns; unknown dimensions become 1.
 
+    A column of any rank (`Col(dtype, None)`) gets one dimension.
+
     Args:
         columns: Resolved column declarations.
         rows: Rows to make.
@@ -50,7 +52,8 @@ def fake_batch(columns: Mapping[str, Col], rows: int, seed: int = 0) -> Batch:
     rng = np.random.default_rng(seed)
     batch: Batch = {}
     for name, col in columns.items():
-        dims = tuple(d if isinstance(d, int) else 1 for d in col.shape or ())
+        shape_ = (None,) if col.shape is None else col.shape
+        dims = tuple(d if isinstance(d, int) else 1 for d in shape_)
         dtype = np.dtype(col.dtype)
         shape = (rows, *dims)
         if np.issubdtype(dtype, np.integer):

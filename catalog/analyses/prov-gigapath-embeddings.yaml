@@ -1,0 +1,9 @@
+# Today's tile-embeddings builder on prov-gigapath: the builder's defaults,
+# tiles at the model's 224 px and 0.5 µm/px side by side, an optional region
+# of interest. Each row is the class token.
+summary: Embeds each tissue tile of a slide with Prov-GigaPath into an HDF5 table.
+source: {use: slide_tiles, stride_fraction: 1.0, skip_background: true, min_tissue_fraction: 0.0}
+steps:
+  - {model: prov-gigapath}
+sinks:
+  - {use: embedding_table, output: embeddings}

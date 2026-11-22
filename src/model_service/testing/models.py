@@ -30,12 +30,14 @@ class FakeOutput:
         channels: Score channels.
         size: Score map edge.
         dim: Embedding length.
+        summaries: Embedding summary names; one vector each per tile.
     """
 
     kind: str = "scores"
     channels: int = 1
     size: int = 1
     dim: int = 8
+    summaries: tuple[str, ...] = ("tile",)
 
 
 @dataclass(frozen=True)
@@ -60,13 +62,19 @@ class FakeModel:
 
         Returns:
             float32 scores (batch, channels, size, size) in [0, 1], or
-            embeddings (batch, dim).
+            embeddings (batch, dim) for one summary, else (batch, summaries,
+            dim), each summary scaled by its position.
         """
         mean = tiles.reshape(len(tiles), -1).mean(axis=1).astype(np.float32) / 255
         out = self.output
         if out.kind == "embedding":
-            return np.repeat(mean[:, None], out.dim, axis=1) * np.linspace(
+            vectors = np.repeat(mean[:, None], out.dim, axis=1) * np.linspace(
                 0, 1, out.dim, dtype=np.float32
+            )
+            if len(out.summaries) == 1:
+                return vectors
+            return np.stack(
+                [vectors * (i + 1) for i in range(len(out.summaries))], axis=1
             )
         shape = (len(tiles), out.channels, out.size, out.size)
         return np.broadcast_to(mean[:, None, None, None], shape).astype(np.float32)
@@ -78,7 +86,8 @@ class FakeModel:
             tile: uint8 `(3, tile_size, tile_size)`.
 
         Returns:
-            Scores `(channels, size, size)`, or an embedding `(dim,)`.
+            Scores `(channels, size, size)`, or an embedding `(dim,)` for one
+            summary, else `(summaries, dim)`.
         """
         return self(tile[None])[0]
 
@@ -87,8 +96,8 @@ def fake_model(output: dict[str, Any] | None = None, **input_: Any) -> FakeModel
     """Build a fake served model.
 
     Args:
-        output: Output fields (`kind`, `channels`, `size`, `dim`), as in a
-            served-model file's `output:`.
+        output: Output fields (`kind`, `channels`, `size`, `dim`,
+            `summaries`), as in a served-model file's `output:`.
         **input_: Input fields (`tile_size`, `mpp`).
 
     Returns:

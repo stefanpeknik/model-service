@@ -91,7 +91,7 @@ async def test_analyses_list_inputs_outputs_settings_and_models() -> None:
         response = await client.get("/v1/analyses")
 
     assert response.status_code == 200
-    (listed,) = response.json()
+    (listed,) = [a for a in response.json() if a["id"] == "prostate-heatmap"]
     schema = listed.pop("settings_schema")
     assert listed == {
         "id": "prostate-heatmap",
@@ -121,6 +121,29 @@ async def test_analyses_list_inputs_outputs_settings_and_models() -> None:
         "skip_background": True,
         "stride_fraction": 0.5,
     }
+
+
+async def test_the_embeddings_analyses_list_an_embedding_table() -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app(FakeRunner())), base_url="http://model-service"
+    ) as client:
+        response = await client.get("/v1/analyses")
+
+    listed = {a["id"]: a for a in response.json()}
+    for analysis, model in (
+        ("virchow2-embeddings", "virchow2"),
+        ("prov-gigapath-embeddings", "prov-gigapath"),
+    ):
+        assert listed[analysis]["models"] == [model]
+        assert listed[analysis]["outputs"] == {
+            "embeddings": {
+                "kind": "shared_artifact",
+                "format": "embedding_table",
+                "media_type": "application/vnd.rationai.embedding-table+hdf5; "
+                "version=2",
+            }
+        }
+        assert listed[analysis]["settings"]["stride_fraction"] == 1.0
 
 
 async def test_a_run_sends_the_analysis_resolved_with_its_settings() -> None:

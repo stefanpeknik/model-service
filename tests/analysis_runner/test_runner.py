@@ -39,9 +39,10 @@ def analysis(
     *,
     source: str = "{use: slide_tiles}",
     steps: str = "[{model: m1}]",
+    model_output: str = "kind: scores",
 ) -> Analysis:
     root = tmp_path / "catalog"
-    write(root, "served-models/m1.yaml", served_model())
+    write(root, "served-models/m1.yaml", served_model(output=model_output))
     write(
         root,
         "analyses/a1.yaml",
@@ -168,6 +169,31 @@ def test_a_failing_model_fails_the_run_with_its_code_and_writes_nothing(
         run(analysis(tmp_path, HEATMAP), slide, {"heatmap": out / "heatmap.npz"}, model)
 
     assert (raised.value.code, raised.value.retryable) == (code, retryable)
+    assert list(out.iterdir()) == []
+
+
+def test_features_that_change_shape_between_tiles_fail_the_embedding_table(
+    tmp_path: Path, slide: Path, out: Path
+) -> None:
+    resolved = analysis(
+        tmp_path,
+        "[{use: embedding_table, output: embeddings}]",
+        source=ALL_TILES,
+        model_output="kind: embedding, summaries: [tile]",
+    )
+
+    class Growing(Model):
+        async def infer(self, tile: np.ndarray) -> np.ndarray:
+            self.calls += 1
+            return np.ones(4 if self.calls < 5 else 5, np.float32)
+
+    with pytest.raises(BuilderFailure) as raised:
+        run(resolved, slide, {"embeddings": out / "embeddings.h5"}, Growing())
+
+    assert (raised.value.code, raised.value.retryable) == (
+        "invalid_model_output",
+        False,
+    )
     assert list(out.iterdir()) == []
 
 
