@@ -1,4 +1,4 @@
-"""Answer a builder run request and map exceptions to the deployment's HTTP errors.
+"""Answer a run request and map exceptions to the deployment's HTTP errors.
 
 The format is contracts/builder_http.py; the public API's is api/http/errors.py.
 """
@@ -24,6 +24,8 @@ from model_service.contracts.result import BuilderResult
 
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
+
     from model_service.builders.replica.runner import BuilderApplication
 
 
@@ -60,13 +62,31 @@ async def run_http(
         The builder's result.
 
     Raises:
+        HTTPException: As `answer_http` maps the failure.
+    """
+    return await answer_http(
+        application.run(request.invocation, request.model, request.execution_context)
+    )
+
+
+async def answer_http(run: Awaitable[BuilderResult]) -> BuilderResult:
+    """Await a run and translate its exceptions into the safe error envelope.
+
+    The analysis runner answers in the same envelope, so the API's dispatch
+    reads both alike.
+
+    Args:
+        run: The run of one request.
+
+    Returns:
+        The run's result.
+
+    Raises:
         HTTPException: 422 for an invalid invocation or a non-retryable failure,
             500 for a contract violation, 503 for a retryable failure.
     """
     try:
-        return await application.run(
-            request.invocation, request.model, request.execution_context
-        )
+        return await run
     except InvalidInvocation as exc:
         raise error(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
