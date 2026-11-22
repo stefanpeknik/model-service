@@ -173,6 +173,23 @@ def test_a_score_map_replies_as_lz4_bytes(tmp_path: Path) -> None:
     np.testing.assert_allclose(scores.reshape(1, TILE, TILE), [expected], rtol=1e-6)
 
 
+def test_the_onnx_runtime_casts_its_output_to_the_asked_dtype(
+    tmp_path: Path,
+) -> None:
+    graph = onnx_graphs.scores(tmp_path / "m.onnx", per_pixel=True)
+    output = {"kind": "scores", "channels": 1, "size": TILE, "dtype": "float16"}
+    document = declaration(
+        graph, runtime={"use": "onnx", "output_dtype": "float16"}, output=output
+    )
+    tile = tiles(1)[0]
+
+    scores = run(host(document, tmp_path), lambda s: s.infer(tile))
+
+    expected = 1 / (1 + np.exp(-(8 * tile.mean(axis=0) / 255 - 4)))
+    assert scores.dtype == np.float16
+    np.testing.assert_allclose(scores, [expected], rtol=1e-3)
+
+
 def test_an_embedding_replies_pooled_or_as_tokens_without_registers(
     tmp_path: Path,
 ) -> None:

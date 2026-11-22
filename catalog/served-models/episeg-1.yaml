@@ -1,0 +1,18 @@
+# EPISeg: an epithelium score in [0, 1] per pixel of a 1024 px tile at 0.468 mpp.
+# The ONNX graph takes uint8 RGB tiles (N, 3, 1024, 1024) and normalises inside.
+weights: {use: mlflow, uri: "mlflow-artifacts:/10/39f821ed5b964c71a603cc6db196f9fd/artifacts/checkpoints/epoch=19-step=32020/model.onnx/model.onnx"}
+# Reproduces the original class: its session ran on ONNX Runtime's defaults
+# because it passed threads and optimisations under a keyword ONNX Runtime
+# ignores, and it cast the float32 scores to float16. Applying the session
+# options comes after v1, under a new ID.
+runtime:
+  use: onnx
+  tensorrt: true
+  workspace_gib: 6
+  optimization_level: 3
+  apply_session_options: false
+  output_dtype: float16
+input: {tile_size: 1024, mpp: 0.468}
+output: {kind: scores, channels: 1, size: 1024, dtype: float16, range: [0, 1]}
+batching: {max_size: 8, wait_s: 0.1}
+resources: {gpus: 1, cpus: 4, memory_gib: 12}

@@ -52,6 +52,7 @@ def served(root: Path, model_id: str = "m1") -> ServedModel:
     [
         ("prostate-classifier-1", None, "uri", "artifact_uri"),
         ("prostate-classifier-1", "rationai-test", "uri", "artifact_uri"),
+        ("episeg-1", None, "uri", "artifact_uri"),
         ("virchow2", None, "repo", "repo_id"),
         ("virchow2", "rationai-test", "repo", "repo_id"),
     ],
@@ -116,6 +117,19 @@ def test_keys_of_todays_model_files_are_refused_with_what_fits(
         "this file: batching, input, output, post, pre, resources, runtime, "
         "serving, weights. Hint: remove it",
     ]
+
+
+def test_threads_are_refused_where_session_options_are_not_applied(
+    root: Path,
+) -> None:
+    runtime = "{use: onnx, apply_session_options: false, threads: 4}"
+    write(root, "served-models/m1.yaml", MODEL.replace("{use: onnx}", runtime))
+
+    with pytest.raises(CatalogInvalid) as raised:
+        load_catalog(root)
+
+    (error,) = raised.value.errors
+    assert "threads has no effect with apply_session_options: false" in str(error)
 
 
 def test_a_hugging_face_revision_must_be_a_commit(root: Path) -> None:
