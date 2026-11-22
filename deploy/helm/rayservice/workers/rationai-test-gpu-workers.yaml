@@ -49,7 +49,6 @@ template:
               secretKeyRef:
                 name: huggingface-secret
                 key: token
-          # Builders may also be placed here, so storage matches the CPU group.
           # Working files (score sums, libvips spills) stay on the node's disk.
           - name: TMPDIR
             value: /mnt/tmp

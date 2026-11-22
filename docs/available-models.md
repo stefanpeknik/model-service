@@ -107,35 +107,40 @@ with Client() as client:
   print(emb.shape)
 ```
 
-### 5. Builders (`/v1/builders/...` on the API)
+### 5. Analyses (`/v1/analyses/...` on the API)
 
-Builders run a model over a whole slide. They are called through the API's
-public API, not on the Ray route, and take the model as a parameter:
+Analyses run served models over a whole slide. They are called through the
+API, not on the Ray route, and each names the models it calls:
 
-| Builder | Accepts | Output |
+| Analysis | Model | Output |
 | --- | --- | --- |
-| `heatmap` | `spatial-scores` models (classifiers, segmentation) | score grid (`.npz`): scores per cell with the slide geometry |
-| `tile-embeddings` | `tile-embedding` models (Virchow2, Prov-GigaPath) | HDF5 with one feature row per tile |
+| `prostate-heatmap` | `prostate-classifier-1` | `score_grid` (`.npz`): scores per cell with the slide geometry |
+| `episeg-heatmap` | `episeg-1` | `score_grid` (`.npz`) |
+| `virchow2-embeddings` | `virchow2` | `embedding_table` (`.h5`): one feature row per tile |
+| `prov-gigapath-embeddings` | `prov-gigapath` | `embedding_table` (`.h5`) |
 
-`GET /v1/models` lists the deployed models and the builders each works with.
+`GET /v1/analyses` lists the deployed analyses, and `GET /v1/models` the
+served models with the analyses that call each.
 
 ```python
-from rationai import Client
-from rationai.types import BuilderRequest, InputAccess, SharedPathInput
+from rationai import Client, formats
+from rationai.types import AnalysisRequest, InputAccess, SharedPathInput
 
 with Client(base_url="http://<model-service>:8080") as client:
-  result = client.builders.run(
-    "heatmap",
-    BuilderRequest(
-      model_id="prostate-classifier-1",
+  result = client.analyses.run(
+    "prostate-heatmap",
+    AnalysisRequest(
       inputs={
         "slide": SharedPathInput("slides/slide.mrxs"),
         "region_of_interest": SharedPathInput("masks/mask.tif"),  # optional
       },
       input_access=InputAccess("shared_storage", {"root": "/mnt/data"}),
-      output_path="outputs/heatmap.tif",
+      output_path="outputs/heatmap.npz",
     ),
   )
+
+heatmap = result.outputs["heatmap"]
+grid = formats.read(heatmap.path, heatmap.media_type)  # refuses unknown versions
 ```
 
 ---

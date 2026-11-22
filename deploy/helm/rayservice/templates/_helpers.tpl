@@ -83,6 +83,33 @@ off to once a day. Not -1: Ray 2.58's GCS then dumps in a tight loop
 {{- end -}}
 
 {{/*
+A CPU-only Serve deployment (a builder or the analysis runner): `deployment`
+with cpuWorkerResource.perReplica of the cpuWorkerResource.name Ray resource
+added to its ray_actor_options.resources, so Ray places its replicas only on
+CPU worker groups. Takes dict "root" ($) and "deployment". Renders YAML.
+*/}}
+{{- define "model-service.cpuOnlyDeployment" -}}
+{{- $marker := required "cpuWorkerResource is required" .root.Values.cpuWorkerResource }}
+{{- $deployment := deepCopy (.deployment | default dict) }}
+{{- $actor := get $deployment "ray_actor_options" | default dict }}
+{{- $resources := get $actor "resources" | default dict }}
+{{- $_ := set $resources $marker.name $marker.perReplica }}
+{{- $_ := set $actor "resources" $resources }}
+{{- $_ := set $deployment "ray_actor_options" $actor }}
+{{- toYaml $deployment }}
+{{- end }}
+
+{{/*
+The rayStartParams `resources` value of a CPU worker group: perWorker of the
+cpuWorkerResource.name Ray resource, quoted the way KubeRay and Ray's
+autoscaler expect ('"{\"cpu_worker\":100}"').
+*/}}
+{{- define "model-service.cpuWorkerRayResources" -}}
+{{- $marker := required "cpuWorkerResource is required" .Values.cpuWorkerResource }}
+{{- dict $marker.name $marker.perWorker | toJson | replace "\"" "\\\"" | printf "\"%s\"" | squote }}
+{{- end }}
+
+{{/*
 Deep-merge `patch` over `base` the way the catalog loader does
 (model_service.catalog.merge): mappings merge key by key, any other value
 replaces, null removes the key. Not sprig's mergeOverwrite, which keeps the

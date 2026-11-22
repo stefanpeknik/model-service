@@ -87,6 +87,18 @@ builders:
       num_threads: 2
       max_concurrent_tasks: 8
 
+# Keeps CPU-only Serve apps off GPU workers. Every builder and the analysis
+# runner request `perReplica` of this Ray custom resource, and only the CPU
+# worker groups advertise it (`perWorker` each, in rayStartParams). Without
+# it, Ray may place a builder on a GPU worker's free CPUs, and the served
+# model that needs them can't start. perWorker / perReplica caps the CPU-only
+# replicas on one worker; keep it above their max_replicas summed (CPUs are
+# the real limit).
+cpuWorkerResource:
+  name: cpu_worker
+  perWorker: 100
+  perReplica: 1
+
 # Roots callers may name in shared-storage requests (API, builders and the
 # analysis runner).
 sharedStorageRoots: [/mnt/data, /mnt/projects]
