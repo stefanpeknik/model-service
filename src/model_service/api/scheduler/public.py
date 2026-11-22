@@ -26,6 +26,10 @@ from model_service.contracts.result import BuilderResult
 if TYPE_CHECKING:
     from datetime import datetime
 
+    from model_service.api.scheduler.targets import ExecutionTarget
+    from model_service.catalog.analyses import ResolvedAnalysis
+    from model_service.contracts.json_values import JsonObject
+
 
 __all__ = ["IncompatibleModelError", "UnknownBuilderError", "UnknownModelError"]
 
@@ -36,7 +40,10 @@ type ProviderName = str
 
 @dataclass(frozen=True, slots=True)
 class ScheduleRequest:
-    """`body` is provider-specific; standalone bodies are a `BuilderRequest`."""
+    """A builder run with a model (transitional); `body` is provider-specific.
+
+    Standalone bodies are a `BuilderRequest`.
+    """
 
     builder_id: str
     model_id: str
@@ -46,9 +53,39 @@ class ScheduleRequest:
     idempotency_key: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class AnalysisScheduleRequest:
+    """An analysis run; `body` is provider-specific, a `BuilderRequest` for standalone.
+
+    The provider prepares the invocation; its `configuration` holds the
+    caller's settings, which the scheduler resolves the analysis with.
+
+    Attributes:
+        analysis_id: The analysis to run.
+        provider: The provider admitting it.
+        body: The provider's request body.
+        requested_timeout_seconds: How long the execution may take.
+        idempotency_key: The caller's key naming the submission.
+    """
+
+    analysis_id: str
+    provider: ProviderName
+    body: dict[str, JsonValue]
+    requested_timeout_seconds: int | None = None
+    idempotency_key: str | None = None
+
+
+type AnyScheduleRequest = ScheduleRequest | AnalysisScheduleRequest
+
+
 type ModelResolver = Callable[[str, str], ModelBinding]
 """Return the current model binding for (builder_id, model_id), raising
 UnknownBuilderError, UnknownModelError or IncompatibleModelError."""
+
+
+type AnalysisResolver = Callable[[str, JsonObject | None], ResolvedAnalysis]
+"""Resolve a deployed analysis with per-run settings (None keeps the file's),
+raising UnknownAnalysisError or InvalidInvocation."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,19 +107,23 @@ class ExecutionView:
 
     Attributes:
         id: The execution's id.
-        builder_id: The builder it runs.
-        model_id: The model the builder uses.
+        analysis_id: The analysis it runs; a `<builder>:<model>` ID for a
+            builder run that matches no analysis.
+        models: The served models the analysis calls.
+        analysis_digest: The digest of the analysis as resolved at
+            admission; None for a builder run.
         status: Its status.
-        configuration: Every setting the builder runs with, fixed at admission.
-        result: The builder's result, once succeeded.
+        configuration: Every setting it runs with, fixed at admission.
+        result: Its result, once succeeded.
         error: Why it failed, once failed.
         provider_pending: A failure or cancellation not yet reported to the
             provider.
     """
 
     id: str
-    builder_id: str
-    model_id: str
+    analysis_id: str
+    models: list[str]
+    analysis_digest: str | None
     status: ExecutionStatus
     configuration: dict[str, JsonValue] | None = None
     result: BuilderResult | None = None
@@ -105,7 +146,7 @@ class ScheduleResult:
 
 
 class InvalidScheduleRequestError(ValueError):
-    """The schedule request is invalid for its builder, model or provider."""
+    """The schedule request is invalid for its analysis, builder, model or provider."""
 
 
 class ScheduleConflictError(RuntimeError):
@@ -162,8 +203,9 @@ class ProviderSuccess:
     """Give provider finish the durable builder result to publish."""
 
     result: BuilderResult
-    # The builder that produced it, whose declarations say what each output is.
-    builder_id: str
+    # What produced it: the analysis document (or the builder) says what each
+    # output is.
+    target: ExecutionTarget
 
 
 @dataclass(frozen=True, slots=True)

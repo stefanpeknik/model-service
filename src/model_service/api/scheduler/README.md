@@ -1,7 +1,10 @@
 # Execution scheduler
 
-Durable executions of builder invocations. Raw model requests are not
-executions: they go straight to the model's Ray Serve ingress.
+Durable executions of analyses (and, until they retire, builder runs). Raw
+model requests are not executions: they go straight to the model's Ray Serve
+ingress. An execution's target (`targets.py`) is its analysis ID, the served
+models it calls, and for an analysis admitted as one the resolved document
+and its digest; every attempt sends that document to the analysis runner.
 `ExecutionScheduler` admits, reads and cancels; its worker claims due work and
 moves it through processing and provider finish.
 
@@ -14,7 +17,8 @@ moves it through processing and provider finish.
 | `public.py`, `internal_state.py`, `status.py` | Public request/view types, internal records, statuses |
 | `protocols.py` | The `Scheduler` interface the API uses |
 | `store/repository.py` | The persistence interface |
-| `store/postgres/` | PostgreSQL implementation; an advisory lock per model serializes capacity checks. `PostgresExecutionRepository` delegates to one operations class per concern (admission, claims, settlement, maintenance), each built over `PostgresDatabase` (pool, transactions, row mapping) |
+| `targets.py` | What an execution runs, its capacity keys, and the builder × model to analysis ID mapping (transitional) |
+| `store/postgres/` | PostgreSQL implementation; an advisory lock per capacity key (served model, or a model-free analysis), tried in sorted order, serializes capacity checks. `PostgresExecutionRepository` delegates to one operations class per concern (admission, claims, settlement, maintenance), each built over `PostgresDatabase` (pool, transactions, row mapping) |
 | `store/migrations/` | Yoyo migrations, applied at startup ([guide](store/migrations/README.md)) |
 | `store/protected_context.py` | AES-GCM encryption of provider secrets at rest |
 
@@ -30,9 +34,14 @@ queued ──claim──► running (processing) ──result──► running (
 cancel ─────────────────────────────────────────────────────► cancelled ──► cancellation report
 ```
 
-- Each attempt resolves the model's current catalog entry; a model removed or
-  made incompatible since admission fails the execution without retry.
-- A builder that rejects with 429 is retried without spending an attempt.
+- An analysis attempt sends the document stored at admission, whatever the
+  catalog holds now. A builder attempt resolves the model's current catalog
+  entry; a model removed or made incompatible since admission fails the
+  execution without retry.
+- A processing attempt is claimed only when each of its capacity keys has a
+  free slot: every served model it calls (`serving.max_concurrent_runs`,
+  default `PER_MODEL_LIMIT`), or its analysis ID when it calls none.
+- A runner or builder that rejects with 429 is retried without spending an attempt.
 - A publication that fails or whose outcome is unknown is not retried; the
   execution fails and the provider gets a failure report.
 - Leases are renewed every third of their duration. Renewal errors are retried

@@ -25,6 +25,7 @@ from psycopg.types.json import Jsonb
 
 from model_service.api.scheduler.internal_state import (
     Admission,
+    ProcessingFailed,
     ProcessingSucceeded,
     ProviderFinishSucceeded,
     RenewDirective,
@@ -34,6 +35,7 @@ from model_service.api.scheduler.internal_state import (
     WorkKind,
 )
 from model_service.api.scheduler.public import (
+    ExecutionError,
     ScheduleConflictError,
     SubmissionIdentity,
     UnknownExecutionError,
@@ -47,12 +49,18 @@ from model_service.api.scheduler.store.repository import (
     ExecutionRepositoryUnavailableError,
 )
 from model_service.api.scheduler.store.rows import ExecutionRow
+from model_service.api.scheduler.targets import (
+    CapacityKey,
+    CapacityLimits,
+    ExecutionTarget,
+)
 from model_service.contracts.invocation import (
     INVOCATION,
     InputAccessContext,
     Invocation,
     SharedPathInput,
 )
+from model_service.contracts.json_values import JsonValue
 from model_service.contracts.result import (
     RESULT,
     BuilderResult,
@@ -290,18 +298,83 @@ class PostgresExecutionRepositoryTests(
         await self.repository.initialize()
 
         expected = {
-            "prostate-heatmap": ("heatmap", "prostate-classifier-1"),
-            "episeg-segmentation": ("heatmap", "episeg-1"),
-            "virchow2-embeddings": ("tile-embeddings", "virchow2"),
-            "gigapath-embeddings": ("tile-embeddings", "prov-gigapath"),
+            "prostate-heatmap": ("prostate-heatmap", "prostate-classifier-1"),
+            "episeg-segmentation": ("episeg-heatmap", "episeg-1"),
+            "virchow2-embeddings": ("virchow2-embeddings", "virchow2"),
+            "gigapath-embeddings": ("prov-gigapath-embeddings", "prov-gigapath"),
         }
-        for workflow_id, (builder_id, model_id) in expected.items():
+        for workflow_id, (analysis_id, model_id) in expected.items():
             record = await self.repository.get(identifiers[workflow_id])
-            self.assertEqual(
-                (record.builder_id, record.model_id), (builder_id, model_id)
-            )
+            self.assertEqual(record.target, ExecutionTarget(analysis_id, (model_id,)))
         prostate = await self.repository.get(identifiers["prostate-heatmap"])
         self.assertEqual(prostate.invocation.configuration, {"stride_fraction": 0.5})
+        self.assertEqual(await self._applied_migrations(), ALL_MIGRATIONS)
+
+    async def test_identity_migration_maps_builder_runs_to_analyses(self) -> None:
+        await self._drop_schema(self.schema)
+        with TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            for path in MIGRATIONS_DIRECTORY.glob("000[1-8]-*.sql"):
+                shutil.copy(path, directory)
+            with patch(
+                "model_service.api.scheduler.store.migrate.MIGRATIONS_DIRECTORY",
+                directory,
+            ):
+                await self.repository.initialize()
+        deadline = datetime.now(UTC) + timedelta(minutes=5)
+        invocation = {
+            "inputs": {"slide": {"kind": "shared_path", "path": "slide.mrxs"}},
+            "configuration": {"stride_fraction": 0.5},
+            "input_access": {"kind": "shared_storage", "state": {"root": "/s"}},
+            "deadline_at": deadline.isoformat(),
+            "output_path": None,
+        }
+        pairs = {
+            ("heatmap", "prostate-classifier-1"): "prostate-heatmap",
+            ("heatmap", "episeg-1"): "episeg-heatmap",
+            ("tile-embeddings", "virchow2"): "virchow2-embeddings",
+            ("tile-embeddings", "prov-gigapath"): "prov-gigapath-embeddings",
+            ("heatmap", "virchow2"): "heatmap:virchow2",
+        }
+        identifiers = {}
+        async with await AsyncConnection.connect(self.dsn) as connection:
+            for builder_id, model_id in pairs:
+                execution_id = str(uuid4())
+                identifiers[builder_id, model_id] = execution_id
+                await connection.execute(
+                    sql.SQL(
+                        "INSERT INTO {} (id, provider, submission_key, "
+                        "request_fingerprint, builder_id, model_id, status, "
+                        "invocation, protected_context, deadline_at, work_kind, "
+                        "next_attempt_at) VALUES (%s, 'empaia', %s, %s, %s, %s, "
+                        "'queued', %s, %s, %s, 'processing', clock_timestamp())"
+                    ).format(sql.Identifier(self.schema, "executions")),
+                    (
+                        execution_id,
+                        f"key-{execution_id}",
+                        f"fingerprint-{execution_id}",
+                        builder_id,
+                        model_id,
+                        Jsonb(invocation),
+                        self.cipher.encrypt({}),
+                        deadline,
+                    ),
+                )
+
+        await self.repository.initialize()
+
+        for (builder_id, model_id), analysis_id in pairs.items():
+            execution_id = identifiers[builder_id, model_id]
+            record = await self.repository.get(execution_id)
+            self.assertEqual(
+                record.target, ExecutionTarget(analysis_id, (model_id,)), analysis_id
+            )
+            self.assertEqual(
+                record.identity,
+                SubmissionIdentity(
+                    "empaia", f"key-{execution_id}", f"fingerprint-{execution_id}"
+                ),
+            )
         self.assertEqual(await self._applied_migrations(), ALL_MIGRATIONS)
 
     async def test_raw_inference_removal_keeps_builders(self) -> None:
@@ -355,7 +428,10 @@ class PostgresExecutionRepositoryTests(
 
         await self.repository.initialize()
 
-        self.assertEqual((await self.repository.get(builder_id)).builder_id, "heatmap")
+        self.assertEqual(
+            (await self.repository.get(builder_id)).target,
+            ExecutionTarget("heatmap:model", ("model",)),
+        )
         with self.assertRaises(UnknownExecutionError):
             await self.repository.get(inference_id)
         self.assertEqual(await self._applied_migrations(), ALL_MIGRATIONS)
@@ -441,6 +517,83 @@ class PostgresExecutionRepositoryTests(
         self.assertIsNone(
             await repository.claim_due("extra-worker", timedelta(seconds=30))
         )
+
+    async def test_overlapping_multi_model_claims_neither_deadlock_nor_overfill(
+        self,
+    ) -> None:
+        model_sets = [("a", "b"), ("b", "a"), ("b", "c"), ("c", "a"), ("a",), ()]
+        for index in range(18):
+            await self._admit_execution(
+                f"overlap-{index}",
+                analysis_id=f"analysis-{index % 2}",
+                models=model_sets[index % len(model_sets)],
+            )
+        repositories = [self._repository() for _ in range(8)]
+
+        claims: list[WorkClaim] = []
+        for _ in range(3):
+            competing = await asyncio.wait_for(
+                asyncio.gather(
+                    *(
+                        repository.claim_due(f"worker-{index}", timedelta(seconds=30))
+                        for index, repository in enumerate(repositories)
+                    )
+                ),
+                timeout=10,
+            )
+            claims.extend(claim for claim in competing if claim is not None)
+
+        in_use: dict[object, int] = {}
+        for claim in claims:
+            for key in claim.target.capacity_keys:
+                in_use[key] = in_use.get(key, 0) + 1
+        self.assertTrue(claims)
+        self.assertLessEqual(max(in_use.values()), 1, in_use)
+
+    async def test_each_served_model_has_its_own_limit(self) -> None:
+        def limits(key: CapacityKey) -> int:
+            return 2 if key.id == "wide" else 1
+
+        repository = self._repository(capacity_limits=limits)
+        for index in range(3):
+            await self._admit_execution(f"wide-{index}", "wide")
+            await self._admit_execution(f"narrow-{index}", "narrow")
+
+        claims = [
+            await repository.claim_due("worker", timedelta(seconds=30))
+            for _ in range(4)
+        ]
+
+        claimed = [claim.target.models for claim in claims if claim is not None]
+        self.assertEqual(sorted(claimed), [("narrow",), ("wide",), ("wide",)])
+
+    async def test_every_attempt_carries_the_admitted_document(self) -> None:
+        document: dict[str, JsonValue] = {
+            "id": "prostate-heatmap",
+            "steps": [{"model": "prostate-classifier-1"}],
+            "digest": "d1",
+        }
+        target = ExecutionTarget(
+            "prostate-heatmap", ("prostate-classifier-1",), "d1", document
+        )
+        admitted = await self.repository.admit(
+            replace(self._admission("document"), target=target)
+        )
+
+        first = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert first is not None
+        await self.repository.settle(
+            first.execution_id,
+            first.fencing_token,
+            ProcessingFailed(ExecutionError("model_failed", "try again"), True),
+        )
+        retry = await self.repository.claim_due("worker", timedelta(seconds=30))
+
+        assert retry is not None
+        self.assertEqual((retry.execution_id, retry.attempt), (first.execution_id, 2))
+        self.assertEqual(retry.target, target)
+        stored = await self.repository.get(admitted.execution.id)
+        self.assertEqual(stored.target, target)
 
     async def test_locked_execution_does_not_block_another_model(self) -> None:
         locked_id = await self._admit_execution("locked", "first-model")
@@ -598,8 +751,7 @@ class PostgresExecutionRepositoryTests(
         admitted = await self.repository.admit(
             Admission(
                 identity=admission.identity,
-                builder_id=admission.builder_id,
-                model_id=admission.model_id,
+                target=admission.target,
                 invocation=admission.invocation,
                 protected_context=admission.protected_context,
                 deadline_at=datetime.now(UTC) + DATABASE_DEADLINE_WINDOW,
@@ -653,8 +805,7 @@ class PostgresExecutionRepositoryTests(
                 key=first.identity.key,
                 fingerprint="different-request",
             ),
-            builder_id=first.builder_id,
-            model_id=first.model_id,
+            target=first.target,
             invocation=first.invocation,
             protected_context=first.protected_context,
             deadline_at=first.deadline_at,
@@ -807,8 +958,7 @@ class PostgresExecutionRepositoryTests(
         admission = self._admission("submission-1")
         expiring = Admission(
             identity=admission.identity,
-            builder_id=admission.builder_id,
-            model_id=admission.model_id,
+            target=admission.target,
             invocation=admission.invocation,
             protected_context=admission.protected_context,
             deadline_at=datetime.now(UTC) + DATABASE_DEADLINE_WINDOW,
@@ -836,8 +986,7 @@ class PostgresExecutionRepositoryTests(
         execution_deadline = datetime.now(UTC) + DATABASE_DEADLINE_WINDOW
         expiring = Admission(
             identity=admission.identity,
-            builder_id=admission.builder_id,
-            model_id=admission.model_id,
+            target=admission.target,
             invocation=admission.invocation,
             protected_context=admission.protected_context,
             deadline_at=execution_deadline,
@@ -873,8 +1022,7 @@ class PostgresExecutionRepositoryTests(
         admission = self._admission("submission-1")
         expiring = Admission(
             identity=admission.identity,
-            builder_id=admission.builder_id,
-            model_id=admission.model_id,
+            target=admission.target,
             invocation=admission.invocation,
             protected_context=admission.protected_context,
             deadline_at=datetime.now(UTC) + DATABASE_DEADLINE_WINDOW,
@@ -908,8 +1056,7 @@ class PostgresExecutionRepositoryTests(
         admission = self._admission("submission-1")
         admission = Admission(
             identity=admission.identity,
-            builder_id=admission.builder_id,
-            model_id=admission.model_id,
+            target=admission.target,
             invocation=admission.invocation,
             protected_context={"credential": "secret-job-token"},
             deadline_at=admission.deadline_at,
@@ -986,13 +1133,18 @@ class PostgresExecutionRepositoryTests(
         self.assertEqual(self.repository._db.cipher.decrypt(bytes(row[0])), {})
 
     def _repository(
-        self, *, schema: str | None = None, per_model_limit: int = 1
+        self,
+        *,
+        schema: str | None = None,
+        per_model_limit: int = 1,
+        capacity_limits: CapacityLimits | None = None,
     ) -> PostgresExecutionRepository:
         repository = PostgresExecutionRepository(
             self.dsn,
             cipher=self.cipher,
             schema=schema or self.schema,
             per_model_limit=per_model_limit,
+            capacity_limits=capacity_limits,
             processing_policy=self.processing_policy,
             finish_policy=self.processing_policy,
         )
@@ -1008,8 +1160,7 @@ class PostgresExecutionRepositoryTests(
                 key=submission_key,
                 fingerprint=f"fingerprint-{submission_key}",
             ),
-            builder_id="heatmap",
-            model_id="prostate-classifier-1",
+            target=ExecutionTarget("prostate-heatmap", ("prostate-classifier-1",)),
             invocation=Invocation(
                 inputs={},
                 configuration={},

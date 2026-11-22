@@ -16,6 +16,7 @@ from model_service.api.scheduler.public import (
     Priority,
     SubmissionIdentity,
 )
+from model_service.api.scheduler.targets import ExecutionTarget
 from model_service.contracts.invocation import InputAccessContext, Invocation
 from model_service.contracts.result import BuilderResult
 
@@ -34,15 +35,18 @@ class ExecutionRepositoryContract:
         self,
         key: str,
         model_id: str = "model-a",
-        builder_id: str = "heatmap",
+        analysis_id: str = "analysis-a",
         priority: int = Priority.NORMAL,
+        *,
+        models: tuple[str, ...] | None = None,
     ) -> str:
         deadline = datetime.now(UTC) + timedelta(minutes=5)
         admitted = await self.repository.admit(
             Admission(
                 identity=SubmissionIdentity("standalone", key, key),
-                builder_id=builder_id,
-                model_id=model_id,
+                target=ExecutionTarget(
+                    analysis_id, (model_id,) if models is None else models
+                ),
                 invocation=Invocation(
                     inputs={},
                     configuration=None,
@@ -193,16 +197,57 @@ class ExecutionRepositoryContract:
         assert selected is not None
         assert selected.execution_id == available_id, selected
 
-    async def test_builders_sharing_a_model_share_its_capacity(self) -> None:
-        await self._admit_execution("active", builder_id="heatmap")
+    async def test_analyses_sharing_a_model_share_its_capacity(self) -> None:
+        await self._admit_execution("active", analysis_id="first")
         active = await self.repository.claim_due("worker", timedelta(seconds=30))
         assert active is not None
         await self._advance_time(timedelta(milliseconds=10))
-        await self._admit_execution("other-builder", builder_id="other")
+        await self._admit_execution("other-analysis", analysis_id="second")
 
         selected = await self.repository.claim_due("worker", timedelta(seconds=30))
 
         assert selected is None, selected
+
+    async def test_a_multi_model_run_waits_for_a_slot_in_every_model(self) -> None:
+        await self._admit_execution("active", "model-b")
+        assert await self.repository.claim_due("worker", timedelta(seconds=30))
+        await self._advance_time(timedelta(milliseconds=10))
+        await self._admit_execution("both", models=("model-a", "model-b"))
+        await self._advance_time(timedelta(milliseconds=10))
+        single_id = await self._admit_execution("single", "model-a")
+
+        selected = await self.repository.claim_due("worker", timedelta(seconds=30))
+
+        assert selected is not None and selected.execution_id == single_id, selected
+
+    async def test_a_multi_model_run_takes_a_slot_in_each_model(self) -> None:
+        both_id = await self._admit_execution("both", models=("model-b", "model-a"))
+        claimed = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert claimed is not None and claimed.execution_id == both_id, claimed
+        await self._admit_execution("first", "model-a")
+        await self._admit_execution("second", "model-b")
+
+        selected = await self.repository.claim_due("worker", timedelta(seconds=30))
+
+        assert selected is None, selected
+
+    async def test_model_free_runs_are_counted_by_their_analysis(self) -> None:
+        await self._admit_execution("active", analysis_id="free", models=())
+        assert await self.repository.claim_due("worker", timedelta(seconds=30))
+        await self._advance_time(timedelta(milliseconds=10))
+        await self._admit_execution("same", analysis_id="free", models=())
+        await self._advance_time(timedelta(milliseconds=10))
+        other_id = await self._admit_execution("other", analysis_id="also", models=())
+        await self._advance_time(timedelta(milliseconds=10))
+        model_id = await self._admit_execution("model", analysis_id="free")
+
+        first = await self.repository.claim_due("worker", timedelta(seconds=30))
+        second = await self.repository.claim_due("worker", timedelta(seconds=30))
+        third = await self.repository.claim_due("worker", timedelta(seconds=30))
+
+        assert first is not None and first.execution_id == other_id, first
+        assert second is not None and second.execution_id == model_id, second
+        assert third is None, third
 
     async def test_terminal_report_precedes_older_processing(self) -> None:
         await self._admit_execution("older")

@@ -29,6 +29,7 @@ from model_service.api.scheduler.public import (
 )
 from model_service.api.scheduler.status import ExecutionStatus
 from model_service.api.scheduler.store.repository import ExecutionRepository
+from model_service.api.scheduler.targets import fixed_limit
 from model_service.api.scheduler.transitions.common import work_deadline_at
 from model_service.api.scheduler.transitions.execution_transitions import (
     ExecutionTransitions,
@@ -48,6 +49,8 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Mapping
 
     from model_service.api.scheduler.public import SubmissionIdentity
+    from model_service.api.scheduler.targets import CapacityKey, CapacityLimits
+    from model_service.contracts.analysis_http import AnalysisRunRequest
 
 
 def utc_now() -> datetime:
@@ -63,14 +66,13 @@ class InMemoryExecutionRepository(ExecutionRepository):
         *,
         clock: Callable[[], datetime] = utc_now,
         per_model_limit: int = 1,
+        capacity_limits: CapacityLimits | None = None,
         processing_policy: RetryPolicy | None = None,
         finish_policy: RetryPolicy | None = None,
     ) -> None:
         """Set capacity and retry policies, create the state machine, and start with empty records under one async lock."""
-        if per_model_limit <= 0:
-            raise ValueError("per-model limits must be positive")
         self._clock = clock
-        self._per_model_limit = per_model_limit
+        self._capacity_limit = capacity_limits or fixed_limit(per_model_limit)
         self._processing_policy = processing_policy or RetryPolicy(
             max_attempts=3,
             initial_backoff=timedelta(seconds=5),
@@ -162,7 +164,7 @@ class InMemoryExecutionRepository(ExecutionRepository):
         owner: str,
         lease_duration: timedelta,
     ) -> WorkClaim | None:
-        """Lease the highest-priority due work within per-model processing capacity."""
+        """Lease the highest-priority due work with a free slot in every pool it uses."""
         async with self._operation():
             now = self._clock()
             active = self._active_processing(now)
@@ -174,45 +176,45 @@ class InMemoryExecutionRepository(ExecutionRepository):
                 and execution.next_attempt_at <= now
                 and execution.fencing_token is None
             ]
-            first_created: dict[str, datetime] = {}
-            top_priority: dict[str, int] = {}
+            first_created: dict[object, datetime] = {}
+            top_priority: dict[object, int] = {}
             for execution in due:
                 if execution.work_kind is WorkKind.PROCESSING:
-                    target = execution.model_id
-                    first_created[target] = min(
-                        first_created.get(target, execution.created_at),
+                    group = _group(execution)
+                    first_created[group] = min(
+                        first_created.get(group, execution.created_at),
                         execution.created_at,
                     )
-                    top_priority[target] = max(
-                        top_priority.get(target, execution.priority),
+                    top_priority[group] = max(
+                        top_priority.get(group, execution.priority),
                         execution.priority,
                     )
 
             def order(item: ExecutionRecord) -> tuple[object, ...]:
-                group: tuple[object, ...]
+                rank: tuple[object, ...]
                 if item.work_kind is WorkKind.PROCESSING:
-                    target = item.model_id
-                    group = (-top_priority[target], first_created[target])
+                    group = _group(item)
+                    rank = (-top_priority[group], first_created[group])
                 else:
-                    group = (-item.priority, item.next_attempt_at)
+                    rank = (-item.priority, item.next_attempt_at)
                 return (
                     item.work_kind is WorkKind.PROCESSING,
-                    *group,
+                    *rank,
                     -item.priority,
                     item.next_attempt_at,
                     item.created_at,
                 )
 
             for execution in sorted(due, key=order):
-                target = execution.model_id
-                if (
-                    execution.work_kind is WorkKind.PROCESSING
-                    and active.get(target, 0) >= self._per_model_limit
+                keys = execution.target.capacity_keys
+                if execution.work_kind is WorkKind.PROCESSING and any(
+                    active.get(key, 0) >= self._capacity_limit(key) for key in keys
                 ):
                     continue
                 token = str(uuid4())
                 if execution.work_kind is WorkKind.PROCESSING:
-                    active[target] = active.get(target, 0) + 1
+                    for key in keys:
+                        active[key] = active.get(key, 0) + 1
                 claimed = self._transitions.leases.claim(
                     execution,
                     owner=owner,
@@ -299,9 +301,9 @@ class InMemoryExecutionRepository(ExecutionRepository):
     def _store(self, execution: ExecutionRecord) -> None:
         self._executions[execution.id] = execution
 
-    def _active_processing(self, now: datetime) -> dict[str, int]:
-        """Count only processing claims with an unexpired lease per model."""
-        counts: dict[str, int] = {}
+    def _active_processing(self, now: datetime) -> dict[CapacityKey, int]:
+        """Count only processing claims with an unexpired lease per capacity key."""
+        counts: dict[CapacityKey, int] = {}
         for execution in self._executions.values():
             if (
                 execution.work_kind is WorkKind.PROCESSING
@@ -309,8 +311,8 @@ class InMemoryExecutionRepository(ExecutionRepository):
                 and execution.lease_expires_at is not None
                 and execution.lease_expires_at > now
             ):
-                target = execution.model_id
-                counts[target] = counts.get(target, 0) + 1
+                for key in execution.target.capacity_keys:
+                    counts[key] = counts.get(key, 0) + 1
         return counts
 
     def _expire_deadlines(self, now: datetime) -> None:
@@ -347,6 +349,12 @@ class InMemoryExecutionRepository(ExecutionRepository):
             raise UnknownExecutionError(execution_id) from error
 
 
+def _group(execution: ExecutionRecord) -> object:
+    """Processing rows compete as groups: by served models, a model-free one by ID."""
+    target = execution.target
+    return (target.models, target.analysis_id if not target.models else None)
+
+
 def resolve_test_model(builder_id: str, model_id: str) -> ModelBinding:
     """Resolve any model ID to a small binding of the contract the builder accepts."""
     spec = get_builder(builder_id)
@@ -363,11 +371,21 @@ type Handler = Callable[
 
 
 class FakeDispatch:
-    """Run in-process handlers by builder ID and record the models they received."""
+    """Run in-process handlers by builder or analysis ID and record what they received."""
 
     def __init__(self, handlers: Mapping[str, Handler]) -> None:
         self._handlers = dict(handlers)
         self.models: list[ModelBinding] = []
+        self.analyses: list[AnalysisRunRequest] = []
+
+    async def run_analysis(self, request: AnalysisRunRequest) -> BuilderResult:
+        self.analyses.append(request)
+        value = self._handlers[str(request.analysis["id"])](
+            request.invocation, request.execution_context
+        )
+        if inspect.isawaitable(value):
+            return await value
+        return value
 
     async def run(
         self,

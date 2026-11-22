@@ -25,6 +25,7 @@ from model_service.api.scheduler.internal_state import (
     WorkKind,
 )
 from model_service.api.scheduler.public import (
+    AnyScheduleRequest,
     IncompatibleModelError,
     InvalidScheduleRequestError,
     PreparedInvocation,
@@ -43,6 +44,7 @@ from model_service.api.scheduler.status import ExecutionStatus
 from model_service.api.scheduler.store.repository import (
     ExecutionRepositoryUnavailableError,
 )
+from model_service.api.scheduler.targets import ExecutionTarget
 from model_service.api.scheduler.worker import ExecutionWorker
 from model_service.contracts.invocation import (
     ExecutionContext,
@@ -88,7 +90,7 @@ class RecordingProvider(StandaloneProvider):
 
     async def prepare(
         self,
-        request: ScheduleRequest,
+        request: AnyScheduleRequest,
         deadline_at: datetime,
     ) -> PreparedInvocation:
         """Attach configured protected context to the minimal prepared invocation."""
@@ -449,8 +451,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         report_deadline = clock() + timedelta(hours=1)
         admission = Admission(
             identity=SubmissionIdentity("external", "job-1", "fingerprint"),
-            builder_id="heatmap",
-            model_id="prostate-classifier-1",
+            target=ExecutionTarget.builder("heatmap", "prostate-classifier-1"),
             invocation=Invocation(
                 inputs={},
                 configuration={},

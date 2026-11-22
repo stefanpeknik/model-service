@@ -32,6 +32,7 @@ from model_service.api.scheduler.store.repository import (
     ExecutionRepositoryUnavailableError,
 )
 from model_service.api.scheduler.store.rows import DEFAULT_SCHEMA, ExecutionRow
+from model_service.api.scheduler.targets import ExecutionTarget, fixed_limit
 from model_service.api.scheduler.transitions.execution_transitions import (
     ExecutionTransitions,
 )
@@ -43,6 +44,7 @@ if TYPE_CHECKING:
     from model_service.api.scheduler.store.protected_context import (
         ProtectedContextCipher,
     )
+    from model_service.api.scheduler.targets import CapacityLimits
 
 
 class PostgresDatabase:
@@ -50,7 +52,7 @@ class PostgresDatabase:
 
     Attributes:
         cipher: Cipher for the stored provider context.
-        per_model_limit: Concurrent builder executions allowed per model.
+        capacity_limit: Attempts allowed at once per capacity key.
         transitions: The shared state machine.
     """
 
@@ -61,6 +63,7 @@ class PostgresDatabase:
         cipher: ProtectedContextCipher,
         schema: str = DEFAULT_SCHEMA,
         per_model_limit: int = 1,
+        capacity_limits: CapacityLimits | None = None,
         processing_policy: RetryPolicy | None = None,
         finish_policy: RetryPolicy | None = None,
         pool_size: int = 10,
@@ -73,7 +76,10 @@ class PostgresDatabase:
             dsn: libpq DSN or PostgreSQL URL.
             cipher: Cipher for the stored provider context.
             schema: PostgreSQL schema holding the execution table.
-            per_model_limit: Concurrent builder executions allowed per model.
+            per_model_limit: Attempts allowed at once per capacity key when
+                `capacity_limits` is None.
+            capacity_limits: Attempts allowed at once per capacity key (a served
+                model, or a model-free analysis).
             processing_policy: Processing retry policy; defaults to 3 attempts, 5 s to 1 min backoff.
             finish_policy: Provider finish retry policy; same default.
             pool_size: Pooled connections, with as many again allowed as overflow.
@@ -83,8 +89,6 @@ class PostgresDatabase:
         """
         if not schema or not schema.replace("_", "a").isalnum():
             raise ValueError("PostgreSQL schema must be an identifier")
-        if per_model_limit <= 0:
-            raise ValueError("per-model limits must be positive")
         self.cipher = cipher
         self._schema = schema
         self._dsn = dsn
@@ -107,7 +111,7 @@ class PostgresDatabase:
             execution_options={"schema_translate_map": {DEFAULT_SCHEMA: schema}},
         )
         self._sessions = async_sessionmaker(self._engine, expire_on_commit=False)
-        self.per_model_limit = per_model_limit
+        self.capacity_limit = capacity_limits or fixed_limit(per_model_limit)
         self.transitions = ExecutionTransitions(
             processing_policy
             or RetryPolicy(
@@ -276,8 +280,12 @@ class PostgresDatabase:
                 key=row.submission_key,
                 fingerprint=row.request_fingerprint,
             ),
-            builder_id=row.builder_id,
-            model_id=row.model_id,
+            target=ExecutionTarget(
+                analysis_id=row.analysis_id,
+                models=tuple(row.models),
+                analysis_digest=row.analysis_digest,
+                analysis=row.analysis,
+            ),
             status=row.status,
             invocation=row.invocation,
             protected_context=(

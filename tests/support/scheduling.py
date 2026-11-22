@@ -13,9 +13,9 @@ if TYPE_CHECKING:
     from datetime import datetime, timedelta
 
     from model_service.api.scheduler.public import (
+        AnyScheduleRequest,
         BeforeMutation,
         ProviderFinishOutcome,
-        ScheduleRequest,
     )
     from model_service.contracts.json_values import JsonValue
 
@@ -25,7 +25,7 @@ class StandaloneProvider(ProviderAdapter):
 
     name = "standalone"
 
-    def identify(self, request: ScheduleRequest) -> SubmissionIdentity:
+    def identify(self, request: AnyScheduleRequest) -> SubmissionIdentity:
         """Use the test replay key with a fixed fingerprint to isolate scheduler replay behavior."""
         assert request.idempotency_key is not None
         return SubmissionIdentity(
@@ -36,7 +36,7 @@ class StandaloneProvider(ProviderAdapter):
 
     async def prepare(
         self,
-        request: ScheduleRequest,
+        request: AnyScheduleRequest,
         deadline_at: datetime,
     ) -> PreparedInvocation:
         """Create an empty shared-storage invocation with the scheduler-supplied deadline."""

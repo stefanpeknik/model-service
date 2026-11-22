@@ -6,6 +6,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from model_service.api.analysis_requests import check_invocation
 from model_service.builders.registry import get_builder
 from model_service.catalog.analyses import resolve_run
 from model_service.contracts.analysis_http import AnalysisRunRequest
@@ -20,8 +21,6 @@ if TYPE_CHECKING:
     from model_service.api.routes.v1.builders import ImmediateBuilderRequest
     from model_service.api.scheduler.protocols import AnalysisDispatch, BuilderDispatch
     from model_service.catalog import Catalog
-    from model_service.catalog.analyses import Analysis
-    from model_service.contracts.invocation import Invocation
     from model_service.contracts.result import BuilderResult
 
 
@@ -116,26 +115,9 @@ class SynchronousAnalysisService:
             request.invocation(request.deadline_at),
             configuration=analysis.settings(),
         )
-        _check(analysis, invocation)
+        if invocation.deadline_at <= datetime.now(UTC):
+            raise InvalidInvocation("deadline_at must be in the future")
+        check_invocation(analysis, invocation)
         return await self._dispatch.run_analysis(
             AnalysisRunRequest(invocation, resolved.document)
-        )
-
-
-def _check(analysis: Analysis, invocation: Invocation) -> None:
-    """Refuse a request the analysis cannot run, before it reaches the runner."""
-    if invocation.deadline_at <= datetime.now(UTC):
-        raise InvalidInvocation("deadline_at must be in the future")
-    inputs = ", ".join(sorted(analysis.inputs))
-    if unknown := sorted(invocation.inputs.keys() - analysis.inputs.keys()):
-        raise InvalidInvocation(
-            f"unknown inputs: {', '.join(unknown)}; {analysis.id} reads {inputs}"
-        )
-    required = {name for name, needed in analysis.inputs.items() if needed}
-    if missing := sorted(required - invocation.inputs.keys()):
-        raise InvalidInvocation(f"missing inputs: {', '.join(missing)}")
-    if invocation.output_path is not None and len(analysis.sinks) != 1:
-        raise InvalidInvocation(
-            f"output_path needs an analysis with one output; {analysis.id} has "
-            f"{len(analysis.sinks)}"
         )

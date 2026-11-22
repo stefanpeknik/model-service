@@ -11,6 +11,7 @@ from model_service.api.scheduler.public import (
     ProviderFinishFailureError,
     ProviderSuccess,
 )
+from model_service.api.scheduler.targets import ExecutionTarget
 from model_service.builders.declarations import OutputSpec
 from model_service.builders.registry import get_builder
 from model_service.contracts.model_declarations import SpatialScoresModel
@@ -178,7 +179,7 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
                             )
                         }
                     ),
-                    "heatmap",
+                    ExecutionTarget.builder("heatmap", "prostate-classifier-1"),
                 ),
             )
 
@@ -210,7 +211,7 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
                             )
                         }
                     ),
-                    "heatmap",
+                    ExecutionTarget.builder("heatmap", "prostate-classifier-1"),
                 ),
             )
 
@@ -265,7 +266,7 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
                             "score": InlineOutput("high"),
                         }
                     ),
-                    "heatmap",
+                    ExecutionTarget.builder("heatmap", "prostate-classifier-1"),
                 ),
             )
 

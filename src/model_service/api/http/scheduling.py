@@ -14,12 +14,14 @@ from model_service.api.http.errors import (
     unavailable,
 )
 from model_service.api.scheduler.public import (
+    AnalysisScheduleRequest,
     InvalidScheduleRequestError,
     ScheduleConflictError,
     SchedulingUnavailableError,
 )
 from model_service.contracts.failures import (
     IncompatibleModelError,
+    UnknownAnalysisError,
     UnknownBuilderError,
     UnknownModelError,
 )
@@ -29,7 +31,7 @@ if TYPE_CHECKING:
     from fastapi import Response
 
     from model_service.api.scheduler.protocols import Scheduler
-    from model_service.api.scheduler.public import ScheduleRequest, ScheduleResult
+    from model_service.api.scheduler.public import AnyScheduleRequest, ScheduleResult
 
 
 logger = logging.getLogger(__name__)
@@ -58,16 +60,16 @@ def require_idempotency_key(
 
 async def submit(
     scheduler: Scheduler,
-    request: ScheduleRequest,
+    request: AnyScheduleRequest,
     response: Response,
 ) -> ScheduleResult:
-    """Admit a builder execution and map refusals to API errors.
+    """Admit an analysis or builder execution and map refusals to API errors.
 
     Refusals are logged, since callers may not log the response body.
 
     Args:
         scheduler: Admits the execution.
-        request: The builder schedule request.
+        request: The analysis or builder schedule request.
         response: The outgoing response; its status becomes 202 when the
             execution is created and 200 when an existing one is returned.
 
@@ -75,13 +77,18 @@ async def submit(
         The execution and whether it was created.
 
     Raises:
-        HTTPException: 404 for an unknown builder or model, 409 for an
+        HTTPException: 404 for an unknown analysis, builder or model, 409 for an
             idempotency conflict, 422 for an incompatible model or invalid
             request, 503 if scheduling is unavailable.
     """
     try:
         result = await scheduler.schedule(request)
-    except (UnknownBuilderError, UnknownModelError, IncompatibleModelError) as error:
+    except (
+        UnknownAnalysisError,
+        UnknownBuilderError,
+        UnknownModelError,
+        IncompatibleModelError,
+    ) as error:
         _log_refusal(request, error)
         raise lookup_error(error) from error
     except ScheduleConflictError as error:
@@ -97,7 +104,10 @@ async def submit(
     return result
 
 
-def _log_refusal(request: ScheduleRequest, error: Exception) -> None:
+def _log_refusal(request: AnyScheduleRequest, error: Exception) -> None:
     """Log why a schedule request was refused; error messages are the safe public ones."""
-    subject = f"{request.provider} {request.builder_id} on {request.model_id}"
+    if isinstance(request, AnalysisScheduleRequest):
+        subject = f"{request.provider} {request.analysis_id}"
+    else:
+        subject = f"{request.provider} {request.builder_id} on {request.model_id}"
     logger.warning("Refused %s: %s", subject, error)

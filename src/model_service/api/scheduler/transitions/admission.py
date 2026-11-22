@@ -39,8 +39,7 @@ class AdmissionTransitions:
         return ExecutionRecord(
             id=execution_id,
             identity=admission.identity,
-            builder_id=admission.builder_id,
-            model_id=admission.model_id,
+            target=admission.target,
             status=ExecutionStatus.QUEUED,
             invocation=admission.invocation,
             protected_context=admission.protected_context,

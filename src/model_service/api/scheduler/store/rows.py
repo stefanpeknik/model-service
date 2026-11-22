@@ -25,13 +25,14 @@ from sqlalchemy import (
     literal,
     or_,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
 
 from model_service.api.scheduler.internal_state import WorkKind
 from model_service.api.scheduler.status import ExecutionStatus
 from model_service.contracts.invocation import Invocation
+from model_service.contracts.json_values import JsonValue
 from model_service.contracts.result import BuilderResult
 
 
@@ -137,8 +138,12 @@ class ExecutionRow(Base):
     provider: Mapped[str] = mapped_column(Text)
     submission_key: Mapped[str] = mapped_column(Text)
     request_fingerprint: Mapped[str] = mapped_column(Text)
-    builder_id: Mapped[str] = mapped_column(Text)
-    model_id: Mapped[str] = mapped_column(Text)
+    analysis_id: Mapped[str] = mapped_column(Text)
+    models: Mapped[list[str]] = mapped_column(ARRAY(Text))
+    analysis_digest: Mapped[str | None] = mapped_column(Text)
+    analysis: Mapped[dict[str, JsonValue] | None] = mapped_column(
+        JSONB(none_as_null=True)
+    )
     status: Mapped[ExecutionStatus] = mapped_column(
         Enum(
             ExecutionStatus,
@@ -194,6 +199,9 @@ CheckConstraint(
     ExecutionRow.error_code.is_(None) == ExecutionRow.error_message.is_(None)
 )
 CheckConstraint(
+    ExecutionRow.analysis.is_(None) == ExecutionRow.analysis_digest.is_(None)
+)
+CheckConstraint(
     or_(
         and_(
             ExecutionRow.fencing_token.is_(None),
@@ -228,7 +236,6 @@ Index(
 )
 Index(
     "executions_active_processing_idx",
-    ExecutionRow.model_id,
     ExecutionRow.lease_expires_at,
     postgresql_where=and_(
         ExecutionRow.work_kind == WorkKind.PROCESSING,

@@ -1,7 +1,7 @@
 """What the API's and providers' routes need from the scheduler, and what it runs builders through.
 
 ExecutionScheduler implements `Scheduler` and HTTPBuilderDispatch implements
-`BuilderDispatch`; each documents its methods. Tests pass fakes.
+`RunDispatch`; each documents its methods. Tests pass fakes.
 """
 
 from __future__ import annotations
@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from model_service.api.scheduler.public import (
+        AnyScheduleRequest,
         ExecutionView,
-        ScheduleRequest,
         ScheduleResult,
     )
     from model_service.contracts.analysis_http import AnalysisRunRequest
@@ -33,8 +33,8 @@ class Scheduler(Protocol):
         """Check that durable storage is reachable."""
         ...
 
-    async def schedule(self, request: ScheduleRequest) -> ScheduleResult:
-        """Admit a durable builder execution, or return the one its idempotency key names."""
+    async def schedule(self, request: AnyScheduleRequest) -> ScheduleResult:
+        """Admit a durable analysis or builder execution, or return the one its idempotency key names."""
         ...
 
     async def get(self, execution_id: str) -> ExecutionView:
@@ -70,3 +70,7 @@ class AnalysisDispatch(Protocol):
     async def run_analysis(self, request: AnalysisRunRequest) -> BuilderResult:
         """Run one resolved analysis and return its result."""
         ...
+
+
+class RunDispatch(BuilderDispatch, AnalysisDispatch, Protocol):
+    """How the scheduler runs an attempt: an analysis on the runner, or a builder."""

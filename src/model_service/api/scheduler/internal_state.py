@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
     from model_service.api.scheduler.public import ExecutionError
     from model_service.api.scheduler.status import ExecutionStatus
+    from model_service.api.scheduler.targets import ExecutionTarget
     from model_service.contracts.invocation import Invocation
     from model_service.contracts.json_values import JsonValue
     from model_service.contracts.result import BuilderResult
@@ -95,8 +96,7 @@ class Admission:
     """Carry the complete prepared submission that persistence must admit atomically."""
 
     identity: SubmissionIdentity
-    builder_id: str
-    model_id: str
+    target: ExecutionTarget
     invocation: Invocation
     protected_context: dict[str, JsonValue]
     deadline_at: datetime
@@ -110,8 +110,7 @@ class ExecutionRecord:
 
     id: str
     identity: SubmissionIdentity
-    builder_id: str
-    model_id: str
+    target: ExecutionTarget
     status: ExecutionStatus
     invocation: Invocation
     protected_context: dict[str, JsonValue]
@@ -153,8 +152,7 @@ class WorkClaim:
     """Give a worker the inputs and token for one leased processing or provider attempt."""
 
     execution_id: str
-    builder_id: str
-    model_id: str
+    target: ExecutionTarget
     provider: ProviderName
     kind: WorkKind
     invocation: Invocation

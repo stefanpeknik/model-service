@@ -74,7 +74,10 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
 
-    from model_service.api.scheduler.public import BeforeMutation
+    from model_service.api.scheduler.public import (
+        AnyScheduleRequest,
+        BeforeMutation,
+    )
     from model_service.contracts.json_values import JsonValue
     from model_service.providers.empaia.ead.builder_io import BuilderIo
     from model_service.providers.empaia.publishing.publishers import PublisherRegistry
@@ -118,7 +121,7 @@ class EmpaiaProviderAdapter(ProviderAdapter):
         self._allowed_api_urls = tuple(url.rstrip("/") for url in allowed_api_urls)
         self._workspace_root = workspace_root
 
-    def identify(self, request: ScheduleRequest) -> SubmissionIdentity:
+    def identify(self, request: AnyScheduleRequest) -> SubmissionIdentity:
         """Key admission by installation and job, fingerprinting stable request fields.
 
         Renewable credentials are left out of the fingerprint.
@@ -130,8 +133,10 @@ class EmpaiaProviderAdapter(ProviderAdapter):
             The identity keyed `<installation_id>:<job_id>`.
 
         Raises:
-            InvalidScheduleRequestError: If the body is not a valid EMPAIA payload.
+            InvalidScheduleRequestError: If the body is not a valid EMPAIA payload,
+                or the request runs an analysis rather than a builder.
         """
+        request = _builder_request(request)
         context = schedule_payload(request.body)
         canonical = json.dumps(
             {
@@ -153,7 +158,7 @@ class EmpaiaProviderAdapter(ProviderAdapter):
 
     async def prepare(
         self,
-        request: ScheduleRequest,
+        request: AnyScheduleRequest,
         deadline_at: datetime,
     ) -> PreparedInvocation:
         """Admit an EMPAIA job as an invocation of provider inputs.
@@ -182,6 +187,7 @@ class EmpaiaProviderAdapter(ProviderAdapter):
             SchedulingUnavailableError: If the gateway cannot be created or closed, or
                 the App Service is temporarily unavailable.
         """
+        request = _builder_request(request)
         context = schedule_payload(request.body)
         if not allowed(context.api_url, self._allowed_api_urls):
             raise InvalidScheduleRequestError(
@@ -286,7 +292,8 @@ class EmpaiaProviderAdapter(ProviderAdapter):
             mutation_completed = False
             try:
                 if isinstance(outcome, ProviderSuccess):
-                    builder = get_builder(outcome.builder_id)
+                    builder_id = _builder_id(outcome)
+                    builder = get_builder(builder_id)
                     try:
                         outputs = builder.output_model.model_validate(
                             outcome.result.outputs
@@ -296,10 +303,10 @@ class EmpaiaProviderAdapter(ProviderAdapter):
                             "EMPAIA job result does not match its builder's outputs"
                         ) from error
                     declared = builder.outputs
-                    io = self._io.get(outcome.builder_id)
+                    io = self._io.get(builder_id)
                     if io is None:
                         raise EmpaiaGatewayError.invalid(
-                            f"builder {outcome.builder_id!r} is not offered in EMPAIA"
+                            f"builder {builder_id!r} is not offered in EMPAIA"
                         )
                     # Every output is checked before the first write.
                     commits = []
@@ -350,3 +357,28 @@ class EmpaiaProviderAdapter(ProviderAdapter):
             return
         directory = job_workspace(self._workspace_root, context.api_url, context.job_id)
         await asyncio.to_thread(remove_directory, directory)
+
+
+def _builder_request(request: AnyScheduleRequest) -> ScheduleRequest:
+    """The request as a builder run; EMPAIA jobs don't run analyses yet.
+
+    Raises:
+        InvalidScheduleRequestError: The request runs an analysis.
+    """
+    if not isinstance(request, ScheduleRequest):
+        raise InvalidScheduleRequestError("EMPAIA jobs run builders")
+    return request
+
+
+def _builder_id(outcome: ProviderSuccess) -> str:
+    """The builder whose declarations describe a result's outputs.
+
+    Raises:
+        EmpaiaGatewayError: The execution ran no builder.
+    """
+    pair = outcome.target.builder_pair()
+    if outcome.target.analysis is not None or pair is None:
+        raise EmpaiaGatewayError.invalid(
+            f"{outcome.target.analysis_id!r} is not offered in EMPAIA"
+        )
+    return pair[0]
