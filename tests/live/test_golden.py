@@ -9,9 +9,11 @@ Environment:
 - `MODEL_SERVICE_LIVE_NAMESPACE`: where run outputs are fetched from with
   `oc exec` (default `rationai-infra-test-ns`);
 - `MODEL_SERVICE_LIVE_MODELS` / `MODEL_SERVICE_LIVE_RUNS`: comma-separated
-  subsets to check (default: all recorded).
-
-Runs go through today's builder route until analyses have their own route.
+  subsets to check (default: all recorded);
+- `MODEL_SERVICE_LIVE_ROUTE`: `analyses` runs through
+  `/v1/analyses/{id}/run`, `builders` through today's builder and model
+  route. Unset, an analysis the API lists runs through its own route and any
+  other through the builder route.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ import subprocess
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
@@ -28,12 +31,17 @@ import pytest
 from tests.live.golden import (
     RAW_CASES,
     RUN_CASES,
+    RunCase,
     check_hashes,
     compare_embedding_tables,
     compare_reply,
     compare_score_grids,
     load_manifest,
 )
+
+
+if TYPE_CHECKING:
+    import httpx
 
 
 pytestmark = pytest.mark.live
@@ -84,6 +92,30 @@ def require(variable: str) -> str:
     return value
 
 
+def run_route(client: httpx.Client, case: RunCase) -> str:
+    """Pick the route a run case goes through.
+
+    Args:
+        client: The API client.
+        case: The run case.
+
+    Returns:
+        The analysis route or today's builder route, per `MODEL_SERVICE_LIVE_ROUTE`.
+    """
+    analyses = f"/v1/analyses/{case.analysis}/run"
+    builders = f"/v1/builders/{case.builder}/models/{case.model}/run"
+    chosen = os.environ.get("MODEL_SERVICE_LIVE_ROUTE")
+    if chosen in ("analyses", "builders"):
+        return analyses if chosen == "analyses" else builders
+    if chosen:
+        pytest.fail(f"MODEL_SERVICE_LIVE_ROUTE is {chosen!r}, not analyses or builders")
+    listed = client.get("/v1/analyses")
+    deployed = listed.status_code == 200 and any(
+        item["id"] == case.analysis for item in listed.json()
+    )
+    return analyses if deployed else builders
+
+
 def test_reference_set_matches_manifest() -> None:
     """The local reference set is the one the manifest describes."""
     manifest = load_manifest()
@@ -132,10 +164,11 @@ def test_run_matches_references(analysis: str) -> None:
     with httpx.Client(
         base_url=require("MODEL_SERVICE_API_URL"), timeout=7300
     ) as client:
+        route = run_route(client, case)
         for reference in sorted((GOLDEN / "runs" / analysis).iterdir()):
             output = f"{prefix}/{analysis}/{reference.name}"
             response = client.post(
-                f"/v1/builders/{case.builder}/models/{case.model}/run",
+                route,
                 json={
                     "inputs": {
                         "slide": {
