@@ -2,9 +2,11 @@
 
 `deploy/helm/rayservice/templates/model-catalog.yaml` renders three files:
 
-- `catalog.json`: `{"served-models": {id: document}}`, the deployed served
-  models after the environment's patches. They resolve through the catalog
-  loader, so the API runs the same load-time checks as the catalog test;
+- `catalog.json`: `{"served-models": {id: document}, "analyses": {id:
+  document}}`, the deployed served models and analyses after the
+  environment's patches. They resolve through the catalog loader, so the API
+  runs the same load-time checks as the catalog test, and an analysis naming
+  a served model that isn't deployed is an error naming that model;
 - `model-catalog.json`: the old model files of models not yet migrated
   (transitional);
 - `provider-blocks.json`: `{id: {block: value}}`, the served models' provider
@@ -26,14 +28,13 @@ from model_service.api.model_catalog import (
     ModelCatalog,
     served_model_binding,
 )
-from model_service.catalog import CatalogInvalid, load_catalog
+from model_service.catalog import Catalog, CatalogInvalid, load_catalog
 from model_service.catalog.served_models import FOLDER
 
 
 if TYPE_CHECKING:
     from collections.abc import Collection
 
-    from model_service.catalog.served_models import ServedModel
     from model_service.contracts.model_declarations import ModelBinding
 
 
@@ -58,14 +59,16 @@ def read_catalog(
         provider_blocks: The top-level keys providers read.
 
     Returns:
-        The catalog.
+        The catalog, with the resolved served models and analyses as
+        `resolved`.
 
     Raises:
-        CatalogError: If a file cannot be read, a served model does not
-            resolve (the message lists every error in the catalog's format),
-            or a provider block is one no provider takes.
+        CatalogError: If a file cannot be read, a served model or analysis
+            does not resolve (the message lists every error in the catalog's
+            format), or a provider block is one no provider takes.
     """
-    served = _served_models(_read_json(directory / CATALOG_FILE))
+    resolved = _resolve(_read_json(directory / CATALOG_FILE))
+    served = [entry.value for entry in resolved.entries(FOLDER).values()]
     served_ids = {model.id for model in served}
     blocks = _provider_blocks(
         _read_json(directory / BLOCKS_FILE), served_ids, provider_blocks
@@ -85,7 +88,7 @@ def read_catalog(
             **{i: b for i, b in old.items() if i not in served_ids},
             **blocks[key],
         }
-    return ModelCatalog(models, blocks)
+    return ModelCatalog(models, blocks, resolved=resolved)
 
 
 def _read_json(path: Path) -> Any:
@@ -95,7 +98,7 @@ def _read_json(path: Path) -> Any:
         raise CatalogError(f"cannot read model catalog file {path}") from error
 
 
-def _served_models(data: object) -> list[ServedModel]:
+def _resolve(data: object) -> Catalog:
     """Resolve `catalog.json` through the catalog loader.
 
     The loader reads a catalog directory, so the documents are written out
@@ -121,7 +124,7 @@ def _served_models(data: object) -> list[ServedModel]:
             catalog = load_catalog(root)
         except CatalogInvalid as invalid:
             raise CatalogError(str(invalid)) from invalid
-    return [entry.value for entry in catalog.entries(FOLDER).values()]
+    return catalog
 
 
 def _safe_name(name: object) -> bool:

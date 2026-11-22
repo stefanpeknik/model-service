@@ -27,6 +27,10 @@ CATALOG = Path(__file__).resolve().parents[2] / "catalog"
 SMALL = served_document()
 
 
+def heatmap() -> dict[str, Any]:
+    return load_catalog(CATALOG).entries("analyses")["prostate-heatmap"].document
+
+
 def prostate() -> dict[str, Any]:
     entry = load_catalog(CATALOG, "rationai-test").entries("served-models")[
         "prostate-classifier-1"
@@ -39,11 +43,12 @@ def mount(
     served: dict[str, Any],
     legacy: list[dict[str, Any]] | None = None,
     blocks: dict[str, Any] | None = None,
+    analyses: dict[str, Any] | None = None,
 ) -> Path:
     """Write the files the chart's catalog ConfigMap holds."""
     directory.mkdir(exist_ok=True)
     files = {
-        "catalog.json": {"served-models": served},
+        "catalog.json": {"served-models": served, "analyses": analyses or {}},
         "model-catalog.json": legacy or [],
         "provider-blocks.json": blocks or {},
     }
@@ -150,3 +155,42 @@ def test_a_catalog_that_does_not_load_at_startup_stops_the_api(
         MountedCatalog(directory)
     with pytest.raises(CatalogError):
         MountedCatalog(tmp_path / "missing")
+
+
+def test_analyses_load_beside_the_served_models_they_call(tmp_path: Path) -> None:
+    directory = mount(
+        tmp_path / "mount",
+        {"prostate-classifier-1": prostate()},
+        analyses={"prostate-heatmap": heatmap()},
+    )
+
+    catalog = MountedCatalog(directory)
+
+    (analysis,) = catalog.resolved.entries("analyses").values()
+    assert analysis.id == "prostate-heatmap"
+    assert list(analysis.value.models) == ["prostate-classifier-1"]
+
+
+def test_an_analysis_naming_an_undeployed_served_model_names_it(
+    tmp_path: Path,
+) -> None:
+    directory = mount(
+        tmp_path / "mount", {"small": SMALL}, analyses={"prostate-heatmap": heatmap()}
+    )
+
+    with pytest.raises(CatalogError, match="no served model `prostate-classifier-1`"):
+        MountedCatalog(directory)
+
+
+def test_a_reload_brings_new_analyses(tmp_path: Path) -> None:
+    directory = mount(tmp_path / "mount", {"prostate-classifier-1": prostate()})
+    catalog = MountedCatalog(directory)
+
+    mount(
+        directory,
+        {"prostate-classifier-1": prostate()},
+        analyses={"prostate-heatmap": heatmap()},
+    )
+    catalog.refresh()
+
+    assert list(catalog.resolved.entries("analyses")) == ["prostate-heatmap"]

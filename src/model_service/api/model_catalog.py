@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Annotated, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from model_service.catalog.catalog import Catalog
 from model_service.catalog.served_models import ScoresOutput, legacy_config
 from model_service.contracts.failures import UnknownModelError
 from model_service.contracts.model_declarations import (
@@ -190,12 +191,16 @@ class ModelCatalog:
         self,
         models: list[ModelBinding],
         blocks: Mapping[str, Mapping[str, object]] | None = None,
+        *,
+        resolved: Catalog | None = None,
     ) -> None:
         """Index models by ID and keep the provider blocks.
 
         Args:
             models: Model bindings.
             blocks: Provider blocks by block key, then by model ID.
+            resolved: The served models and analyses the catalog loader
+                resolved; None for none.
 
         Raises:
             CatalogError: If two models share an ID.
@@ -204,6 +209,7 @@ class ModelCatalog:
         if len(self._models) != len(models):
             raise CatalogError("model IDs must be unique")
         self._blocks = {key: dict(value) for key, value in (blocks or {}).items()}
+        self.resolved = resolved or Catalog(None)
 
     @classmethod
     def from_documents(

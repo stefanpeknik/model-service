@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 from model_service.api.catalog_files import read_catalog
 from model_service.api.model_catalog import CatalogError
+from model_service.catalog.analyses import FOLDER as ANALYSES
 
 
 if TYPE_CHECKING:
@@ -27,6 +28,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from model_service.api.model_catalog import ModelCatalog
+    from model_service.catalog import Catalog
     from model_service.contracts.model_declarations import ModelBinding
 
 
@@ -97,7 +99,9 @@ class MountedCatalog:
             return False
         self._current, self._fingerprint, self._error = catalog, seen, None
         logger.info(
-            "model catalog reloaded: %s", ", ".join(m.id for m in catalog) or "empty"
+            "model catalog reloaded: %s; analyses: %s",
+            ", ".join(m.id for m in catalog) or "no models",
+            ", ".join(catalog.resolved.entries(ANALYSES)) or "none",
         )
         return True
 
@@ -120,6 +124,11 @@ class MountedCatalog:
         if self._error is None:
             return CatalogStatus(CatalogState.LOADED)
         return CatalogStatus(CatalogState.RELOAD_FAILED, self._error)
+
+    @property
+    def resolved(self) -> Catalog:
+        """The served models and analyses in use, as the catalog loader resolved them."""
+        return self._current.resolved
 
     def get(self, model_id: str) -> ModelBinding:
         """Look up a deployed model.
