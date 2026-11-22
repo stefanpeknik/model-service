@@ -39,6 +39,10 @@ class Opened:
 class Source(Component):
     """Produces an analysis's items from its inputs, e.g. tiles of a slide.
 
+    A source whose options include `tile_size` and `mpp` takes its tile
+    geometry from the analysis's first model step wherever the file leaves
+    them out; the catalog fills them in when the analysis loads.
+
     Attributes:
         frame: The fields of the frame row the source gives.
     """
@@ -61,7 +65,7 @@ class Source(Component):
 
         Args:
             inputs: Local paths of the run's inputs, keyed by input name.
-            run: The run's context (served models, working directory).
+            run: The run's `Run`.
 
         Returns:
             A context manager giving the open source and closing it after.

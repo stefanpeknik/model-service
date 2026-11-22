@@ -1,0 +1,8 @@
+# Today's heatmap builder on prostate-classifier-1: the builder's defaults,
+# tiles at the model's 512 px and 0.468 µm/px, an optional region of interest.
+summary: Scores each tile of a prostate slide into a heatmap.
+source: {use: slide_tiles, stride_fraction: 0.5, skip_background: true, min_tissue_fraction: 0.0}
+steps:
+  - {model: prostate-classifier-1}
+sinks:
+  - {use: score_grid, output: heatmap}

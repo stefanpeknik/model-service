@@ -2,7 +2,7 @@
 
 - invocation.py: a builder invocation (inputs, access, configuration, deadline).
 - caller_request.py: the request a caller sends, which becomes an invocation.
-- result.py: a builder's result; score_grid.py: the heatmap's file format.
+- result.py: a builder's result; score_grid.py: the heatmap's names for `formats.score_grid`.
 - model_declarations.py: what a model of each inference contract declares.
 - builder_http.py: the builder deployment's HTTP request and error format.
 - failures.py: failure codes and errors every process shares.
