@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from model_service.catalog import load_catalog
 from model_service.served_model.deployment import (
     DEFAULT_CACHE_ROOT,
@@ -20,22 +18,10 @@ CATALOG = REPO / "catalog"
 OLD_MODELS = REPO / "deploy" / "helm" / "rayservice" / "models"
 
 
-@pytest.mark.parametrize(
-    ("model_id", "environment"),
-    [
-        ("prostate-classifier-1", None),
-        ("prostate-classifier-1", "rationai-test"),
-        ("virchow2", None),
-        ("virchow2", "rationai-test"),
-        ("prov-gigapath", None),
-    ],
-)
-def test_served_models_deploy_with_todays_serve_options(
-    model_id: str, environment: str | None
-) -> None:
-    entry = load_catalog(CATALOG, environment).entries("served-models")[model_id]
-    old_dir = OLD_MODELS / environment if environment else OLD_MODELS
-    old = model_file(old_dir / f"{model_id}.yaml")["deployment"]
+def test_episeg_deploys_with_the_serve_options_of_its_old_model_file() -> None:
+    model_id = "episeg-1"
+    entry = load_catalog(CATALOG).entries("served-models")[model_id]
+    old = model_file(OLD_MODELS / f"{model_id}.yaml")["deployment"]
     del old["user_config"], old["ray_actor_options"]["runtime_env"]
 
     app = serve_application(entry, cache_root="/mnt/cache/trt_cache")

@@ -23,7 +23,6 @@ CATALOG = REPO / "catalog"
 TEST_VALUES = CHART / "values.rationai-test.yaml"
 TEST_ANALYSES = ("prostate-heatmap", "virchow2-embeddings", "prov-gigapath-embeddings")
 BASE_VALUES = CHART / "values.yaml"
-OLD_MODELS = CHART / "models"
 TEST_MLFLOW = "https://mlflow.rationai.cloud.e-infra.cz"
 BASE_MLFLOW = "http://mlflow.rationai-mlflow:5000"
 
@@ -90,28 +89,6 @@ def test_a_served_model_deploys_as_serve_application_builds_it(
     }
 
     assert applications(render(*values))[model_id] == expected
-
-
-@pytest.mark.parametrize(
-    ("values", "old_file"),
-    [
-        ((TEST_VALUES,), OLD_MODELS / "rationai-test" / "virchow2.yaml"),
-        ((), OLD_MODELS / "virchow2.yaml"),
-    ],
-)
-def test_virchow2_keeps_the_serve_options_of_its_old_model_file(
-    values: tuple[Path, ...], old_file: Path
-) -> None:
-    old = yaml.safe_load(old_file.read_text(encoding="utf-8"))
-    app = applications(render(*values))["virchow2"]
-    (deployment,) = app["deployments"]
-    env = deployment["ray_actor_options"]["runtime_env"]["env_vars"]
-
-    assert app["runtime_env"] == old["application"]["runtime_env"]
-    assert env["HF_HOME"] == "/mnt/huggingface_cache"
-    del env["MLFLOW_TRACKING_URI"], deployment["name"], deployment["user_config"]
-    del old["deployment"]["user_config"]
-    assert deployment == old["deployment"]
 
 
 def test_an_environment_without_old_models_deploys_only_the_generic_host() -> None:

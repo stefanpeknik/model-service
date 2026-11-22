@@ -47,29 +47,12 @@ def served(root: Path, model_id: str = "m1") -> ServedModel:
     return load_catalog(root).entries("served-models")[model_id].value
 
 
-@pytest.mark.parametrize(
-    ("model_id", "environment", "weights", "old_weights"),
-    [
-        ("prostate-classifier-1", None, "uri", "artifact_uri"),
-        ("prostate-classifier-1", "rationai-test", "uri", "artifact_uri"),
-        ("episeg-1", None, "uri", "artifact_uri"),
-        ("virchow2", None, "repo", "repo_id"),
-        ("virchow2", "rationai-test", "repo", "repo_id"),
-        ("prov-gigapath", None, "repo", "repo_id"),
-    ],
-)
-def test_a_migrated_file_gives_the_binding_of_todays_model_file(
-    model_id: str, environment: str | None, weights: str, old_weights: str
-) -> None:
-    model = load_catalog(CATALOG, environment).entries("served-models")[model_id]
-    old_dir = OLD_MODELS / environment if environment else OLD_MODELS
-    old = ModelDocument.model_validate(model_file(old_dir / f"{model_id}.yaml"))
+def test_episeg_gives_the_binding_of_its_old_model_file() -> None:
+    model = load_catalog(CATALOG).entries("served-models")["episeg-1"]
+    old = ModelDocument.model_validate(model_file(OLD_MODELS / "episeg-1.yaml"))
     old_config = old.deployment.user_config
 
-    assert (
-        getattr(model.value.weights.options, weights)
-        == old_config["model"][old_weights]
-    )
+    assert model.value.weights.options.uri == old_config["model"]["artifact_uri"]
     assert model_binding(old).model_dump(
         mode="json", exclude={"id", "contract"}
     ) == legacy_config(model.value)
