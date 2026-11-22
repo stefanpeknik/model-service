@@ -45,8 +45,8 @@ class Staging:
             The staging.
         """
         for directory in self._dirs.values():
-            make_shared_directory(directory.parent)
-            directory.mkdir()
+            # Open to all users, like every directory the API may have to remove.
+            make_shared_directory(directory)
         return self
 
     def __exit__(
