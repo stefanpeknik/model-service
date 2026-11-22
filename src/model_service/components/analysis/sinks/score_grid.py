@@ -65,7 +65,9 @@ class ScoreGridSink(Sink):
             raise ValueError(f"score_grid needs a known scores shape, got {shape}")
         channels, height, width = shape
         self._frame = frame
-        self._path: Path = run.work_dir / f"{self.options.output}.npz"
+        self._path: Path = (
+            run.work_dir / f"{self.options.output}.{score_grid.EXTENSION}"
+        )
         self._builder = MaskBuilder(
             source_extents=(frame["extent_y"], frame["extent_x"]),
             source_tile_extent=(frame["tile_extent_y"], frame["tile_extent_x"]),
