@@ -185,7 +185,14 @@ retrying every minute until it succeeds. It uses the marketplace mock's route
 (`/v1/custom-mock/portal-apps`) that EMPAIA test installations run; a
 production marketplace lists apps through its portal's review. App IDs derive
 from the namespace, so registering again replaces an app, and every replica
-may do it. Credentials for the marketplace go through an outgoing-credentials
+may do it. After the apps and their preprocessing triggers, registration
+deletes the apps model-service owns that no deployed analysis has any more
+(`DELETE /v1/custom-mock/portal-apps/{id}`, after listing them with
+`PUT /v1/customer/portal-apps/query`). It owns an app when its namespace starts
+with `org.empaia.rationai.` and its image is `http::<target>/…` for this
+deployment's JES target, so a renamed analysis's old app goes, the
+builder-era prostate app included, while RationAI's container apps under the same
+prefix and other deployments' apps stay. Credentials for the marketplace go through an outgoing-credentials
 interface: none by default, or client credentials from an identity provider
 (`EMPAIA_IDP_URL`, `EMPAIA_CLIENT_ID`, `EMPAIA_CLIENT_SECRET`), obtained the way
 `empaia-sender-auth` does.
