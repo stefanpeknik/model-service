@@ -28,6 +28,10 @@ class UnknownModelError(KeyError):
     """No model has the requested id."""
 
 
+class UnknownAnalysisError(KeyError):
+    """No deployed analysis has the requested id."""
+
+
 class IncompatibleModelError(InvalidInvocation):
     """The model's inference contract is not the one the builder accepts."""
 
