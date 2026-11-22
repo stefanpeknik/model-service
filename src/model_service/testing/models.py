@@ -71,6 +71,17 @@ class FakeModel:
         shape = (len(tiles), out.channels, out.size, out.size)
         return np.broadcast_to(mean[:, None, None, None], shape).astype(np.float32)
 
+    async def infer(self, tile: np.ndarray) -> np.ndarray:
+        """Infer one tile, as a served-model host's handle does.
+
+        Args:
+            tile: uint8 `(3, tile_size, tile_size)`.
+
+        Returns:
+            Scores `(channels, size, size)`, or an embedding `(dim,)`.
+        """
+        return self(tile[None])[0]
+
 
 def fake_model(output: dict[str, Any] | None = None, **input_: Any) -> FakeModel:
     """Build a fake served model.
