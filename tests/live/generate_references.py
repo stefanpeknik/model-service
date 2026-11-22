@@ -171,7 +171,7 @@ def record_raw(args: argparse.Namespace) -> None:
 
 
 def record_run(args: argparse.Namespace) -> None:
-    """Run one analysis's builder and model synchronously on each slide.
+    """Run one analysis synchronously on each slide.
 
     Args:
         args: The parsed `run` command line.
@@ -184,7 +184,7 @@ def record_run(args: argparse.Namespace) -> None:
         for name in SLIDES:
             output = f"{args.prefix}/{case.analysis}/{Path(name).stem}.{case.extension}"
             response = client.post(
-                f"/v1/builders/{case.builder}/models/{case.model}/run",
+                f"/v1/analyses/{case.analysis}/run",
                 json={
                     "inputs": {
                         "slide": {"kind": "shared_path", "path": f"slides/{name}"}

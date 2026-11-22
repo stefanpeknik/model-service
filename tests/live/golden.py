@@ -53,12 +53,12 @@ class RawCase:
 
 @dataclass(frozen=True, slots=True)
 class RunCase:
-    """A v1 analysis, recorded through today's builder and model route.
+    """A v1 analysis; its references were recorded through the builder it replaced.
 
     Attributes:
-        analysis: The analysis ID it becomes.
-        builder: Today's builder.
-        model: Today's model.
+        analysis: The analysis ID.
+        builder: The builder the references were recorded through.
+        model: The model that builder ran.
         extension: The output file's extension.
     """
 
