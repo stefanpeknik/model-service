@@ -48,28 +48,30 @@ def served(root: Path, model_id: str = "m1") -> ServedModel:
 
 
 @pytest.mark.parametrize(
-    ("model_id", "environment", "old_file"),
+    ("model_id", "environment", "weights", "old_weights"),
     [
-        ("prostate-classifier-1", None, "prostate-classifier-1.yaml"),
-        (
-            "prostate-classifier-1",
-            "rationai-test",
-            "rationai-test/prostate-classifier-1.yaml",
-        ),
-        ("episeg-1", None, "episeg-1.yaml"),
+        ("prostate-classifier-1", None, "uri", "artifact_uri"),
+        ("prostate-classifier-1", "rationai-test", "uri", "artifact_uri"),
+        ("episeg-1", None, "uri", "artifact_uri"),
+        ("virchow2", None, "repo", "repo_id"),
+        ("virchow2", "rationai-test", "repo", "repo_id"),
     ],
 )
 def test_a_migrated_file_gives_the_binding_of_todays_model_file(
-    model_id: str, environment: str | None, old_file: str
+    model_id: str, environment: str | None, weights: str, old_weights: str
 ) -> None:
     model = load_catalog(CATALOG, environment).entries("served-models")[model_id]
-    old = ModelDocument.model_validate(model_file(OLD_MODELS / old_file))
+    old_dir = OLD_MODELS / environment if environment else OLD_MODELS
+    old = ModelDocument.model_validate(model_file(old_dir / f"{model_id}.yaml"))
     old_config = old.deployment.user_config
 
-    assert model.value.weights.options.uri == old_config["model"]["artifact_uri"]
-    assert model_binding(old).model_dump(exclude={"id", "contract"}) == legacy_config(
-        model.value
+    assert (
+        getattr(model.value.weights.options, weights)
+        == old_config["model"][old_weights]
     )
+    assert model_binding(old).model_dump(
+        mode="json", exclude={"id", "contract"}
+    ) == legacy_config(model.value)
 
 
 def test_the_digest_follows_what_the_model_computes_not_how_it_is_scheduled(
@@ -128,3 +130,25 @@ def test_threads_are_refused_where_session_options_are_not_applied(
 
     (error,) = raised.value.errors
     assert "threads has no effect with apply_session_options: false" in str(error)
+
+
+def test_a_hugging_face_revision_must_be_a_commit(root: Path) -> None:
+    write(
+        root,
+        "served-models/m1.yaml",
+        MODEL.replace(
+            "{use: local, path: /weights/model.onnx}",
+            "{use: huggingface, repo: paige-ai/Virchow2, revision: main}",
+        ),
+    )
+
+    with pytest.raises(CatalogInvalid) as raised:
+        load_catalog(root)
+
+    assert [str(e) for e in raised.value.errors] == [
+        "catalog/served-models/m1.yaml:weights.revision: `main` is invalid: string "
+        "should match pattern '^[0-9a-f]{40}$'. revision: The full 40-character "
+        "commit hash to download. A branch or tag can move, so the weights would "
+        "change under the same file. Hint: copy the full commit hash from the "
+        "history of the repository's files on huggingface.co"
+    ]

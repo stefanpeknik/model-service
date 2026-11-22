@@ -5,8 +5,9 @@ The format follows from `output:`, with no per-model code:
 - one score per tile (`scores`, 1 channel, size 1): the score as a JSON float;
 - a score map: the scores' bytes, LZ4-compressed;
 - an embedding: the features' bytes, LZ4-compressed, with `x-output-shape`.
-  `x-pool-tokens: false` returns the runtime's output before `post:`, and
-  `x-output-dtype` casts it (float32 by default).
+  `x-pool-tokens: false` skips `post:` (each step's `skipped`, so Virchow2's
+  reply has no register tokens), and `x-output-dtype` casts the features
+  (float32 by default).
 
 The request body is an LZ4-compressed uint8 RGB tile, `(tile_size,
 tile_size, 3)` (channels last). Unifying these formats is a later change,
