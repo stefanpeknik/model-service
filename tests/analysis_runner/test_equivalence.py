@@ -1,15 +1,18 @@
-"""prostate-heatmap through the analysis runner against today's heatmap processor.
+"""Heatmap analyses through the analysis runner against today's heatmap processor.
 
-Both run on the same fake slide with the same fake model. With one tile in
-flight the score grids are identical byte for byte. At today's concurrency
-the float32 sums over overlapping tiles happen in completion order, so a few
-cells may differ in the last bit, as two runs of today's code do.
+`prostate-heatmap` scores a tile with one number, `episeg-heatmap` with a
+float16 map as large as the tile. Both runs use the same fake slide and the
+same fake model. With one tile in flight the score grids are identical byte
+for byte. At today's concurrency the float32 sums over overlapping tiles
+happen in completion order, so a few cells may differ in the last bit, as two
+runs of today's code do.
 """
 
 from __future__ import annotations
 
 import asyncio
 import zlib
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -27,11 +30,23 @@ from model_service.testing import fake_model, fake_slide
 
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from model_service.testing import FakeModel
 
 
 CATALOG = Path(__file__).resolve().parents[2] / "catalog"
-MODEL_ID = "prostate-classifier-1"
+
+
+class ScoreMapModel:
+    """Scores each pixel by its mean brightness, as float16 like EPISeg.
+
+    The map follows the tile's pixels, so a grid with x and y swapped or a
+    map placed at the wrong scale differs from today's.
+    """
+
+    async def infer(self, tile: np.ndarray) -> np.ndarray:
+        return (tile.mean(axis=0, dtype=np.float32) / 255).astype(np.float16)[None]
 
 
 class JitteryModel:
@@ -40,7 +55,7 @@ class JitteryModel:
     The delay reorders completions when several tiles are in flight.
     """
 
-    def __init__(self, model: FakeModel) -> None:
+    def __init__(self, model: FakeModel | ScoreMapModel) -> None:
         self.model = model
 
     async def infer(self, tile: np.ndarray) -> np.ndarray:
@@ -70,16 +85,46 @@ def roi_mask(path: Path) -> Path:
     return fake_slide(path, pixels, mpp=2.0)
 
 
+@dataclass(frozen=True)
+class Case:
+    """An analysis and the served model today's heatmap builder ran it with.
+
+    Attributes:
+        analysis: The analysis ID.
+        model: The served-model ID.
+        fake: Builds a fake of the served model with its output geometry.
+    """
+
+    analysis: str
+    model: str
+    fake: Callable[[], FakeModel | ScoreMapModel]
+
+    def client(self) -> JitteryModel:
+        """A fresh fake of the served model, answering out of order."""
+        return JitteryModel(self.fake())
+
+
+CASES = [
+    Case(
+        "prostate-heatmap",
+        "prostate-classifier-1",
+        lambda: fake_model(tile_size=512, mpp=0.468),
+    ),
+    Case("episeg-heatmap", "episeg-1", ScoreMapModel),
+]
+
+
 async def old_heatmap(
+    case: Case,
     slide: Path,
     roi: Path | None,
     out: Path,
     client: JitteryModel,
     settings: BuilderSettings,
 ) -> Path:
-    served = load_catalog(CATALOG).entries("served-models")[MODEL_ID].value
+    served = load_catalog(CATALOG).entries("served-models")[case.model].value
     # Today's API binds the model with these fields; the processor reads them.
-    binding = SpatialScoresModel(id=MODEL_ID, **legacy_config(served))
+    binding = SpatialScoresModel(id=case.model, **legacy_config(served))
     client.declaration = binding  # type: ignore[attr-defined]
     await build_heatmap(
         slide,
@@ -95,19 +140,20 @@ async def old_heatmap(
 
 
 async def new_heatmap(
+    case: Case,
     slide: Path,
     roi: Path | None,
     out: Path,
     model: JitteryModel,
     concurrency: Concurrency,
 ) -> Path:
-    analysis = load_catalog(CATALOG).entries("analyses")["prostate-heatmap"].value
+    analysis = load_catalog(CATALOG).entries("analyses")[case.analysis].value
     inputs = {"slide": slide} | ({"region_of_interest": roi} if roi else {})
     written = await run_analysis(
         analysis,
         inputs,
         {"heatmap": out},
-        {MODEL_ID: model},
+        {case.model: model},
         concurrency=concurrency,
     )
     return written["heatmap"]
@@ -118,24 +164,22 @@ def arrays(path: Path) -> dict[str, np.ndarray]:
         return {key: stored[key] for key in stored.files}
 
 
-@pytest.fixture
-def model() -> JitteryModel:
-    return JitteryModel(fake_model(tile_size=512, mpp=0.468))
-
-
 @pytest.fixture(scope="module")
 def slide(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return tissue_slide(tmp_path_factory.mktemp("slide") / "slide.tiff")
 
 
+@pytest.mark.parametrize("case", CASES, ids=lambda case: case.analysis)
 @pytest.mark.parametrize("with_roi", [False, True], ids=["whole slide", "with roi"])
 def test_one_tile_in_flight_gives_todays_score_grid_byte_for_byte(
-    tmp_path: Path, slide: Path, model: JitteryModel, with_roi: bool
+    tmp_path: Path, slide: Path, case: Case, with_roi: bool
 ) -> None:
     roi = roi_mask(tmp_path / "roi.tiff") if with_roi else None
+    model = case.client()
 
     old = asyncio.run(
         old_heatmap(
+            case,
             slide,
             roi,
             tmp_path / "old.npz",
@@ -145,6 +189,7 @@ def test_one_tile_in_flight_gives_todays_score_grid_byte_for_byte(
     )
     new = asyncio.run(
         new_heatmap(
+            case,
             slide,
             roi,
             tmp_path / "new.npz",
@@ -162,14 +207,18 @@ def test_one_tile_in_flight_gives_todays_score_grid_byte_for_byte(
         assert actual[key].tobytes() == value.tobytes(), key
 
 
+@pytest.mark.parametrize("case", CASES, ids=lambda case: case.analysis)
 def test_todays_concurrency_matches_within_the_last_bit(
-    tmp_path: Path, slide: Path, model: JitteryModel
+    tmp_path: Path, slide: Path, case: Case
 ) -> None:
     today = BuilderSettings()
+    model = case.client()
 
-    old = asyncio.run(old_heatmap(slide, None, tmp_path / "old.npz", model, today))
+    old = asyncio.run(
+        old_heatmap(case, slide, None, tmp_path / "old.npz", model, today)
+    )
     new = asyncio.run(
-        new_heatmap(slide, None, tmp_path / "new.npz", model, Concurrency())
+        new_heatmap(case, slide, None, tmp_path / "new.npz", model, Concurrency())
     )
 
     assert Concurrency() == Concurrency(
