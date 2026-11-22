@@ -103,37 +103,68 @@ base value when the patch says false, 0 or "". Renders JSON.
 {{- end }}
 
 {{/*
-The served models this release deploys, as JSON {id: document}: each
-catalog/served-models/<id>.yaml (through the chart's `catalog` symlink to the
-repo's catalog/) that `servedModels` selects, with its
-catalog/environments/<environment>/served-models/<id>.yaml patch merged in.
+The documents of one catalog folder this release deploys, as JSON
+{id: document}: each catalog/<folder>/<id>.yaml (through the chart's `catalog`
+symlink to the repo's catalog/) that the values key `key` selects (["*"] or
+named IDs), with its catalog/environments/<environment>/<folder>/<id>.yaml
+patch merged in. Takes dict "root" ($), "folder" and "key".
 */}}
-{{- define "model-service.servedModels" -}}
-{{- $selected := .Values.servedModels | default list }}
-{{- $env := .Values.environment | default "" }}
-{{- $models := dict }}
-{{- range $path, $_ := .Files.Glob "catalog/served-models/*.yaml" }}
+{{- define "model-service.catalogDocuments" -}}
+{{- $root := .root }}
+{{- $folder := .folder }}
+{{- $selected := index $root.Values .key | default list }}
+{{- $env := $root.Values.environment | default "" }}
+{{- $documents := dict }}
+{{- range $path, $_ := $root.Files.Glob (printf "catalog/%s/*.yaml" $folder) }}
 {{- $id := base $path | trimSuffix ".yaml" }}
 {{- if or (has "*" $selected) (has $id $selected) }}
-{{- $document := $.Files.Get $path | fromYaml | default dict }}
+{{- $document := $root.Files.Get $path | fromYaml | default dict }}
 {{- if hasKey $document "Error" }}{{ fail (printf "%s is not valid YAML: %s" $path $document.Error) }}{{ end }}
-{{- $patch := $.Files.Get (printf "catalog/environments/%s/served-models/%s" $env (base $path)) }}
+{{- $patch := $root.Files.Get (printf "catalog/environments/%s/%s/%s" $env $folder (base $path)) }}
 {{- if and $env $patch }}
 {{- $document = include "model-service.deepMerge" (dict "base" $document "patch" (fromYaml $patch | default dict)) | fromJson }}
 {{- end }}
-{{- $_ := set $models $id $document }}
+{{- $_ := set $documents $id $document }}
 {{- end }}
 {{- end }}
-{{- range $path, $_ := .Files.Glob (printf "catalog/environments/%s/served-models/*.yaml" $env) }}
-{{- if not ($.Files.Get (printf "catalog/served-models/%s" (base $path))) }}{{ fail (printf "%s patches a served model that has no file" $path) }}{{ end }}
+{{- range $path, $_ := $root.Files.Glob (printf "catalog/environments/%s/%s/*.yaml" $env $folder) }}
+{{- if not ($root.Files.Get (printf "catalog/%s/%s" $folder (base $path))) }}{{ fail (printf "%s patches a file catalog/%s/ does not have" $path $folder) }}{{ end }}
 {{- end }}
 {{- range $selected }}
-{{- if and (ne . "*") (not (hasKey $models .)) }}{{ fail (printf "servedModels names %s, but catalog/served-models/%s.yaml does not exist" . .) }}{{ end }}
+{{- if and (ne . "*") (not (hasKey $documents .)) }}{{ fail (printf "%s names %s, but catalog/%s/%s.yaml does not exist" $.key . $folder .) }}{{ end }}
 {{- end }}
+{{- toJson $documents }}
+{{- end }}
+
+{{/*
+The served models this release deploys, as JSON {id: document}: the
+catalog/served-models/ files `servedModels` selects, patched for `environment`.
+*/}}
+{{- define "model-service.servedModels" -}}
+{{- $models := include "model-service.catalogDocuments" (dict "root" . "folder" "served-models" "key" "servedModels") | fromJson }}
 {{- range $.Values.models }}
 {{- if hasKey $models (base .) }}{{ fail (printf "%s is deployed from catalog/served-models/ and from models/%s.yaml; drop it from models:" (base .) .) }}{{ end }}
 {{- end }}
 {{- toJson $models }}
+{{- end }}
+
+{{/*
+The analyses this release deploys, as JSON {id: document}: the
+catalog/analyses/ files `analyses` selects, patched for `environment`. An
+analysis whose `{model: <id>}` step names a served model this release does not
+deploy fails the render, naming both.
+*/}}
+{{- define "model-service.analyses" -}}
+{{- $analyses := include "model-service.catalogDocuments" (dict "root" . "folder" "analyses" "key" "analyses") | fromJson }}
+{{- $models := include "model-service.servedModels" . | fromJson }}
+{{- range $id, $analysis := $analyses }}
+{{- range $analysis.steps | default list }}
+{{- if and (kindIs "map" .) (hasKey . "model") (not (hasKey $models (toString .model))) }}
+{{- fail (printf "analysis %s calls served model %s, which this release does not deploy: add it to servedModels or leave %s out of analyses" $id .model $id) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- toJson $analyses }}
 {{- end }}
 
 {{/*

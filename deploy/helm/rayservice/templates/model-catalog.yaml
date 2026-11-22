@@ -3,7 +3,8 @@ The API's catalog, rendered from the same files as the Serve config. The API
 mounts it as a directory and reloads it when kubelet updates the files, so a
 catalog change does not restart the API.
 
-- catalog.json: the deployed served models after the environment's patches;
+- catalog.json: the deployed served models and analyses after the
+  environment's patches;
 - model-catalog.json: models not yet migrated, from models/ (transitional);
 - provider-blocks.json: the served models' provider blocks (transitional).
 */}}
@@ -14,7 +15,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
 data:
   catalog.json: |
-    {{- dict "served-models" (include "model-service.servedModels" . | fromJson) | toJson | nindent 4 }}
+    {{- dict "served-models" (include "model-service.servedModels" . | fromJson) "analyses" (include "model-service.analyses" . | fromJson) | toJson | nindent 4 }}
   model-catalog.json: |
     {{- $models := list }}
     {{- range $path := .Values.models }}

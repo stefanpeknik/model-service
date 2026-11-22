@@ -114,6 +114,7 @@ def test_an_environment_without_old_models_deploys_only_the_generic_host() -> No
         "prostate-classifier-1",
         "virchow2",
         "prov-gigapath",
+        "analysis-runner",
         "builder-heatmap",
         "builder-tile-embeddings",
     }
@@ -127,19 +128,24 @@ def test_the_base_values_serve_every_model_on_the_generic_host() -> None:
     apps = applications(render())
 
     assert {
-        app["import_path"] for app in apps.values() if "builder" not in app["name"]
+        app["import_path"]
+        for app in apps.values()
+        if not app["name"].startswith(("builder-", "analysis-"))
     } == {"model_service.served_model.serve:app"}
 
 
 def test_the_api_catalog_carries_the_deployed_served_models() -> None:
     data = catalog_data(render(TEST_VALUES))
-    entries = load_catalog(CATALOG, "rationai-test").entries("served-models")
+    catalog = load_catalog(CATALOG, "rationai-test")
+    entries = catalog.entries("served-models")
+    analyses = catalog.entries("analyses")
 
     assert data["catalog.json"] == {
         "served-models": {
             model_id: entries[model_id].document
             for model_id in ("prostate-classifier-1", "virchow2", "prov-gigapath")
-        }
+        },
+        "analyses": {"prostate-heatmap": analyses["prostate-heatmap"].document},
     }
     assert data["model-catalog.json"] == []
     assert set(data["provider-blocks.json"]["prostate-classifier-1"]) == {"empaia"}
@@ -161,14 +167,15 @@ def test_the_api_reads_the_rendered_catalog(tmp_path: Path) -> None:
     )
     assert catalog.get("virchow2").contract == "tile-embedding"
     assert set(catalog.provider_block("empaia")) == {"prostate-classifier-1"}
+    assert list(catalog.resolved.entries("analyses")) == ["prostate-heatmap"]
 
 
 def test_an_environment_deploys_a_named_subset_or_none() -> None:
-    none = render(TEST_VALUES, servedModels=[])
+    none = render(TEST_VALUES, servedModels=[], analyses=[])
     named = render(TEST_VALUES, servedModels=["prostate-classifier-1"])
 
     assert "prostate-classifier-1" not in applications(none)
-    assert catalog_data(none)["catalog.json"] == {"served-models": {}}
+    assert catalog_data(none)["catalog.json"] == {"served-models": {}, "analyses": {}}
     assert catalog_data(none)["provider-blocks.json"] == {}
     assert "prostate-classifier-1" in applications(named)
 
@@ -200,3 +207,65 @@ def test_catalog_changes_reach_the_api_without_rolling_it() -> None:
     assert "subPath" not in mount
     assert "items" not in volume["configMap"]
     assert env["MODEL_CATALOG_DIR"] == mount["mountPath"]
+
+
+def test_one_analysis_runner_serves_the_deployed_analyses() -> None:
+    values = yaml.safe_load(TEST_VALUES.read_text(encoding="utf-8"))
+    sizing = values["analysisRunner"]
+
+    runner = applications(render(TEST_VALUES))["analysis-runner"]
+
+    assert runner == {
+        "name": "analysis-runner",
+        "route_prefix": "/analyses",
+        "import_path": "model_service.analysis_runner.serve:app",
+        "deployments": [
+            {
+                "name": "AnalysisRunner",
+                **sizing["deployment"],
+                "user_config": {
+                    "shared_storage_roots": ["/mnt/shared"],
+                    **sizing["userConfig"],
+                },
+            }
+        ],
+    }
+
+
+def test_the_runner_is_sized_like_todays_heatmap_builder_on_the_test_cluster() -> None:
+    apps = applications(render(TEST_VALUES))
+    (runner,) = apps["analysis-runner"]["deployments"]
+    (builder,) = apps["builder-heatmap"]["deployments"]
+
+    del runner["name"], builder["name"], builder["user_config"]["builder_id"]
+    assert runner == builder
+
+
+def test_without_analyses_there_is_no_runner() -> None:
+    objects = render(TEST_VALUES, analyses=[])
+
+    assert "analysis-runner" not in applications(objects)
+    assert catalog_data(objects)["catalog.json"]["analyses"] == {}
+
+
+def test_the_base_values_deploy_every_analysis() -> None:
+    data = catalog_data(render())
+
+    assert set(data["catalog.json"]["analyses"]) == set(
+        load_catalog(CATALOG).entries("analyses")
+    )
+
+
+def test_an_analysis_calling_an_undeployed_served_model_fails_the_render() -> None:
+    with pytest.raises(subprocess.CalledProcessError) as failed:
+        render(TEST_VALUES, servedModels=["virchow2"])
+
+    assert "prostate-heatmap" in failed.value.stderr
+    assert "prostate-classifier-1" in failed.value.stderr
+
+
+def test_a_named_analysis_without_a_file_fails_the_render() -> None:
+    with pytest.raises(subprocess.CalledProcessError) as failed:
+        render(TEST_VALUES, analyses=["no-such-analysis"])
+
+    assert "no-such-analysis" in failed.value.stderr

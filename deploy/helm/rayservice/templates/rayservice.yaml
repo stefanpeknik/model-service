@@ -71,6 +71,20 @@ spec:
 {{- range $id, $document := include "model-service.servedModels" . | fromJson }}
       - {{ include "model-service.servedModelApplication" (dict "id" $id "document" $document "settings" $.Values.servedModelSettings) | nindent 8 | trim }}
 {{- end }}
+{{- /* One analysis runner executes every deployed analysis; none without analyses. */}}
+{{- if include "model-service.analyses" . | fromJson }}
+      - name: analysis-runner
+        route_prefix: /analyses
+        import_path: model_service.analysis_runner.serve:app
+        deployments:
+          - name: AnalysisRunner
+            {{- toYaml .Values.analysisRunner.deployment | nindent 12 }}
+            user_config:
+              shared_storage_roots: {{ toJson .Values.sharedStorageRoots }}
+              {{- with .Values.analysisRunner.userConfig }}
+              {{- toYaml . | nindent 14 }}
+              {{- end }}
+{{- end }}
 {{- /* Models not yet migrated to catalog/served-models/ (transitional). */}}
 {{- range $path := .Values.models }}
 {{- $model := tpl (printf "models/%s.yaml" $path | $.Files.Get) $ | fromYaml }}
