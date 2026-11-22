@@ -199,6 +199,10 @@ class TableWriter:
         traceback: TracebackType | None,
     ) -> None:
         """Release the file, finished or not."""
+        self.release()
+
+    def release(self) -> None:
+        """Close the file without finishing it, if it is still open."""
         self._file.close()
 
     def append(self, coordinates: NDArray[Any], features: NDArray[Any]) -> None:
@@ -238,12 +242,8 @@ class TableWriter:
         # file's bytes are the builder's.
         self._coordinates.resize(count + rows, axis=0)
         self._features.resize(count + rows, axis=0)
-        if rows == 1:
-            self._coordinates[count] = coordinates[0]
-            self._features[count] = features[0]
-        else:
-            self._coordinates[count:] = coordinates
-            self._features[count:] = features
+        self._coordinates[count:] = coordinates
+        self._features[count:] = features
 
     def close(self) -> None:
         """Finish the table: `features` when no row came, `tile_count`, then the file."""
