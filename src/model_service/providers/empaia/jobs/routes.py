@@ -1,10 +1,12 @@
 """`/v1/empaia`: the remote execution protocol of EMPAIA's Job Execution Service.
 
-An EMPAIA app registered as `http::<target>/builders/<builder>/models/<model>`
-reaches `POST /builders/<builder>/models/<model>` with what an app container
-would get: the App API URL, the job ID and the job token. The registration names
-what runs; the job's inputs and configuration are read from the App API like a
-container would. Submission is idempotent per job: JES's `Idempotency-Key` is the
+An EMPAIA app registered as `http::<target>/analyses/<id>` reaches
+`POST /analyses/<id>` with what an app container would get: the App API URL,
+the job ID and the job token. The registration names what runs; the job's
+inputs and configuration are read from the App API like a container would.
+Apps registered before analyses had apps name
+`http::<target>/builders/<builder>/models/<model>`, which still runs the
+builder (transitional). Submission is idempotent per job: JES's `Idempotency-Key` is the
 job ID, so a different key is rejected. The response's `Location` is then polled
 with `GET` and cancelled with `DELETE`. Remote statuses are `ExecutionStatus`
 values.
@@ -27,6 +29,7 @@ from model_service.api.http.errors import (
 )
 from model_service.api.http.scheduling import submit
 from model_service.api.scheduler.public import (
+    AnalysisScheduleRequest,
     ScheduleRequest,
     SchedulingUnavailableError,
     UnknownExecutionError,
@@ -39,6 +42,7 @@ from model_service.providers.empaia.jobs.payload import EmpaiaSchedulePayload
 if TYPE_CHECKING:
     from model_service.api.scheduler.protocols import Scheduler
     from model_service.api.scheduler.public import ExecutionView
+    from model_service.contracts.json_values import JsonValue
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +89,56 @@ def create_router(scheduler: Scheduler, access: Access | None = None) -> APIRout
     access = access or Access()
     router = APIRouter(prefix="/v1/empaia")
 
+    async def admit(
+        request: AnalysisScheduleRequest | ScheduleRequest,
+        body: EmpaiaExecutionRequest,
+        response: Response,
+        idempotency_key: str | None,
+    ) -> EmpaiaExecutionStatus:
+        """Admit a job, idempotently per job ID, and point `Location` at it."""
+        if idempotency_key is not None and idempotency_key != body.job_id:
+            raise http_error(
+                422,
+                ApiErrorCode.INVALID_REQUEST,
+                "Idempotency-Key must be the job ID",
+            )
+        result = await submit(scheduler, request, response)
+        response.headers["Location"] = f"/v1/empaia/executions/{result.execution.id}"
+        return remote_status(result.execution)
+
+    @router.post(
+        "/analyses/{analysis_id}",
+        status_code=status.HTTP_202_ACCEPTED,
+        responses={200: {"model": EmpaiaExecutionStatus}, **ERRORS},
+        dependencies=[access.require(Action.SUBMIT_PROVIDER_JOB)],
+    )
+    async def execute_analysis(
+        analysis_id: str,
+        body: EmpaiaExecutionRequest,
+        response: Response,
+        idempotency_key: Annotated[str | None, Header()] = None,
+    ) -> EmpaiaExecutionStatus:
+        """Admit an EMPAIA job as a run of the analysis its app exposes.
+
+        Args:
+            analysis_id: The analysis the app runs.
+            body: The job's App Service URL, id and token.
+            response: The response, 201 for a new execution or 200 for a repeat.
+            idempotency_key: Optional; must equal the job id.
+
+        Returns:
+            The execution's status.
+
+        Raises:
+            HTTPException: The key differs from the job id, the analysis is not
+                deployed or not offered in EMPAIA, or the job is invalid or
+                cannot be admitted.
+        """
+        request = AnalysisScheduleRequest(
+            analysis_id=analysis_id, provider=PROVIDER_NAME, body=_payload(body)
+        )
+        return await admit(request, body, response, idempotency_key)
+
     @router.post(
         "/builders/{builder_id}/models/{model_id}",
         status_code=status.HTTP_202_ACCEPTED,
@@ -98,7 +152,10 @@ def create_router(scheduler: Scheduler, access: Access | None = None) -> APIRout
         response: Response,
         idempotency_key: Annotated[str | None, Header()] = None,
     ) -> EmpaiaExecutionStatus:
-        """Admit an EMPAIA job as a builder execution.
+        """Admit an EMPAIA job as a builder execution (transitional).
+
+        Apps registered before analyses had apps name this route; it goes
+        with the builders.
 
         Args:
             builder_id: The builder the app runs.
@@ -114,30 +171,13 @@ def create_router(scheduler: Scheduler, access: Access | None = None) -> APIRout
             HTTPException: The key differs from the job id, or the job is invalid
                 or cannot be admitted.
         """
-        if idempotency_key is not None and idempotency_key != body.job_id:
-            raise http_error(
-                422,
-                ApiErrorCode.INVALID_REQUEST,
-                "Idempotency-Key must be the job ID",
-            )
-        result = await submit(
-            scheduler,
-            ScheduleRequest(
-                builder_id=builder_id,
-                model_id=model_id,
-                provider=PROVIDER_NAME,
-                body=EmpaiaSchedulePayload(
-                    # Job IDs are unique per installation; its App API URL names it.
-                    installation_id=body.app_api.rstrip("/"),
-                    api_url=body.app_api,
-                    job_id=body.job_id,
-                    credential=body.access_token,
-                ).model_dump(mode="json", exclude={"mode"}),
-            ),
-            response,
+        request = ScheduleRequest(
+            builder_id=builder_id,
+            model_id=model_id,
+            provider=PROVIDER_NAME,
+            body=_payload(body),
         )
-        response.headers["Location"] = f"/v1/empaia/executions/{result.execution.id}"
-        return remote_status(result.execution)
+        return await admit(request, body, response, idempotency_key)
 
     @router.get(
         "/executions/{execution_id}",
@@ -191,6 +231,26 @@ def create_router(scheduler: Scheduler, access: Access | None = None) -> APIRout
             raise _unknown_execution() from error
 
     return router
+
+
+def _payload(body: EmpaiaExecutionRequest) -> dict[str, JsonValue]:
+    """The schedule body of a job JES posts.
+
+    Args:
+        body: The job's App Service URL, id and token.
+
+    Returns:
+        The EMPAIA schedule payload.
+    """
+    return EmpaiaSchedulePayload(
+        # Job IDs are unique per installation; its App API URL names it.
+        installation_id=body.app_api.rstrip("/"),
+        api_url=body.app_api,
+        job_id=body.job_id,
+        credential=body.access_token,
+    ).model_dump(
+        mode="json", include={"installation_id", "api_url", "job_id", "credential"}
+    )
 
 
 def remote_status(execution: ExecutionView) -> EmpaiaExecutionStatus:

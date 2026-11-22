@@ -1,4 +1,4 @@
-"""Deployed models become EMPAIA apps, registered in the marketplace at startup."""
+"""Analyses with `expose.empaia` become EMPAIA apps, registered in the marketplace at startup."""
 
 from __future__ import annotations
 
@@ -6,294 +6,161 @@ import asyncio
 import json
 import time
 import unittest
-from dataclasses import replace
 from pathlib import Path
 
 import httpx
 import jwt
-from jsonschema import ValidationError
+import pytest
 from pydantic import ValidationError as SettingsError
 
-from model_service.api.model_catalog import ModelCatalog
-from model_service.builders.registry import BUILDERS, get_builder
+from model_service.builders.registry import BUILDERS
+from model_service.catalog import load_catalog
 from model_service.providers.empaia.credentials import (
     ClientCredentials,
     NoCredentials,
 )
-from model_service.providers.empaia.ead.apps import app_definitions, generate_ead
-from model_service.providers.empaia.ead.builder_io import BUILDER_IO, NOT_OFFERED
-from model_service.providers.empaia.ead.listing import (
-    VIEWER_CONFIG_KEY,
-    AppMode,
-    EmpaiaListing,
-    ViewerConfig,
-    parse_listings,
+from model_service.providers.empaia.ead.apps import (
+    AnalysisApp,
+    analysis_app,
+    analysis_apps,
 )
-from model_service.providers.empaia.provider import CATALOG_BLOCK
-from model_service.providers.empaia.publishing.publishers import default_publishers
+from model_service.providers.empaia.ead.builder_io import BUILDER_IO, NOT_OFFERED
+from model_service.providers.empaia.ead.vocabulary import VIEWER_CONFIG_KEY, AppMode
 from model_service.providers.empaia.registration import (
     Marketplace,
     register_until_done,
 )
 from model_service.providers.empaia.settings import EmpaiaSettings
 from model_service.providers.empaia.triggers import PreprocessingTriggers
-from tests.support.deployment import CHART, VALUES, load
-from tests.support.model_documents import model_file
+from tests.support.analysis_catalog import REGISTRY, write
+from tests.support.analysis_catalog import served_model as model
 
 
-PUBLISHERS = default_publishers()
-MODELS = (
-    Path(__file__).resolve().parents[2] / "deploy" / "helm" / "rayservice" / "models"
+CATALOG = Path(__file__).resolve().parents[2] / "catalog"
+# Today's app, as the builder-keyed EAD generation made it from
+# prostate-classifier-1's `empaia` block (recorded at e91f62d).
+BEFORE = json.loads(
+    (Path(__file__).parent / "fixtures/prostate-heatmap-app-before.json").read_text()
 )
+OLD_NAMESPACE = "org.empaia.rationai.heatmap_prostate_classifier_1.v3.0"
+NEW_NAMESPACE = "org.empaia.rationai.prostate_heatmap.v3.0"
 
 
-def catalog(*names: str) -> ModelCatalog:
-    return ModelCatalog.from_documents(
-        [model_file(MODELS / f"{name}.yaml") for name in names], [CATALOG_BLOCK]
+def prostate_app(environment: str | None = None) -> AnalysisApp:
+    analyses = load_catalog(CATALOG, environment).entries("analyses")
+    return analysis_app(analyses["prostate-heatmap"].value)
+
+
+def tmp_app(tmp_path: Path, expose: str) -> AnalysisApp:
+    """The app of a small analysis with this `expose.empaia` body."""
+    root = tmp_path / "catalog"
+    write(root, "served-models/m1.yaml", model())
+    write(
+        root,
+        "analyses/a1.yaml",
+        """
+        source: {use: slide_tiles}
+        steps: [{model: m1}]
+        sinks: [{use: score_grid, output: heatmap}]
+        expose:
+          empaia:
+            name: Test heatmap
+            name_short: TestHM
+            description: Finds things.
+            outputs:
+              heatmap: {type: continuous_pixelmap}
+        """.rstrip(" ")
+        + "\n".join(f"            {line}" for line in expose.splitlines()),
+    )
+    analyses = load_catalog(root, registry=REGISTRY).entries("analyses")
+    return analysis_app(analyses["a1"].value)
+
+
+@pytest.mark.parametrize("environment", [None, "rationai-test"])
+def test_the_prostate_app_is_todays_apart_from_its_namespace(
+    environment: str | None,
+) -> None:
+    app = prostate_app(environment)
+
+    assert app.ead["namespace"] == NEW_NAMESPACE
+    assert {**app.ead, "namespace": OLD_NAMESPACE} == BEFORE["ead"]
+    assert app.global_configuration == BEFORE["global_configuration"]
+    assert app.modes == (AppMode.STANDALONE, AppMode.PREPROCESSING)
+    assert app.image("model-service") == (
+        "http::model-service/analyses/prostate-heatmap"
+    )
+    # Its triggers' tags list the app under them in the marketplace.
+    tags = app.portal_app("model-service", "org-1")["active_app_views"]["v3"]["tags"]
+    assert (tags["tissues"][0]["name"], tags["stains"][0]["name"]) == (
+        "PROSTATE",
+        "H_AND_E",
     )
 
 
-def listings(models: ModelCatalog) -> dict[str, EmpaiaListing]:
-    return parse_listings(models.provider_block(CATALOG_BLOCK))
+def test_every_exposed_analysis_yields_a_valid_app_in_every_environment() -> None:
+    for environment in (None, "rationai-test"):
+        apps = analysis_apps(load_catalog(CATALOG, environment))
+
+        assert [app.analysis_id for app in apps] == ["prostate-heatmap"]
 
 
-class AppDefinitionTests(unittest.TestCase):
-    def test_a_listed_model_offers_one_app_with_its_modes_per_builder(
-        self,
-    ) -> None:
-        models = catalog("prostate-classifier-1", "virchow2")
+def test_a_preprocessing_only_app_leaves_out_the_region_of_interest(
+    tmp_path: Path,
+) -> None:
+    app = tmp_app(tmp_path, "modes: {preprocessing: }")
 
-        (app,) = app_definitions(models, listings(models), PUBLISHERS)
+    assert "region_of_interest" not in app.ead["io"]
+    assert app.ead["modes"] == {
+        "preprocessing": {"inputs": ["slide"], "outputs": ["heatmap"]}
+    }
+    assert "configuration" not in app.ead
 
-        self.assertEqual(
-            (app.builder_id, app.model_id, app.modes),
-            (
-                "heatmap",
-                "prostate-classifier-1",
-                (AppMode.STANDALONE, AppMode.PREPROCESSING),
-            ),
-        )
-        self.assertEqual(app.ead["name"], "Prostate cancer heatmap")
-        self.assertEqual(
-            app.ead["namespace"],
-            "org.empaia.rationai.heatmap_prostate_classifier_1.v3.0",
-        )
-        # EMPAIA starts a preprocessing job with a slide alone.
-        self.assertEqual(
-            app.ead["modes"],
-            {
-                "standalone": {
-                    "inputs": ["slide", "region_of_interest"],
-                    "outputs": ["heatmap"],
-                },
-                "preprocessing": {"inputs": ["slide"], "outputs": ["heatmap"]},
-            },
-        )
-        self.assertEqual(app.ead["io"]["region_of_interest"]["reference"], "io.slide")
-        self.assertEqual(
-            app.image("model-service"),
-            "http::model-service/builders/heatmap/models/prostate-classifier-1",
-        )
-        # Its triggers' tags list the app under them in the marketplace.
-        tags = app.portal_app("model-service", "org-1")["active_app_views"]["v3"][
-            "tags"
-        ]
-        self.assertEqual(
-            (tags["tissues"][0]["name"], tags["stains"][0]["name"]),
-            ("PROSTATE", "H_AND_E"),
-        )
 
-    def test_a_preprocessing_only_app_leaves_out_the_region_of_interest(self) -> None:
-        listing = EmpaiaListing(
-            name="Prostate cancer",
-            name_short="ProstHM",
-            description="Finds things.",
-            modes={"preprocessing": {}},
-        )
-        models = catalog("prostate-classifier-1")
+def test_parameters_become_standalone_inputs_described_by_their_settings(
+    tmp_path: Path,
+) -> None:
+    app = tmp_app(
+        tmp_path,
+        "modes:\n"
+        "  standalone: {parameters: [min_tissue_fraction, skip_background]}\n"
+        "  preprocessing:",
+    )
 
-        (app,) = app_definitions(models, {"prostate-classifier-1": listing}, PUBLISHERS)
+    assert app.ead["io"]["min_tissue_fraction"]["type"] == "float"
+    assert app.ead["io"]["min_tissue_fraction"]["description"].startswith(
+        "How much of a tile must be tissue"
+    )
+    assert app.ead["io"]["skip_background"]["type"] == "bool"
+    # EMPAIA starts preprocessing with the slide alone, so it runs on the file's values.
+    assert app.ead["modes"]["standalone"]["inputs"] == [
+        "slide",
+        "region_of_interest",
+        "min_tissue_fraction",
+        "skip_background",
+    ]
+    assert app.ead["modes"]["preprocessing"]["inputs"] == ["slide"]
+    # The case browser may pre-fill its form from the file's values.
+    assert VIEWER_CONFIG_KEY in app.ead["configuration"]["global"]
+    viewer = json.loads(app.global_configuration[VIEWER_CONFIG_KEY])
+    assert viewer["inputs"] == {
+        "min_tissue_fraction": {"default": 0.0},
+        "skip_background": {"default": True},
+    }
 
-        self.assertNotIn("region_of_interest", app.ead["io"])
-        self.assertEqual(list(app.ead["modes"]), ["preprocessing"])
 
-    def test_listed_parameters_become_standalone_inputs_described_by_the_builder(
-        self,
-    ) -> None:
-        listing = EmpaiaListing(
-            name="Prostate cancer",
-            name_short="ProstHM",
-            description="Finds things.",
-            modes={
-                "standalone": {
-                    "parameters": {
-                        "heatmap": ("min_tissue_fraction", "skip_background")
-                    }
-                },
-                "preprocessing": {},
-            },
-        )
-        models = catalog("prostate-classifier-1")
+def test_viewer_entries_for_io_an_app_lacks_are_left_out(tmp_path: Path) -> None:
+    app = tmp_app(
+        tmp_path,
+        "modes: {preprocessing: }\n"
+        "viewer:\n"
+        "  inputs: {region_of_interest: {label: ROI}}\n"
+        "  outputs: {heatmap: {render: shader}}",
+    )
 
-        (app,) = app_definitions(models, {"prostate-classifier-1": listing}, PUBLISHERS)
-
-        settings = get_builder("heatmap").configuration.model_fields
-        self.assertEqual(
-            app.ead["io"]["min_tissue_fraction"],
-            {
-                "type": "float",
-                "description": settings["min_tissue_fraction"].description,
-            },
-        )
-        self.assertEqual(app.ead["io"]["skip_background"]["type"], "bool")
-        # EMPAIA starts preprocessing with the slide alone, so it runs on defaults.
-        self.assertEqual(
-            app.ead["modes"]["standalone"]["inputs"],
-            ["slide", "region_of_interest", "min_tissue_fraction", "skip_background"],
-        )
-        self.assertEqual(app.ead["modes"]["preprocessing"]["inputs"], ["slide"])
-        self.assertEqual(app.parameters, ("min_tissue_fraction", "skip_background"))
-        # The case browser may pre-fill its form from the builder's defaults.
-        self.assertIn(VIEWER_CONFIG_KEY, app.ead["configuration"]["global"])
-        viewer = json.loads(app.global_configuration[VIEWER_CONFIG_KEY])
-        self.assertEqual(
-            viewer["inputs"],
-            {
-                "min_tissue_fraction": {"default": 0.0},
-                "skip_background": {"default": True},
-            },
-        )
-
-    def test_the_viewer_settings_are_declared_and_given_to_each_app(self) -> None:
-        models = catalog("prostate-classifier-1")
-
-        (standalone,) = app_definitions(models, listings(models), PUBLISHERS)
-
-        self.assertEqual(
-            standalone.ead["configuration"]["global"][VIEWER_CONFIG_KEY]["type"],
-            "string",
-        )
-        viewer = json.loads(standalone.global_configuration[VIEWER_CONFIG_KEY])
-        self.assertEqual(
-            viewer["inputs"]["slide"], {"target": "xopat", "lossless": False}
-        )
-        self.assertEqual(viewer["outputs"]["heatmap"]["shader"]["type"], "heatmap")
-
-    def test_an_invalid_listing_leaves_only_its_model_out(self) -> None:
-        valid = {
-            "name": "Prostate",
-            "name_short": "Pros",
-            "description": "Finds.",
-            "modes": {"preprocessing": None},
-        }
-        with self.assertLogs(
-            "model_service.providers.empaia.ead.listing", "ERROR"
-        ) as logs:
-            parsed = parse_listings(
-                {
-                    "good": valid,
-                    "typo": {**valid, "mods": {"preprocessing": None}},
-                    # The earlier shape, a list of mode names.
-                    "modes-as-list": {**valid, "modes": ["preprocessing"]},
-                    "no-mode": {**valid, "modes": {}},
-                    "unknown-builder": {**valid, "viewer": {"heatmapp": {}}},
-                    # A tag no slide carries would never trigger anything.
-                    "unknown-tissue": {
-                        **valid,
-                        "modes": {
-                            "preprocessing": {
-                                "triggers": [
-                                    {"tissue": "PROSTRATE", "stain": "H_AND_E"}
-                                ]
-                            }
-                        },
-                    },
-                    "triggers-under-standalone": {
-                        **valid,
-                        "modes": {
-                            "standalone": {
-                                "triggers": [{"tissue": "ANY", "stain": "ANY"}]
-                            }
-                        },
-                    },
-                    "unknown-setting": {
-                        **valid,
-                        "modes": {
-                            "standalone": {"parameters": {"heatmap": ["treshold"]}}
-                        },
-                    },
-                    # Preprocessing jobs have no form to fill in.
-                    "parameters-under-preprocessing": {
-                        **valid,
-                        "modes": {
-                            "preprocessing": {
-                                "parameters": {"heatmap": ["stride_fraction"]}
-                            }
-                        },
-                    },
-                }
-            )
-        self.assertEqual(list(parsed), ["good"])
-        self.assertEqual(len(logs.output), 8)
-
-    def test_viewer_entries_for_io_an_app_lacks_are_left_out(self) -> None:
-        listing = EmpaiaListing(
-            name="Prostate cancer",
-            name_short="ProstHM",
-            description="Finds things.",
-            modes={"preprocessing": {}},
-            viewer={
-                "heatmap": ViewerConfig.model_validate(
-                    {
-                        "inputs": {"region_of_interest": {"label": "ROI"}},
-                        "outputs": {"heatmap": {"render": "shader"}},
-                    }
-                )
-            },
-        )
-        models = catalog("prostate-classifier-1")
-
-        (app,) = app_definitions(
-            models,
-            {"prostate-classifier-1": listing},
-            PUBLISHERS,
-            [get_builder("heatmap")],
-        )
-
-        self.assertEqual(
-            json.loads(app.global_configuration[VIEWER_CONFIG_KEY]),
-            {"inputs": {}, "outputs": {"heatmap": {"render": "shader"}}},
-        )
-
-    def test_every_listed_model_in_the_repository_yields_valid_apps(self) -> None:
-        listed = 0
-        for path in sorted(MODELS.rglob("*.yaml")):
-            with self.subTest(model=str(path.relative_to(MODELS))):
-                models = catalog(str(path.relative_to(MODELS).with_suffix("")))
-                apps = app_definitions(models, listings(models), PUBLISHERS)
-                if listings(models):
-                    listed += 1
-                    self.assertTrue(apps)
-        self.assertGreater(listed, 0)
-
-    def test_listings_keep_within_the_ead_limits(self) -> None:
-        with self.assertRaises(SettingsError):
-            EmpaiaListing(
-                name="A model name far too long",
-                name_short="Model",
-                description="Finds things.",
-                modes={"standalone": {}},
-            )
-        listing = EmpaiaListing(
-            name="Prostate cancer",
-            name_short="ProstHM",
-            description="Finds things.",
-            modes={"standalone": {}},
-        )
-        heatmap = BUILDER_IO["heatmap"]
-        broken = replace(heatmap, outputs={"heatmap": {"type": "no_such_type"}})
-        with self.assertRaises(ValidationError):
-            generate_ead(get_builder("heatmap"), broken, "model", listing)
+    assert json.loads(app.global_configuration[VIEWER_CONFIG_KEY]) == {
+        "inputs": {},
+        "outputs": {"heatmap": {"render": "shader"}},
+    }
 
 
 def token(lifetime: float) -> str:
@@ -325,8 +192,7 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
             posted.append(sent)
             return httpx.Response(201)
 
-        models = catalog("prostate-classifier-1")
-        apps = app_definitions(models, listings(models), PUBLISHERS)
+        apps = [prostate_app()]
         credentials = ClientCredentials("https://idp.example/realm", "ms", "secret")
         marketplace = Marketplace(
             "https://marketplace.example",
@@ -367,8 +233,7 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("authorization", request.headers)
             return answers.pop(0)
 
-        models = catalog("prostate-classifier-1")
-        apps = app_definitions(models, listings(models), PUBLISHERS)
+        apps = [prostate_app()]
         settings = EmpaiaSettings(
             marketplace_url="https://marketplace.example", organization_id="org-1"
         )
@@ -400,8 +265,7 @@ class RegistrationTests(unittest.IsolatedAsyncioTestCase):
 
 class TriggerTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
-        models = catalog("prostate-classifier-1")
-        (self.app,) = app_definitions(models, listings(models), PUBLISHERS)
+        self.app = prostate_app()
         self.items: list[dict[str, str]] = []
         self.created = 0
 
@@ -480,26 +344,6 @@ class BuilderCoverageTests(unittest.TestCase):
     def test_every_builder_is_offered_or_explicitly_not(self) -> None:
         self.assertEqual(BUILDER_IO.keys() & NOT_OFFERED.keys(), set())
         self.assertEqual(BUILDER_IO.keys() | NOT_OFFERED.keys(), BUILDERS.keys())
-
-
-class ValuesFileTests(unittest.TestCase):
-    def test_each_values_file_yields_a_valid_catalog_and_its_apps(self) -> None:
-        publishers = default_publishers()
-        for values in VALUES:
-            models = load(values).get("models")
-            if not models:
-                continue
-            with self.subTest(values.name):
-                documents = [model_file(CHART / f"models/{m}.yaml") for m in models]
-                catalog = ModelCatalog.from_documents(documents, [CATALOG_BLOCK])
-                # The catalog leaves an invalid model file out instead of failing.
-                self.assertEqual(len(catalog), len(models))
-                listings = parse_listings(catalog.provider_block(CATALOG_BLOCK))
-                apps = app_definitions(catalog, listings, publishers)
-                # A model listed for EMPAIA that no builder can serve there would
-                # otherwise only be logged at startup.
-                offered = {app.model_id for app in apps}
-                self.assertEqual(offered, set(listings))
 
 
 if __name__ == "__main__":

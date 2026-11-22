@@ -1,12 +1,13 @@
 """The EMPAIA provider, composed for the API and for builder replicas.
 
 It serves JES's remote execution routes, runs App Service jobs, and registers
-apps, with their preprocessing triggers, for the models whose files have an
-`empaia` block. Its settings come from `EMPAIA_*` (`EmpaiaSettings`).
+apps, with their preprocessing triggers, for the analyses with an
+`expose.empaia` section. Its settings come from `EMPAIA_*` (`EmpaiaSettings`).
 """
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from model_service.providers.empaia.app_service.gateway import INPUT_ACCESS_KIND
@@ -27,12 +28,15 @@ if TYPE_CHECKING:
     from model_service.providers.empaia.triggers import PreprocessingTriggers
 
 
-# The model files' block it reads: how a model is offered in EMPAIA.
+# The model files' block of the earlier EMPAIA offering; still accepted so old
+# files load, but analyses' `expose.empaia` makes the apps now (transitional).
 CATALOG_BLOCK = "empaia"
+
+logger = logging.getLogger(__name__)
 
 
 class EmpaiaProvider(Provider):
-    """Runs EMPAIA jobs and registers the deployed models' EMPAIA apps."""
+    """Runs EMPAIA jobs and registers the deployed analyses' EMPAIA apps."""
 
     catalog_block = CATALOG_BLOCK
 
@@ -41,13 +45,15 @@ class EmpaiaProvider(Provider):
     ) -> ApiContribution:
         """Contribute the EMPAIA scheduler adapter, JES routes and app registration.
 
-        Apps come from the models whose file has an `empaia` block. Registration runs
-        in the background, and only when a marketplace is configured, so the API
-        serves while the marketplace is down; it aligns the preprocessing
-        triggers too when a Medical Data Service is configured.
+        Apps come from the deployed analyses with `expose.empaia`, as the
+        catalog is when the API starts; admission reads the catalog in use.
+        Registration runs in the background, and only when a marketplace is
+        configured, so the API serves while the marketplace is down; it
+        aligns the preprocessing triggers too when a Medical Data Service is
+        configured. Models' `empaia` blocks are no longer read.
 
         Args:
-            catalog: The deployed models and their `empaia` blocks.
+            catalog: The deployed served models and analyses.
             settings: Unused; EMPAIA reads its own `EMPAIA_*` settings.
 
         Returns:
@@ -55,25 +61,22 @@ class EmpaiaProvider(Provider):
 
         Raises:
             pydantic.ValidationError: If the `EMPAIA_*` settings are invalid.
-            ValueError: If a model's listing is invalid or an app's EAD references an
-                unknown input.
             jsonschema.ValidationError: If a generated EAD fails the EAD v3 schema.
         """
-        from model_service.providers.empaia.ead.apps import app_definitions
-        from model_service.providers.empaia.ead.listing import parse_listings
+        from model_service.providers.empaia.ead.apps import analysis_apps
         from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
         from model_service.providers.empaia.jobs.routes import create_router
-        from model_service.providers.empaia.publishing.publishers import (
-            default_publishers,
-        )
         from model_service.providers.empaia.registration import register_until_done
 
         del settings
         empaia = EmpaiaSettings()
-        publishers = default_publishers()
-        apps = app_definitions(
-            catalog, parse_listings(catalog.provider_block(CATALOG_BLOCK)), publishers
-        )
+        if blocks := sorted(catalog.provider_block(CATALOG_BLOCK)):
+            logger.warning(
+                "model files' empaia blocks are no longer read (%s); an analysis's "
+                "expose.empaia makes its app",
+                ", ".join(blocks),
+            )
+        apps = analysis_apps(catalog.resolved)
         credentials = _credentials(empaia)
         marketplace = _marketplace(empaia, credentials)
         triggers = _triggers(empaia, credentials)
@@ -81,7 +84,7 @@ class EmpaiaProvider(Provider):
         async def register() -> None:
             """Register the apps until done, when a marketplace is configured.
 
-            It runs with no apps too, so triggers of removed models go.
+            It runs with no apps too, so triggers of removed apps go.
             """
             if marketplace is not None:
                 await register_until_done(marketplace, apps, triggers)
@@ -91,10 +94,7 @@ class EmpaiaProvider(Provider):
                 http_gateway_factory(empaia),
                 allowed_api_urls=empaia.api_urls,
                 workspace_root=empaia.workspace_root,
-                publishers=publishers,
-                parameters={
-                    (app.builder_id, app.model_id): app.parameters for app in apps
-                },
+                catalog=lambda: catalog.resolved,
             ),
             routes=create_router,
             # In the background: the API serves while the marketplace is down.

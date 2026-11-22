@@ -1,4 +1,4 @@
-"""Register the deployed models' EMPAIA apps in a marketplace when the API starts.
+"""Register the deployed analyses' EMPAIA apps in a marketplace when the API starts.
 
 It posts to the routes of the marketplace mock EMPAIA test installations run
 (`/v1/custom-mock/portal-apps`, then the app's global configuration, such as
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from model_service.providers.empaia.credentials import OutgoingCredentials
-    from model_service.providers.empaia.ead.apps import AppDefinition
+    from model_service.providers.empaia.ead.apps import AnalysisApp
     from model_service.providers.empaia.triggers import PreprocessingTriggers
 
 
@@ -65,7 +65,7 @@ class Marketplace:
         self._timeout = timeout
         self._transport = transport
 
-    async def register(self, apps: Sequence[AppDefinition]) -> None:
+    async def register(self, apps: Sequence[AnalysisApp]) -> None:
         """Post each app as a portal app, then its global configuration if it has one.
 
         Registering again replaces an app.
@@ -101,17 +101,16 @@ class Marketplace:
                     )
                     response.raise_for_status()
                 logger.info(
-                    "registered EMPAIA app %s (%s, %s on %s)",
+                    "registered EMPAIA app %s (%s) of analysis %s",
                     app.app_id,
                     ", ".join(app.modes),
-                    app.builder_id,
-                    app.model_id,
+                    app.analysis_id,
                 )
 
 
 async def register_until_done(
     marketplace: Marketplace,
-    apps: Sequence[AppDefinition],
+    apps: Sequence[AnalysisApp],
     triggers: PreprocessingTriggers | None = None,
     *,
     retry_seconds: float = RETRY_SECONDS,

@@ -1,0 +1,59 @@
+{
+  "ead": {
+    "$schema": "https://gitlab.com/empaia/integration/definitions/-/raw/main/ead/ead-schema.v3.json",
+    "name": "Prostate cancer heatmap",
+    "name_short": "ProstHM",
+    "namespace": "org.empaia.rationai.heatmap_prostate_classifier_1.v3.0",
+    "description": "Classifies prostate tissue and shows the scores as a heatmap over the slide. Runs on the region of interest you draw. Runs on the whole slide when the slide is preprocessed.",
+    "permissions": {
+      "data_transmission_to_external_service_provider": true,
+      "wsi_raw_file_access": true
+    },
+    "io": {
+      "slide": {
+        "type": "wsi"
+      },
+      "region_of_interest": {
+        "type": "rectangle",
+        "reference": "io.slide",
+        "classes": [
+          "org.empaia.global.v1.classes.roi"
+        ]
+      },
+      "heatmap": {
+        "type": "continuous_pixelmap",
+        "reference": "io.slide"
+      }
+    },
+    "modes": {
+      "standalone": {
+        "inputs": [
+          "slide",
+          "region_of_interest"
+        ],
+        "outputs": [
+          "heatmap"
+        ]
+      },
+      "preprocessing": {
+        "inputs": [
+          "slide"
+        ],
+        "outputs": [
+          "heatmap"
+        ]
+      }
+    },
+    "configuration": {
+      "global": {
+        "aigopath_viewer": {
+          "type": "string",
+          "description": "Configuration for the viewer"
+        }
+      }
+    }
+  },
+  "global_configuration": {
+    "aigopath_viewer": "{\"inputs\": {\"slide\": {\"target\": \"xopat\", \"lossless\": false}}, \"outputs\": {\"heatmap\": {\"render\": \"shader\", \"label\": \"Prostate Heatmap\", \"visible\": true, \"shader\": {\"type\": \"heatmap\", \"params\": {\"threshold\": 65, \"opacity\": 0.5, \"color\": \"#ffff00\"}}}}}"
+  }
+}
