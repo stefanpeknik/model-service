@@ -1,7 +1,7 @@
 """EMPAIA wiring for the processes that talk to App Service, from `EMPAIA_*` variables.
 
-The API and the builder replicas read the same settings: the API admits
-jobs and publishes results, builders read job inputs.
+The API and the analysis runner read the same settings: the API admits
+jobs and publishes results, the runner reads job inputs.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ class EmpaiaSettings(BaseSettings):
     Attributes:
         api_urls: App Service URLs that may receive job credentials; empty
             refuses all.
-        workspace_root: Where builders' EMPAIA inputs and outputs are kept.
+        workspace_root: Where EMPAIA jobs' inputs and outputs are kept.
         app_service_timeout_seconds: Timeout of App Service calls.
         marketplace_url: Marketplace to register apps in at startup; None
             for no registration.

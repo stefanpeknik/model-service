@@ -1,6 +1,6 @@
 """`/v1/executions`: status, lookup and cancellation.
 
-Submitting work is `/v1/builders/.../schedule` in builders.py.
+Submitting work is `/v1/analyses/{id}/schedule` in analyses.py.
 """
 
 from __future__ import annotations

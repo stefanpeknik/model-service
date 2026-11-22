@@ -34,14 +34,7 @@ from model_service.api.scheduler.transitions.common import work_deadline_at
 from model_service.api.scheduler.transitions.execution_transitions import (
     ExecutionTransitions,
 )
-from model_service.builders.registry import get_builder
 from model_service.contracts.invocation import ExecutionContext, Invocation
-from model_service.contracts.model_declarations import (
-    InferenceContract,
-    ModelBinding,
-    SpatialScoresModel,
-    TileEmbeddingModel,
-)
 from model_service.contracts.result import BuilderResult
 
 
@@ -355,27 +348,16 @@ def _group(execution: ExecutionRecord) -> object:
     return (target.models, target.analysis_id if not target.models else None)
 
 
-def resolve_test_model(builder_id: str, model_id: str) -> ModelBinding:
-    """Resolve any model ID to a small binding of the contract the builder accepts."""
-    spec = get_builder(builder_id)
-    if spec.accepts is InferenceContract.SPATIAL_SCORES:
-        return SpatialScoresModel(
-            id=model_id, tile_size=8, output_tile_size=1, n_channels=1, mpp=0.5
-        )
-    return TileEmbeddingModel(id=model_id, tile_size=8, mpp=0.5, summaries=("tile",))
-
-
 type Handler = Callable[
     [Invocation, ExecutionContext], BuilderResult | Awaitable[BuilderResult]
 ]
 
 
 class FakeDispatch:
-    """Run in-process handlers by builder or analysis ID and record what they received."""
+    """Run in-process handlers by analysis ID and record what they received."""
 
     def __init__(self, handlers: Mapping[str, Handler]) -> None:
         self._handlers = dict(handlers)
-        self.models: list[ModelBinding] = []
         self.analyses: list[AnalysisRunRequest] = []
 
     async def run_analysis(self, request: AnalysisRunRequest) -> BuilderResult:
@@ -383,19 +365,6 @@ class FakeDispatch:
         value = self._handlers[str(request.analysis["id"])](
             request.invocation, request.execution_context
         )
-        if inspect.isawaitable(value):
-            return await value
-        return value
-
-    async def run(
-        self,
-        builder_id: str,
-        invocation: Invocation,
-        model: ModelBinding,
-        execution_context: ExecutionContext,
-    ) -> BuilderResult:
-        self.models.append(model)
-        value = self._handlers[builder_id](invocation, execution_context)
         if inspect.isawaitable(value):
             return await value
         return value

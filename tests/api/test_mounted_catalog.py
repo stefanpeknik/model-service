@@ -9,18 +9,10 @@ from typing import Any
 
 import pytest
 
+from model_service.api.catalog_files import CatalogError
 from model_service.api.catalog_mount import MountedCatalog
-from model_service.api.model_catalog import CatalogError
 from model_service.catalog import load_catalog
-from model_service.contracts.model_declarations import (
-    SpatialScoresModel,
-    TileEmbeddingModel,
-)
-from tests.support.model_documents import (
-    embedding_document,
-    served_document,
-    spatial_document,
-)
+from tests.support.model_documents import served_document
 
 
 CATALOG = Path(__file__).resolve().parents[2] / "catalog"
@@ -41,75 +33,17 @@ def prostate() -> dict[str, Any]:
 def mount(
     directory: Path,
     served: dict[str, Any],
-    legacy: list[dict[str, Any]] | None = None,
-    blocks: dict[str, Any] | None = None,
     analyses: dict[str, Any] | None = None,
 ) -> Path:
-    """Write the files the chart's catalog ConfigMap holds."""
+    """Write the file the chart's catalog ConfigMap holds."""
     directory.mkdir(exist_ok=True)
-    files = {
-        "catalog.json": {"served-models": served, "analyses": analyses or {}},
-        "model-catalog.json": legacy or [],
-        "provider-blocks.json": blocks or {},
-    }
-    for name, content in files.items():
-        (directory / name).write_text(json.dumps(content), encoding="utf-8")
+    content = {"served-models": served, "analyses": analyses or {}}
+    (directory / "catalog.json").write_text(json.dumps(content), encoding="utf-8")
     return directory
 
 
-def test_served_models_give_todays_bindings_beside_old_model_files(
-    tmp_path: Path,
-) -> None:
-    directory = mount(
-        tmp_path / "mount",
-        {"prostate-classifier-1": prostate(), "small": SMALL},
-        legacy=[embedding_document()],
-        blocks={"prostate-classifier-1": {"empaia": {"name": "Prostate cancer"}}},
-    )
-
-    catalog = MountedCatalog(directory, provider_blocks=["empaia"])
-
-    assert list(catalog) == [
-        SpatialScoresModel(
-            id="prostate-classifier-1",
-            tile_size=512,
-            output_tile_size=1,
-            n_channels=1,
-            mpp=0.468,
-        ),
-        TileEmbeddingModel(id="small", tile_size=64, mpp=0.5, summaries=("global",)),
-        TileEmbeddingModel(
-            id="virchow2", tile_size=224, mpp=0.5, summaries=("global", "local_mean")
-        ),
-    ]
-    assert catalog.provider_block("empaia") == {
-        "prostate-classifier-1": {"name": "Prostate cancer"}
-    }
-
-
-def test_an_old_model_file_repeating_a_served_model_is_left_out(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
-    old = spatial_document()
-    old["deployment"]["user_config"]["mpp"] = 1.0
-    directory = mount(
-        tmp_path / "mount", {"prostate-classifier-1": prostate()}, legacy=[old]
-    )
-
-    with caplog.at_level(logging.ERROR):
-        catalog = MountedCatalog(directory)
-
-    assert [(m.id, m.mpp) for m in catalog] == [("prostate-classifier-1", 0.468)]
-    assert "'prostate-classifier-1'" in caplog.text
-
-
-def test_a_provider_block_no_provider_takes_is_refused(tmp_path: Path) -> None:
-    directory = mount(
-        tmp_path / "mount", {"small": SMALL}, blocks={"small": {"listing": {}}}
-    )
-
-    with pytest.raises(CatalogError, match="listing"):
-        MountedCatalog(directory, provider_blocks=["empaia"])
+def served_ids(catalog: MountedCatalog) -> list[str]:
+    return list(catalog.resolved.entries("served-models"))
 
 
 def test_a_changed_catalog_is_picked_up_in_place(tmp_path: Path) -> None:
@@ -121,7 +55,7 @@ def test_a_changed_catalog_is_picked_up_in_place(tmp_path: Path) -> None:
     changed = catalog.refresh()
 
     assert (unchanged, changed) == (False, True)
-    assert [m.id for m in catalog] == ["prostate-classifier-1", "small"]
+    assert served_ids(catalog) == ["prostate-classifier-1", "small"]
     assert catalog.status().status == "loaded"
 
 
@@ -142,7 +76,7 @@ def test_an_invalid_catalog_keeps_the_old_one_and_reports_why(
     assert failed.error is not None
     assert "catalog/served-models/small.yaml:input.tile_size" in failed.error
     assert "catalog/served-models/small.yaml:input.tile_size" in caplog.text
-    assert [m.id for m in catalog] == ["other"]
+    assert served_ids(catalog) == ["other"]
     assert catalog.status().status == "loaded"
 
 

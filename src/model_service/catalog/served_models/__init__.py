@@ -21,7 +21,6 @@ from model_service.catalog.served_models.kind import (
     ServedModels,
     resolve_served_model,
 )
-from model_service.catalog.served_models.legacy import legacy_config
 
 
 __all__ = [
@@ -35,6 +34,5 @@ __all__ = [
     "ServedModel",
     "ServedModels",
     "Serving",
-    "legacy_config",
     "resolve_served_model",
 ]

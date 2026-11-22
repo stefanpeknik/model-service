@@ -47,7 +47,7 @@ PROGRESS_LOG_SECONDS = 60
 
 @dataclass(frozen=True)
 class Concurrency:
-    """How much of one run happens at once; the defaults are today's builders'.
+    """How much of one run happens at once; the defaults are the replica settings'.
 
     Attributes:
         read_threads: Threads for source loads and component steps.

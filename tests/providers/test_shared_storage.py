@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import unittest
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
@@ -16,23 +17,32 @@ from model_service.api.scheduler.public import (
 )
 from model_service.api.scheduler.targets import ExecutionTarget
 from model_service.contracts.failures import InvalidInvocation
-from model_service.contracts.invocation import ExecutionContext, SharedPathInput
+from model_service.contracts.invocation import (
+    ExecutionContext,
+    InputAccessContext,
+    Invocation,
+    SharedPathInput,
+)
 from model_service.contracts.result import BuilderResult, SharedArtifact
 from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
-from tests.support.builder_fixtures import invocation
 
 
 if TYPE_CHECKING:
     from model_service.contracts.json_values import JsonValue
 
 
-def shared(root: str | Path, **inputs: str):  # type: ignore[no-untyped-def]
-    return invocation(
-        "shared_storage",
-        {"root": str(root)},
+def invocation(state: dict[str, JsonValue], **inputs: str) -> Invocation:
+    return Invocation(
         inputs={name: SharedPathInput(path) for name, path in inputs.items()},
+        configuration=None,
+        input_access=InputAccessContext("shared_storage", state),
+        deadline_at=datetime.now(UTC) + timedelta(minutes=1),
     )
+
+
+def shared(root: str | Path, **inputs: str) -> Invocation:
+    return invocation({"root": str(root)}, **inputs)
 
 
 class SharedStorageTests(unittest.TestCase):
@@ -103,9 +113,7 @@ class SharedStorageTests(unittest.TestCase):
         ]
         for state in states:
             with self.subTest(state=state), self.assertRaises(InvalidInvocation):
-                self.adapter.create(
-                    invocation("shared_storage", state), ExecutionContext()
-                )
+                self.adapter.create(invocation(state), ExecutionContext())
 
     def test_input_paths_cannot_escape_the_root(self) -> None:
         (self.allowed / "project" / "escape.tiff").symlink_to(
@@ -153,10 +161,6 @@ class SharedStorageTests(unittest.TestCase):
         old.parent.mkdir(parents=True)
         old.write_bytes(b"late old attempt")
         self.assertEqual(new.read_bytes(), b"accepted")
-        self.assertTrue(access("new").is_visible_artifact(new))
-        self.assertFalse(
-            access("new").is_visible_artifact(self.outside / "secret.tiff")
-        )
         with self.assertRaises(InvalidInvocation):
             access("new").output_path("../escape.tiff")
         self.assertEqual(
@@ -184,7 +188,7 @@ class SharedStorageTests(unittest.TestCase):
         write("failed")
         success = ProviderSuccess(
             BuilderResult({"heatmap": SharedArtifact(str(write("accepted")))}),
-            ExecutionTarget.builder("heatmap", "prostate-classifier-1"),
+            ExecutionTarget("prostate-heatmap", ("prostate-classifier-1",)),
         )
         finish = StandaloneProviderAdapter(self.adapter).finish
 

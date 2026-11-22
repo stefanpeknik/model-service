@@ -1,7 +1,7 @@
 """Run leased processing and provider attempts with independent maintenance and renewal.
 
 Results are settled before provider finish is claimed, so a failed publication is
-retried without rerunning the builder.
+retried without rerunning the analysis.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import logging
 from contextlib import suppress
 from typing import TYPE_CHECKING
 
-from model_service.api.scheduler.builder_dispatch import (
+from model_service.api.scheduler.dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,
     UnknownOutcomeError,
@@ -29,14 +29,11 @@ from model_service.api.scheduler.internal_state import (
 )
 from model_service.api.scheduler.public import (
     ExecutionError,
-    IncompatibleModelError,
     ProviderCancellation,
     ProviderFailure,
     ProviderFinishFailureError,
     ProviderFinishOutcome,
     ProviderSuccess,
-    UnknownBuilderError,
-    UnknownModelError,
 )
 from model_service.api.scheduler.status import ExecutionErrorCode
 from model_service.api.scheduler.store.repository import (
@@ -56,8 +53,8 @@ if TYPE_CHECKING:
     from datetime import timedelta
 
     from model_service.api.scheduler.internal_state import Settlement
-    from model_service.api.scheduler.protocols import RunDispatch
-    from model_service.api.scheduler.public import ModelResolver, ProviderName
+    from model_service.api.scheduler.protocols import AnalysisDispatch
+    from model_service.api.scheduler.public import ProviderName
     from model_service.api.scheduler.running_work import ActiveWorkRegistry
     from model_service.api.scheduler.store.repository import ExecutionRepository
     from model_service.providers.provider import ProviderAdapter
@@ -71,8 +68,7 @@ class ExecutionWorker:
         *,
         repository: ExecutionRepository,
         providers: Mapping[ProviderName, ProviderAdapter],
-        dispatch: RunDispatch,
-        resolve_model: ModelResolver,
+        dispatch: AnalysisDispatch,
         owner: str,
         lease_duration: timedelta,
         active_work: ActiveWorkRegistry,
@@ -83,12 +79,11 @@ class ExecutionWorker:
         Args:
             repository: Durable execution store.
             providers: Provider adapters by provider name.
-            dispatch: Client that runs analyses and builders.
-            resolve_model: Resolver of the current model binding for a builder and model.
+            dispatch: Client that runs analyses on the runner.
             owner: Lease owner ID of this worker.
             lease_duration: How long a claim stays valid without renewal.
             active_work: Registry of local tasks, used for prompt cancellation.
-            max_concurrent: Builder and provider attempts run at once.
+            max_concurrent: Processing and provider attempts run at once.
 
         Raises:
             ValueError: max_concurrent is not positive.
@@ -98,7 +93,6 @@ class ExecutionWorker:
         self._repository = repository
         self._providers = dict(providers)
         self._dispatch = dispatch
-        self._resolve_model = resolve_model
         self._owner = owner
         self._lease_duration = lease_duration
         self._active_work = active_work
@@ -336,7 +330,7 @@ class ExecutionWorker:
         return RenewDirective.CONTINUE
 
     async def _execute(self, claim: WorkClaim) -> Settlement:
-        """Run the claimed work: builder processing, or a provider finish or report.
+        """Run the claimed work: processing, or a provider finish or report.
 
         Provider finish marks the mutation boundary before its first external write.
 
@@ -378,39 +372,44 @@ class ExecutionWorker:
             )
 
     async def _run_processing(self, claim: WorkClaim) -> Settlement:
-        """Dispatch the attempt: the stored analysis to the runner, or a builder.
+        """Dispatch the attempt: the stored analysis document to the runner.
 
         Args:
             claim: Leased attempt.
 
         Returns:
             Success with the result; a rejection for confirmed backpressure; or
-            a failure, permanent for a builder or model that is gone or
-            incompatible, retryable for an unknown dispatch outcome.
+            a failure, permanent for an execution without a document,
+            retryable for an unknown dispatch outcome.
         """
         context = ExecutionContext(
             processing_attempt_id=claim.fencing_token,
             execution_id=claim.execution_id,
             protected_context=claim.protected_context,
         )
+        if claim.target.analysis is None:
+            # Admitted by a builder route before analyses; nothing runs it now.
+            return ProcessingFailed(
+                error=ExecutionError(
+                    code=ExecutionErrorCode.UNKNOWN_ANALYSIS,
+                    message=f"{claim.target.analysis_id} was admitted without an "
+                    "analysis document and can no longer run",
+                ),
+                retryable=False,
+            )
         try:
-            if claim.target.analysis is not None:
-                # Every attempt runs the document admitted, not today's catalog.
-                result = await self._dispatch.run_analysis(
-                    AnalysisRunRequest(claim.invocation, claim.target.analysis, context)
-                )
-            else:
-                result = await self._run_builder(claim, context)
+            # Every attempt runs the document admitted, not today's catalog.
+            result = await self._dispatch.run_analysis(
+                AnalysisRunRequest(claim.invocation, claim.target.analysis, context)
+            )
             return ProcessingSucceeded(result)
-        except ProcessingRefusedError as refused:
-            return refused.failed
         except ConfirmedRejectionError as error:
             return ProcessingRejected(error.retry_after)
         except UnknownOutcomeError:
             return ProcessingFailed(
                 error=ExecutionError(
                     code=ExecutionErrorCode.BUILDER_OUTCOME_UNKNOWN,
-                    message="builder dispatch outcome is unknown",
+                    message="analysis dispatch outcome is unknown",
                 ),
                 retryable=True,
             )
@@ -419,58 +418,6 @@ class ExecutionWorker:
                 error=ExecutionError(error.code, error.safe_message),
                 retryable=error.retryable,
             )
-
-    async def _run_builder(
-        self, claim: WorkClaim, context: ExecutionContext
-    ) -> BuilderResult:
-        """Resolve the builder's model in today's catalog and dispatch the builder.
-
-        Args:
-            claim: Leased attempt of an execution without a document.
-            context: The attempt's identity and provider state.
-
-        Returns:
-            The builder's result.
-
-        Raises:
-            ProcessingRefusedError: The builder or model is gone or incompatible.
-        """
-        pair = claim.target.builder_pair()
-        if pair is None:
-            raise ProcessingRefusedError(
-                ExecutionErrorCode.UNKNOWN_MODEL,
-                f"{claim.target.analysis_id} names no builder and model",
-            )
-        builder_id, model_id = pair
-        try:
-            # Each attempt uses the model's current catalog declaration.
-            model = self._resolve_model(builder_id, model_id)
-        except (UnknownBuilderError, UnknownModelError) as error:
-            raise ProcessingRefusedError(
-                ExecutionErrorCode.UNKNOWN_MODEL,
-                f"{builder_id}/{model_id} is no longer deployed",
-            ) from error
-        except IncompatibleModelError as error:
-            raise ProcessingRefusedError(
-                ExecutionErrorCode.INCOMPATIBLE_MODEL,
-                f"model {model_id!r} is no longer compatible with "
-                f"builder {builder_id!r}",
-            ) from error
-        return await self._dispatch.run(builder_id, claim.invocation, model, context)
-
-
-class ProcessingRefusedError(Exception):
-    """An attempt that cannot start and must not be retried."""
-
-    def __init__(self, code: str, message: str) -> None:
-        """Keep the permanent failure to settle.
-
-        Args:
-            code: The error code.
-            message: The safe message.
-        """
-        super().__init__(message)
-        self.failed = ProcessingFailed(ExecutionError(code, message), retryable=False)
 
 
 def _finish_outcome(claim: WorkClaim) -> ProviderFinishOutcome:
@@ -487,7 +434,7 @@ def _finish_outcome(claim: WorkClaim) -> ProviderFinishOutcome:
     """
     if claim.kind is WorkKind.PROVIDER_FINISH:
         if not isinstance(claim.result, BuilderResult):
-            raise RuntimeError("provider finish requires a durable builder result")
+            raise RuntimeError("provider finish requires a durable result")
         return ProviderSuccess(claim.result, claim.target)
     if claim.kind is WorkKind.PROVIDER_FAILURE_REPORT:
         if claim.error is None:

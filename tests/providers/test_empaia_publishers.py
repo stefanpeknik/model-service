@@ -291,52 +291,24 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
         assert not raised.exception.outcome_unknown
         gateway.finalize.assert_not_awaited()
 
-    async def test_an_output_the_builder_does_not_declare_is_never_published(
+    async def test_a_job_admitted_without_publications_is_never_published(
         self,
     ) -> None:
         gateway = AsyncMock()
+        # A builder-era job: no document, no publications.
+        old = ProviderSuccess(
+            BuilderResult(
+                outputs={"heatmap": SharedArtifact("/x.npz", score_grid.MEDIA_TYPE)}
+            ),
+            ExecutionTarget("prostate-heatmap", ("prostate-classifier-1",)),
+        )
 
         with self.assertRaises(ProviderFinishFailureError) as raised:
-            await self.provider(gateway).finish(
-                CONTEXT,
-                ProviderSuccess(
-                    BuilderResult(
-                        outputs={
-                            "extra": SharedArtifact(
-                                path="/shared/x.npz", media_type=score_grid.MEDIA_TYPE
-                            )
-                        }
-                    ),
-                    ExecutionTarget.builder("heatmap", "prostate-classifier-1"),
-                ),
-            )
+            await self.provider(gateway).finish(CONTEXT, old)
 
         assert not raised.exception.retryable
         assert not raised.exception.outcome_unknown
         gateway.finalize.assert_not_awaited()
-
-    async def test_a_builder_heatmap_is_published_as_before(self) -> None:
-        gateway = AsyncMock()
-        gateway.slide_info.return_value = slide_info()
-        with TemporaryDirectory() as directory:
-            await self.provider(gateway).finish(
-                CONTEXT,
-                ProviderSuccess(
-                    BuilderResult(
-                        outputs={
-                            "heatmap": SharedArtifact(
-                                str(heatmap_file(directory)),
-                                score_grid.LEGACY_MEDIA_TYPE,
-                            )
-                        }
-                    ),
-                    ExecutionTarget.builder("heatmap", "prostate-classifier-1"),
-                ),
-            )
-
-        [call] = gateway.publish_pixelmap.await_args_list
-        assert call.args[:2] == ("heatmap", SLIDE_ID)
-        gateway.finalize.assert_awaited_once()
 
     async def test_an_unreadable_artifact_is_invalid_not_retried(self) -> None:
         gateway = AsyncMock()
@@ -346,16 +318,10 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
 
             with self.assertRaises(ProviderFinishFailureError) as raised:
                 await self.provider(gateway).finish(
-                    CONTEXT,
-                    ProviderSuccess(
-                        BuilderResult(
-                            outputs={
-                                "heatmap": SharedArtifact(
-                                    str(path), score_grid.LEGACY_MEDIA_TYPE
-                                )
-                            }
-                        ),
-                        ExecutionTarget.builder("heatmap", "prostate-classifier-1"),
+                    admitted(heatmap={"type": "continuous_pixelmap"}),
+                    analysis_success(
+                        {"heatmap": SharedArtifact(str(path), score_grid.MEDIA_TYPE)},
+                        ["heatmap"],
                     ),
                 )
 

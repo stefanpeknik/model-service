@@ -12,14 +12,8 @@ from enum import IntEnum
 from typing import TYPE_CHECKING
 
 from model_service.api.scheduler.status import ExecutionStatus
-from model_service.contracts.failures import (
-    IncompatibleModelError,
-    UnknownBuilderError,
-    UnknownModelError,
-)
 from model_service.contracts.invocation import Invocation
 from model_service.contracts.json_values import JsonValue
-from model_service.contracts.model_declarations import ModelBinding
 from model_service.contracts.result import BuilderResult
 
 
@@ -31,26 +25,8 @@ if TYPE_CHECKING:
     from model_service.contracts.json_values import JsonObject
 
 
-__all__ = ["IncompatibleModelError", "UnknownBuilderError", "UnknownModelError"]
-
-
 # The integration a scheduled execution belongs to; each provider names itself.
 type ProviderName = str
-
-
-@dataclass(frozen=True, slots=True)
-class ScheduleRequest:
-    """A builder run with a model (transitional); `body` is provider-specific.
-
-    Standalone bodies are a `BuilderRequest`.
-    """
-
-    builder_id: str
-    model_id: str
-    provider: ProviderName
-    body: dict[str, JsonValue]
-    requested_timeout_seconds: int | None = None
-    idempotency_key: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,14 +49,6 @@ class AnalysisScheduleRequest:
     body: dict[str, JsonValue]
     requested_timeout_seconds: int | None = None
     idempotency_key: str | None = None
-
-
-type AnyScheduleRequest = ScheduleRequest | AnalysisScheduleRequest
-
-
-type ModelResolver = Callable[[str, str], ModelBinding]
-"""Return the current model binding for (builder_id, model_id), raising
-UnknownBuilderError, UnknownModelError or IncompatibleModelError."""
 
 
 type AnalysisResolver = Callable[[str, JsonObject | None], ResolvedAnalysis]
@@ -108,10 +76,10 @@ class ExecutionView:
     Attributes:
         id: The execution's id.
         analysis_id: The analysis it runs; a `<builder>:<model>` ID for a
-            builder run that matches no analysis.
+            builder-era run that matches no analysis.
         models: The served models the analysis calls.
         analysis_digest: The digest of the analysis as resolved at
-            admission; None for a builder run.
+            admission; None for a builder-era run.
         status: Its status.
         configuration: Every setting it runs with, fixed at admission.
         result: Its result, once succeeded.
@@ -146,7 +114,7 @@ class ScheduleResult:
 
 
 class InvalidScheduleRequestError(ValueError):
-    """The schedule request is invalid for its analysis, builder, model or provider."""
+    """The schedule request is invalid for its analysis or provider."""
 
 
 class ScheduleConflictError(RuntimeError):
@@ -200,11 +168,10 @@ class PreparedInvocation:
 
 @dataclass(frozen=True, slots=True)
 class ProviderSuccess:
-    """Give provider finish the durable builder result to publish."""
+    """Give provider finish the durable result to publish."""
 
     result: BuilderResult
-    # What produced it: the analysis document (or the builder) says what each
-    # output is.
+    # What produced it: the analysis document says what each output is.
     target: ExecutionTarget
 
 

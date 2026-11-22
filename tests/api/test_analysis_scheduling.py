@@ -10,9 +10,8 @@ from typing import TYPE_CHECKING
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from model_service.api.app_factory import analysis_resolver, create_app, model_resolver
-from model_service.api.model_catalog import ModelCatalog
-from model_service.api.scheduler.builder_dispatch import RemoteFailureError
+from model_service.api.app_factory import analysis_resolver, create_app
+from model_service.api.scheduler.dispatch import RemoteFailureError
 from model_service.api.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.api.scheduler.internal_state import RetryPolicy
 from model_service.catalog import Catalog, load_catalog
@@ -28,8 +27,6 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
     from model_service.contracts.analysis_http import AnalysisRunRequest
-    from model_service.contracts.invocation import ExecutionContext, Invocation
-    from model_service.contracts.model_declarations import ModelBinding
 
 
 pytestmark = pytest.mark.anyio
@@ -61,21 +58,12 @@ class FakeRunner:
             }
         )
 
-    async def run(
-        self,
-        builder_id: str,
-        invocation: Invocation,
-        model: ModelBinding,
-        execution_context: ExecutionContext,
-    ) -> BuilderResult:
-        raise AssertionError(builder_id)
-
 
 class Deployment:
     """The API with a real scheduler over the in-memory repository and a fake runner."""
 
     def __init__(self, root: Path, runner: FakeRunner) -> None:
-        self.catalog = ModelCatalog([], resolved=CATALOG)
+        self.catalog = CATALOG
         self.runner = runner
         self.scheduler = ExecutionScheduler(
             repository=InMemoryExecutionRepository(
@@ -87,18 +75,17 @@ class Deployment:
                     SharedStorageAccessFactory([root])
                 )
             },
-            resolve_model=model_resolver(self.catalog),
-            resolve_analysis=analysis_resolver(self.catalog),
+            resolve_analysis=analysis_resolver(lambda: self.catalog),
             default_timeout=timedelta(hours=1),
             maximum_timeout=timedelta(hours=6),
             poll_interval=0.01,
         )
 
     def replace_catalog(self, catalog: Catalog) -> None:
-        self.catalog.resolved = catalog
+        self.catalog = catalog
 
     async def client(self) -> AsyncIterator[AsyncClient]:
-        app = create_app(self.scheduler, catalog=self.catalog)
+        app = create_app(self.scheduler, catalog=lambda: self.catalog)
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://model-service"
         ) as client:

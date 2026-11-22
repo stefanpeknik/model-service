@@ -84,7 +84,7 @@ class InvocationType(TypeDecorator[Invocation]):
 
 
 class ResultType(TypeDecorator[BuilderResult]):
-    """Stores a builder result as JSONB."""
+    """Stores a run result as JSONB."""
 
     impl = JSONB(none_as_null=True)
     cache_ok = True
@@ -92,7 +92,7 @@ class ResultType(TypeDecorator[BuilderResult]):
     def process_bind_param(
         self, value: BuilderResult | None, dialect: Dialect
     ) -> object:
-        """Serialize a builder result to JSON for the JSONB column.
+        """Serialize a run result to JSON for the JSONB column.
 
         Args:
             value: The result, or None.
@@ -106,17 +106,17 @@ class ResultType(TypeDecorator[BuilderResult]):
     def process_result_value(
         self, value: object, dialect: Dialect
     ) -> BuilderResult | None:
-        """Validate the column's JSON back into a builder result.
+        """Validate the column's JSON back into a run result.
 
         Args:
             value: JSON from the JSONB column, or None.
             dialect: Database dialect in use.
 
         Returns:
-            The builder result, or None.
+            The run result, or None.
 
         Raises:
-            pydantic.ValidationError: The JSON does not match the builder result schema.
+            pydantic.ValidationError: The JSON does not match the run result schema.
         """
         return _RESULT.validate_python(value) if value is not None else None
 

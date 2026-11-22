@@ -55,7 +55,7 @@ class AttemptOutcomeTransitions:
         """Keep the retry policies and the expiry rules a settlement past its deadline applies.
 
         Args:
-            processing_policy: Attempts and backoff for builder processing.
+            processing_policy: Attempts and backoff for processing.
             finish_policy: Attempts and backoff for provider finish and reports.
             expiry: Deadline and lease-recovery rules.
         """

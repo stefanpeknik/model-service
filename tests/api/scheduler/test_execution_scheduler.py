@@ -9,7 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any
 
-from model_service.api.scheduler.builder_dispatch import (
+from model_service.api.scheduler.dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,
     UnknownOutcomeError,
@@ -25,8 +25,7 @@ from model_service.api.scheduler.internal_state import (
     WorkKind,
 )
 from model_service.api.scheduler.public import (
-    AnyScheduleRequest,
-    IncompatibleModelError,
+    AnalysisScheduleRequest,
     InvalidScheduleRequestError,
     PreparedInvocation,
     ProviderCancellation,
@@ -34,10 +33,7 @@ from model_service.api.scheduler.public import (
     ProviderFinishFailureError,
     ProviderSuccess,
     ScheduleConflictError,
-    ScheduleRequest,
     SubmissionIdentity,
-    UnknownBuilderError,
-    UnknownModelError,
 )
 from model_service.api.scheduler.running_work import ActiveWorkRegistry
 from model_service.api.scheduler.status import ExecutionStatus
@@ -46,6 +42,7 @@ from model_service.api.scheduler.store.repository import (
 )
 from model_service.api.scheduler.targets import ExecutionTarget
 from model_service.api.scheduler.worker import ExecutionWorker
+from model_service.contracts.failures import UnknownAnalysisError
 from model_service.contracts.invocation import (
     ExecutionContext,
     InputAccessContext,
@@ -54,12 +51,12 @@ from model_service.contracts.invocation import (
 from model_service.contracts.result import BuilderResult, SharedArtifact
 from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
-from tests.support.memory_repository import (
-    FakeDispatch,
-    InMemoryExecutionRepository,
-    resolve_test_model,
+from tests.support.memory_repository import FakeDispatch, InMemoryExecutionRepository
+from tests.support.scheduling import (
+    MutableClock,
+    StandaloneProvider,
+    resolve_test_analysis,
 )
-from tests.support.scheduling import MutableClock, StandaloneProvider
 
 
 if TYPE_CHECKING:
@@ -67,11 +64,9 @@ if TYPE_CHECKING:
 
     from model_service.api.scheduler.public import (
         BeforeMutation,
-        ModelResolver,
         ProviderFinishOutcome,
     )
     from model_service.contracts.json_values import JsonValue
-    from model_service.contracts.model_declarations import ModelBinding
 
 
 class RecordingProvider(StandaloneProvider):
@@ -90,7 +85,7 @@ class RecordingProvider(StandaloneProvider):
 
     async def prepare(
         self,
-        request: AnyScheduleRequest,
+        request: AnalysisScheduleRequest,
         deadline_at: datetime,
     ) -> PreparedInvocation:
         """Attach configured protected context to the minimal prepared invocation."""
@@ -157,7 +152,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         scheduler, worker = self._scheduler_and_worker(
             repository,
             BlockingProvider(),
-            FakeDispatch({"heatmap": lambda _i, _c: BuilderResult(outputs={})}),
+            FakeDispatch({"a1": lambda _i, _c: BuilderResult(outputs={})}),
             lease_duration=timedelta(milliseconds=30),
         )
         admitted = await scheduler.schedule(self._request())
@@ -195,7 +190,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         scheduler, worker = self._scheduler_and_worker(
             StalledRenewalRepository(),
             StandaloneProvider(),
-            FakeDispatch({"heatmap": dispatch}),
+            FakeDispatch({"a1": dispatch}),
             lease_duration=timedelta(milliseconds=30),
         )
         await scheduler.schedule(self._request())
@@ -227,7 +222,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         scheduler, worker = self._scheduler_and_worker(
             repository,
             StandaloneProvider(),
-            FakeDispatch({"heatmap": dispatch}),
+            FakeDispatch({"a1": dispatch}),
             lease_duration=timedelta(milliseconds=90),
         )
         admitted = await scheduler.schedule(self._request())
@@ -283,7 +278,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         scheduler, worker = self._scheduler_and_worker(
             repository,
             StandaloneProvider(),
-            FakeDispatch({"heatmap": dispatch}),
+            FakeDispatch({"a1": dispatch}),
             clock=clock,
             lease_duration=timedelta(milliseconds=30),
         )
@@ -359,15 +354,15 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             await release.wait()
             return BuilderResult(outputs={})
 
-        fake = FakeDispatch({"heatmap": dispatch})
+        fake = FakeDispatch({"a1": dispatch, "a2": dispatch})
         scheduler, worker = self._scheduler_and_worker(
             InMemoryExecutionRepository(),
             StandaloneProvider(),
             fake,
             max_concurrent=2,
         )
-        first = await scheduler.schedule(self._request("a", model_id="model-a"))
-        second = await scheduler.schedule(self._request("b", model_id="model-b"))
+        first = await scheduler.schedule(self._request("a", analysis_id="a1"))
+        second = await scheduler.schedule(self._request("b", analysis_id="a2"))
         self._start_worker(worker)
 
         await asyncio.wait_for(both_started.wait(), timeout=1)
@@ -378,71 +373,56 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         await self._wait_for_status(
             scheduler, second.execution.id, ExecutionStatus.SUCCEEDED
         )
-        self.assertEqual({model.id for model in fake.models}, {"model-a", "model-b"})
+        self.assertEqual({r.analysis["id"] for r in fake.analyses}, {"a1", "a2"})
 
-    async def test_model_removed_before_attempt_fails_without_retry(self) -> None:
-        cases = {
-            UnknownModelError("gone"): "unknown_model",
-            IncompatibleModelError("changed contract"): "incompatible_model",
-        }
-        for error, code in cases.items():
-            with self.subTest(code=code):
-                resolutions = 0
+    async def test_an_execution_without_an_analysis_document_fails_without_retry(
+        self,
+    ) -> None:
+        clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
+        repository = InMemoryExecutionRepository(clock=clock)
+        deadline = clock() + timedelta(hours=1)
+        # Admitted by a builder route before analyses; migration 0009 named it.
+        admitted = await repository.admit(
+            Admission(
+                identity=SubmissionIdentity("standalone", "old-1", "fingerprint"),
+                target=ExecutionTarget("prostate-heatmap", ("prostate-classifier-1",)),
+                invocation=Invocation(
+                    inputs={},
+                    configuration={},
+                    input_access=InputAccessContext(kind="shared_storage", state={}),
+                    deadline_at=deadline,
+                ),
+                protected_context={},
+                deadline_at=deadline,
+            )
+        )
+        dispatch = FakeDispatch({})
+        _, worker = self._scheduler_and_worker(
+            repository, StandaloneProvider(), dispatch, clock=clock
+        )
 
-                def resolve(
-                    builder_id: str, model_id: str, error: Exception = error
-                ) -> ModelBinding:
-                    nonlocal resolutions
-                    resolutions += 1
-                    # Admission succeeds; the first attempt sees the changed catalog.
-                    if resolutions > 1:
-                        raise error
-                    return resolve_test_model(builder_id, model_id)
+        self.assertTrue(await worker.run_once())
 
-                repository = InMemoryExecutionRepository()
-                scheduler, worker = self._scheduler_and_worker(
-                    repository,
-                    StandaloneProvider(),
-                    FakeDispatch({}),
-                    resolve_model=resolve,
-                )
-                admitted = await scheduler.schedule(self._request(code))
+        failed = await repository.get(admitted.execution.id)
+        self.assertEqual(failed.status, "failed")
+        self.assertEqual(failed.processing_attempts, 1)
+        assert failed.error is not None
+        self.assertEqual(failed.error.code, "unknown_analysis")
+        self.assertEqual(dispatch.analyses, [])
 
-                self.assertTrue(await worker.run_once())
+    async def test_admission_rejects_an_analysis_that_is_not_deployed(self) -> None:
+        repository = InMemoryExecutionRepository()
+        scheduler, _ = self._scheduler_and_worker(
+            repository, StandaloneProvider(), FakeDispatch({})
+        )
 
-                failed = await repository.get(admitted.execution.id)
-                self.assertEqual(failed.status, "failed")
-                self.assertEqual(failed.processing_attempts, 1)
-                assert failed.error is not None
-                self.assertEqual(failed.error.code, code)
-
-    async def test_admission_rejects_unknown_or_incompatible_models(self) -> None:
-        for error in (
-            UnknownBuilderError("x"),
-            UnknownModelError("x"),
-            IncompatibleModelError("x"),
-        ):
-            with self.subTest(error=type(error).__name__):
-
-                def resolve(
-                    _builder_id: str, _model_id: str, error: Exception = error
-                ) -> ModelBinding:
-                    raise error
-
-                repository = InMemoryExecutionRepository()
-                scheduler, _ = self._scheduler_and_worker(
-                    repository,
-                    StandaloneProvider(),
-                    FakeDispatch({}),
-                    resolve_model=resolve,
-                )
-                with self.assertRaises(type(error)):
-                    await scheduler.schedule(self._request())
-                self.assertIsNone(
-                    await repository.find_submission(
-                        SubmissionIdentity("standalone", "request-1", "same-request")
-                    )
-                )
+        with self.assertRaises(UnknownAnalysisError):
+            await scheduler.schedule(self._request(analysis_id="missing"))
+        self.assertIsNone(
+            await repository.find_submission(
+                SubmissionIdentity("standalone", "request-1", "same-request")
+            )
+        )
 
     async def test_deadline_failure_is_reported_until_provider_deadline(self) -> None:
         clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
@@ -451,7 +431,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         report_deadline = clock() + timedelta(hours=1)
         admission = Admission(
             identity=SubmissionIdentity("external", "job-1", "fingerprint"),
-            target=ExecutionTarget.builder("heatmap", "prostate-classifier-1"),
+            target=ExecutionTarget("prostate-heatmap", ("prostate-classifier-1",)),
             invocation=Invocation(
                 inputs={},
                 configuration={},
@@ -518,7 +498,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         scheduler, worker = self._scheduler_and_worker(
             repository,
             provider,
-            FakeDispatch({"heatmap": dispatch}),
+            FakeDispatch({"a1": dispatch}),
             clock=lambda: now,
         )
         admitted = await scheduler.schedule(self._request())
@@ -558,7 +538,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         scheduler, worker = self._scheduler_and_worker(
             repository,
             provider,
-            FakeDispatch({"heatmap": fail}),
+            FakeDispatch({"a1": fail}),
         )
         failed = await scheduler.schedule(self._request("failure"))
 
@@ -610,7 +590,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         scheduler, worker = self._scheduler_and_worker(
             repository,
             provider,
-            FakeDispatch({"heatmap": fail}),
+            FakeDispatch({"a1": fail}),
         )
         admitted = await scheduler.schedule(self._request())
 
@@ -646,7 +626,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             provider,
             FakeDispatch(
                 {
-                    "heatmap": lambda _invocation, _execution_context: BuilderResult(
+                    "a1": lambda _invocation, _execution_context: BuilderResult(
                         outputs={}
                     )
                 }
@@ -689,7 +669,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         scheduler, worker = self._scheduler_and_worker(
             repository,
             provider,
-            FakeDispatch({"heatmap": dispatch}),
+            FakeDispatch({"a1": dispatch}),
         )
         admitted = await scheduler.schedule(self._request())
 
@@ -710,26 +690,24 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             repository=repository,
             dispatch=FakeDispatch({}),
             providers={provider.name: provider},
-            resolve_model=resolve_test_model,
+            resolve_analysis=resolve_test_analysis,
             default_timeout=timedelta(hours=1),
             maximum_timeout=timedelta(hours=6),
             clock=lambda: now,
         )
         worker = ExecutionWorker(
-            resolve_model=resolve_test_model,
             repository=repository,
             active_work=ActiveWorkRegistry(),
             providers={provider.name: provider},
             dispatch=FakeDispatch(
-                {"heatmap": lambda _invocation, _context: BuilderResult(outputs={})}
+                {"a1": lambda _invocation, _context: BuilderResult(outputs={})}
             ),
             owner="worker-1",
             lease_duration=timedelta(minutes=1),
         )
         admitted = await scheduler.schedule(
-            ScheduleRequest(
-                builder_id="heatmap",
-                model_id="prostate-classifier-1",
+            AnalysisScheduleRequest(
+                analysis_id="a1",
                 provider="standalone",
                 body={},
                 idempotency_key="request-1",
@@ -776,24 +754,22 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             repository=repository,
             dispatch=FakeDispatch({}),
             providers={provider.name: provider},
-            resolve_model=resolve_test_model,
+            resolve_analysis=resolve_test_analysis,
             default_timeout=timedelta(hours=1),
             maximum_timeout=timedelta(hours=6),
             clock=clock,
         )
         worker = ExecutionWorker(
-            resolve_model=resolve_test_model,
             repository=repository,
             active_work=ActiveWorkRegistry(),
             providers={provider.name: provider},
-            dispatch=FakeDispatch({"heatmap": dispatch}),
+            dispatch=FakeDispatch({"a1": dispatch}),
             owner="worker-1",
             lease_duration=timedelta(minutes=1),
         )
         admitted = await scheduler.schedule(
-            ScheduleRequest(
-                builder_id="heatmap",
-                model_id="prostate-classifier-1",
+            AnalysisScheduleRequest(
+                analysis_id="a1",
                 provider="standalone",
                 body={},
                 idempotency_key="request-1",
@@ -837,24 +813,22 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             repository=repository,
             dispatch=FakeDispatch({}),
             providers={provider.name: provider},
-            resolve_model=resolve_test_model,
+            resolve_analysis=resolve_test_analysis,
             default_timeout=timedelta(hours=1),
             maximum_timeout=timedelta(hours=6),
             clock=clock,
         )
         worker = ExecutionWorker(
-            resolve_model=resolve_test_model,
             repository=repository,
             active_work=ActiveWorkRegistry(),
             providers={provider.name: provider},
-            dispatch=FakeDispatch({"heatmap": dispatch}),
+            dispatch=FakeDispatch({"a1": dispatch}),
             owner="worker-1",
             lease_duration=timedelta(minutes=1),
         )
         admitted = await scheduler.schedule(
-            ScheduleRequest(
-                builder_id="heatmap",
-                model_id="prostate-classifier-1",
+            AnalysisScheduleRequest(
+                analysis_id="a1",
                 provider="standalone",
                 body={},
                 idempotency_key="request-1",
@@ -892,9 +866,9 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         provider = StandaloneProvider()
         scheduler = ExecutionScheduler(
             repository=repository,
-            dispatch=FakeDispatch({"heatmap": dispatch}),
+            dispatch=FakeDispatch({"a1": dispatch}),
             providers={provider.name: provider},
-            resolve_model=resolve_test_model,
+            resolve_analysis=resolve_test_analysis,
             default_timeout=timedelta(hours=1),
             maximum_timeout=timedelta(hours=6),
             clock=clock,
@@ -902,9 +876,8 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             poll_interval=0.01,
         )
         admitted = await scheduler.schedule(
-            ScheduleRequest(
-                builder_id="heatmap",
-                model_id="prostate-classifier-1",
+            AnalysisScheduleRequest(
+                analysis_id="a1",
                 provider="standalone",
                 body={},
                 idempotency_key="request-1",
@@ -943,13 +916,12 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             repository=repository,
             dispatch=FakeDispatch({}),
             providers={provider.name: provider},
-            resolve_model=resolve_test_model,
+            resolve_analysis=resolve_test_analysis,
             default_timeout=timedelta(hours=1),
             maximum_timeout=timedelta(hours=6),
         )
-        dispatch_adapter = FakeDispatch({"heatmap": dispatch})
+        dispatch_adapter = FakeDispatch({"a1": dispatch})
         first_worker = ExecutionWorker(
-            resolve_model=resolve_test_model,
             repository=repository,
             active_work=ActiveWorkRegistry(),
             providers={provider.name: provider},
@@ -958,7 +930,6 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             lease_duration=timedelta(milliseconds=60),
         )
         replacement_worker = ExecutionWorker(
-            resolve_model=resolve_test_model,
             repository=repository,
             active_work=ActiveWorkRegistry(),
             providers={provider.name: provider},
@@ -967,9 +938,8 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             lease_duration=timedelta(milliseconds=60),
         )
         await scheduler.schedule(
-            ScheduleRequest(
-                builder_id="heatmap",
-                model_id="prostate-classifier-1",
+            AnalysisScheduleRequest(
+                analysis_id="a1",
                 provider="standalone",
                 body={},
                 idempotency_key="request-1",
@@ -1006,7 +976,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
                 repository=repository,
                 dispatch=FakeDispatch({}),
                 providers={provider.name: provider},
-                resolve_model=resolve_test_model,
+                resolve_analysis=resolve_test_analysis,
                 default_timeout=timedelta(hours=1),
                 maximum_timeout=timedelta(hours=6),
                 clock=clock,
@@ -1025,9 +995,8 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             conflicting_body["output_path"] = "outputs/other.tiff"
             with self.assertRaises(ScheduleConflictError):
                 await scheduler.schedule(
-                    ScheduleRequest(
-                        builder_id=request.builder_id,
-                        model_id=request.model_id,
+                    AnalysisScheduleRequest(
+                        analysis_id=request.analysis_id,
                         provider=request.provider,
                         body=conflicting_body,
                         idempotency_key=request.idempotency_key,
@@ -1045,7 +1014,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
                 repository=repository,
                 dispatch=FakeDispatch({}),
                 providers={provider.name: provider},
-                resolve_model=resolve_test_model,
+                resolve_analysis=resolve_test_analysis,
                 default_timeout=timedelta(hours=1),
                 maximum_timeout=timedelta(hours=6),
                 clock=clock,
@@ -1071,7 +1040,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
                 repository=repository,
                 dispatch=FakeDispatch({}),
                 providers={provider.name: provider},
-                resolve_model=resolve_test_model,
+                resolve_analysis=resolve_test_analysis,
                 default_timeout=timedelta(hours=1),
                 maximum_timeout=timedelta(hours=6),
                 clock=clock,
@@ -1079,9 +1048,8 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             valid_request = self._standalone_request(root)
             invalid_body = dict(valid_request.body)
             invalid_body["configuration"] = {"output_path": "heatmap.tiff"}
-            invalid_request = ScheduleRequest(
-                builder_id=valid_request.builder_id,
-                model_id=valid_request.model_id,
+            invalid_request = AnalysisScheduleRequest(
+                analysis_id=valid_request.analysis_id,
                 provider=valid_request.provider,
                 body=invalid_body,
                 idempotency_key=valid_request.idempotency_key,
@@ -1097,12 +1065,10 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
     def _request(
         key: str = "request-1",
         *,
-        builder_id: str = "heatmap",
-        model_id: str = "prostate-classifier-1",
-    ) -> ScheduleRequest:
-        return ScheduleRequest(
-            builder_id=builder_id,
-            model_id=model_id,
+        analysis_id: str = "a1",
+    ) -> AnalysisScheduleRequest:
+        return AnalysisScheduleRequest(
+            analysis_id=analysis_id,
             provider="standalone",
             body={},
             idempotency_key=key,
@@ -1116,20 +1082,18 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         *,
         clock: Callable[[], datetime] | None = None,
         lease_duration: timedelta = timedelta(minutes=1),
-        resolve_model: ModelResolver = resolve_test_model,
         max_concurrent: int = 1,
     ) -> tuple[ExecutionScheduler, ExecutionWorker]:
         scheduler = ExecutionScheduler(
             repository=repository,
             dispatch=FakeDispatch({}),
             providers={provider.name: provider},
-            resolve_model=resolve_model,
+            resolve_analysis=resolve_test_analysis,
             default_timeout=timedelta(hours=1),
             maximum_timeout=timedelta(hours=6),
             clock=clock,
         )
         worker = ExecutionWorker(
-            resolve_model=resolve_model,
             repository=repository,
             active_work=ActiveWorkRegistry(),
             providers={provider.name: provider},
@@ -1141,11 +1105,10 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         return scheduler, worker
 
     @staticmethod
-    def _standalone_request(root: Path) -> ScheduleRequest:
-        """Build a complete shared-storage prostate schedule request rooted at the fixture directory."""
-        return ScheduleRequest(
-            builder_id="heatmap",
-            model_id="prostate-classifier-1",
+    def _standalone_request(root: Path) -> AnalysisScheduleRequest:
+        """Build a complete shared-storage schedule request rooted at the fixture directory."""
+        return AnalysisScheduleRequest(
+            analysis_id="a1",
             provider="standalone",
             body={
                 "inputs": {
@@ -1155,7 +1118,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
                         "path": "roi.tiff",
                     },
                 },
-                "output_path": "outputs/heatmap.tiff",
+                "output_path": "outputs/heatmap.npz",
                 "input_access": {
                     "kind": "shared_storage",
                     "state": {"root": str(root)},

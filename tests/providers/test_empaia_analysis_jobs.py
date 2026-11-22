@@ -168,9 +168,6 @@ class Runner:
     async def run_analysis(self, request: AnalysisRunRequest) -> BuilderResult:
         return await self.replica.run(request)
 
-    async def run(self, *_args: object) -> BuilderResult:
-        raise AssertionError("a builder ran")
-
 
 class Deployment:
     """The JES route, scheduler, worker and runner, over one fake App Service."""
@@ -201,7 +198,6 @@ class Deployment:
             repository=self.repository,
             dispatch=runner,
             providers={"empaia": self.adapter},
-            resolve_model=_no_model,
             resolve_analysis=lambda i, s: resolve_run(catalog, i, s),
             default_timeout=timedelta(hours=1),
             maximum_timeout=timedelta(hours=6),
@@ -211,7 +207,6 @@ class Deployment:
             active_work=ActiveWorkRegistry(),
             providers={"empaia": self.adapter},
             dispatch=runner,
-            resolve_model=_no_model,
             owner="worker-1",
             lease_duration=timedelta(minutes=1),
         )
@@ -223,10 +218,6 @@ class Deployment:
             transport=ASGITransport(app=app), base_url="http://model-service"
         ) as client:
             yield client
-
-
-def _no_model(builder_id: str, model_id: str) -> Any:
-    raise AssertionError("no builder runs here")
 
 
 def job(job_id: str = "job-1") -> dict[str, str]:

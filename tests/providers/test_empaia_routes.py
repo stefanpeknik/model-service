@@ -14,28 +14,20 @@ from model_service.api.http.auth import (
     Authenticator,
     Principal,
 )
-from model_service.api.model_catalog import ModelCatalog
 from model_service.api.scheduler.public import (
+    AnalysisScheduleRequest,
     ExecutionError,
     ExecutionView,
-    ScheduleRequest,
     ScheduleResult,
     UnknownExecutionError,
 )
 from model_service.api.scheduler.status import ExecutionStatus
-from model_service.contracts.failures import UnknownModelError
-from model_service.contracts.model_declarations import SpatialScoresModel
+from model_service.catalog import Catalog
+from model_service.contracts.failures import UnknownAnalysisError
 from model_service.providers.empaia.jobs.routes import create_router
 
 
-PROSTATE = SpatialScoresModel(
-    id="prostate-classifier-1",
-    tile_size=512,
-    output_tile_size=1,
-    n_channels=1,
-    mpp=0.468,
-)
-SUBMIT = "/v1/empaia/builders/heatmap/models/prostate-classifier-1"
+SUBMIT = "/v1/empaia/analyses/prostate-heatmap"
 TOKEN = "secret-job-token"
 JOB = {
     "app_api": "https://app-service.example/v3/",
@@ -49,7 +41,7 @@ def view(status: ExecutionStatus, **fields: object) -> ExecutionView:
     return ExecutionView(
         id="execution-1",
         analysis_id="prostate-heatmap",
-        models=[PROSTATE.id],
+        models=["prostate-classifier-1"],
         analysis_digest=None,
         status=status,
         **fields,  # type: ignore[arg-type]
@@ -62,16 +54,16 @@ class ScriptedScheduler:
     def __init__(self, current: ExecutionView, *, created: bool = True) -> None:
         self.current = current
         self.created = created
-        self.requests: list[ScheduleRequest] = []
-        self.unknown_models: set[str] = set()
+        self.requests: list[AnalysisScheduleRequest] = []
+        self.unknown_analyses: set[str] = set()
         self.cancelled: list[str] = []
 
     async def check_ready(self) -> None:
         return None
 
-    async def schedule(self, request: ScheduleRequest) -> ScheduleResult:
-        if request.model_id in self.unknown_models:
-            raise UnknownModelError(request.model_id)
+    async def schedule(self, request: AnalysisScheduleRequest) -> ScheduleResult:
+        if request.analysis_id in self.unknown_analyses:
+            raise UnknownAnalysisError(request.analysis_id)
         self.requests.append(request)
         return ScheduleResult(self.current, created=self.created)
 
@@ -88,14 +80,14 @@ class ScriptedScheduler:
 def client(scheduler: ScriptedScheduler) -> AsyncClient:
     app = create_app(
         scheduler,  # type: ignore[arg-type]
-        catalog=ModelCatalog([PROSTATE]),
+        catalog=lambda: Catalog(None),
         provider_routes=[create_router],
     )
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://ms")
 
 
 class EmpaiaRouteTests(unittest.IsolatedAsyncioTestCase):
-    async def test_submission_runs_the_apps_builder_and_model(self) -> None:
+    async def test_submission_runs_the_apps_analysis(self) -> None:
         scheduler = ScriptedScheduler(view(ExecutionStatus.QUEUED))
         async with client(scheduler) as http:
             response = await http.post(
@@ -112,9 +104,8 @@ class EmpaiaRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             scheduler.requests,
             [
-                ScheduleRequest(
-                    builder_id="heatmap",
-                    model_id=PROSTATE.id,
+                AnalysisScheduleRequest(
+                    analysis_id="prostate-heatmap",
                     provider="empaia",
                     body={
                         "installation_id": "https://app-service.example/v3",
@@ -147,17 +138,17 @@ class EmpaiaRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.json()["detail"]["code"], "invalid_request")
         self.assertEqual(scheduler.requests, [])
 
-    async def test_unknown_model_and_invalid_body_are_rejected_safely(self) -> None:
+    async def test_unknown_analysis_and_invalid_body_are_rejected_safely(
+        self,
+    ) -> None:
         scheduler = ScriptedScheduler(view(ExecutionStatus.QUEUED))
-        scheduler.unknown_models.add("other-model")
+        scheduler.unknown_analyses.add("other")
         async with client(scheduler) as http:
-            unknown = await http.post(
-                "/v1/empaia/builders/heatmap/models/other-model", json=JOB
-            )
+            unknown = await http.post("/v1/empaia/analyses/other", json=JOB)
             invalid = await http.post(SUBMIT, json={**JOB, "job_id": ""})
 
         self.assertEqual(unknown.status_code, 404)
-        self.assertEqual(unknown.json()["detail"]["code"], "unknown_model")
+        self.assertEqual(unknown.json()["detail"]["code"], "unknown_analysis")
         self.assertEqual(invalid.status_code, 422)
         self.assertNotIn(TOKEN, invalid.text)
         self.assertEqual(scheduler.requests, [])
@@ -213,7 +204,7 @@ class EmpaiaRouteTests(unittest.IsolatedAsyncioTestCase):
 
         app = create_app(
             ScriptedScheduler(view(ExecutionStatus.QUEUED)),  # type: ignore[arg-type]
-            catalog=ModelCatalog([PROSTATE]),
+            catalog=lambda: Catalog(None),
             access=Access(authenticator=Nobody()),
             provider_routes=[create_router],
         )

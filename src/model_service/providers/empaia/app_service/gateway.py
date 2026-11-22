@@ -1,7 +1,7 @@
 """Specify the EMPAIA job boundary, protected credentials, and configurable gateway factory.
 
 Provider admission and finish use this boundary in the scheduler process; input access
-uses it in the builder process.
+uses it in the analysis runner.
 """
 
 from __future__ import annotations
@@ -111,8 +111,8 @@ class EmpaiaInputState(BaseModel):
         mode: How the job was started; None for executions admitted before
             it was recorded.
         inputs: Each file input's EAD type and converter options, by input
-            name, as admitted; None for builder runs admitted before they
-            were recorded, whose inputs keep the builder's EAD types.
+            name, as admitted; None for builder-era jobs, which no longer
+            run.
     """
 
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
@@ -146,8 +146,8 @@ class EmpaiaJobContext(EmpaiaInputState):
     Attributes:
         credential: The job's App Service token.
         publications: How the analysis's outputs are published, as
-            admitted; None for a builder run, whose outputs keep the
-            builder's EAD types.
+            admitted; None for a builder-era job, which is never
+            published now.
     """
 
     credential: Annotated[str, Field(min_length=1, repr=False)]

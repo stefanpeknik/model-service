@@ -1,4 +1,4 @@
-"""A builder's result as it is sent and stored: one output per declared name."""
+"""A run's result as it is sent and stored: one output per declared name."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from model_service.contracts.json_values import (
 
 
 class OutputKind(StrEnum):
-    """How a builder output is returned: inline or as a shared artifact."""
+    """How an output is returned: inline or as a shared artifact."""
 
     INLINE = "inline"
     SHARED_ARTIFACT = "shared_artifact"
@@ -53,7 +53,7 @@ type BuilderOutput = Annotated[
 
 @dataclass(frozen=True, slots=True)
 class BuilderResult:
-    """A builder run's result.
+    """A run's result.
 
     Attributes:
         outputs: One output per declared output name.

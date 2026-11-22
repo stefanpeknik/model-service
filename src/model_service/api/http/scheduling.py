@@ -14,24 +14,21 @@ from model_service.api.http.errors import (
     unavailable,
 )
 from model_service.api.scheduler.public import (
-    AnalysisScheduleRequest,
     InvalidScheduleRequestError,
     ScheduleConflictError,
     SchedulingUnavailableError,
 )
-from model_service.contracts.failures import (
-    IncompatibleModelError,
-    UnknownAnalysisError,
-    UnknownBuilderError,
-    UnknownModelError,
-)
+from model_service.contracts.failures import UnknownAnalysisError
 
 
 if TYPE_CHECKING:
     from fastapi import Response
 
     from model_service.api.scheduler.protocols import Scheduler
-    from model_service.api.scheduler.public import AnyScheduleRequest, ScheduleResult
+    from model_service.api.scheduler.public import (
+        AnalysisScheduleRequest,
+        ScheduleResult,
+    )
 
 
 logger = logging.getLogger(__name__)
@@ -60,16 +57,16 @@ def require_idempotency_key(
 
 async def submit(
     scheduler: Scheduler,
-    request: AnyScheduleRequest,
+    request: AnalysisScheduleRequest,
     response: Response,
 ) -> ScheduleResult:
-    """Admit an analysis or builder execution and map refusals to API errors.
+    """Admit an analysis execution and map refusals to API errors.
 
     Refusals are logged, since callers may not log the response body.
 
     Args:
         scheduler: Admits the execution.
-        request: The analysis or builder schedule request.
+        request: The analysis schedule request.
         response: The outgoing response; its status becomes 202 when the
             execution is created and 200 when an existing one is returned.
 
@@ -77,18 +74,13 @@ async def submit(
         The execution and whether it was created.
 
     Raises:
-        HTTPException: 404 for an unknown analysis, builder or model, 409 for an
-            idempotency conflict, 422 for an incompatible model or invalid
-            request, 503 if scheduling is unavailable.
+        HTTPException: 404 for an unknown analysis, 409 for an idempotency
+            conflict, 422 for an invalid request, 503 if scheduling is
+            unavailable.
     """
     try:
         result = await scheduler.schedule(request)
-    except (
-        UnknownAnalysisError,
-        UnknownBuilderError,
-        UnknownModelError,
-        IncompatibleModelError,
-    ) as error:
+    except UnknownAnalysisError as error:
         _log_refusal(request, error)
         raise lookup_error(error) from error
     except ScheduleConflictError as error:
@@ -104,10 +96,6 @@ async def submit(
     return result
 
 
-def _log_refusal(request: AnyScheduleRequest, error: Exception) -> None:
+def _log_refusal(request: AnalysisScheduleRequest, error: Exception) -> None:
     """Log why a schedule request was refused; error messages are the safe public ones."""
-    if isinstance(request, AnalysisScheduleRequest):
-        subject = f"{request.provider} {request.analysis_id}"
-    else:
-        subject = f"{request.provider} {request.builder_id} on {request.model_id}"
-    logger.warning("Refused %s: %s", subject, error)
+    logger.warning("Refused %s %s: %s", request.provider, request.analysis_id, error)

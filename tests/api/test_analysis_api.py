@@ -10,10 +10,10 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from model_service.api.app_factory import create_app
-from model_service.api.model_catalog import ModelCatalog, served_model_binding
-from model_service.api.scheduler.builder_dispatch import (
+from model_service.api.scheduler.dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,
+    UnknownOutcomeError,
 )
 from model_service.api.synchronous_runs import SynchronousAnalysisService
 from model_service.catalog import load_catalog
@@ -58,7 +58,7 @@ class NoScheduler:
 def app(runner: FakeRunner | None) -> FastAPI:
     return create_app(
         NoScheduler(),  # type: ignore[arg-type]
-        catalog=ModelCatalog([], resolved=CATALOG),
+        catalog=lambda: CATALOG,
         analysis_runner=(
             None
             if runner is None
@@ -225,11 +225,20 @@ async def test_an_unknown_setting_is_named() -> None:
             False,
         ),
         (
+            RemoteFailureError(
+                code="model_failed", safe_message="down", retryable=True
+            ),
+            503,
+            "model_failed",
+            True,
+        ),
+        (
             ConfirmedRejectionError(timedelta(seconds=7)),
             429,
             "builder_backpressure",
             True,
         ),
+        (UnknownOutcomeError("lost"), 503, "builder_unavailable", True),
     ],
 )
 async def test_the_runners_failures_reach_the_caller_safely(
@@ -251,16 +260,13 @@ async def test_runs_are_unavailable_without_a_runner() -> None:
 
 async def test_models_list_served_models_with_declarations_and_analyses() -> None:
     served = CATALOG.entries("served-models")
-    catalog = ModelCatalog(
-        [served_model_binding(entry.value) for entry in served.values()],
-        resolved=CATALOG,
-    )
-    app = create_app(NoScheduler(), catalog=catalog)  # type: ignore[arg-type]
+    app = create_app(NoScheduler(), catalog=lambda: CATALOG)  # type: ignore[arg-type]
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://model-service"
     ) as client:
         listed = (await client.get("/v1/models")).json()
         single = (await client.get("/v1/models/prostate-classifier-1")).json()
+        missing = await client.get("/v1/models/missing")
 
     by_id = {model["id"]: model for model in listed}
     assert sorted(by_id) == [
@@ -271,6 +277,11 @@ async def test_models_list_served_models_with_declarations_and_analyses() -> Non
     ]
     prostate = by_id["prostate-classifier-1"]
     assert single == prostate
+    assert set(prostate) == {"id", "declaration", "digest", "analyses"}
+    assert (missing.status_code, missing.json()["detail"]["code"]) == (
+        404,
+        "unknown_model",
+    )
     assert prostate["analyses"] == ["prostate-heatmap"]
     assert prostate["declaration"]["input"] == {"tile_size": 512, "mpp": 0.468}
     # The environment's patch is part of the declaration.

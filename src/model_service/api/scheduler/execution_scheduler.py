@@ -20,7 +20,6 @@ from model_service.api.scheduler.internal_state import (
     WorkKind,
 )
 from model_service.api.scheduler.public import (
-    AnalysisScheduleRequest,
     ExecutionView,
     InvalidScheduleRequestError,
     ScheduleResult,
@@ -33,25 +32,22 @@ from model_service.api.scheduler.store.repository import (
 )
 from model_service.api.scheduler.targets import ExecutionTarget
 from model_service.api.scheduler.worker import ExecutionWorker
-from model_service.contracts.failures import InvalidInvocation, UnknownAnalysisError
+from model_service.contracts.failures import InvalidInvocation
 from model_service.contracts.log_context import EXECUTION_ID
 
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Mapping
 
-    from model_service.api.scheduler.protocols import RunDispatch
+    from model_service.api.scheduler.protocols import AnalysisDispatch
     from model_service.api.scheduler.public import (
         AnalysisResolver,
-        AnyScheduleRequest,
-        ModelResolver,
+        AnalysisScheduleRequest,
         ProviderName,
         SubmissionIdentity,
     )
     from model_service.api.scheduler.store.repository import ExecutionRepository
-    from model_service.catalog.analyses import ResolvedAnalysis
     from model_service.contracts.invocation import Invocation
-    from model_service.contracts.json_values import JsonObject
     from model_service.providers.provider import ProviderAdapter
 
 
@@ -62,10 +58,9 @@ class ExecutionScheduler:
         self,
         *,
         repository: ExecutionRepository,
-        dispatch: RunDispatch,
+        dispatch: AnalysisDispatch,
         providers: Mapping[ProviderName, ProviderAdapter],
-        resolve_model: ModelResolver,
-        resolve_analysis: AnalysisResolver | None = None,
+        resolve_analysis: AnalysisResolver,
         default_timeout: timedelta,
         maximum_timeout: timedelta,
         clock: Callable[[], datetime] | None = None,
@@ -79,17 +74,16 @@ class ExecutionScheduler:
 
         Args:
             repository: Durable execution store.
-            dispatch: Client that runs analyses and builders.
+            dispatch: Client that runs analyses on the runner.
             providers: Provider adapters by provider name.
-            resolve_model: Resolver of the current model binding for a builder and model.
             resolve_analysis: Resolver of a deployed analysis with a run's
-                settings; None for no analyses.
+                settings.
             default_timeout: Execution timeout when the request gives none.
             maximum_timeout: Upper bound on a requested timeout.
             clock: Source of the current time; defaults to UTC now.
             lease_duration: How long a claim stays valid without renewal.
             poll_interval: Seconds between worker polls for due work.
-            max_concurrent: Maximum builder executions this process runs at once.
+            max_concurrent: Maximum attempts this process runs at once.
 
         Raises:
             ValueError: lease_duration or poll_interval is not positive.
@@ -100,8 +94,7 @@ class ExecutionScheduler:
             raise ValueError("poll_interval must be positive")
         self._repository = repository
         self._providers = dict(providers)
-        self._resolve_model = resolve_model
-        self._resolve_analysis = resolve_analysis or _no_analyses
+        self._resolve_analysis = resolve_analysis
         self._default_timeout = default_timeout
         self._maximum_timeout = maximum_timeout
         self._clock = clock or (lambda: datetime.now(UTC))
@@ -110,7 +103,6 @@ class ExecutionScheduler:
             repository=repository,
             providers=self._providers,
             dispatch=dispatch,
-            resolve_model=resolve_model,
             owner=f"execution-scheduler-{uuid4()}",
             lease_duration=lease_duration,
             active_work=self._active_work,
@@ -169,7 +161,7 @@ class ExecutionScheduler:
                 "execution repository is temporarily unavailable"
             ) from error
 
-    async def schedule(self, request: AnyScheduleRequest) -> ScheduleResult:
+    async def schedule(self, request: AnalysisScheduleRequest) -> ScheduleResult:
         """Identify and replay a submission, prepare new inputs, then admit the complete execution.
 
         A replayed submission returns the existing execution without preparing again.
@@ -185,17 +177,11 @@ class ExecutionScheduler:
 
         Raises:
             UnknownAnalysisError: No deployed analysis has the ID.
-            UnknownBuilderError: The resolver does not know the builder.
-            UnknownModelError: The resolver does not know the model.
-            IncompatibleModelError: The model does not fit the builder.
             InvalidScheduleRequestError: The provider is unknown, the timeout is not positive, the effective deadline has already passed, or the analysis refuses the settings or inputs.
             ScheduleConflictError: The idempotency key was used for a different request.
             SchedulingUnavailableError: The execution repository is unavailable.
         """
-        if isinstance(request, AnalysisScheduleRequest):
-            self._resolve_analysis(request.analysis_id, None)
-        else:
-            self._resolve_model(request.builder_id, request.model_id)
+        self._resolve_analysis(request.analysis_id, None)
         try:
             provider = self._providers[request.provider]
         except KeyError as error:
@@ -216,10 +202,7 @@ class ExecutionScheduler:
                 "effective execution deadline has expired"
             )
         invocation = replace(prepared.invocation, deadline_at=deadline_at)
-        if isinstance(request, AnalysisScheduleRequest):
-            target, invocation = self._resolved(request.analysis_id, invocation)
-        else:
-            target = ExecutionTarget.builder(request.builder_id, request.model_id)
+        target, invocation = self._resolved(request.analysis_id, invocation)
         return await self._admit(
             Admission(
                 identity=identity,
@@ -416,13 +399,3 @@ class ExecutionScheduler:
                 WorkKind.PROVIDER_CANCELLATION_REPORT,
             },
         )
-
-
-def _no_analyses(analysis_id: str, settings: JsonObject | None) -> ResolvedAnalysis:
-    """Resolve nothing: a scheduler without analyses knows none.
-
-    Raises:
-        UnknownAnalysisError: Always.
-    """
-    del settings
-    raise UnknownAnalysisError(analysis_id)

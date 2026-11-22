@@ -40,7 +40,7 @@ class ExpiryTransitions:
         """Keep the retry policies.
 
         Args:
-            processing_policy: Attempts and backoff for builder processing.
+            processing_policy: Attempts and backoff for processing.
             finish_policy: Attempts and backoff for provider finish and reports.
         """
         self._processing_policy = processing_policy
@@ -85,9 +85,7 @@ class ExpiryTransitions:
                 execution,
                 ExecutionError(
                     code=ExecutionErrorCode.PROCESSING_ATTEMPTS_EXHAUSTED,
-                    message=(
-                        "builder processing did not complete within its retry policy"
-                    ),
+                    message=("processing did not complete within its retry policy"),
                 ),
                 now,
                 report=True,

@@ -1,7 +1,7 @@
-"""What the API's and providers' routes need from the scheduler, and what it runs builders through.
+"""What the API's and providers' routes need from the scheduler, and what it runs analyses through.
 
-ExecutionScheduler implements `Scheduler` and HTTPBuilderDispatch implements
-`RunDispatch`; each documents its methods. Tests pass fakes.
+ExecutionScheduler implements `Scheduler` and HTTPAnalysisDispatch implements
+`AnalysisDispatch`; each documents its methods. Tests pass fakes.
 """
 
 from __future__ import annotations
@@ -11,13 +11,11 @@ from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from model_service.api.scheduler.public import (
-        AnyScheduleRequest,
+        AnalysisScheduleRequest,
         ExecutionView,
         ScheduleResult,
     )
     from model_service.contracts.analysis_http import AnalysisRunRequest
-    from model_service.contracts.invocation import ExecutionContext, Invocation
-    from model_service.contracts.model_declarations import ModelBinding
     from model_service.contracts.result import BuilderResult
 
 
@@ -33,8 +31,8 @@ class Scheduler(Protocol):
         """Check that durable storage is reachable."""
         ...
 
-    async def schedule(self, request: AnyScheduleRequest) -> ScheduleResult:
-        """Admit a durable analysis or builder execution, or return the one its idempotency key names."""
+    async def schedule(self, request: AnalysisScheduleRequest) -> ScheduleResult:
+        """Admit a durable analysis execution, or return the one its idempotency key names."""
         ...
 
     async def get(self, execution_id: str) -> ExecutionView:
@@ -50,27 +48,9 @@ class Scheduler(Protocol):
         ...
 
 
-class BuilderDispatch(Protocol):
-    """How the scheduler runs a builder on a replica."""
-
-    async def run(
-        self,
-        builder_id: str,
-        invocation: Invocation,
-        model: ModelBinding,
-        execution_context: ExecutionContext,
-    ) -> BuilderResult:
-        """Run one builder invocation and return its result."""
-        ...
-
-
 class AnalysisDispatch(Protocol):
     """How the API runs a resolved analysis on the analysis runner."""
 
     async def run_analysis(self, request: AnalysisRunRequest) -> BuilderResult:
         """Run one resolved analysis and return its result."""
         ...
-
-
-class RunDispatch(BuilderDispatch, AnalysisDispatch, Protocol):
-    """How the scheduler runs an attempt: an analysis on the runner, or a builder."""

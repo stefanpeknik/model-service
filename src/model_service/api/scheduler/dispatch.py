@@ -1,27 +1,23 @@
-"""Send a builder or analysis run to its Ray Serve replica over HTTP, and how a send can end.
+"""Send an analysis run to the runner over HTTP, and how a send can end.
 
 A 429 is a confirmed rejection before work started. Transport failures and
-malformed responses leave the outcome unknown, because the builder may have run.
+malformed responses leave the outcome unknown, because the analysis may have run.
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
-from urllib.parse import quote
 
 import httpx
 from pydantic import TypeAdapter, ValidationError
 
-from model_service.contracts.analysis_http import ANALYSIS_RUN_REQUEST
-from model_service.contracts.builder_http import RUN_REQUEST, ErrorResponse, RunRequest
+from model_service.contracts.analysis_http import ANALYSIS_RUN_REQUEST, ErrorResponse
 from model_service.contracts.result import RESULT
 
 
 if TYPE_CHECKING:
     from model_service.contracts.analysis_http import AnalysisRunRequest
-    from model_service.contracts.invocation import ExecutionContext, Invocation
-    from model_service.contracts.model_declarations import ModelBinding
     from model_service.contracts.result import BuilderResult
 
 
@@ -29,32 +25,32 @@ _ERROR_RESPONSE = TypeAdapter(ErrorResponse)
 
 
 class ConfirmedRejectionError(RuntimeError):
-    """The builder rejected the request before starting work, so a retry is safe."""
+    """The runner rejected the request before starting work, so a retry is safe."""
 
     def __init__(self, retry_after: timedelta | None = None) -> None:
-        """Record a rejection that happened before the builder started work.
+        """Record a rejection that happened before the runner started work.
 
         Args:
-            retry_after: Delay the builder asked for, if it sent one.
+            retry_after: Delay the runner asked for, if it sent one.
         """
-        super().__init__("builder rejected the request before starting it")
+        super().__init__("runner rejected the request before starting it")
         self.retry_after = retry_after
 
 
 class UnknownOutcomeError(RuntimeError):
-    """The builder may or may not have run; the request was lost in flight."""
+    """The analysis may or may not have run; the request was lost in flight."""
 
 
 class RemoteFailureError(RuntimeError):
-    """The builder ran and reported a safe failure."""
+    """The runner ran the analysis and reported a safe failure."""
 
     def __init__(self, *, code: str, safe_message: str, retryable: bool) -> None:
-        """Record a safe failure the builder reported.
+        """Record a safe failure the runner reported.
 
         Args:
-            code: Stable failure code from the builder.
+            code: Stable failure code from the runner.
             safe_message: Message safe to show callers.
-            retryable: Whether the builder considers a retry worthwhile.
+            retryable: Whether the runner considers a retry worthwhile.
         """
         super().__init__(safe_message)
         self.code = code
@@ -62,11 +58,11 @@ class RemoteFailureError(RuntimeError):
         self.retryable = retryable
 
 
-class HTTPBuilderDispatch:
-    """Sends builder runs and analysis runs to their replicas over Ray Serve's HTTP proxy."""
+class HTTPAnalysisDispatch:
+    """Sends analysis runs to the analysis runner over Ray Serve's HTTP proxy."""
 
     def __init__(self, client: httpx.AsyncClient, *, origin: str) -> None:
-        """Dispatch builder runs to a Ray Serve origin.
+        """Dispatch analysis runs to a Ray Serve origin.
 
         Args:
             client: HTTP client used for the requests.
@@ -75,46 +71,8 @@ class HTTPBuilderDispatch:
         self._client = client
         self._origin = origin.rstrip("/")
 
-    async def run(
-        self,
-        builder_id: str,
-        invocation: Invocation,
-        model: ModelBinding,
-        execution_context: ExecutionContext,
-    ) -> BuilderResult:
-        """Post one run request to a builder replica and classify the outcome.
-
-        The request timeout is the time left until the invocation's deadline.
-
-        Args:
-            builder_id: Registered builder id, used in the route.
-            invocation: Invocation to run.
-            model: Model binding resolved for this attempt.
-            execution_context: Attempt identity and protected provider state.
-
-        Returns:
-            The builder's result from a 200 response.
-
-        Raises:
-            ConfirmedRejectionError: The builder answered 429, or Ray Serve answered a
-                non-JSON 503, so the work never started.
-            UnknownOutcomeError: The transport failed or the response was malformed,
-                so the builder may have run.
-            RemoteFailureError: The builder returned a well-formed error envelope.
-        """
-        return await self._post(
-            f"/builders/{quote(builder_id, safe='')}/",
-            RUN_REQUEST.dump_python(
-                RunRequest(invocation, model, execution_context), mode="json"
-            ),
-            invocation.deadline_at,
-        )
-
     async def run_analysis(self, request: AnalysisRunRequest) -> BuilderResult:
         """Post one resolved analysis to the analysis runner and classify the outcome.
-
-        The runner answers in the builder deployment's format, so outcomes
-        are classified as for a builder.
 
         Args:
             request: The resolved document, the invocation and the attempt.
@@ -145,7 +103,7 @@ class HTTPBuilderDispatch:
                 f"{self._origin}{path}", json=payload, timeout=timeout
             )
         except httpx.TransportError as error:
-            raise UnknownOutcomeError("builder dispatch transport failed") from error
+            raise UnknownOutcomeError("analysis dispatch transport failed") from error
         if response.status_code == 429:
             raise ConfirmedRejectionError(
                 _retry_after(response.headers.get("retry-after"))
@@ -153,25 +111,25 @@ class HTTPBuilderDispatch:
         try:
             body = response.json()
         except ValueError as error:
-            # Ray Serve's own 503 (replica queue full, none running): our builder
+            # Ray Serve's own 503 (replica queue full, none running): the runner
             # answers JSON, so the request never reached it.
             if response.status_code == 503:
                 raise ConfirmedRejectionError(
                     _retry_after(response.headers.get("retry-after"))
                 ) from error
-            raise UnknownOutcomeError("builder returned an invalid response") from error
+            raise UnknownOutcomeError("runner returned an invalid response") from error
         if response.status_code == 200:
             try:
                 return RESULT.validate_python(body)
             except ValidationError as error:
                 raise UnknownOutcomeError(
-                    "builder returned an invalid result"
+                    "runner returned an invalid result"
                 ) from error
         try:
             detail = _ERROR_RESPONSE.validate_python(body).detail
         except ValidationError as error:
             raise UnknownOutcomeError(
-                f"builder returned HTTP {response.status_code}"
+                f"runner returned HTTP {response.status_code}"
             ) from error
         raise RemoteFailureError(
             code=detail.code, safe_message=detail.message, retryable=detail.retryable

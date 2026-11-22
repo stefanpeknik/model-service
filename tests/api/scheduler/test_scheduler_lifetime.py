@@ -10,15 +10,15 @@ from unittest.mock import patch
 
 from model_service.api.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.api.scheduler.internal_state import RenewDirective, RetryPolicy
-from model_service.api.scheduler.public import ScheduleRequest
+from model_service.api.scheduler.public import AnalysisScheduleRequest
 from model_service.api.scheduler.status import ExecutionStatus
 from model_service.contracts.result import BuilderResult
-from tests.support.memory_repository import (
-    FakeDispatch,
-    InMemoryExecutionRepository,
-    resolve_test_model,
+from tests.support.memory_repository import FakeDispatch, InMemoryExecutionRepository
+from tests.support.scheduling import (
+    MutableClock,
+    StandaloneProvider,
+    resolve_test_analysis,
 )
-from tests.support.scheduling import MutableClock, StandaloneProvider
 
 
 if TYPE_CHECKING:
@@ -46,8 +46,8 @@ class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):
         return ExecutionScheduler(
             repository=self.repository,
             providers={self.provider.name: self.provider},
-            dispatch=FakeDispatch({"heatmap": dispatch or self.completed_dispatch}),
-            resolve_model=resolve_test_model,
+            dispatch=FakeDispatch({"a1": dispatch or self.completed_dispatch}),
+            resolve_analysis=resolve_test_analysis,
             default_timeout=timedelta(hours=1),
             maximum_timeout=timedelta(hours=6),
             clock=self.clock,
@@ -67,9 +67,8 @@ class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):
     ) -> ScheduleResult:
         """Submit minimal standalone fixture work under the selected replay key."""
         return await scheduler.schedule(
-            ScheduleRequest(
-                builder_id="heatmap",
-                model_id="prostate-classifier-1",
+            AnalysisScheduleRequest(
+                analysis_id="a1",
                 provider="standalone",
                 body={},
                 idempotency_key=key,
@@ -176,9 +175,8 @@ class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):
         async with scheduler.running():
             await asyncio.wait_for(started.wait(), timeout=1)
             queued = await scheduler.schedule(
-                ScheduleRequest(
-                    builder_id="heatmap",
-                    model_id="prostate-classifier-1",
+                AnalysisScheduleRequest(
+                    analysis_id="a1",
                     provider="standalone",
                     body={},
                     idempotency_key="queued-deadline",

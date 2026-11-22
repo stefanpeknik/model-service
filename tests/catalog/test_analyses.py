@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from model_service.builders.implementations.heatmap.spec import HeatmapConfiguration
 from model_service.catalog import CatalogInvalid, load_catalog
 from model_service.components import Col
 from tests.support.analysis_catalog import REGISTRY, write
@@ -52,7 +51,7 @@ def errors(root: Path) -> list[str]:
         ("episeg-heatmap", "episeg-1", (1, 1024, 1024)),
     ],
 )
-def test_heatmap_analyses_are_todays_heatmap_builder_on_their_model(
+def test_heatmap_analyses_keep_the_heatmap_builders_settings_on_their_model(
     environment: str | None,
     analysis_id: str,
     model_id: str,
@@ -62,7 +61,12 @@ def test_heatmap_analyses_are_todays_heatmap_builder_on_their_model(
     served = catalog.entries("served-models")[model_id].value
     heatmap = catalog.entries("analyses")[analysis_id].value
 
-    assert heatmap.settings() == HeatmapConfiguration().model_dump()
+    # The retired heatmap builder's defaults.
+    assert heatmap.settings() == {
+        "stride_fraction": 0.5,
+        "skip_background": True,
+        "min_tissue_fraction": 0.0,
+    }
     assert heatmap.inputs == {"slide": True, "region_of_interest": False}
     assert list(heatmap.models) == [model_id]
     assert (heatmap.source.options.tile_size, heatmap.source.options.mpp) == (

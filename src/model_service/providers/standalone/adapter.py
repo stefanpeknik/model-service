@@ -4,7 +4,7 @@ The caller's idempotency key identifies a submission. Scheduled attempts write
 below `.attempts/<execution>/` in the shared-storage root; finish moves the
 accepted attempt's artifacts to their requested paths and removes that
 directory, including failed and superseded attempts. Only the API process
-imports this module; builder replicas load provider.py alone.
+imports this module; the analysis runner loads provider.py alone.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ import hashlib
 import json
 import os
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -29,7 +29,6 @@ from model_service.api.scheduler.public import (
     ProviderSuccess,
     SubmissionIdentity,
 )
-from model_service.builders.registry import get_builder
 from model_service.contracts.caller_request import BuilderRequest
 from model_service.contracts.failures import InvalidInvocation
 from model_service.contracts.invocation import (
@@ -53,7 +52,6 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from model_service.api.scheduler.public import (
-        AnyScheduleRequest,
         BeforeMutation,
         ProviderFinishOutcome,
     )
@@ -74,12 +72,12 @@ class StandaloneProviderAdapter(ProviderAdapter):
         """
         self._shared_storage = shared_storage
 
-    def identify(self, request: AnyScheduleRequest) -> SubmissionIdentity:
+    def identify(self, request: AnalysisScheduleRequest) -> SubmissionIdentity:
         """Identify a submission by its idempotency key and a fingerprint of the request.
 
-        The fingerprint hashes the canonical JSON of the analysis (or builder
-        and model), body and requested timeout, so reusing a key for a
-        different request is detected.
+        The fingerprint hashes the canonical JSON of the analysis, body and
+        requested timeout, so reusing a key for a different request is
+        detected.
 
         Args:
             request: The schedule request.
@@ -95,15 +93,10 @@ class StandaloneProviderAdapter(ProviderAdapter):
             raise InvalidScheduleRequestError(
                 "standalone scheduling requires an idempotency key"
             )
-        target: dict[str, JsonValue] = (
-            {"analysis_id": request.analysis_id}
-            if isinstance(request, AnalysisScheduleRequest)
-            else {"builder_id": request.builder_id, "model_id": request.model_id}
-        )
         try:
             canonical = json.dumps(
                 {
-                    **target,
+                    "analysis_id": request.analysis_id,
                     "body": request.body,
                     "requested_timeout_seconds": request.requested_timeout_seconds,
                 },
@@ -122,11 +115,11 @@ class StandaloneProviderAdapter(ProviderAdapter):
         )
 
     async def prepare(
-        self, request: AnyScheduleRequest, deadline_at: datetime
+        self, request: AnalysisScheduleRequest, deadline_at: datetime
     ) -> PreparedInvocation:
-        """Check the request and its inputs, and fix the settings a builder run uses.
+        """Check the request's access and shared inputs.
 
-        An analysis run keeps the caller's settings: the scheduler resolves
+        The invocation keeps the caller's settings: the scheduler resolves
         the analysis with them and checks the inputs against it.
 
         Args:
@@ -139,9 +132,9 @@ class StandaloneProviderAdapter(ProviderAdapter):
             a fresh attempts directory name as protected context.
 
         Raises:
-            InvalidScheduleRequestError: If the body is invalid, the invocation fails
-                a builder's validation, input access is not shared storage, or a
-                shared input is not a regular file below an allowed root.
+            InvalidScheduleRequestError: If the body is invalid, input access is
+                not shared storage, or a shared input is not a regular file below
+                an allowed root.
         """
         try:
             body = BuilderRequest.model_validate(request.body)
@@ -150,17 +143,7 @@ class StandaloneProviderAdapter(ProviderAdapter):
                 "schedule request body is invalid"
             ) from error
         invocation = body.invocation(deadline_at)
-        spec = (
-            None
-            if isinstance(request, AnalysisScheduleRequest)
-            else get_builder(request.builder_id)
-        )
         try:
-            if spec is not None:
-                spec.check_invocation(
-                    invocation,
-                    now=deadline_at - timedelta(microseconds=1),
-                )
             if invocation.input_access.kind != SHARED_STORAGE:
                 raise InvalidInvocation("standalone scheduling requires shared storage")
             access = self._shared_storage.create(invocation, ExecutionContext())
@@ -170,10 +153,6 @@ class StandaloneProviderAdapter(ProviderAdapter):
             root = self._shared_storage.root(invocation.input_access.state)
         except InvalidInvocation as error:
             raise InvalidScheduleRequestError(str(error)) from error
-        if spec is not None:
-            invocation = replace(
-                invocation, configuration=spec.with_defaults(invocation.configuration)
-            )
         return PreparedInvocation(
             invocation=invocation,
             protected_context={"root": str(root), ATTEMPTS_KEY: uuid4().hex},
@@ -229,7 +208,7 @@ def _move_outputs(
     Args:
         root: The caller's shared storage root.
         attempts: The execution's attempts directory.
-        outputs: The builder's outputs.
+        outputs: The run's outputs.
 
     Returns:
         The outputs, with moved artifacts at their requested paths.

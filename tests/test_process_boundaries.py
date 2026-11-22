@@ -1,4 +1,9 @@
-"""Each process imports only its own packages: the API never loads Ray, replicas never load the API."""
+"""Each process imports only its own packages: the API never loads Ray, replicas never load the API.
+
+The processes: the API (`api/`), the generic served-model host
+(`served_model/`) and the analysis runner (`analysis_runner/`); `catalog/`,
+`components/`, `formats/` and `contracts/` are shared and stay light.
+"""
 
 from __future__ import annotations
 
@@ -52,13 +57,16 @@ class ProcessBoundaryTests(unittest.TestCase):
             under(
                 modules,
                 "ray",
+                "onnxruntime",
                 "torch",
+                "timm",
+                "mlflow",
                 "ratiopath",
                 "pyvips",
                 "openslide",
-                "model_service.builders.replica",
-                "model_service.builders.model_clients",
-                "model_service.inference",
+                "model_service.served_model.serve",
+                "model_service.analysis_runner",
+                "model_service.slides",
             ),
             [],
         )
@@ -91,15 +99,25 @@ class ProcessBoundaryTests(unittest.TestCase):
             [],
         )
 
-    def test_builder_replicas_load_no_api_code(self) -> None:
-        modules = loaded_modules("model_service.builders.replica.serve")
+    def test_the_replicas_load_no_api_code(self) -> None:
+        for serve in ("analysis_runner", "served_model"):
+            with self.subTest(serve):
+                modules = loaded_modules(f"model_service.{serve}.serve")
+                self.assertEqual(under(modules, "model_service.api"), [])
 
-        self.assertEqual(under(modules, "model_service.api"), [])
+    def test_the_served_model_replica_loads_no_runner_or_slide_code(self) -> None:
+        modules = loaded_modules("model_service.served_model.serve")
 
-    def test_the_analysis_runner_replica_loads_no_api_code(self) -> None:
-        modules = loaded_modules("model_service.analysis_runner.serve")
-
-        self.assertEqual(under(modules, "model_service.api"), [])
+        self.assertEqual(
+            under(
+                modules,
+                "model_service.analysis_runner",
+                "model_service.slides",
+                "openslide",
+                "pyvips",
+            ),
+            [],
+        )
 
     def test_the_served_model_host_core_loads_without_ray(self) -> None:
         """Only the Serve wrapper needs Ray; the chart's tests and tools use the rest."""

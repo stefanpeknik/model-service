@@ -1,4 +1,4 @@
-"""A request to run a builder: inputs, their access, configuration and output path."""
+"""A request to run an analysis: inputs, their access, settings and output path."""
 
 from __future__ import annotations
 
@@ -19,10 +19,10 @@ class BuilderRequest(BaseModel):
     """Inputs and their access, settings, and an optional output path.
 
     Attributes:
-        inputs: The builder's inputs, by name.
-        input_access: How the builder reaches them.
-        configuration: Settings that differ from the builder's defaults; see the
-            builder's configuration for the names, types and limits.
+        inputs: The analysis's inputs, by name.
+        input_access: How the runner reaches them.
+        configuration: Settings that differ from the analysis's; see its
+            settings schema for the names, types and limits.
         output_path: Where the single artifact output is written.
     """
 
@@ -33,8 +33,8 @@ class BuilderRequest(BaseModel):
     configuration: Annotated[
         JsonObject | None,
         Field(
-            description="Settings that differ from the builder's defaults, by "
-            "name; GET /v1/builders gives each builder's configuration_schema."
+            description="Settings that differ from the analysis's, by name; "
+            "GET /v1/analyses gives each analysis's settings_schema."
         ),
     ] = None
     output_path: Annotated[str, Field(strict=True, min_length=1)] | None = None

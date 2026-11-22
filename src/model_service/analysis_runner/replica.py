@@ -22,7 +22,7 @@ import asyncio
 import inspect
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, Protocol
 
 from model_service.analysis_runner.models import RayServedModel
 from model_service.analysis_runner.progress import reporting_progress
@@ -91,8 +91,7 @@ class AnalysisReplica:
             settings: Threads and tiles in flight per run, and the
                 shared-storage roots requests may name.
             models: Gives a served model's handle by ID.
-            access: The input access by kind; by default every provider's, as
-                builder replicas compose them.
+            access: The input access by kind; by default every provider's.
             progress_interval_seconds: Time between two progress sends.
             cleanup_timeout_seconds: Time allowed for closing the access.
         """
@@ -219,15 +218,12 @@ class AnalysisReplica:
 def _provider_access(
     settings: ReplicaSettings,
 ) -> dict[InputAccessKind, AccessFactory]:
-    """Every provider's input access, as builder replicas compose them."""
+    """Every provider's input access, by the kind each serves."""
     from model_service.providers.registry import PROVIDERS
 
     access: dict[InputAccessKind, AccessFactory] = {}
     for provider in PROVIDERS:
-        # Their factories take the attempt alone; the model argument defaults.
-        access.update(
-            cast("Mapping[str, AccessFactory]", provider.input_access(settings))
-        )
+        access.update(provider.input_access(settings))
     return access
 
 
@@ -250,7 +246,7 @@ def _outputs(
     """Where each output goes: `output_path` for an analysis with one output.
 
     Without `output_path`, each output is `<output>.<format extension>` at
-    the root, as today's builders name theirs.
+    the root, as the builders named theirs.
     """
     paths = {
         s.options.output: f"{s.options.output}.{get_format(s.format).extension}"

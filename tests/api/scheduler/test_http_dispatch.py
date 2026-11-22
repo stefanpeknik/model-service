@@ -1,4 +1,4 @@
-"""Check builder dispatch over HTTP: request shape and outcome classification."""
+"""Check analysis dispatch over HTTP: request shape and outcome classification."""
 
 from __future__ import annotations
 
@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING
 
 import httpx
 
-from model_service.api.scheduler.builder_dispatch import (
+from model_service.api.scheduler.dispatch import (
     ConfirmedRejectionError,
-    HTTPBuilderDispatch,
+    HTTPAnalysisDispatch,
     RemoteFailureError,
     UnknownOutcomeError,
 )
@@ -22,7 +22,6 @@ from model_service.contracts.invocation import (
     Invocation,
     SharedPathInput,
 )
-from model_service.contracts.model_declarations import SpatialScoresModel
 from model_service.contracts.result import BuilderResult, InlineOutput
 
 
@@ -30,41 +29,37 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
-MODEL = SpatialScoresModel(
-    id="prostate-classifier-1",
-    tile_size=512,
-    output_tile_size=1,
-    n_channels=1,
-    mpp=0.468,
-)
-
-
 def respond(response: httpx.Response) -> Callable[[httpx.Request], httpx.Response]:
     return lambda _request: response
 
 
-class HttpBuilderDispatchTests(unittest.IsolatedAsyncioTestCase):
+class HttpAnalysisDispatchTests(unittest.IsolatedAsyncioTestCase):
     async def dispatch(
         self,
         handler: Callable[[httpx.Request], httpx.Response],
         context: ExecutionContext | None = None,
     ) -> BuilderResult:
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            return await HTTPBuilderDispatch(client, origin="http://ray:8000/").run(
-                "heatmap",
-                Invocation(
-                    inputs={"slide": SharedPathInput(path="slide.svs")},
-                    configuration=None,
-                    input_access=InputAccessContext(
-                        kind="shared_storage", state={"root": "/mnt/data"}
+            return await HTTPAnalysisDispatch(
+                client, origin="http://ray:8000/"
+            ).run_analysis(
+                AnalysisRunRequest(
+                    invocation=Invocation(
+                        inputs={"slide": SharedPathInput(path="slide.svs")},
+                        configuration={"stride_fraction": 1.0},
+                        input_access=InputAccessContext(
+                            kind="shared_storage", state={"root": "/mnt/data"}
+                        ),
+                        deadline_at=datetime.now(UTC) + timedelta(minutes=1),
                     ),
-                    deadline_at=datetime.now(UTC) + timedelta(minutes=1),
-                ),
-                MODEL,
-                context or ExecutionContext(),
+                    analysis={"id": "prostate-heatmap", "digest": "abc"},
+                    execution_context=context or ExecutionContext(),
+                )
             )
 
-    async def test_success_sends_invocation_model_and_context(self) -> None:
+    async def test_a_run_goes_to_the_runner_with_the_document_and_context(
+        self,
+    ) -> None:
         requests: list[httpx.Request] = []
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -84,12 +79,10 @@ class HttpBuilderDispatchTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, BuilderResult(outputs={"score": InlineOutput(0.9)}))
         [request] = requests
-        self.assertEqual(request.url, "http://ray:8000/builders/heatmap/")
+        self.assertEqual(request.url, "http://ray:8000/analyses/")
         body = json.loads(request.content)
+        self.assertEqual(body["analysis"], {"id": "prostate-heatmap", "digest": "abc"})
         self.assertEqual(body["invocation"]["inputs"]["slide"]["path"], "slide.svs")
-        self.assertIsNone(body["invocation"]["configuration"])
-        self.assertEqual(body["model"]["id"], "prostate-classifier-1")
-        self.assertEqual(body["model"]["contract"], "spatial-scores")
         self.assertEqual(
             body["execution_context"],
             {
@@ -160,64 +153,3 @@ class HttpBuilderDispatchTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
-class HttpAnalysisDispatchTests(unittest.IsolatedAsyncioTestCase):
-    async def dispatch(
-        self, handler: Callable[[httpx.Request], httpx.Response]
-    ) -> BuilderResult:
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            return await HTTPBuilderDispatch(
-                client, origin="http://ray:8000/"
-            ).run_analysis(
-                AnalysisRunRequest(
-                    invocation=Invocation(
-                        inputs={"slide": SharedPathInput(path="slide.svs")},
-                        configuration={"stride_fraction": 1.0},
-                        input_access=InputAccessContext(
-                            kind="shared_storage", state={"root": "/mnt/data"}
-                        ),
-                        deadline_at=datetime.now(UTC) + timedelta(minutes=1),
-                    ),
-                    analysis={"id": "prostate-heatmap", "digest": "abc"},
-                )
-            )
-
-    async def test_a_run_goes_to_the_runner_with_the_resolved_document(
-        self,
-    ) -> None:
-        requests: list[httpx.Request] = []
-
-        def handler(request: httpx.Request) -> httpx.Response:
-            requests.append(request)
-            return httpx.Response(
-                200, json={"outputs": {"score": {"kind": "inline", "value": 0.9}}}
-            )
-
-        result = await self.dispatch(handler)
-
-        self.assertEqual(result, BuilderResult(outputs={"score": InlineOutput(0.9)}))
-        [request] = requests
-        self.assertEqual(request.url, "http://ray:8000/analyses/")
-        body = json.loads(request.content)
-        self.assertEqual(body["analysis"], {"id": "prostate-heatmap", "digest": "abc"})
-        self.assertEqual(body["invocation"]["inputs"]["slide"]["path"], "slide.svs")
-        self.assertLessEqual(request.extensions["timeout"]["read"], 60)
-
-    async def test_the_runners_answers_are_classified_like_a_builders(self) -> None:
-        mismatch = httpx.Response(
-            422,
-            json={
-                "detail": {
-                    "code": "model_contract_mismatch",
-                    "message": "model changed",
-                    "retryable": False,
-                }
-            },
-        )
-        with self.assertRaises(RemoteFailureError) as raised:
-            await self.dispatch(respond(mismatch))
-        with self.assertRaises(ConfirmedRejectionError):
-            await self.dispatch(respond(httpx.Response(429)))
-
-        self.assertEqual(raised.exception.code, "model_contract_mismatch")

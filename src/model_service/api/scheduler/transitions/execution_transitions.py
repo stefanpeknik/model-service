@@ -34,7 +34,7 @@ class ExecutionTransitions:
         """Build each group of rules over the two retry policies.
 
         Args:
-            processing_policy: Attempts and backoff for builder processing.
+            processing_policy: Attempts and backoff for processing.
             finish_policy: Attempts and backoff for provider finish and reports.
         """
         self.admission = AdmissionTransitions()

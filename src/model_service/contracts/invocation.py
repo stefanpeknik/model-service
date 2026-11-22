@@ -1,7 +1,7 @@
-"""A builder invocation: what is run, on which inputs, with which access, by when.
+"""An invocation: what is run, on which inputs, with which access, by when.
 
-It crosses every process boundary (API, scheduler database, Ray builder
-replica), so the types are strict and JSON-serializable.
+It crosses every process boundary (API, scheduler database, the analysis
+runner on Ray), so the types are strict and JSON-serializable.
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ type BuilderInput = Annotated[
 
 
 # Which access adapter resolves an invocation's inputs and outputs; each
-# provider names its own, the builder replica holds one adapter per kind.
+# provider names its own, the analysis runner holds one adapter per kind.
 type InputAccessKind = str
 
 
@@ -110,16 +110,14 @@ type Deadline = Annotated[
 
 @dataclass(frozen=True, slots=True)
 class Invocation:
-    """One request to run a builder; stored durably for scheduled executions.
+    """One request to run an analysis; stored durably for scheduled executions.
 
     Attributes:
-        inputs: The builder's inputs, by name.
-        configuration: The builder settings: a caller's or an EMPAIA job's,
-            and once admitted, every setting the run uses, defaults included,
-            so the record shows what ran. None leaves all to the builder's
-            defaults. Each attempt checks them, so a value the builder rejects
-            fails the attempt rather than admission.
-        input_access: How the builder reaches its inputs.
+        inputs: The analysis's inputs, by name.
+        configuration: The settings: a caller's or an EMPAIA job's, and once
+            admitted, every setting the run uses, defaults included, so the
+            record shows what ran. The resolved analysis carries them too.
+        input_access: How the runner reaches its inputs.
         deadline_at: When the execution must finish.
         output_path: Where the single artifact output is written, if set.
     """

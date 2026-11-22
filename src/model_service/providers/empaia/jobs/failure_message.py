@@ -1,9 +1,8 @@
 """Fit a job's failure message into the 255 characters EMPAIA shows.
 
-Settings errors read `invalid settings: <setting>: <reason>; <setting>: <reason>`
-(see `BuilderSpec.resolve_configuration`). A message too long is cut on whole
+A message of entries, `<head>: <entry>; <entry>`, too long is cut on whole
 entries and ends with how many were left out, so the user still sees which
-settings to fix.
+entries it named.
 """
 
 from __future__ import annotations

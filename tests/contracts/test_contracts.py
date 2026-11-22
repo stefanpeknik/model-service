@@ -1,17 +1,12 @@
-"""Check the wire format of invocations, results, run requests and model bindings."""
+"""Check the wire format of invocations, results and analysis run requests."""
 
 import unittest
 from datetime import UTC, datetime
 
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
-from model_service.contracts.builder_http import RUN_REQUEST
-from model_service.contracts.invocation import INVOCATION, InputKind
-from model_service.contracts.model_declarations import (
-    MODEL_BINDING,
-    SpatialScoresModel,
-    TileEmbeddingModel,
-)
+from model_service.contracts.analysis_http import ANALYSIS_RUN_REQUEST
+from model_service.contracts.invocation import INVOCATION, ExecutionContext, InputKind
 from model_service.contracts.result import RESULT, OutputKind
 
 
@@ -27,7 +22,7 @@ INVOCATION_BODY = {
 }
 
 
-class BuilderContractTests(unittest.TestCase):
+class ContractTests(unittest.TestCase):
     def test_invocation_round_trips_with_tagged_inputs(self) -> None:
         invocation = INVOCATION.validate_python(INVOCATION_BODY)
 
@@ -61,73 +56,33 @@ class BuilderContractTests(unittest.TestCase):
         self.assertIs(result.outputs["heatmap"].kind, OutputKind.SHARED_ARTIFACT)
         self.assertEqual(RESULT.dump_python(result, mode="json"), body)
 
-    def test_model_binding_is_discriminated_by_contract(self) -> None:
-        spatial = MODEL_BINDING.validate_python(
-            {
-                "id": "classifier",
-                "contract": "spatial-scores",
-                "tile_size": 512,
-                "output_tile_size": 1,
-                "n_channels": 1,
-                "mpp": 0.468,
-            }
-        )
-        embedding = MODEL_BINDING.validate_python(
-            {
-                "id": "virchow2",
-                "contract": "tile-embedding",
-                "tile_size": 224,
-                "mpp": 0.5,
-                "summaries": ["global", "local_mean"],
-            }
-        )
-
-        self.assertIsInstance(spatial, SpatialScoresModel)
-        self.assertIsInstance(embedding, TileEmbeddingModel)
-        for invalid in (
-            {"id": "x", "contract": "spatial-scores", "tile_size": 8, "mpp": 1},
-            {
-                "id": "x",
-                "contract": "tile-embedding",
-                "tile_size": 8,
-                "mpp": 1,
-                "summaries": [],
-            },
-            {
-                "id": "x",
-                "contract": "tile-embedding",
-                "tile_size": "8",
-                "mpp": 1,
-                "summaries": ["tile"],
-            },
-            {"id": "x", "contract": "unknown", "tile_size": 8, "mpp": 1},
-        ):
-            with self.subTest(invalid=invalid), self.assertRaises(ValidationError):
-                MODEL_BINDING.validate_python(invalid)
-
-    def test_run_request_nests_invocation_model_and_context(self) -> None:
+    def test_run_request_nests_invocation_analysis_and_context(self) -> None:
         body = {
             "invocation": INVOCATION_BODY,
-            "model": {
-                "id": "virchow2",
-                "contract": "tile-embedding",
-                "tile_size": 224,
-                "mpp": 0.5,
-                "summaries": ["tile"],
-            },
+            "analysis": {"id": "prostate-heatmap", "steps": []},
             "execution_context": {
                 "processing_attempt_id": "attempt-1",
                 "execution_id": "execution-1",
                 "protected_context": {"credential": "secret"},
             },
         }
-        request = RUN_REQUEST.validate_python(body)
+        request = ANALYSIS_RUN_REQUEST.validate_python(body)
 
-        self.assertIsInstance(request.model, TileEmbeddingModel)
         self.assertNotIn("secret", repr(request.execution_context))
-        self.assertEqual(RUN_REQUEST.dump_python(request, mode="json"), body)
+        self.assertEqual(ANALYSIS_RUN_REQUEST.dump_python(request, mode="json"), body)
         with self.assertRaises(ValidationError):
-            RUN_REQUEST.validate_python({"invocation": INVOCATION_BODY})
+            ANALYSIS_RUN_REQUEST.validate_python({"invocation": INVOCATION_BODY})
+
+    def test_execution_context_rejects_invalid_attempts_and_non_json_secrets(
+        self,
+    ) -> None:
+        for attempt in ("", True, 1):
+            with self.subTest(attempt=attempt), self.assertRaises(ValidationError):
+                ExecutionContext(processing_attempt_id=attempt)  # type: ignore[arg-type]
+        with self.assertRaises(ValidationError):
+            ExecutionContext(protected_context={"invalid": float("nan")})
+        with self.assertRaises(ValidationError):
+            TypeAdapter(ExecutionContext).validate_python({"unexpected": True})
 
 
 if __name__ == "__main__":

@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from model_service.api.app_factory import capacity_limits
-from model_service.api.model_catalog import ModelCatalog
 from model_service.api.scheduler.targets import CapacityKey, CapacityKind
 from model_service.catalog import load_catalog
 from tests.support.analysis_catalog import served_model, write
@@ -25,7 +24,8 @@ def test_a_served_model_file_sets_its_slots_and_others_get_the_default(
         served_model().rstrip() + "\n        serving: {max_concurrent_runs: 3}\n",
     )
     write(root, "served-models/plain.yaml", served_model())
-    limits = capacity_limits(ModelCatalog([], resolved=load_catalog(root)), default=1)
+    catalog = load_catalog(root)
+    limits = capacity_limits(lambda: catalog, default=1)
 
     assert limits(CapacityKey(CapacityKind.MODEL, "wide")) == 3
     assert limits(CapacityKey(CapacityKind.MODEL, "plain")) == 1

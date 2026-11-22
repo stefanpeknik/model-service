@@ -1,8 +1,7 @@
 """Synchronous runs over HTTP: wait while the caller stays connected, answer safe errors.
 
-Builder runs and analysis runs share this: lookups and admission errors are
-answered before dispatch, and what the replica answered is mapped to the
-API's envelope.
+Lookups and admission errors are answered before dispatch, and what the
+runner answered is mapped to the API's envelope.
 """
 
 from __future__ import annotations
@@ -11,18 +10,12 @@ import asyncio
 from typing import TYPE_CHECKING
 
 from model_service.api.http.errors import ApiErrorCode, http_error, lookup_error
-from model_service.api.scheduler.builder_dispatch import (
+from model_service.api.scheduler.dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,
     UnknownOutcomeError,
 )
-from model_service.contracts.failures import (
-    IncompatibleModelError,
-    InvalidInvocation,
-    UnknownAnalysisError,
-    UnknownBuilderError,
-    UnknownModelError,
-)
+from model_service.contracts.failures import InvalidInvocation, UnknownAnalysisError
 
 
 if TYPE_CHECKING:
@@ -37,7 +30,7 @@ def runs_unavailable(what: str) -> HTTPException:
     """The 503 answered when the API has no runner for synchronous runs.
 
     Args:
-        what: What isn't available, e.g. `synchronous builder runs`.
+        what: What isn't available, e.g. `synchronous analysis runs`.
 
     Returns:
         The HTTP error to raise.
@@ -60,20 +53,14 @@ async def run_synchronously(
         The run's result.
 
     Raises:
-        HTTPException: 404 for an unknown builder, model or analysis; 422 for
-            an incompatible model, an invalid request or a non-retryable
-            failure; 429 when the replica has no capacity; 503 for a
-            retryable failure or an unknown outcome.
+        HTTPException: 404 for an unknown analysis; 422 for an invalid
+            request or a non-retryable failure; 429 when the runner has no
+            capacity; 503 for a retryable failure or an unknown outcome.
         asyncio.CancelledError: If the client disconnects first.
     """
     try:
         return await _run_while_connected(request, operation)
-    except (
-        UnknownBuilderError,
-        UnknownModelError,
-        UnknownAnalysisError,
-        IncompatibleModelError,
-    ) as error:
+    except UnknownAnalysisError as error:
         raise lookup_error(error) from error
     except InvalidInvocation as error:
         raise http_error(422, ApiErrorCode.INVALID_REQUEST, str(error)) from error
@@ -84,7 +71,7 @@ async def run_synchronously(
         raise http_error(
             429,
             ApiErrorCode.BUILDER_BACKPRESSURE,
-            "builder capacity is temporarily unavailable",
+            "analysis runner capacity is temporarily unavailable",
             retryable=True,
             headers=headers,
         ) from error
@@ -99,7 +86,7 @@ async def run_synchronously(
         raise http_error(
             503,
             ApiErrorCode.BUILDER_UNAVAILABLE,
-            "builder outcome is unknown",
+            "analysis outcome is unknown",
             retryable=True,
         ) from error
 

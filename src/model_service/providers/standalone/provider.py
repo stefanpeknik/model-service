@@ -1,6 +1,6 @@
 """Standalone provider: shared-storage inputs and outputs, no external job lifecycle.
 
-Builder replicas load this module through the provider registry, so it imports
+The analysis runner loads this module through the provider registry, so it imports
 no API code; the API side (admission, finish) is adapter.py, imported lazily.
 """
 
@@ -14,30 +14,28 @@ from model_service.providers.standalone.shared_storage import SharedStorageAcces
 
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
 
     from model_service.analysis_runner.settings import ReplicaSettings
-    from model_service.api.model_catalog import ModelCatalogView
     from model_service.api.scheduler.settings import SchedulerSettings
+    from model_service.catalog import Catalog
     from model_service.providers.input_access import InputAccessFactory
     from model_service.providers.provider import ApiContribution
 
 
-# The provider name of requests made through the public builder routes.
+# The provider name of requests made through the public analysis routes.
 STANDALONE_PROVIDER = "standalone"
 
 
 class StandaloneProvider(Provider):
-    """Shared-storage jobs, through the public builder routes the API serves."""
-
-    catalog_block = None
+    """Shared-storage jobs, through the public analysis routes the API serves."""
 
     def api(
-        self, catalog: ModelCatalogView, settings: SchedulerSettings
+        self, catalog: Callable[[], Catalog], settings: SchedulerSettings
     ) -> ApiContribution:
         """Contribute the standalone scheduler adapter, with no routes or background work.
 
-        The API's public builder routes submit these jobs.
+        The API's public analysis routes submit these jobs.
 
         Args:
             catalog: Unused.
@@ -61,7 +59,7 @@ class StandaloneProvider(Provider):
     def input_access(
         self, settings: ReplicaSettings
     ) -> Mapping[str, InputAccessFactory]:
-        """Give builder replicas shared-storage access below the allowed roots.
+        """Give the analysis runner shared-storage access below the allowed roots.
 
         Args:
             settings: Supplies the allowed shared-storage roots.

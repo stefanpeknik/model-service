@@ -1,4 +1,4 @@
-"""Resolve builder files below a shared-storage root with traversal and symlink checks.
+"""Resolve run files below a shared-storage root with traversal and symlink checks.
 
 The caller names the root, but it must lie within a root the server allows.
 Scheduled attempts write outputs below `.attempts/<execution>/<hash of attempt
@@ -27,7 +27,6 @@ if TYPE_CHECKING:
         ExecutionContext,
         Invocation,
     )
-    from model_service.contracts.model_declarations import ModelBinding
 
 
 ATTEMPTS_DIR = ".attempts"
@@ -61,7 +60,7 @@ class SharedStorageAccess(InputAccess):
 
         Args:
             root: The resolved shared-storage root, already checked against the allowed roots.
-            inputs: The invocation's builder inputs by name.
+            inputs: The invocation's inputs by name.
             output_prefix: Relative directory a scheduled attempt writes below; empty
                 for synchronous runs, which write to the requested path directly.
         """
@@ -73,7 +72,7 @@ class SharedStorageAccess(InputAccess):
         """Resolve a shared-path input to an existing regular file below the root.
 
         Args:
-            name: The builder input name.
+            name: The input name.
 
         Returns:
             The resolved file path.
@@ -97,7 +96,7 @@ class SharedStorageAccess(InputAccess):
         The file need not exist yet.
 
         Args:
-            relative_path: The relative POSIX path the builder writes to.
+            relative_path: The relative POSIX path the run writes to.
 
         Returns:
             The resolved output path.
@@ -113,22 +112,6 @@ class SharedStorageAccess(InputAccess):
     async def aclose(self) -> None:
         """Release nothing; shared-storage access holds no resources."""
         return None
-
-    def is_visible_artifact(self, path: Path) -> bool:
-        """Check that a path is an existing file below the root once symlinks are resolved.
-
-        Args:
-            path: The artifact path a builder reported.
-
-        Returns:
-            True if the path resolves to a file inside the root.
-        """
-        try:
-            resolved = path.resolve(strict=True)
-            resolved.relative_to(self._root)
-        except (OSError, ValueError):
-            return False
-        return resolved.is_file()
 
     def _resolve(
         self, relative_path: str, *, must_exist: bool, prefix: str = ""
@@ -217,7 +200,6 @@ class SharedStorageAccessFactory(InputAccessFactory):
         self,
         invocation: Invocation,
         execution_context: ExecutionContext,
-        model: ModelBinding | None = None,
     ) -> SharedStorageAccess:
         """Create shared-storage access for one invocation.
 
@@ -225,7 +207,6 @@ class SharedStorageAccessFactory(InputAccessFactory):
             invocation: The invocation; its input access state names the root.
             execution_context: Supplies the processing attempt ID and the
                 execution's attempts directory that scope outputs.
-            model: Unused.
 
         Returns:
             Access to the invocation's inputs and outputs below the root.
@@ -233,7 +214,6 @@ class SharedStorageAccessFactory(InputAccessFactory):
         Raises:
             InvalidInvocation: If the root is invalid or not allowed on this server.
         """
-        del model
         attempt = execution_context.processing_attempt_id
         group = execution_context.protected_context.get(ATTEMPTS_KEY)
         prefix = ""

@@ -15,12 +15,11 @@ from typing import TYPE_CHECKING
 from httpx import ASGITransport, AsyncClient
 
 import model_service.api
-from model_service.api.app_factory import create_app, model_resolver
-from model_service.api.model_catalog import ModelCatalog
+from model_service.api.app_factory import create_app
 from model_service.api.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.api.scheduler.running_work import ActiveWorkRegistry
 from model_service.api.scheduler.worker import ExecutionWorker
-from model_service.contracts.model_declarations import SpatialScoresModel
+from model_service.catalog import Catalog
 from model_service.contracts.result import BuilderResult, InlineOutput
 from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
@@ -29,17 +28,17 @@ from tests.support.memory_repository import (
     FakeDispatch,
     InMemoryExecutionRepository,
 )
+from tests.support.scheduling import resolve_test_analysis, scheduling_catalog
 
 
 if TYPE_CHECKING:
-    from model_service.contracts.invocation import ExecutionContext, Invocation
-    from model_service.contracts.model_declarations import ModelBinding
+    from model_service.contracts.analysis_http import AnalysisRunRequest
 
 
 # What Uvicorn loads with `--log-config` in the API container.
 LOG_CONFIG = Path(model_service.api.__file__).with_name("log-config.json")
-# Scheduling a model the catalog lacks is refused, and the refusal is logged.
-UNKNOWN_MODEL = "/v1/builders/heatmap/models/missing/schedule"
+# Scheduling an analysis the catalog lacks is refused, and the refusal is logged.
+UNKNOWN_ANALYSIS = "/v1/analyses/missing/schedule"
 BODY = {
     "inputs": {"slide": {"kind": "shared_path", "path": "slide.tiff"}},
     "input_access": {"kind": "shared_storage", "state": {"root": "/data"}},
@@ -48,7 +47,7 @@ BODY = {
 
 class RequestIdTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        catalog = ModelCatalog([])
+        catalog = Catalog(None)
         scheduler = ExecutionScheduler(
             repository=InMemoryExecutionRepository(),
             dispatch=FakeDispatch({}),
@@ -57,12 +56,12 @@ class RequestIdTests(unittest.IsolatedAsyncioTestCase):
                     SharedStorageAccessFactory([Path("/data")])
                 )
             },
-            resolve_model=model_resolver(catalog),
+            resolve_analysis=resolve_test_analysis,
             default_timeout=timedelta(minutes=1),
             maximum_timeout=timedelta(hours=1),
         )
         self.client = AsyncClient(
-            transport=ASGITransport(app=create_app(scheduler, catalog=catalog)),
+            transport=ASGITransport(app=create_app(scheduler, catalog=lambda: catalog)),
             base_url="http://api",
         )
         self.addAsyncCleanup(self.client.aclose)
@@ -94,7 +93,7 @@ class RequestIdTests(unittest.IsolatedAsyncioTestCase):
         stream = self.capture_logs()
 
         response = await self.client.post(
-            UNKNOWN_MODEL,
+            UNKNOWN_ANALYSIS,
             json=BODY,
             headers={"X-Request-ID": "jes-1234", "Idempotency-Key": "k"},
         )
@@ -109,19 +108,8 @@ class RequestIdTests(unittest.IsolatedAsyncioTestCase):
 
 class ExecutionIdTests(unittest.IsolatedAsyncioTestCase):
     async def test_log_lines_while_an_execution_runs_name_it(self) -> None:
-        model = SpatialScoresModel(
-            id="classifier", tile_size=32, output_tile_size=1, n_channels=1, mpp=0.5
-        )
-        catalog = ModelCatalog([model])
-
         class LoggingDispatch:
-            async def run(
-                self,
-                builder_id: str,
-                invocation: Invocation,
-                model: ModelBinding,
-                execution_context: ExecutionContext,
-            ) -> BuilderResult:
+            async def run_analysis(self, request: AnalysisRunRequest) -> BuilderResult:
                 logging.getLogger("model_service.tests").warning("dispatching")
                 return BuilderResult({"heatmap": InlineOutput(1)})
 
@@ -138,7 +126,7 @@ class ExecutionIdTests(unittest.IsolatedAsyncioTestCase):
                 repository=repository,
                 dispatch=LoggingDispatch(),
                 providers=providers,
-                resolve_model=model_resolver(catalog),
+                resolve_analysis=resolve_test_analysis,
                 default_timeout=timedelta(minutes=1),
                 maximum_timeout=timedelta(hours=1),
             )
@@ -147,16 +135,17 @@ class ExecutionIdTests(unittest.IsolatedAsyncioTestCase):
                 active_work=ActiveWorkRegistry(),
                 providers=providers,
                 dispatch=LoggingDispatch(),
-                resolve_model=model_resolver(catalog),
                 owner="worker-1",
                 lease_duration=timedelta(minutes=1),
             )
             async with AsyncClient(
-                transport=ASGITransport(app=create_app(scheduler, catalog=catalog)),
+                transport=ASGITransport(
+                    app=create_app(scheduler, catalog=scheduling_catalog)
+                ),
                 base_url="http://api",
             ) as client:
                 response = await client.post(
-                    "/v1/builders/heatmap/models/classifier/schedule",
+                    "/v1/analyses/a1/schedule",
                     json={
                         **BODY,
                         "input_access": {

@@ -10,15 +10,16 @@ from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock
 
 from model_service.api.scheduler.public import (
+    AnalysisScheduleRequest,
     ExecutionError,
     InvalidScheduleRequestError,
     ProviderFailure,
     ProviderFinishFailureError,
     ProviderSuccess,
-    ScheduleRequest,
 )
 from model_service.api.scheduler.targets import ExecutionTarget
 from model_service.contracts.result import BuilderResult, SharedArtifact
+from model_service.formats import score_grid
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
 from model_service.providers.empaia.jobs.inputs import job_workspace
@@ -27,6 +28,33 @@ from tests.support.empaia_fixtures import slide_info, write_score_grid
 
 def unused_gateway_factory(_context: object) -> object:
     raise AssertionError("the gateway must not be created")
+
+
+# A prostate-heatmap job as admission recorded it, publications included.
+JOB = {
+    "api_url": "https://empaia.invalid",
+    "job_id": "j",
+    "credential": "c",
+    "publications": {
+        "slide": "slide",
+        "outputs": {"heatmap": {"type": "continuous_pixelmap"}},
+    },
+}
+
+
+def heatmap_success(artifact: Path) -> ProviderSuccess:
+    """The job's result: the heatmap its one sink wrote."""
+    return ProviderSuccess(
+        BuilderResult(
+            outputs={"heatmap": SharedArtifact(str(artifact), score_grid.MEDIA_TYPE)}
+        ),
+        ExecutionTarget(
+            "prostate-heatmap",
+            ("prostate-classifier-1",),
+            "digest",
+            {"sinks": [{"use": "score_grid", "output": "heatmap"}]},
+        ),
+    )
 
 
 class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
@@ -45,9 +73,8 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
                 self.assertRaises(InvalidScheduleRequestError),
             ):
                 await provider.prepare(
-                    ScheduleRequest(
-                        builder_id="heatmap",
-                        model_id="prostate-classifier-1",
+                    AnalysisScheduleRequest(
+                        analysis_id="prostate-heatmap",
                         provider="empaia",
                         body={
                             "installation_id": "installation-1",
@@ -64,9 +91,8 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(InvalidScheduleRequestError):
             await provider.prepare(
-                ScheduleRequest(
-                    builder_id="heatmap",
-                    model_id="prostate-classifier-1",
+                AnalysisScheduleRequest(
+                    analysis_id="prostate-heatmap",
                     provider="empaia",
                     body={
                         "installation_id": "https://empaia.example/app-api",
@@ -105,17 +131,8 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
             )
 
             await provider.finish(
-                {"api_url": "https://empaia.invalid", "job_id": "j", "credential": "c"},
-                ProviderSuccess(
-                    BuilderResult(
-                        outputs={
-                            "heatmap": SharedArtifact(
-                                path=str(artifact), media_type="application/x-npz"
-                            )
-                        }
-                    ),
-                    ExecutionTarget.builder("heatmap", "prostate-classifier-1"),
-                ),
+                JOB,
+                heatmap_success(artifact),
             )
 
             gateway.finalize.assert_awaited_once()
@@ -170,22 +187,8 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
             try:
                 with self.assertLogs("model_service", "WARNING"):
                     await provider.finish(
-                        {
-                            "api_url": "https://empaia.invalid",
-                            "job_id": "j",
-                            "credential": "c",
-                        },
-                        ProviderSuccess(
-                            BuilderResult(
-                                outputs={
-                                    "heatmap": SharedArtifact(
-                                        path=str(artifact),
-                                        media_type="application/x-npz",
-                                    )
-                                }
-                            ),
-                            ExecutionTarget.builder("heatmap", "prostate-classifier-1"),
-                        ),
+                        JOB,
+                        heatmap_success(artifact),
                     )
             finally:
                 artifact.parent.chmod(0o755)
@@ -212,15 +215,8 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
 
             with self.assertRaises(ProviderFinishFailureError):
                 await provider.finish(
-                    {
-                        "api_url": "https://empaia.invalid",
-                        "job_id": "j",
-                        "credential": "c",
-                    },
-                    ProviderSuccess(
-                        BuilderResult(outputs={}),
-                        ExecutionTarget.builder("heatmap", "prostate-classifier-1"),
-                    ),
+                    JOB,
+                    heatmap_success(artifact),
                 )
 
             self.assertTrue(artifact.exists())

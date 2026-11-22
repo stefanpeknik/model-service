@@ -4,10 +4,8 @@ An EMPAIA app registered as `http::<target>/analyses/<id>` reaches
 `POST /analyses/<id>` with what an app container would get: the App API URL,
 the job ID and the job token. The registration names what runs; the job's
 inputs and configuration are read from the App API like a container would.
-Apps registered before analyses had apps name
-`http::<target>/builders/<builder>/models/<model>`, which still runs the
-builder (transitional). Submission is idempotent per job: JES's `Idempotency-Key` is the
-job ID, so a different key is rejected. The response's `Location` is then polled
+Submission is idempotent per job: JES's `Idempotency-Key` is the job ID, so a
+different key is rejected. The response's `Location` is then polled
 with `GET` and cancelled with `DELETE`. Remote statuses are `ExecutionStatus`
 values.
 """
@@ -30,7 +28,6 @@ from model_service.api.http.errors import (
 from model_service.api.http.scheduling import submit
 from model_service.api.scheduler.public import (
     AnalysisScheduleRequest,
-    ScheduleRequest,
     SchedulingUnavailableError,
     UnknownExecutionError,
 )
@@ -90,7 +87,7 @@ def create_router(scheduler: Scheduler, access: Access | None = None) -> APIRout
     router = APIRouter(prefix="/v1/empaia")
 
     async def admit(
-        request: AnalysisScheduleRequest | ScheduleRequest,
+        request: AnalysisScheduleRequest,
         body: EmpaiaExecutionRequest,
         response: Response,
         idempotency_key: str | None,
@@ -136,46 +133,6 @@ def create_router(scheduler: Scheduler, access: Access | None = None) -> APIRout
         """
         request = AnalysisScheduleRequest(
             analysis_id=analysis_id, provider=PROVIDER_NAME, body=_payload(body)
-        )
-        return await admit(request, body, response, idempotency_key)
-
-    @router.post(
-        "/builders/{builder_id}/models/{model_id}",
-        status_code=status.HTTP_202_ACCEPTED,
-        responses={200: {"model": EmpaiaExecutionStatus}, **ERRORS},
-        dependencies=[access.require(Action.SUBMIT_PROVIDER_JOB)],
-    )
-    async def execute(
-        builder_id: str,
-        model_id: str,
-        body: EmpaiaExecutionRequest,
-        response: Response,
-        idempotency_key: Annotated[str | None, Header()] = None,
-    ) -> EmpaiaExecutionStatus:
-        """Admit an EMPAIA job as a builder execution (transitional).
-
-        Apps registered before analyses had apps name this route; it goes
-        with the builders.
-
-        Args:
-            builder_id: The builder the app runs.
-            model_id: The model it uses.
-            body: The job's App Service URL, id and token.
-            response: The response, 201 for a new execution or 200 for a repeat.
-            idempotency_key: Optional; must equal the job id.
-
-        Returns:
-            The execution's status.
-
-        Raises:
-            HTTPException: The key differs from the job id, or the job is invalid
-                or cannot be admitted.
-        """
-        request = ScheduleRequest(
-            builder_id=builder_id,
-            model_id=model_id,
-            provider=PROVIDER_NAME,
-            body=_payload(body),
         )
         return await admit(request, body, response, idempotency_key)
 

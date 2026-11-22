@@ -14,14 +14,13 @@ from unittest.mock import AsyncMock, patch
 from httpx import ASGITransport, AsyncClient, MockTransport, Request, Response
 
 from model_service.api.app_factory import build_api_process
-from model_service.api.model_catalog import CatalogError
+from model_service.api.catalog_files import CatalogError
 from model_service.api.scheduler.settings import SchedulerSettings
 from tests.support.memory_repository import InMemoryExecutionRepository
-from tests.support.model_documents import (
-    embedding_document,
-    served_document,
-    spatial_document,
-)
+from tests.support.model_documents import served_document
+
+
+DEPLOYED = {"prostate-classifier-1": served_document(), "virchow2": served_document()}
 
 
 class RuntimeTestCase(unittest.IsolatedAsyncioTestCase):
@@ -31,12 +30,8 @@ class RuntimeTestCase(unittest.IsolatedAsyncioTestCase):
         self.directory = Path(directory.name)
         self.catalog_dir = self.directory / "catalog-mount"
         self.catalog_dir.mkdir()
-        self.catalog_path = self.catalog_dir / "model-catalog.json"
-        self.catalog_path.write_text(
-            json.dumps([spatial_document(), embedding_document()]), encoding="utf-8"
-        )
-        self.write_served({})
-        (self.catalog_dir / "provider-blocks.json").write_text("{}", encoding="utf-8")
+        self.catalog_path = self.catalog_dir / "catalog.json"
+        self.write_served(DEPLOYED)
 
     def write_served(self, documents: dict[str, object]) -> None:
         (self.catalog_dir / "catalog.json").write_text(
@@ -47,7 +42,7 @@ class RuntimeTestCase(unittest.IsolatedAsyncioTestCase):
         values = {
             "DATABASE_URL": "postgresql://unused",
             "PROVIDER_CONTEXT_KEY": base64.urlsafe_b64encode(b"x" * 32).decode(),
-            "RAY_SERVE_ORIGIN": "http://builder-serve",
+            "RAY_SERVE_ORIGIN": "http://ray-serve",
             "MODEL_CATALOG_DIR": str(self.catalog_dir),
             "SHARED_STORAGE_ROOTS": json.dumps([str(self.directory)]),
             **environment,
@@ -71,40 +66,16 @@ class ExecutionRuntimeTests(RuntimeTestCase):
             ["prostate-classifier-1", "virchow2"],
         )
 
-    async def test_an_invalid_or_repeated_model_is_left_out_of_the_catalog(
-        self,
-    ) -> None:
-        broken = spatial_document("broken")
-        broken["deployment"] = {"user_config": 7}
-        self.catalog_path.write_text(
-            json.dumps(
-                [spatial_document(), broken, spatial_document(), embedding_document()]
-            ),
-            encoding="utf-8",
-        )
-        app = build_api_process(self.settings())
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://model-service"
-        ) as client:
-            models = await client.get("/v1/models")
-
-        self.assertEqual(
-            [model["id"] for model in models.json()],
-            ["prostate-classifier-1", "virchow2"],
-        )
-
-    def test_an_unreadable_catalog_or_bad_builder_selection_prevents_startup(
-        self,
-    ) -> None:
+    def test_an_unreadable_or_invalid_catalog_prevents_startup(self) -> None:
         self.catalog_path.write_text("{not json", encoding="utf-8")
+        with self.assertRaises(CatalogError):
+            build_api_process(self.settings())
+        self.write_served({"small": served_document(tile_size=0)})
         with self.assertRaises(CatalogError):
             build_api_process(self.settings())
         self.catalog_path.unlink()
         with self.assertRaises(CatalogError):
             build_api_process(self.settings())
-        self.catalog_path.write_text("[]", encoding="utf-8")
-        with self.assertRaises(KeyError):
-            build_api_process(self.settings(BUILDER_IDS='["missing"]'))
 
     async def test_lifespan_initializes_repository_and_closes_client(self) -> None:
         repository = InMemoryExecutionRepository()
@@ -179,25 +150,25 @@ class ExecutionRuntimeTests(RuntimeTestCase):
                 return_value=serve_client,
             ),
         ):
-            app = build_api_process(
-                self.settings(CATALOG_RELOAD_SECONDS="0.01", BUILDER_IDS="[]")
-            )
+            app = build_api_process(self.settings(CATALOG_RELOAD_SECONDS="0.01"))
             async with (
                 app.router.lifespan_context(app),
                 AsyncClient(
                     transport=ASGITransport(app=app), base_url="http://model-service"
                 ) as client,
             ):
-                self.write_served({"small": served_document()})
+                self.write_served({**DEPLOYED, "small": served_document()})
                 added = await until(client, "/v1/models", lambda r: "small" in ids(r))
                 deployments = await client.get("/healthz/deployments")
-                self.write_served({"small": served_document(tile_size=0)})
+                self.write_served({**DEPLOYED, "small": served_document(tile_size=0)})
                 failed = await until(
                     client, "/healthz/catalog", lambda r: r.status_code == 503
                 )
                 kept = await client.get("/v1/models")
 
-        self.assertEqual(ids(added), ["small", "prostate-classifier-1", "virchow2"])
+        self.assertEqual(
+            sorted(ids(added)), ["prostate-classifier-1", "small", "virchow2"]
+        )
         self.assertEqual(deployments.json()["missing_routes"], ["/small"])
         self.assertEqual(failed.json()["status"], "reload_failed")
         self.assertIn(
@@ -205,14 +176,10 @@ class ExecutionRuntimeTests(RuntimeTestCase):
         )
         self.assertEqual(ids(kept), ids(added))
 
-    async def test_health_expects_deployed_builders_and_catalog_models(self) -> None:
+    async def test_health_expects_every_deployed_served_model(self) -> None:
         def serve(request: Request) -> Response:
             return Response(
-                200,
-                json={
-                    "/builders/heatmap": "heatmap",
-                    "/prostate-classifier-1": "prostate-classifier-1",
-                },
+                200, json={"/prostate-classifier-1": "prostate-classifier-1"}
             )
 
         async with AsyncClient(transport=MockTransport(serve)) as serve_client:
@@ -220,7 +187,7 @@ class ExecutionRuntimeTests(RuntimeTestCase):
                 "model_service.api.app_factory.httpx.AsyncClient",
                 return_value=serve_client,
             ):
-                app = build_api_process(self.settings(BUILDER_IDS='["heatmap"]'))
+                app = build_api_process(self.settings())
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://model-service"
             ) as client:

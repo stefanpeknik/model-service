@@ -6,7 +6,7 @@ from enum import StrEnum
 
 
 class FailureCode(StrEnum):
-    """Why a builder run failed."""
+    """Why a run failed; the `builder_` codes keep their names for callers."""
 
     DEADLINE_EXCEEDED = "builder_deadline_exceeded"
     INTERNAL_ERROR = "builder_internal_error"
@@ -17,11 +17,7 @@ class FailureCode(StrEnum):
 
 
 class InvalidInvocation(ValueError):
-    """Inputs, access, configuration or deadline violate the builder's contract."""
-
-
-class UnknownBuilderError(KeyError):
-    """No builder has the requested id."""
+    """Inputs, access, settings or deadline don't fit what is run."""
 
 
 class UnknownModelError(KeyError):
@@ -30,14 +26,6 @@ class UnknownModelError(KeyError):
 
 class UnknownAnalysisError(KeyError):
     """No deployed analysis has the requested id."""
-
-
-class IncompatibleModelError(InvalidInvocation):
-    """The model's inference contract is not the one the builder accepts."""
-
-
-class ContractViolation(RuntimeError):
-    """A builder returned outputs that differ from its declaration."""
 
 
 class BuilderFailure(RuntimeError):

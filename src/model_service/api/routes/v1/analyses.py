@@ -1,8 +1,8 @@
 """`/v1/analyses`: the deployed analyses, and synchronous and scheduled runs of one.
 
-`POST /v1/analyses/{id}/run` takes the builder run's request (inputs, their
-access, settings as `configuration`, output path, deadline) without a model:
-the analysis names its served models. The API resolves the analysis with the
+`POST /v1/analyses/{id}/run` takes the run's request (inputs, their access,
+settings as `configuration`, output path, deadline); the analysis names its
+served models. The API resolves the analysis with the
 settings and sends the resolved document to the analysis runner.
 
 `POST /v1/analyses/{id}/schedule` takes the same request with a timeout
@@ -17,17 +17,16 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, Request, Response, status
+from pydantic import Field
 
 from model_service.api.http.auth import Access, Action
 from model_service.api.http.errors import ERRORS
 from model_service.api.http.scheduling import require_idempotency_key, submit
 from model_service.api.http.synchronous import run_synchronously, runs_unavailable
-from model_service.api.routes.v1.builders import (
-    ImmediateBuilderRequest,
-    ScheduledBuilderRequest,
-)
 from model_service.api.scheduler.public import AnalysisScheduleRequest, ScheduleResult
 from model_service.catalog.analyses import FOLDER
+from model_service.contracts.caller_request import BuilderRequest
+from model_service.contracts.invocation import Deadline
 from model_service.contracts.json_values import JsonValue
 from model_service.contracts.result import BuilderResult, OutputKind
 from model_service.formats.known import get_format
@@ -41,6 +40,30 @@ if TYPE_CHECKING:
     from model_service.api.synchronous_runs import SynchronousAnalysisService
     from model_service.catalog import Catalog
     from model_service.catalog.analyses import Analysis
+
+
+class ImmediateAnalysisRequest(BuilderRequest):
+    """A synchronous analysis run: the request plus a deadline.
+
+    Attributes:
+        deadline_at: When the run must have finished.
+    """
+
+    deadline_at: Deadline
+
+
+class ScheduledAnalysisRequest(BuilderRequest):
+    """A request plus a timeout; the `Idempotency-Key` header names it."""
+
+    requested_timeout_seconds: Annotated[int, Field(strict=True, gt=0)] | None = None
+
+    def stored_body(self) -> dict[str, JsonValue]:
+        """Serialize the request without the scheduling timeout.
+
+        Returns:
+            The JSON body stored with the execution.
+        """
+        return self.model_dump(mode="json", exclude={"requested_timeout_seconds"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,7 +185,7 @@ def create_router(
         dependencies=[access.require(Action.RUN)],
     )
     async def run_analysis(
-        request: Request, analysis_id: str, body: ImmediateBuilderRequest
+        request: Request, analysis_id: str, body: ImmediateAnalysisRequest
     ) -> BuilderResult:
         """Run an analysis and wait for its result.
 
@@ -194,7 +217,7 @@ def create_router(
     )
     async def schedule_analysis(
         analysis_id: str,
-        body: ScheduledBuilderRequest,
+        body: ScheduledAnalysisRequest,
         response: Response,
         idempotency_key: Annotated[str, Depends(require_idempotency_key)],
     ) -> ScheduleResult:
@@ -217,7 +240,7 @@ def create_router(
             AnalysisScheduleRequest(
                 analysis_id=analysis_id,
                 provider=provider,
-                body=body.builder_request(),
+                body=body.stored_body(),
                 requested_timeout_seconds=body.requested_timeout_seconds,
                 idempotency_key=idempotency_key,
             ),

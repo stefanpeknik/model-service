@@ -14,7 +14,6 @@ import jwt
 import pytest
 from pydantic import ValidationError as SettingsError
 
-from model_service.builders.registry import BUILDERS
 from model_service.catalog import load_catalog
 from model_service.providers.empaia.credentials import (
     ClientCredentials,
@@ -25,7 +24,6 @@ from model_service.providers.empaia.ead.apps import (
     analysis_app,
     analysis_apps,
 )
-from model_service.providers.empaia.ead.builder_io import BUILDER_IO, NOT_OFFERED
 from model_service.providers.empaia.ead.vocabulary import VIEWER_CONFIG_KEY, AppMode
 from model_service.providers.empaia.registration import (
     Marketplace,
@@ -500,12 +498,6 @@ class TriggerTests(unittest.IsolatedAsyncioTestCase):
             {k: v for k, v in self.items[0].items() if k != "id"},
             {k: v for k, v in self.trigger("", ours, "PROSTATE").items() if k != "id"},
         )
-
-
-class BuilderCoverageTests(unittest.TestCase):
-    def test_every_builder_is_offered_or_explicitly_not(self) -> None:
-        self.assertEqual(BUILDER_IO.keys() & NOT_OFFERED.keys(), set())
-        self.assertEqual(BUILDER_IO.keys() | NOT_OFFERED.keys(), BUILDERS.keys())
 
 
 if __name__ == "__main__":

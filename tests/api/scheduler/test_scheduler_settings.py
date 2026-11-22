@@ -21,7 +21,7 @@ class SchedulerSettingsTests(unittest.TestCase):
         self.environment = {
             "DATABASE_URL": "postgresql://unused",
             "PROVIDER_CONTEXT_KEY": "synthetic-key",
-            "RAY_SERVE_ORIGIN": "http://builder-serve",
+            "RAY_SERVE_ORIGIN": "http://ray-serve",
         }
 
     def test_environment_lists_paths_and_seconds_are_parsed(self) -> None:
@@ -30,7 +30,6 @@ class SchedulerSettingsTests(unittest.TestCase):
                 **self.environment,
                 "MODEL_CATALOG_DIR": "/etc/catalog",
                 "CATALOG_RELOAD_SECONDS": "2",
-                "BUILDER_IDS": '["heatmap", "tile-embeddings"]',
                 "SHARED_STORAGE_ROOTS": '["/mnt/data", "/mnt/projects"]',
                 "LEASE_SECONDS": "12.5",
                 "PER_MODEL_LIMIT": "2",
@@ -41,7 +40,6 @@ class SchedulerSettingsTests(unittest.TestCase):
 
         self.assertEqual(settings.model_catalog_dir, Path("/etc/catalog"))
         self.assertEqual(settings.catalog_reload_seconds, 2)
-        self.assertEqual(settings.builder_ids, {"heatmap", "tile-embeddings"})
         self.assertEqual(
             settings.shared_storage_roots, (Path("/mnt/data"), Path("/mnt/projects"))
         )
@@ -49,23 +47,14 @@ class SchedulerSettingsTests(unittest.TestCase):
         self.assertEqual(settings.per_model_limit, 2)
         self.assertEqual(settings.max_concurrent_executions, 8)
 
-    def test_unset_optional_settings_deny_shared_storage_and_deploy_all_builders(
-        self,
-    ) -> None:
+    def test_unset_shared_storage_roots_deny_shared_storage(self) -> None:
         settings = load(self.environment)
 
         self.assertEqual(settings.shared_storage_roots, ())
-        self.assertIsNone(settings.builder_ids)
-
-    def test_an_empty_builder_list_deploys_no_builders(self) -> None:
-        settings = load({**self.environment, "BUILDER_IDS": "[]"})
-
-        self.assertEqual(settings.builder_ids, frozenset())
 
     def test_invalid_values_are_rejected(self) -> None:
         for overrides in (
             {"DATABASE_URL": " "},
-            {"BUILDER_IDS": "heatmap"},
             {"SHARED_STORAGE_ROOTS": "/mnt/data"},
             {"PER_MODEL_LIMIT": "0"},
             {"MAX_CONCURRENT_EXECUTIONS": "0"},

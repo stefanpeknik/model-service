@@ -17,23 +17,16 @@ from model_service.api.http.auth import (
     Authorizer,
     Principal,
 )
-from model_service.api.model_catalog import ModelCatalog
 from model_service.api.scheduler.public import (
+    AnalysisScheduleRequest,
     ExecutionView,
-    ScheduleRequest,
     ScheduleResult,
 )
 from model_service.api.scheduler.status import ExecutionStatus
-from model_service.contracts.model_declarations import SpatialScoresModel
+from model_service.catalog import Catalog
 
 
-CATALOG = ModelCatalog(
-    [
-        SpatialScoresModel(
-            id="classifier", tile_size=8, output_tile_size=1, n_channels=1, mpp=0.5
-        )
-    ]
-)
+CATALOG = Catalog(None)
 EXECUTION = "00000000-0000-4000-8000-000000000001"
 
 
@@ -45,14 +38,14 @@ class Scheduler:
     async def check_ready(self) -> None:
         return None
 
-    async def schedule(self, request: ScheduleRequest) -> ScheduleResult:
+    async def schedule(self, request: AnalysisScheduleRequest) -> ScheduleResult:
         raise AssertionError(request)
 
     async def get(self, execution_id: str) -> ExecutionView:
         return ExecutionView(
             id=execution_id,
-            analysis_id="heatmap:classifier",
-            models=["classifier"],
+            analysis_id="a1",
+            models=["m1"],
             analysis_digest=None,
             status=ExecutionStatus.QUEUED,
         )
@@ -88,7 +81,7 @@ class Recorder(Authorizer):
 
 
 def client(access: Access | None = None) -> AsyncClient:
-    app = create_app(Scheduler(), catalog=CATALOG, access=access)
+    app = create_app(Scheduler(), catalog=lambda: CATALOG, access=access)
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://ms")
 
 

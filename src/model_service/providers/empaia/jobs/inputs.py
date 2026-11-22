@@ -2,7 +2,7 @@
 
 The public job identity must match protected dispatch context. Each input's
 EAD type, recorded at admission, picks the converter that makes its file;
-the analysis or builder receives local paths.
+the analysis receives local paths.
 """
 
 from __future__ import annotations
@@ -38,13 +38,8 @@ from model_service.providers.input_access import (
 
 logger = logging.getLogger(__name__)
 
-# The EAD types of builder inputs admitted before they were recorded.
-LEGACY_INPUT_TYPES = {"slide": "wsi", "region_of_interest": "rectangle"}
-
-
 if TYPE_CHECKING:
     from model_service.contracts.invocation import Invocation
-    from model_service.contracts.model_declarations import ModelBinding
     from model_service.providers.empaia.app_service.gateway import (
         EmpaiaGateway,
         EmpaiaGatewayFactory,
@@ -60,12 +55,12 @@ class EmpaiaInputAccess(InputAccess):
         gateway: EmpaiaGateway,
         paths: dict[str, Path],
     ) -> None:
-        """Retain the workspace, materialized input mapping, and gateway to close after the builder ran.
+        """Retain the workspace, materialized input mapping, and gateway to close after the run.
 
         Args:
             root: The attempt's workspace.
             gateway: The job's gateway, closed by `aclose`.
-            paths: The materialized file of each builder input, by name.
+            paths: The materialized file of each input, by name.
         """
         self._gateway = gateway
         self._paths = paths
@@ -75,7 +70,7 @@ class EmpaiaInputAccess(InputAccess):
         """Return the existing materialized file of a declared input.
 
         Args:
-            name: The builder input name.
+            name: The input name.
 
         Returns:
             The file path.
@@ -111,21 +106,6 @@ class EmpaiaInputAccess(InputAccess):
                 "output path escapes the attempt workspace"
             ) from error
         return path
-
-    def is_visible_artifact(self, path: Path) -> bool:
-        """Check that a path is an existing file within the resolved attempt workspace.
-
-        Args:
-            path: The artifact path a builder reported.
-
-        Returns:
-            True if the path is a file inside the workspace.
-        """
-        try:
-            path.resolve(strict=True).relative_to(self._root.resolve(strict=True))
-        except (OSError, ValueError):
-            return False
-        return path.is_file()
 
     async def report_progress(self, fraction: float) -> None:
         """Report the run's progress to the job, for the viewer to show.
@@ -184,7 +164,6 @@ class EmpaiaInputAccessFactory(InputAccessFactory):
         self,
         invocation: Invocation,
         execution_context: ExecutionContext,
-        model: ModelBinding | None = None,
     ) -> EmpaiaInputAccess:
         """Materialize every provider input of an attempt in its own workspace.
 
@@ -195,7 +174,6 @@ class EmpaiaInputAccessFactory(InputAccessFactory):
         Args:
             invocation: The invocation; its input access state names the job.
             execution_context: The protected job context and processing attempt ID.
-            model: Unused.
 
         Returns:
             Access to the materialized inputs and the attempt's outputs.
@@ -225,10 +203,8 @@ class EmpaiaInputAccessFactory(InputAccessFactory):
             / hashlib.sha256(processing_attempt_id.encode()).hexdigest()
         )
         paths: dict[str, Path] = {}
-        uses = state.inputs or {
-            name: {"type": LEGACY_INPUT_TYPES.get(name, "")}
-            for name in invocation.inputs
-        }
+        # Builder-era jobs recorded no input types; nothing runs them now.
+        uses = state.inputs or {}
         slide = next((n for n, u in uses.items() if u.get("type") == "wsi"), None)
         try:
             make_shared_directory(root)
@@ -266,7 +242,7 @@ class EmpaiaInputAccessFactory(InputAccessFactory):
                 )
             await asyncio.to_thread(remove_directory, root)
             if isinstance(error, EmpaiaGatewayError):
-                # Keep the gateway's safe reason instead of "builder failed unexpectedly".
+                # Keep the gateway's safe reason instead of an unexpected failure's.
                 raise BuilderFailure(
                     code=FailureCode.INPUT_UNAVAILABLE,
                     safe_message=error.safe_message,

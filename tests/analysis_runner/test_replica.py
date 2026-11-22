@@ -20,22 +20,26 @@ from model_service.catalog.analyses import resolve_run
 from model_service.contracts.analysis_http import AnalysisRunRequest
 from model_service.contracts.failures import BuilderFailure, InvalidInvocation
 from model_service.contracts.invocation import (
+    ExecutionContext,
     InputAccessContext,
     Invocation,
     SharedPathInput,
 )
 from model_service.contracts.result import BuilderResult, SharedArtifact
 from model_service.formats import score_grid
+from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from model_service.testing import fake_model, fake_slide
 from tests.support.analysis_catalog import REGISTRY, served_model, write
 
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
     from pathlib import Path
 
     import numpy as np
 
     from model_service.catalog.analyses import ResolvedAnalysis
+    from model_service.providers.input_access import InputAccess
 
 
 class Handle:
@@ -201,3 +205,139 @@ def test_a_run_past_its_deadline_fails_without_output(
 
     assert raised.value.code == "builder_deadline_exceeded"
     assert [p for p in storage.rglob("*") if p.is_file()] == [storage / "slide.tiff"]
+
+
+class Access:
+    """Shared-storage access whose close the test decides."""
+
+    def __init__(self, storage: Path, close: Callable[[], Awaitable[None]]) -> None:
+        self._storage = storage
+        self._close = close
+
+    def create(
+        self, invocation: Invocation, execution_context: ExecutionContext
+    ) -> InputAccess:
+        access = SharedStorageAccessFactory([self._storage]).create(
+            invocation, execution_context
+        )
+        access.aclose = self._close  # type: ignore[method-assign]
+        return access
+
+
+def replica(storage: Path, access: Any, **options: Any) -> AnalysisReplica:
+    return AnalysisReplica(
+        ReplicaSettings(shared_storage_roots=(storage,)),
+        access={"shared_storage": access},
+        **options,
+    )
+
+
+async def failing_close() -> None:
+    raise OSError("provider credential is secret")
+
+
+def test_a_failed_cleanup_keeps_the_runs_outcome(
+    resolved: ResolvedAnalysis, storage: Path
+) -> None:
+    handle = Handle(resolved.model_digests["m1"])
+    core = replica(storage, Access(storage, failing_close), models=lambda _: handle)
+
+    result = asyncio.run(core.run(request(resolved, storage)))
+    with pytest.raises(BuilderFailure) as raised:
+        handle.digest = "0" * 64
+        asyncio.run(core.run(request(resolved, storage)))
+
+    assert set(result.outputs) == {"heatmap"}
+    assert raised.value.code == "model_contract_mismatch"
+
+
+def test_the_deadline_covers_opening_the_inputs(
+    resolved: ResolvedAnalysis, storage: Path
+) -> None:
+    cancelled = asyncio.Event()
+
+    class Blocking:
+        async def create(self, *_args: object) -> InputAccess:
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+            raise AssertionError
+
+    handle = Handle(resolved.model_digests["m1"])
+    run_request = request(resolved, storage, deadline=timedelta(milliseconds=50))
+
+    with pytest.raises(BuilderFailure) as raised:
+        asyncio.run(
+            asyncio.wait_for(
+                replica(storage, Blocking(), models=lambda _: handle).run(run_request),
+                timeout=1,
+            )
+        )
+
+    assert (raised.value.code, raised.value.retryable) == (
+        "builder_deadline_exceeded",
+        False,
+    )
+    assert cancelled.is_set()
+
+
+def test_cleanup_is_bounded(resolved: ResolvedAnalysis, storage: Path) -> None:
+    async def scenario() -> BuilderResult:
+        close_cancelled = asyncio.Event()
+
+        async def hanging_close() -> None:
+            try:
+                await asyncio.Event().wait()
+            finally:
+                close_cancelled.set()
+
+        handle = Handle(resolved.model_digests["m1"])
+        core = replica(
+            storage,
+            Access(storage, hanging_close),
+            models=lambda _: handle,
+            cleanup_timeout_seconds=0.02,
+        )
+        result = await asyncio.wait_for(core.run(request(resolved, storage)), 5)
+        await asyncio.wait_for(close_cancelled.wait(), 1)
+        return result
+
+    assert set(asyncio.run(scenario()).outputs) == {"heatmap"}
+
+
+def test_a_cancelled_run_waits_for_cleanup_however_often_cancelled(
+    resolved: ResolvedAnalysis, storage: Path
+) -> None:
+    async def scenario() -> None:
+        started = asyncio.Event()
+        closing = asyncio.Event()
+        release = asyncio.Event()
+        closed = asyncio.Event()
+
+        class Stuck(Handle):
+            async def infer(self, tile: np.ndarray) -> np.ndarray:
+                started.set()
+                await asyncio.Event().wait()
+                raise AssertionError
+
+        async def slow_close() -> None:
+            closing.set()
+            await release.wait()
+            closed.set()
+
+        handle = Stuck(resolved.model_digests["m1"])
+        core = replica(storage, Access(storage, slow_close), models=lambda _: handle)
+        task = asyncio.create_task(core.run(request(resolved, storage)))
+        await asyncio.wait_for(started.wait(), 5)
+        task.cancel()
+        await asyncio.wait_for(closing.wait(), 1)
+        task.cancel()
+        await asyncio.sleep(0)
+        assert not task.done()
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(task, 1)
+        assert closed.is_set()
+
+    asyncio.run(scenario())

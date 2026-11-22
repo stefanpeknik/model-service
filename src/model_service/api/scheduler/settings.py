@@ -53,10 +53,6 @@ class SchedulerSettings(BaseSettings):
     catalog_reload_seconds: FiniteFloat = Field(
         default=10, gt=0, validation_alias="CATALOG_RELOAD_SECONDS"
     )
-    # Deployed builders; unset means all registered, empty means none.
-    builder_ids: frozenset[_RequiredString] | None = Field(
-        default=None, validation_alias="BUILDER_IDS"
-    )
     shared_storage_roots: tuple[Path, ...] = Field(
         default=(), validation_alias="SHARED_STORAGE_ROOTS"
     )

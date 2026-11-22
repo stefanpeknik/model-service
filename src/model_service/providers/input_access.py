@@ -1,8 +1,8 @@
-"""How builders reach their inputs: the interface providers implement, and closing it.
+"""How runs reach their inputs: the interface providers implement, and closing it.
 
 A provider's access adapter turns an invocation's provider-specific inputs into
-local files for one run, and says where outputs go; builders see only the
-resulting paths. An access may also pass the run's progress on to its
+local files for one run, and says where outputs go; the analysis runner sees
+only the resulting paths. An access may also pass the run's progress on to its
 provider. close_resource closes an access, or anything it holds, within
 a timeout; cleanup tasks stay referenced until they finish and their exceptions
 are consumed, so cancelling the caller never leaks a half-closed resource.
@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from model_service.contracts.invocation import ExecutionContext, Invocation
-    from model_service.contracts.model_declarations import ModelBinding
 
 
 class InputAccess(ABC):
@@ -31,10 +30,10 @@ class InputAccess(ABC):
         """Resolve a named invocation input to a local file.
 
         Args:
-            name: Input name from the builder's declaration.
+            name: Input name, as the analysis reads it.
 
         Returns:
-            Local path the builder can read the input from.
+            Local path the run can read the input from.
         """
         ...
 
@@ -46,19 +45,7 @@ class InputAccess(ABC):
             relative_path: Output path relative to the invocation's output location.
 
         Returns:
-            Local path the builder writes the artifact to.
-        """
-        ...
-
-    @abstractmethod
-    def is_visible_artifact(self, path: Path) -> bool:
-        """Check that a returned artifact is a file this access exposes to callers.
-
-        Args:
-            path: Artifact path a builder returned in its result.
-
-        Returns:
-            True when the path is a file inside the access's visible output area.
+            Local path the run writes the artifact to.
         """
         ...
 
@@ -80,21 +67,17 @@ class InputAccess(ABC):
 class InputAccessFactory(ABC):
     """Creates the input access of one input access kind, per invocation attempt."""
 
-    # The model tells an adapter that fetches slides which resolution the builder reads.
     @abstractmethod
     def create(
         self,
         invocation: Invocation,
         execution_context: ExecutionContext,
-        model: ModelBinding,
     ) -> InputAccess | Awaitable[InputAccess]:
         """Create the input access for one invocation attempt.
 
         Args:
             invocation: Invocation whose inputs and outputs the access resolves.
             execution_context: Attempt identity and protected provider state.
-            model: Model binding; tells an adapter that fetches slides which
-                resolution the builder reads.
 
         Returns:
             The access, or an awaitable resolving to it.
@@ -139,12 +122,12 @@ async def close_resource(
         task.add_done_callback(_release_cleanup)
         if cancellation is not None:
             raise cancellation
-        raise TimeoutError("builder resource cleanup timed out")
+        raise TimeoutError("input access cleanup timed out")
     if cancellation is not None:
         _consume_exception(task)
         raise cancellation
     if task.cancelled():
-        raise RuntimeError("builder resource cleanup was cancelled")
+        raise RuntimeError("input access cleanup was cancelled")
     task.result()
 
 

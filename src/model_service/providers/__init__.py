@@ -1,4 +1,4 @@
-"""Where builder inputs come from and results go: standalone shared storage and EMPAIA.
+"""Where run inputs come from and results go: standalone shared storage and EMPAIA.
 
 - provider.py: the provider contract: Provider, ProviderAdapter (how the
   scheduler admits and finishes its jobs), and every method a provider writes.

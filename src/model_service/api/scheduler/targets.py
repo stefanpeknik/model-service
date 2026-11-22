@@ -1,11 +1,10 @@
 """What an execution runs: an analysis, its digest and the served models it calls.
 
-An execution admitted through `/v1/analyses/{id}/schedule` stores the
-resolved analysis document; every attempt sends that document to the
-analysis runner. One admitted through the builder routes (EMPAIA until its
-app moves to analyses) has no document: its analysis ID names the builder
-and model it runs, through `BUILDER_ANALYSES` or a legacy
-`<builder>:<model>` ID (transitional, until the builders are retired).
+An execution stores the analysis document resolved at admission; every
+attempt sends that document to the analysis runner. Executions admitted
+before analyses replaced the builders have none: migration 0009 named them
+after the matching analysis, or `<builder>:<model>`, and they can no longer
+run.
 
 Capacity is counted per served model; an analysis calling none is counted
 under its own ID.
@@ -23,18 +22,6 @@ if TYPE_CHECKING:
 
     from model_service.catalog.analyses import ResolvedAnalysis
     from model_service.contracts.json_values import JsonObject
-
-
-# The day-one analysis each builder and model pair became; migration 0009 maps
-# stored executions the same way.
-BUILDER_ANALYSES: dict[tuple[str, str], str] = {
-    ("heatmap", "prostate-classifier-1"): "prostate-heatmap",
-    ("heatmap", "episeg-1"): "episeg-heatmap",
-    ("tile-embeddings", "virchow2"): "virchow2-embeddings",
-    ("tile-embeddings", "prov-gigapath"): "prov-gigapath-embeddings",
-}
-_BUILDER_PAIRS = {analysis: pair for pair, analysis in BUILDER_ANALYSES.items()}
-_LEGACY_SEPARATOR = ":"
 
 
 class CapacityKind(StrEnum):
@@ -71,7 +58,7 @@ class ExecutionTarget:
         models: The served models it calls, in step order; empty for none.
         analysis_digest: The resolved document's digest; None without one.
         analysis: The resolved document every attempt sends to the analysis
-            runner; None for a run of a builder.
+            runner; None for an execution admitted before analyses.
     """
 
     analysis_id: str
@@ -95,35 +82,6 @@ class ExecutionTarget:
             analysis_digest=resolved.digest,
             analysis=resolved.document,
         )
-
-    @classmethod
-    def builder(cls, builder_id: str, model_id: str) -> ExecutionTarget:
-        """The target of a builder run with a model (transitional).
-
-        Args:
-            builder_id: The builder.
-            model_id: The model it uses.
-
-        Returns:
-            The target named after the matching analysis, or a legacy ID.
-        """
-        analysis_id = BUILDER_ANALYSES.get(
-            (builder_id, model_id), f"{builder_id}{_LEGACY_SEPARATOR}{model_id}"
-        )
-        return cls(analysis_id, (model_id,))
-
-    def builder_pair(self) -> tuple[str, str] | None:
-        """The builder and model a target without a document runs.
-
-        Returns:
-            The pair, or None when the ID names none.
-        """
-        if (pair := _BUILDER_PAIRS.get(self.analysis_id)) is not None:
-            return pair
-        builder_id, separator, model_id = self.analysis_id.partition(_LEGACY_SEPARATOR)
-        if not separator or not builder_id or not model_id:
-            return None
-        return builder_id, model_id
 
     @property
     def capacity_keys(self) -> tuple[CapacityKey, ...]:

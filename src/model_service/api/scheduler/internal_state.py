@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
 
 class WorkKind(StrEnum):
-    """Distinguish builder processing from result publication and terminal status reporting."""
+    """Distinguish processing from result publication and terminal status reporting."""
 
     PROCESSING = "processing"
     PROVIDER_FINISH = "provider_finish"

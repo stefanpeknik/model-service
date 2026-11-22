@@ -1,4 +1,4 @@
-"""Check the public API: catalog listings, builder runs, scheduling and safe errors."""
+"""Check the public API: scheduling, executions, disconnects, health and safe errors."""
 
 from __future__ import annotations
 
@@ -19,18 +19,12 @@ from httpx import (
     Response,
 )
 
-from model_service.api.app_factory import create_app, model_resolver
+from model_service.api.app_factory import analysis_resolver, create_app
 from model_service.api.health import DeploymentHealth
-from model_service.api.model_catalog import ModelCatalog
-from model_service.api.scheduler.builder_dispatch import (
-    ConfirmedRejectionError,
-    RemoteFailureError,
-    UnknownOutcomeError,
-)
 from model_service.api.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.api.scheduler.public import (
+    AnalysisScheduleRequest,
     ExecutionView,
-    ScheduleRequest,
     ScheduleResult,
     SchedulingUnavailableError,
 )
@@ -38,12 +32,10 @@ from model_service.api.scheduler.status import ExecutionStatus
 from model_service.api.scheduler.store.repository import (
     ExecutionRepositoryUnavailableError,
 )
-from model_service.api.synchronous_runs import SynchronousBuilderService
-from model_service.contracts.model_declarations import (
-    SpatialScoresModel,
-    TileEmbeddingModel,
-)
-from model_service.contracts.result import BuilderResult, InlineOutput, SharedArtifact
+from model_service.api.synchronous_runs import SynchronousAnalysisService
+from model_service.catalog import load_catalog
+from model_service.catalog.analyses import resolve_run
+from model_service.contracts.result import BuilderResult, InlineOutput
 from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from tests.support.memory_repository import InMemoryExecutionRepository
@@ -56,30 +48,23 @@ if TYPE_CHECKING:
     from starlette.types import Message, Scope
 
     from model_service.api.scheduler.internal_state import ExecutionRecord
-    from model_service.contracts.invocation import ExecutionContext, Invocation
-    from model_service.contracts.model_declarations import ModelBinding
+    from model_service.catalog import Catalog
+    from model_service.contracts.analysis_http import AnalysisRunRequest
 
-    type Handler = Callable[
-        [str, Invocation, ModelBinding, ExecutionContext], Awaitable[BuilderResult]
-    ]
+    type Handler = Callable[[AnalysisRunRequest], Awaitable[BuilderResult]]
 
 
-PROSTATE = SpatialScoresModel(
-    id="prostate-classifier-1",
-    tile_size=512,
-    output_tile_size=1,
-    n_channels=1,
-    mpp=0.468,
-)
-VIRCHOW = TileEmbeddingModel(
-    id="virchow2", tile_size=224, mpp=0.5, summaries=("global", "local_mean")
-)
-CATALOG = ModelCatalog([PROSTATE, VIRCHOW])
-RUN = "/v1/builders/heatmap/models/prostate-classifier-1/run"
-SCHEDULE = "/v1/builders/heatmap/models/prostate-classifier-1/schedule"
+CATALOG = load_catalog(Path(__file__).resolve().parents[2] / "catalog", "rationai-test")
+RUN = "/v1/analyses/prostate-heatmap/run"
+SCHEDULE = "/v1/analyses/prostate-heatmap/schedule"
 
 
-# Every heatmap setting at its default: what a run without configuration records.
+def catalog() -> Catalog:
+    return CATALOG
+
+
+# Every prostate-heatmap setting at its default: what a run without
+# configuration records.
 HEATMAP_DEFAULTS = {
     "stride_fraction": 0.5,
     "skip_background": True,
@@ -88,23 +73,17 @@ HEATMAP_DEFAULTS = {
 
 
 class FakeDispatch:
-    """Record dispatched calls and delegate to a test handler."""
+    """Record dispatched runs and delegate to a test handler."""
 
     def __init__(self, handler: Handler | None = None) -> None:
-        self.calls: list[tuple[str, Invocation, ModelBinding, ExecutionContext]] = []
+        self.calls: list[AnalysisRunRequest] = []
         self._handler = handler
 
-    async def run(
-        self,
-        builder_id: str,
-        invocation: Invocation,
-        model: ModelBinding,
-        execution_context: ExecutionContext,
-    ) -> BuilderResult:
-        self.calls.append((builder_id, invocation, model, execution_context))
+    async def run_analysis(self, request: AnalysisRunRequest) -> BuilderResult:
+        self.calls.append(request)
         if self._handler is None:
             return BuilderResult(outputs={"score": InlineOutput(value=0.9)})
-        return await self._handler(builder_id, invocation, model, execution_context)
+        return await self._handler(request)
 
 
 class RecordingScheduler:
@@ -113,18 +92,18 @@ class RecordingScheduler:
     alive = True
 
     def __init__(self) -> None:
-        self.requests: list[ScheduleRequest] = []
+        self.requests: list[AnalysisScheduleRequest] = []
 
     async def check_ready(self) -> None:
         return None
 
-    async def schedule(self, request: ScheduleRequest) -> ScheduleResult:
+    async def schedule(self, request: AnalysisScheduleRequest) -> ScheduleResult:
         self.requests.append(request)
         return ScheduleResult(
             execution=ExecutionView(
                 id="execution-1",
-                analysis_id=f"{request.builder_id}:{request.model_id}",
-                models=[request.model_id],
+                analysis_id=request.analysis_id,
+                models=[],
                 analysis_digest=None,
                 status=ExecutionStatus.QUEUED,
             ),
@@ -163,7 +142,7 @@ class ApiTestCase(unittest.IsolatedAsyncioTestCase):
                     SharedStorageAccessFactory([self.root])
                 )
             },
-            resolve_model=model_resolver(CATALOG),
+            resolve_analysis=analysis_resolver(catalog),
             default_timeout=timedelta(hours=1),
             maximum_timeout=timedelta(hours=6),
             poll_interval=0.01,
@@ -177,13 +156,13 @@ class ApiTestCase(unittest.IsolatedAsyncioTestCase):
 
     def app(self, **kwargs: object) -> FastAPI:
         options: dict[str, object] = {
-            "catalog": CATALOG,
-            "builder_runner": SynchronousBuilderService(CATALOG, self.dispatch),
+            "catalog": catalog,
+            "analysis_runner": SynchronousAnalysisService(catalog, self.dispatch),
         }
         options.update(kwargs)
         return create_app(self.scheduler, **options)  # type: ignore[arg-type]
 
-    def builder_request(self) -> dict[str, object]:
+    def request(self) -> dict[str, object]:
         return {
             "inputs": {
                 "slide": {"kind": "shared_path", "path": "slide.svs"},
@@ -197,13 +176,13 @@ class ApiTestCase(unittest.IsolatedAsyncioTestCase):
 
     def run_request(self) -> dict[str, object]:
         return {
-            **self.builder_request(),
-            "output_path": "outputs/heatmap.tiff",
+            **self.request(),
+            "output_path": "outputs/heatmap.npz",
             "deadline_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
         }
 
     def schedule_request(self) -> dict[str, object]:
-        return self.builder_request()
+        return self.request()
 
     async def schedule(
         self,
@@ -232,75 +211,6 @@ class ApiTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.json()["detail"]["retryable"], retryable)
 
 
-class CatalogRouteTests(ApiTestCase):
-    async def test_models_list_contracts_parameters_and_compatible_builders(
-        self,
-    ) -> None:
-        async with self.client(self.app()) as client:
-            listed = await client.get("/v1/models")
-            single = await client.get("/v1/models/virchow2")
-            missing = await client.get("/v1/models/missing")
-
-        self.assertEqual(
-            listed.json(),
-            [
-                {
-                    "id": "prostate-classifier-1",
-                    "declaration": None,
-                    "digest": None,
-                    "analyses": [],
-                    "contract": "spatial-scores",
-                    "parameters": {
-                        "tile_size": 512,
-                        "mpp": 0.468,
-                        "output_tile_size": 1,
-                        "n_channels": 1,
-                    },
-                    "builders": ["heatmap"],
-                },
-                {
-                    "id": "virchow2",
-                    "declaration": None,
-                    "digest": None,
-                    "analyses": [],
-                    "contract": "tile-embedding",
-                    "parameters": {
-                        "tile_size": 224,
-                        "mpp": 0.5,
-                        "summaries": ["global", "local_mean"],
-                    },
-                    "builders": ["tile-embeddings"],
-                },
-            ],
-        )
-        self.assertEqual(single.json()["id"], "virchow2")
-        self.assert_error(missing, 404, "unknown_model")
-
-    async def test_builders_list_contracts_io_and_default_configuration(self) -> None:
-        async with self.client(self.app()) as client:
-            response = await client.get("/v1/builders")
-
-        builders = {item["id"]: item for item in response.json()}
-        self.assertEqual(set(builders), {"heatmap", "tile-embeddings"})
-        heatmap = builders["heatmap"]
-        self.assertEqual(heatmap["accepts"], "spatial-scores")
-        self.assertEqual(
-            heatmap["inputs"]["region_of_interest"],
-            {"required": False, "media_type": "image/tiff"},
-        )
-        self.assertTrue(heatmap["inputs"]["slide"]["required"])
-        self.assertEqual(
-            heatmap["outputs"],
-            {"heatmap": {"kind": "shared_artifact", "media_type": "application/x-npz"}},
-        )
-        self.assertEqual(heatmap["configuration"]["stride_fraction"], 0.5)
-        # What a caller may send as `configuration`, described as in EMPAIA.
-        stride = heatmap["configuration_schema"]["properties"]["stride_fraction"]
-        self.assertEqual((stride["type"], stride["exclusiveMinimum"]), ("number", 0))
-        self.assertIn("share of the tile size", stride["description"])
-        self.assertEqual(builders["tile-embeddings"]["accepts"], "tile-embedding")
-
-
 class ScheduleRouteTests(ApiTestCase):
     async def test_schedule_replay_poll_and_cancel(self) -> None:
         async with self.client(self.app()) as client:
@@ -322,7 +232,9 @@ class ScheduleRouteTests(ApiTestCase):
                 "id": execution_id,
                 "analysis_id": "prostate-heatmap",
                 "models": ["prostate-classifier-1"],
-                "analysis_digest": None,
+                "analysis_digest": resolve_run(
+                    CATALOG, "prostate-heatmap", None
+                ).digest,
                 "status": "queued",
                 "configuration": HEATMAP_DEFAULTS,
                 "result": None,
@@ -349,7 +261,7 @@ class ScheduleRouteTests(ApiTestCase):
             HEATMAP_DEFAULTS | {"stride_fraction": 1.0},
         )
 
-    async def test_a_setting_the_builder_rejects_is_refused_naming_it(self) -> None:
+    async def test_a_setting_the_analysis_rejects_is_refused_naming_it(self) -> None:
         body = {**self.schedule_request(), "configuration": {"stride_fraction": 0}}
         async with self.client(self.app()) as client:
             refused = await self.schedule(client, body)
@@ -375,14 +287,8 @@ class ScheduleRouteTests(ApiTestCase):
     async def test_lookup_and_validation_errors_are_distinct(self) -> None:
         body = self.schedule_request()
         async with self.client(self.app()) as client:
-            unknown_builder = await self.schedule(
-                client, url="/v1/builders/missing/models/prostate-classifier-1/schedule"
-            )
-            unknown_model = await self.schedule(
-                client, url="/v1/builders/heatmap/models/missing/schedule"
-            )
-            incompatible = await self.schedule(
-                client, url="/v1/builders/heatmap/models/virchow2/schedule"
+            unknown_analysis = await self.schedule(
+                client, url="/v1/analyses/missing/schedule"
             )
             empty_key = await self.schedule(client, key="")
             no_key = await self.schedule(client, key=None)
@@ -394,9 +300,7 @@ class ScheduleRouteTests(ApiTestCase):
             )
             provider = await self.schedule(client, {**body, "provider": "standalone"})
 
-        self.assert_error(unknown_builder, 404, "unknown_builder")
-        self.assert_error(unknown_model, 404, "unknown_model")
-        self.assert_error(incompatible, 422, "incompatible_model")
+        self.assert_error(unknown_analysis, 404, "unknown_analysis")
         for response in (
             empty_key,
             no_key,
@@ -433,139 +337,8 @@ class ScheduleRouteTests(ApiTestCase):
             self.assert_error(response, 422, "invalid_request")
         self.assertIn("not allowed", responses[2].json()["detail"]["message"])
 
-    async def test_scheduled_execution_dispatches_current_model_binding(self) -> None:
-        artifact = str(self.root / "heatmap.tiff")
 
-        async def produce(*_args: object) -> BuilderResult:
-            return BuilderResult(
-                outputs={
-                    "heatmap": SharedArtifact(path=artifact, media_type="image/tiff")
-                }
-            )
-
-        self.dispatch = FakeDispatch(produce)
-        self.scheduler = self.make_scheduler(self.repository, self.dispatch)
-        async with self.client(self.app()) as client:
-            admitted = await self.schedule(client)
-            execution_id = admitted.json()["execution"]["id"]
-            async with self.scheduler.running(), asyncio.timeout(2):
-                while True:
-                    state = await client.get(f"/v1/executions/{execution_id}")
-                    if state.json()["status"] == "succeeded":
-                        break
-                    await asyncio.sleep(0.01)
-
-        self.assertEqual(state.json()["result"]["outputs"]["heatmap"]["path"], artifact)
-        [(builder_id, invocation, model, context)] = self.dispatch.calls
-        self.assertEqual(builder_id, "heatmap")
-        self.assertEqual(model, PROSTATE)
-        self.assertEqual(invocation.configuration, HEATMAP_DEFAULTS)
-        self.assertIsNotNone(context.processing_attempt_id)
-
-
-class RunRouteTests(ApiTestCase):
-    async def test_run_returns_result_and_dispatches_without_settings(self) -> None:
-        async with self.client(self.app()) as client:
-            response = await client.post(RUN, json=self.run_request())
-
-        self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(
-            response.json(), {"outputs": {"score": {"kind": "inline", "value": 0.9}}}
-        )
-        [(builder_id, invocation, model, context)] = self.dispatch.calls
-        self.assertEqual(builder_id, "heatmap")
-        self.assertEqual(model, PROSTATE)
-        self.assertIsNone(invocation.configuration)
-        self.assertEqual(invocation.output_path, "outputs/heatmap.tiff")
-        self.assertIsNone(context.processing_attempt_id)
-
-    async def test_lookup_and_validation_errors_happen_before_dispatch(self) -> None:
-        request = self.run_request()
-        async with self.client(self.app()) as client:
-            responses = {
-                "unknown builder": await client.post(
-                    "/v1/builders/missing/models/prostate-classifier-1/run",
-                    json=request,
-                ),
-                "unknown model": await client.post(
-                    "/v1/builders/heatmap/models/missing/run", json=request
-                ),
-                "incompatible": await client.post(
-                    "/v1/builders/heatmap/models/virchow2/run",
-                    json=request,
-                ),
-                "missing input": await client.post(RUN, json={**request, "inputs": {}}),
-                "untagged input": await client.post(
-                    RUN,
-                    json={**request, "inputs": {"slide": {"path": "slide.svs"}}},
-                ),
-                "past deadline": await client.post(
-                    RUN,
-                    json={**request, "deadline_at": "2000-01-01T00:00:00+00:00"},
-                ),
-                "settings": await client.post(
-                    RUN,
-                    json={**request, "stride_fraction": 0.25},
-                ),
-            }
-
-        self.assert_error(responses.pop("unknown builder"), 404, "unknown_builder")
-        self.assert_error(responses.pop("unknown model"), 404, "unknown_model")
-        self.assert_error(responses.pop("incompatible"), 422, "incompatible_model")
-        for name, response in responses.items():
-            with self.subTest(name):
-                self.assert_error(response, 422, "invalid_request")
-        self.assertEqual(self.dispatch.calls, [])
-
-    async def test_dispatch_outcomes_map_to_safe_errors(self) -> None:
-        def failing(error: Exception) -> Handler:
-            async def handler(*_args: object) -> BuilderResult:
-                raise error
-
-            return handler
-
-        cases = [
-            (
-                ConfirmedRejectionError(timedelta(seconds=7)),
-                429,
-                "builder_backpressure",
-                True,
-            ),
-            (
-                RemoteFailureError(
-                    code="model_contract_mismatch",
-                    safe_message="model changed",
-                    retryable=False,
-                ),
-                422,
-                "model_contract_mismatch",
-                False,
-            ),
-            (
-                RemoteFailureError(
-                    code="model_failed", safe_message="down", retryable=True
-                ),
-                503,
-                "model_failed",
-                True,
-            ),
-            (UnknownOutcomeError("lost"), 503, "builder_unavailable", True),
-        ]
-        for error, status_code, code, retryable in cases:
-            with self.subTest(code=code):
-                self.dispatch = FakeDispatch(failing(error))
-                async with self.client(self.app()) as client:
-                    response = await client.post(RUN, json=self.run_request())
-                self.assert_error(response, status_code, code, retryable=retryable)
-                if status_code == 429:
-                    self.assertEqual(response.headers["retry-after"], "7")
-
-    async def test_run_is_unavailable_without_a_runner(self) -> None:
-        async with self.client(self.app(builder_runner=None)) as client:
-            response = await client.post(RUN, json=self.run_request())
-
-        self.assert_error(response, 503, "builder_unavailable", retryable=True)
-
+class DisconnectTests(ApiTestCase):
     async def test_client_disconnect_cancels_dispatch(self) -> None:
         started = asyncio.Event()
         cancelled = asyncio.Event()
@@ -625,7 +398,7 @@ class HealthAndAvailabilityTests(ApiTestCase):
         return DeploymentHealth(
             client,
             origin="http://ray",
-            routes=lambda: ["/builders/heatmap", "/prostate-classifier-1"],
+            routes=lambda: ["/analyses", "/prostate-classifier-1"],
         )
 
     async def test_an_api_without_a_running_worker_is_not_live(self) -> None:
@@ -638,7 +411,7 @@ class HealthAndAvailabilityTests(ApiTestCase):
         self.assertEqual(live.status_code, 200)
 
     async def test_missing_routes_are_separate_from_readiness(self) -> None:
-        routes = {"/builders/heatmap/": "heatmap"}
+        routes = {"/analyses/": "analysis-runner"}
         async with (
             AsyncClient(
                 transport=MockTransport(lambda _request: Response(200, json=routes))
@@ -662,7 +435,7 @@ class HealthAndAvailabilityTests(ApiTestCase):
         )
 
     async def test_all_routes_present_is_ready(self) -> None:
-        routes = {"/builders/heatmap": "heatmap", "/prostate-classifier-1": "p"}
+        routes = {"/analyses": "analysis-runner", "/prostate-classifier-1": "p"}
         async with (
             AsyncClient(
                 transport=MockTransport(lambda _request: Response(200, json=routes))
@@ -732,10 +505,12 @@ class HealthAndAvailabilityTests(ApiTestCase):
 
     async def test_scheduler_unavailability_is_retryable(self) -> None:
         class UnavailableScheduler(RecordingScheduler):
-            async def schedule(self, request: ScheduleRequest) -> ScheduleResult:
+            async def schedule(
+                self, request: AnalysisScheduleRequest
+            ) -> ScheduleResult:
                 raise SchedulingUnavailableError("temporarily unavailable")
 
-        app = create_app(UnavailableScheduler(), catalog=CATALOG)
+        app = create_app(UnavailableScheduler(), catalog=catalog)
         async with self.client(app) as client:
             response = await self.schedule(client)
 

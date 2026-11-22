@@ -5,8 +5,8 @@ its files when a Helm upgrade changes the catalog, without restarting the
 API. `MountedCatalog` notices the change, reads the new files (see
 `catalog_files.py`) and swaps them in only if they load. On failure it keeps
 the catalog it has, logs why, and reports it under `/healthz/catalog` until a
-later version loads. Running executions carry their own model binding, so a
-swap does not touch them.
+later version loads. Executions carry the analysis document resolved at
+admission, so a swap does not touch them.
 """
 
 from __future__ import annotations
@@ -18,18 +18,15 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from model_service.api.catalog_files import read_catalog
-from model_service.api.model_catalog import CatalogError
+from model_service.api.catalog_files import CatalogError, read_catalog
 from model_service.catalog.analyses import FOLDER as ANALYSES
+from model_service.catalog.served_models import FOLDER as SERVED_MODELS
 
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Iterator
     from pathlib import Path
 
-    from model_service.api.model_catalog import ModelCatalog
     from model_service.catalog import Catalog
-    from model_service.contracts.model_declarations import ModelBinding
 
 
 logger = logging.getLogger(__name__)
@@ -58,21 +55,19 @@ class CatalogStatus:
 class MountedCatalog:
     """The catalog from a mounted directory, swapped when its files change."""
 
-    def __init__(self, directory: Path, provider_blocks: Collection[str] = ()) -> None:
+    def __init__(self, directory: Path) -> None:
         """Load the mounted catalog.
 
         Args:
             directory: Where the ConfigMap is mounted.
-            provider_blocks: The top-level keys providers read.
 
         Raises:
             CatalogError: If the catalog does not load; with no older catalog
                 to keep, the API cannot start.
         """
         self._directory = directory
-        self._provider_blocks = tuple(provider_blocks)
         self._fingerprint = _fingerprint(directory)
-        self._current: ModelCatalog = read_catalog(directory, self._provider_blocks)
+        self._current: Catalog = read_catalog(directory)
         self._error: str | None = None
 
     def refresh(self) -> bool:
@@ -85,7 +80,7 @@ class MountedCatalog:
         if seen == self._fingerprint:
             return False
         try:
-            catalog = read_catalog(self._directory, self._provider_blocks)
+            catalog = read_catalog(self._directory)
         except CatalogError as error:
             # Remembered, so the same broken files are reported once.
             self._fingerprint = seen
@@ -100,8 +95,8 @@ class MountedCatalog:
         self._current, self._fingerprint, self._error = catalog, seen, None
         logger.info(
             "model catalog reloaded: %s; analyses: %s",
-            ", ".join(m.id for m in catalog) or "no models",
-            ", ".join(catalog.resolved.entries(ANALYSES)) or "none",
+            ", ".join(catalog.entries(SERVED_MODELS)) or "no models",
+            ", ".join(catalog.entries(ANALYSES)) or "none",
         )
         return True
 
@@ -128,48 +123,7 @@ class MountedCatalog:
     @property
     def resolved(self) -> Catalog:
         """The served models and analyses in use, as the catalog loader resolved them."""
-        return self._current.resolved
-
-    def get(self, model_id: str) -> ModelBinding:
-        """Look up a deployed model.
-
-        Args:
-            model_id: The model ID.
-
-        Returns:
-            The model binding.
-
-        Raises:
-            UnknownModelError: If no model has this ID.
-        """
-        return self._current.get(model_id)
-
-    def provider_block(self, key: str) -> dict[str, object]:
-        """Return each model's `key` block, by model ID.
-
-        Args:
-            key: The provider's top-level block key.
-
-        Returns:
-            Model IDs mapped to their block.
-        """
-        return self._current.provider_block(key)
-
-    def __iter__(self) -> Iterator[ModelBinding]:
-        """Iterate over the model bindings.
-
-        Returns:
-            An iterator over the bindings in catalog order.
-        """
-        return iter(self._current)
-
-    def __len__(self) -> int:
-        """Count the models.
-
-        Returns:
-            The number of models.
-        """
-        return len(self._current)
+        return self._current
 
 
 def _fingerprint(directory: Path) -> str:

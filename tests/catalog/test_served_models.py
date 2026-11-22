@@ -8,10 +8,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from model_service.api.model_catalog import ModelDocument, model_binding
 from model_service.catalog import CatalogInvalid, load_catalog
-from model_service.catalog.served_models import legacy_config
-from tests.support.model_documents import model_file
 
 
 if TYPE_CHECKING:
@@ -20,7 +17,6 @@ if TYPE_CHECKING:
 
 REPO = Path(__file__).resolve().parents[2]
 CATALOG = REPO / "catalog"
-OLD_MODELS = REPO / "deploy" / "helm" / "rayservice" / "models"
 
 MODEL = """
     weights: {use: local, path: /weights/model.onnx}
@@ -45,17 +41,6 @@ def write(root: Path, name: str, text: str) -> None:
 
 def served(root: Path, model_id: str = "m1") -> ServedModel:
     return load_catalog(root).entries("served-models")[model_id].value
-
-
-def test_episeg_gives_the_binding_of_its_old_model_file() -> None:
-    model = load_catalog(CATALOG).entries("served-models")["episeg-1"]
-    old = ModelDocument.model_validate(model_file(OLD_MODELS / "episeg-1.yaml"))
-    old_config = old.deployment.user_config
-
-    assert model.value.weights.options.uri == old_config["model"]["artifact_uri"]
-    assert model_binding(old).model_dump(
-        mode="json", exclude={"id", "contract"}
-    ) == legacy_config(model.value)
 
 
 def test_the_digest_follows_what_the_model_computes_not_how_it_is_scheduled(

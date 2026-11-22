@@ -1,19 +1,18 @@
 """The provider contract: what a provider is and every method it writes.
 
 A provider is a `Provider` (here) listed in `providers/registry.py`. The API
-process and the builder deployment compose the providers there and name none
+process and the analysis runner compose the providers there and name none
 of them. A provider writes:
 
-- `Provider.api` and `Provider.input_access`: what it adds to each process,
-  plus `catalog_block`, the block of the model files it reads;
+- `Provider.api` and `Provider.input_access`: what it adds to each process;
 - a `ProviderAdapter` (here): `identify`, `prepare` and `finish`, admitting a
   job and finishing it, with the types they take and return in
   api/scheduler/public.py;
 - an `InputAccessFactory` (providers/input_access.py) whose `create` returns an
-  `InputAccess`: `input_path`, `output_path`, `is_visible_artifact`, `aclose`.
+  `InputAccess`: `input_path`, `output_path`, `aclose`.
 
 Each provider imports what only one process needs inside the method for it:
-builder replicas load provider modules, so those import no api/ code.
+the analysis runner loads provider modules, so those import no api/ code.
 """
 
 from __future__ import annotations
@@ -30,10 +29,9 @@ if TYPE_CHECKING:
     from fastapi import APIRouter
 
     from model_service.analysis_runner.settings import ReplicaSettings
-    from model_service.api.model_catalog import ModelCatalogView
     from model_service.api.scheduler.protocols import Scheduler
     from model_service.api.scheduler.public import (
-        AnyScheduleRequest,
+        AnalysisScheduleRequest,
         BeforeMutation,
         PreparedInvocation,
         ProviderFinishOutcome,
@@ -41,6 +39,7 @@ if TYPE_CHECKING:
         SubmissionIdentity,
     )
     from model_service.api.scheduler.settings import SchedulerSettings
+    from model_service.catalog import Catalog
     from model_service.contracts.invocation import InputAccessKind
     from model_service.contracts.json_values import JsonValue
     from model_service.contracts.result import BuilderResult
@@ -53,7 +52,7 @@ class ProviderAdapter(ABC):
     name: ProviderName
 
     @abstractmethod
-    def identify(self, request: AnyScheduleRequest) -> SubmissionIdentity:
+    def identify(self, request: AnalysisScheduleRequest) -> SubmissionIdentity:
         """Compute submission identity locally without I/O or external side effects.
 
         Args:
@@ -67,7 +66,7 @@ class ProviderAdapter(ABC):
     @abstractmethod
     async def prepare(
         self,
-        request: AnyScheduleRequest,
+        request: AnalysisScheduleRequest,
         deadline_at: datetime,
     ) -> PreparedInvocation:
         """Resolve and validate new inputs and configuration before admission.
@@ -130,23 +129,16 @@ class ApiContribution:
 
 
 class Provider(ABC):
-    """A source of jobs: how they are admitted, read and finished.
-
-    Attributes:
-        catalog_block: The model files' top-level block it reads, if any.
-    """
-
-    # The model files' top-level block it reads, if any.
-    catalog_block: str | None
+    """A source of jobs: how they are admitted, read and finished."""
 
     @abstractmethod
     def api(
-        self, catalog: ModelCatalogView, settings: SchedulerSettings
+        self, catalog: Callable[[], Catalog], settings: SchedulerSettings
     ) -> ApiContribution:
         """Build what this provider adds to the API.
 
         Args:
-            catalog: The deployed models, with each model file's provider blocks.
+            catalog: Gives the deployed served models and analyses in use.
             settings: the API's scheduler settings.
 
         Returns:
@@ -158,10 +150,10 @@ class Provider(ABC):
     def input_access(
         self, settings: ReplicaSettings
     ) -> Mapping[InputAccessKind, InputAccessFactory]:
-        """Build the adapters builder replicas use for the inputs this provider hands out.
+        """Build the adapters the analysis runner uses for the inputs this provider hands out.
 
         Args:
-            settings: The builder replica's settings.
+            settings: The runner replica's settings.
 
         Returns:
             The access adapters by the input access kind they serve.

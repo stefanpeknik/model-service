@@ -1,4 +1,4 @@
-"""The EMPAIA provider, composed for the API and for builder replicas.
+"""The EMPAIA provider, composed for the API and for the analysis runner.
 
 It serves JES's remote execution routes, runs App Service jobs, and registers
 apps, with their preprocessing triggers, for the analyses with an
@@ -17,20 +17,16 @@ from model_service.providers.provider import ApiContribution, Provider
 
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
 
     from model_service.analysis_runner.settings import ReplicaSettings
-    from model_service.api.model_catalog import ModelCatalogView
     from model_service.api.scheduler.settings import SchedulerSettings
+    from model_service.catalog import Catalog
     from model_service.providers.empaia.credentials import OutgoingCredentials
     from model_service.providers.empaia.registration import Marketplace
     from model_service.providers.empaia.triggers import PreprocessingTriggers
     from model_service.providers.input_access import InputAccessFactory
 
-
-# The model files' block of the earlier EMPAIA offering; still accepted so old
-# files load, but analyses' `expose.empaia` makes the apps now (transitional).
-CATALOG_BLOCK = "empaia"
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +34,8 @@ logger = logging.getLogger(__name__)
 class EmpaiaProvider(Provider):
     """Runs EMPAIA jobs and registers the deployed analyses' EMPAIA apps."""
 
-    catalog_block = CATALOG_BLOCK
-
     def api(
-        self, catalog: ModelCatalogView, settings: SchedulerSettings
+        self, catalog: Callable[[], Catalog], settings: SchedulerSettings
     ) -> ApiContribution:
         """Contribute the EMPAIA scheduler adapter, JES routes and app registration.
 
@@ -51,10 +45,9 @@ class EmpaiaProvider(Provider):
         configured, so the API serves while the marketplace is down; it
         aligns the preprocessing triggers too when a Medical Data Service is
         configured, then deletes the apps it owns that no analysis has.
-        Models' `empaia` blocks are no longer read.
 
         Args:
-            catalog: The deployed served models and analyses.
+            catalog: Gives the deployed served models and analyses.
             settings: Unused; EMPAIA reads its own `EMPAIA_*` settings.
 
         Returns:
@@ -71,13 +64,7 @@ class EmpaiaProvider(Provider):
 
         del settings
         empaia = EmpaiaSettings()
-        if blocks := sorted(catalog.provider_block(CATALOG_BLOCK)):
-            logger.warning(
-                "model files' empaia blocks are no longer read (%s); an analysis's "
-                "expose.empaia makes its app",
-                ", ".join(blocks),
-            )
-        apps = analysis_apps(catalog.resolved)
+        apps = analysis_apps(catalog())
         credentials = _credentials(empaia)
         marketplace = _marketplace(empaia, credentials)
         triggers = _triggers(empaia, credentials)
@@ -95,7 +82,7 @@ class EmpaiaProvider(Provider):
                 http_gateway_factory(empaia),
                 allowed_api_urls=empaia.api_urls,
                 workspace_root=empaia.workspace_root,
-                catalog=lambda: catalog.resolved,
+                catalog=catalog,
             ),
             routes=create_router,
             # In the background: the API serves while the marketplace is down.
@@ -105,7 +92,7 @@ class EmpaiaProvider(Provider):
     def input_access(
         self, settings: ReplicaSettings
     ) -> Mapping[str, InputAccessFactory]:
-        """Give builder replicas access to EMPAIA job inputs through the App Service.
+        """Give the analysis runner access to EMPAIA job inputs through the App Service.
 
         Args:
             settings: Unused; EMPAIA reads its own `EMPAIA_*` settings.

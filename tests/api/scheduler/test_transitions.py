@@ -36,7 +36,7 @@ def publishing() -> ExecutionRecord:
     admitted = TRANSITIONS.admission.admit(
         Admission(
             identity=SubmissionIdentity("external", "job", "job"),
-            target=ExecutionTarget.builder("heatmap", "model"),
+            target=ExecutionTarget("a1", ("model",)),
             invocation=Invocation(
                 inputs={},
                 configuration=None,

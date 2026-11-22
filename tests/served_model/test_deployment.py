@@ -10,19 +10,15 @@ from model_service.served_model.deployment import (
     host_config,
     serve_application,
 )
-from tests.support.model_documents import model_file
 
 
 REPO = Path(__file__).resolve().parents[2]
 CATALOG = REPO / "catalog"
-OLD_MODELS = REPO / "deploy" / "helm" / "rayservice" / "models"
 
 
-def test_episeg_deploys_with_the_serve_options_of_its_old_model_file() -> None:
+def test_a_served_model_deploys_on_the_generic_host_with_its_declaration() -> None:
     model_id = "episeg-1"
     entry = load_catalog(CATALOG).entries("served-models")[model_id]
-    old = model_file(OLD_MODELS / f"{model_id}.yaml")["deployment"]
-    del old["user_config"], old["ray_actor_options"]["runtime_env"]
 
     app = serve_application(entry, cache_root="/mnt/cache/trt_cache")
     (deployment,) = app.pop("deployments")
@@ -33,7 +29,7 @@ def test_episeg_deploys_with_the_serve_options_of_its_old_model_file() -> None:
         "route_prefix": f"/{model_id}",
         "import_path": "model_service.served_model.serve:app",
     }
-    assert deployment == {"name": "ServedModel", **old}
+    assert deployment["name"] == "ServedModel"
     assert user_config == {
         "id": model_id,
         "declaration": entry.document,

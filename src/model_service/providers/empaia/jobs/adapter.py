@@ -1,7 +1,6 @@
 """Translate EMPAIA jobs into durable executions and publish their stored outcomes.
 
-A job runs an analysis (`/v1/empaia/analyses/{id}`), or a builder with a
-model through the transitional builder route. Admission reads the job's
+A job runs an analysis (`/v1/empaia/analyses/{id}`). Admission reads the job's
 configuration and parameters, records each input's EAD type and how each
 output is published, and caps deadlines at credential expiry. Finish
 publishes through the recorded publishers: it validates the result,
@@ -17,8 +16,8 @@ import hashlib
 import json
 import logging
 from copy import deepcopy
-from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -36,7 +35,6 @@ from model_service.api.scheduler.public import (
     ProviderSuccess,
     SubmissionIdentity,
 )
-from model_service.builders.registry import get_builder
 from model_service.components import EmpaiaInput, EmpaiaOutput
 from model_service.components.empaia import converter, publisher
 from model_service.contracts.invocation import (
@@ -58,7 +56,6 @@ from model_service.providers.empaia.app_service.gateway import (
     EmpaiaJobMode,
     Publications,
 )
-from model_service.providers.empaia.ead.builder_io import BUILDER_IO
 from model_service.providers.empaia.jobs.failure_message import fit_failure_message
 from model_service.providers.empaia.jobs.gateways import (
     FINISH_FAILED,
@@ -81,13 +78,9 @@ from model_service.providers.provider import ProviderAdapter
 
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable
 
-    from model_service.api.scheduler.public import (
-        AnyScheduleRequest,
-        BeforeMutation,
-        ScheduleRequest,
-    )
+    from model_service.api.scheduler.public import BeforeMutation
     from model_service.catalog import Catalog
     from model_service.catalog.analyses import Analysis
     from model_service.components import Commit
@@ -97,7 +90,6 @@ if TYPE_CHECKING:
         ComponentUse,
         EmpaiaGateway,
     )
-    from model_service.providers.empaia.ead.builder_io import BuilderIo
 
 
 logger = logging.getLogger(__name__)
@@ -124,7 +116,6 @@ class EmpaiaProviderAdapter(ProviderAdapter):
         allowed_api_urls: tuple[str, ...],
         workspace_root: Path | None = None,
         catalog: Callable[[], Catalog] | None = None,
-        io: Mapping[str, BuilderIo] = BUILDER_IO,
     ) -> None:
         """Only `allowed_api_urls` origins or path prefixes receive job credentials; none, no job.
 
@@ -136,16 +127,13 @@ class EmpaiaProviderAdapter(ProviderAdapter):
                 removes nothing.
             catalog: The deployed catalog, read at each admission; None
                 offers no analysis.
-            io: The EAD io entries of builders run through the builder route,
-                by builder ID.
         """
         self._gateway_factory = gateway_factory
         self._catalog = catalog
-        self._io = io
         self._allowed_api_urls = tuple(url.rstrip("/") for url in allowed_api_urls)
         self._workspace_root = workspace_root
 
-    def identify(self, request: AnyScheduleRequest) -> SubmissionIdentity:
+    def identify(self, request: AnalysisScheduleRequest) -> SubmissionIdentity:
         """Key admission by installation and job, fingerprinting stable request fields.
 
         Renewable credentials are left out of the fingerprint.
@@ -160,14 +148,9 @@ class EmpaiaProviderAdapter(ProviderAdapter):
             InvalidScheduleRequestError: If the body is not a valid EMPAIA payload.
         """
         context = schedule_payload(request.body)
-        target: dict[str, str] = (
-            {"analysis_id": request.analysis_id}
-            if isinstance(request, AnalysisScheduleRequest)
-            else {"builder_id": request.builder_id, "model_id": request.model_id}
-        )
         canonical = json.dumps(
             {
-                **target,
+                "analysis_id": request.analysis_id,
                 "installation_id": context.installation_id,
                 "job_id": context.job_id,
                 "api_url": context.api_url,
@@ -184,13 +167,13 @@ class EmpaiaProviderAdapter(ProviderAdapter):
 
     async def prepare(
         self,
-        request: AnyScheduleRequest,
+        request: AnalysisScheduleRequest,
         deadline_at: datetime,
     ) -> PreparedInvocation:
         """Admit an EMPAIA job as an invocation of provider inputs.
 
-        Fetches the configuration, and for a standalone job of an analysis
-        the values of its app's parameters, which win over it; records the
+        Fetches the configuration, and for a standalone job the values of
+        its app's parameters, which win over it; records the
         job's mode and each input's EAD type, and separates public job state
         from protected credentials and publications. Configuration keys
         that are no settings are dropped and logged, except the viewer's.
@@ -219,11 +202,7 @@ class EmpaiaProviderAdapter(ProviderAdapter):
                 "EMPAIA api_url is not an allowed AppService"
             )
         credential_expires_at = credential_expiry(context.credential)
-        analysis = (
-            self._analysis(request.analysis_id)
-            if isinstance(request, AnalysisScheduleRequest)
-            else None
-        )
+        analysis = self._analysis(request.analysis_id)
         async with preparation_gateway(self._gateway_factory, context) as gateway:
             try:
                 configuration = await gateway.get_configuration()
@@ -232,14 +211,9 @@ class EmpaiaProviderAdapter(ProviderAdapter):
                         "EMPAIA configuration must contain only JSON-compatible values"
                     )
                 mode = await gateway.get_mode()
-                if analysis is not None:
-                    admitted = await _admit_analysis(
-                        analysis, configuration, mode, gateway, context.job_id
-                    )
-                else:
-                    admitted = await self._admit_builder(
-                        request, configuration, gateway, context.job_id
-                    )
+                admitted = await _admit_analysis(
+                    analysis, configuration, mode, gateway, context.job_id
+                )
             except EmpaiaGatewayError as error:
                 raise_preparation_error(error)
         effective_deadline = min(deadline_at, credential_expires_at)
@@ -257,17 +231,6 @@ class EmpaiaProviderAdapter(ProviderAdapter):
             ),
             deadline_at=effective_deadline,
         )
-        if analysis is None:
-            spec = get_builder(_builder_request(request).builder_id)
-            try:
-                # Settings are left to the attempt, which reports a bad one to the
-                # user through EMPAIA's failure endpoint instead of refusing the job.
-                spec.check_invocation(
-                    replace(invocation, configuration=None),
-                    now=effective_deadline - timedelta(microseconds=1),
-                )
-            except (TypeError, ValueError) as error:
-                raise InvalidScheduleRequestError(str(error)) from error
         protected = EmpaiaJobContext(
             api_url=context.api_url,
             job_id=context.job_id,
@@ -302,40 +265,6 @@ class EmpaiaProviderAdapter(ProviderAdapter):
             )
         analysis: Analysis = entry.value
         return analysis
-
-    async def _admit_builder(
-        self,
-        request: AnyScheduleRequest,
-        configuration: dict[str, JsonValue],
-        gateway: EmpaiaGateway,
-        job_id: str,
-    ) -> _Admitted:
-        """Admit a job of the builder route: the builder's settings and inputs.
-
-        Raises:
-            InvalidScheduleRequestError: The builder is not offered in EMPAIA.
-        """
-        builder_request = _builder_request(request)
-        spec = get_builder(builder_request.builder_id)
-        io = self._io.get(spec.id)
-        if io is None:
-            raise InvalidScheduleRequestError(
-                f"builder {spec.id!r} is not offered in EMPAIA"
-            )
-        settings = known_settings(
-            spec.configuration.model_fields,
-            f"{spec.id} builder",
-            configuration,
-            job_id,
-        )
-        names = await job_inputs(
-            {name: s.required for name, s in spec.inputs.items()}, gateway
-        )
-        return _Admitted(
-            configuration=spec.with_defaults(settings),
-            inputs={name: {"type": str(io.inputs[name]["type"])} for name in names},
-            publications=None,
-        )
 
     async def finish(
         self,
@@ -403,49 +332,28 @@ class EmpaiaProviderAdapter(ProviderAdapter):
     def _publications(
         self, context: EmpaiaJobContext, outcome: ProviderSuccess
     ) -> Publications:
-        """How a result is published: as admitted for an analysis, by `io` for a builder.
+        """How a result is published, as admitted.
 
-        The result must have the outputs of what ran, no more.
+        The result must have the analysis's outputs, no more.
 
         Raises:
-            EmpaiaGatewayError: Not retryable if the result doesn't match what
-                ran, or what ran is not offered in EMPAIA.
+            EmpaiaGatewayError: Not retryable if the result doesn't match the
+                analysis, or the job was admitted without publications.
         """
         target = outcome.target
-        if target.analysis is not None:
-            if context.publications is None:
-                raise EmpaiaGatewayError.invalid(
-                    f"{target.analysis_id!r} was admitted without publications"
-                )
-            sinks = {
-                sink["output"]
-                for sink in cast("list[dict[str, Any]]", target.analysis["sinks"])
-            }
-            if set(outcome.result.outputs) != sinks:
-                raise EmpaiaGatewayError.invalid(
-                    "EMPAIA job result does not match its analysis's outputs"
-                )
-            return context.publications
-        pair = target.builder_pair()
-        if pair is None or (io := self._io.get(pair[0])) is None:
+        if target.analysis is None or context.publications is None:
             raise EmpaiaGatewayError.invalid(
-                f"{target.analysis_id!r} is not offered in EMPAIA"
+                f"{target.analysis_id!r} was admitted without publications"
             )
-        builder = get_builder(pair[0])
-        try:
-            builder.output_model.model_validate(outcome.result.outputs)
-        except ValidationError as error:
+        sinks = {
+            sink["output"]
+            for sink in cast("list[dict[str, Any]]", target.analysis["sinks"])
+        }
+        if set(outcome.result.outputs) != sinks:
             raise EmpaiaGatewayError.invalid(
-                "EMPAIA job result does not match its builder's outputs"
-            ) from error
-        return Publications(
-            slide="slide",
-            outputs={
-                name: {"type": output_type}
-                for name in builder.outputs
-                if (output_type := io.output_type(name)) is not None
-            },
-        )
+                "EMPAIA job result does not match its analysis's outputs"
+            )
+        return context.publications
 
     async def _remove_workspace(self, context: EmpaiaJobContext) -> None:
         """Remove every attempt's inputs and outputs of the job.
@@ -511,13 +419,10 @@ def _published(
 ) -> list[tuple[str, ComponentUse, Any]]:
     """Each output to publish with its recorded publisher and stored output.
 
-    A builder may leave an output out; an analysis's result was checked to
-    have every one.
+    The result was checked to have every one.
     """
     return [
-        (name, use, result.outputs[name])
-        for name, use in publications.outputs.items()
-        if name in result.outputs
+        (name, use, result.outputs[name]) for name, use in publications.outputs.items()
     ]
 
 
@@ -561,9 +466,3 @@ async def _prepare(
         raise EmpaiaGatewayError.invalid(
             f"EMPAIA output {name!r} cannot be published"
         ) from error
-
-
-def _builder_request(request: AnyScheduleRequest) -> ScheduleRequest:
-    """The request as a builder run (the transitional builder route)."""
-    assert not isinstance(request, AnalysisScheduleRequest)
-    return request

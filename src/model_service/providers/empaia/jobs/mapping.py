@@ -36,7 +36,7 @@ def known_settings(
     settings are expected and meant for the case browser.
 
     Args:
-        known: The setting names of the analysis or builder.
+        known: The setting names of the analysis.
         runs: What the job runs, for the log, e.g. `analysis prostate-heatmap`.
         configuration: The app configuration EMPAIA gave the job.
         job_id: The job, for the log.
