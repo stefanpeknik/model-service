@@ -61,11 +61,11 @@ workers:
 
 rayImage:
   repository: cerit.io/stefanpeknik/model-service-ray-cpu
-  tag: empaia-36
+  tag: unit-5682293
   pullPolicy: IfNotPresent
 rayGpuImage:
   repository: cerit.io/stefanpeknik/model-service-ray
-  tag: empaia-36
+  tag: unit-5682293
   pullPolicy: IfNotPresent
 
 storage:
@@ -79,7 +79,7 @@ api:
   replicas: 2
   image:
     repository: cerit.io/stefanpeknik/model-service-api
-    tag: empaia-36
+    tag: unit-5682293
     pullPolicy: IfNotPresent
   database:
     existingSecret: model-service-db
