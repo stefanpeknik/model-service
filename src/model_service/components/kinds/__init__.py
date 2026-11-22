@@ -3,7 +3,11 @@
 from model_service.components.kinds.converter import InputConverter
 from model_service.components.kinds.loader import Loader
 from model_service.components.kinds.publisher import Commit, Publisher
-from model_service.components.kinds.runtime import BatchFunction, Runtime
+from model_service.components.kinds.runtime import (
+    BatchFunction,
+    Runtime,
+    RuntimeContext,
+)
 from model_service.components.kinds.sink import Sink, SinkOptions
 from model_service.components.kinds.source import Opened, Source
 from model_service.components.kinds.step import Step
@@ -20,6 +24,7 @@ __all__ = [
     "Opened",
     "Publisher",
     "Runtime",
+    "RuntimeContext",
     "Sink",
     "SinkOptions",
     "Source",

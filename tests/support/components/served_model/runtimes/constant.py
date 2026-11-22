@@ -11,7 +11,7 @@ from model_service.components import Options, Runtime
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from model_service.components import BatchFunction
+    from model_service.components import BatchFunction, RuntimeContext
 
 
 class ConstantOptions(Options):
@@ -25,7 +25,7 @@ class Constant(Runtime):
     name = "constant"
     Options = ConstantOptions
 
-    def load(self, path: Path) -> BatchFunction:
+    def load(self, path: Path, context: RuntimeContext) -> BatchFunction:
         """Ignore the weights and return a constant model."""
         assert isinstance(self.options, ConstantOptions)
         value = self.options.value

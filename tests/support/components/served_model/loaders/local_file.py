@@ -23,3 +23,8 @@ class LocalFile(Loader):
         """Return the configured path unchanged."""
         assert isinstance(self.options, LocalFileOptions)
         return Path(self.options.path)
+
+    def revision(self) -> str:
+        """Name the weights by their path."""
+        assert isinstance(self.options, LocalFileOptions)
+        return self.options.path

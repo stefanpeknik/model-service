@@ -35,3 +35,11 @@ class Loader(Component):
         Returns:
             The local path of the weights (a file or a directory).
         """
+
+    @abstractmethod
+    def revision(self) -> str:
+        """Name the exact weights this loader fetches, for `describe()`.
+
+        Returns:
+            A pinned reference: an artifact URI, a repo revision, a path.
+        """
