@@ -8,28 +8,17 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from model_service.components.columns import Col
 from model_service.components.kinds import Sink, Source, Step
+from model_service.components.run import Run
 from model_service.testing.slides import fake_frame, fake_slide
 
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from model_service.components.columns import Batch, Col
+    from model_service.components.columns import Batch
     from model_service.components.component import Component
-
-
-@dataclass(frozen=True)
-class FakeRun:
-    """The run context sources and sinks receive.
-
-    Attributes:
-        work_dir: Where sinks write their artifacts.
-        model: The run's served model, if any.
-    """
-
-    work_dir: Path
-    model: Any = None
 
 
 @dataclass(frozen=True)
@@ -134,15 +123,33 @@ def run_component(
         )
     if work_dir is None:
         raise ValueError(f"run_component needs work_dir to run a {built.kind}")
-    run = FakeRun(work_dir, model)
     if isinstance(built, Sink):
-        batches = [fake_batch(built.columns(model)[0], 2)] if data is None else data
+        reads = built.columns(model)[0]
+        batches = [fake_batch(reads, 2)] if data is None else data
+        batches = [batches] if isinstance(batches, Mapping) else list(batches)
+        run = Run(work_dir, model, _known(reads, batches[0] if batches else {}))
         built.open(frame if frame is not None else fake_frame(), run)
-        for batch in [batches] if isinstance(batches, Mapping) else batches:
+        for batch in batches:
             built.add(dict(batch))
         return built.close()
     if data is None:
         data = {name: fake_slide(work_dir / f"{name}.tiff") for name in built.inputs()}
-    with built.open(data, run) as opened:
+    with built.open(data, Run(work_dir, model)) as opened:
         keys = list(opened.keys)
         return SourceRun(opened.frame, keys, opened.load(keys))
+
+
+def _known(reads: Mapping[str, Col], batch: Mapping[str, np.ndarray]) -> dict[str, Col]:
+    """Fill unknown dimensions from a sample batch, or with 1 as `fake_batch` does."""
+    known = {}
+    for name, col in reads.items():
+        sample = batch[name].shape[1:] if name in batch else None
+        shape = col.shape if col.shape is not None else sample or ()
+        known[name] = Col(
+            col.dtype,
+            tuple(
+                d if isinstance(d, int) else (sample[i] if sample else 1)
+                for i, d in enumerate(shape)
+            ),
+        )
+    return known

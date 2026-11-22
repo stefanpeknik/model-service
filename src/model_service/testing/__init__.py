@@ -12,13 +12,12 @@ Heavy libraries (pyvips) are imported only when a helper needs them.
 
 from model_service.testing import conformance
 from model_service.testing.models import FakeModel, fake_model
-from model_service.testing.running import FakeRun, SourceRun, fake_batch, run_component
+from model_service.testing.running import SourceRun, fake_batch, run_component
 from model_service.testing.slides import fake_frame, fake_slide
 
 
 __all__ = [
     "FakeModel",
-    "FakeRun",
     "SourceRun",
     "conformance",
     "fake_batch",

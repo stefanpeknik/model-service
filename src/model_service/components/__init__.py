@@ -39,6 +39,7 @@ from model_service.components.options import (
 )
 from model_service.components.problems import Problem
 from model_service.components.registry import Registry, default_registry
+from model_service.components.run import Run
 from model_service.components.slots import Slot
 
 
@@ -58,6 +59,7 @@ __all__ = [
     "Problem",
     "Publisher",
     "Registry",
+    "Run",
     "Runtime",
     "RuntimeContext",
     "Sink",
