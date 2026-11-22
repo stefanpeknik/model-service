@@ -101,7 +101,7 @@ inputs to local files and runs the builder with the typed client, inputs and
 configuration. A builder returns its outputs model; the application checks it
 and turns it into the generic `BuilderResult` that is sent and stored, and
 The EMPAIA adapter reads a stored result back as the builder's outputs model.
-[Adding a builder](guides/adding-builders.md) walks through a new one. One Ray application per builder (`builders.replica.serve:app`, route
+An "Adding a builder" guide walked through a new one; it was removed with the builders. One Ray application per builder (`builders.replica.serve:app`, route
 `/builders/<id>`), with the builder ID in `user_config`.
 
 | Builder | Accepts | Inputs | Output | Defaults |

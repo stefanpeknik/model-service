@@ -14,7 +14,7 @@ Ray owns workflow and model computation. The scheduler owns durable admission, c
 The separation concerns availability. PostgreSQL records, transaction guarantees, leases, and fencing provide execution durability and safe recovery. A scheduler hosted inside Ray Serve could retain those mechanisms, but its public operations and background tasks would also depend on the availability of its Serve deployment and its host resources. Persisted executions could survive while admission and monitoring were unavailable.
 
 The final standalone validation admitted execution
-`2285eb27-8040-4bd6-a8c7-f39e6168b809` with GPU capacity at zero. Admission and polling remained available, the Serve controller restarted while workers were absent, and the execution succeeded after GPU capacity returned. A separate in-flight scheduler replacement recovered work through lease expiry. These observations support the separation; they do not establish availability through every possible Ray outage. See the [recorded validation](../operations/final-standalone-validation-2026-10-06.md).
+`2285eb27-8040-4bd6-a8c7-f39e6168b809` with GPU capacity at zero. Admission and polling remained available, the Serve controller restarted while workers were absent, and the execution succeeded after GPU capacity returned. A separate in-flight scheduler replacement recovered work through lease expiry. These observations support the separation; they do not establish availability through every possible Ray outage. See the [recorded validation](../history/final-standalone-validation-2026-10-06.md).
 
 ## Alternatives considered
 
@@ -34,6 +34,6 @@ The final standalone validation admitted execution
 
 ## Implementation and requirements
 
-The current source separates [public application wiring](../../src/model_service/api/app.py), [durable orchestration](../../src/model_service/api/scheduler/README.md), and [builder dispatch](../../src/model_service/builders/client.py). The [scheduler Deployment](../../deploy/helm/rayservice/templates/execution-scheduler-deployment.yaml) is distinct from the [RayService](../../deploy/helm/rayservice/templates/rayservice.yaml).
+The current source separates [public application wiring](../../src/model_service/api/app_factory.py), [durable orchestration](../../src/model_service/api/scheduler/README.md), and [analysis dispatch](../../src/model_service/api/scheduler/dispatch.py). The [API Deployment](../../deploy/helm/rayservice/templates/api-deployment.yaml), which runs the scheduler, is distinct from the [RayService](../../deploy/helm/rayservice/templates/rayservice.yaml). Workflow processing became the builders and then analyses; the analysis runner is reached over the same HTTP dispatch boundary.
 
-The primary requirements remain the [durable workflow specification](/home/stefanpeknik/.claude/.scratch/model-service/durable-workflow-execution/spec.md), reached through [docs/README.md](../README.md). This ADR records placement rationale and alternatives; it changes no ticket status or validation boundary. The October 7 package moves are local source changes, not a new deployment validation.
+The primary requirements were the [durable workflow specification](../history/durable-workflow-execution.md); the [current specification](../spec-components.md) keeps the scheduler as it is. This ADR records placement rationale and alternatives; it changes no ticket status or validation boundary. The October 7 package moves are local source changes, not a new deployment validation.
