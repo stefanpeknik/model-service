@@ -10,10 +10,13 @@ Release `model-service`, values `deploy/helm/rayservice/values.rationai-test.yam
 
 - API Deployment `model-service-api` with PostgreSQL
   `model-service-postgres`.
-- RayService with one CPU worker group (builders, the constant model) and one
-  MIG GPU worker group that scales to zero. GPUs are scarce on the cluster:
-  after testing, check that no `gpu-workers` pod remains (it goes about six
-  minutes after the last request).
+- RayService with one CPU worker group (builders and the analysis runner) and
+  one MIG GPU worker group (served models) that scales to zero. Builders and
+  the runner request the `cpu_worker` Ray resource, which only the CPU group
+  advertises, so they never take the GPU worker's 4 CPUs that
+  `prostate-classifier-1` needs (`cpuWorkerResource` in the chart's
+  `values.yaml`). GPUs are scarce on the cluster: after testing, check that no
+  `gpu-workers` pod remains (it goes about six minutes after the last request).
 - Slides: linked through the direct-access route. The API and both worker groups mount
   the instance's `test-data-storage-pvc` read-only at `/data/Projects`, where
   its CDS plugins mount it, because model-service links the absolute path CDS

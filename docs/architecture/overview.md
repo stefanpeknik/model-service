@@ -116,6 +116,16 @@ It is important to distinguish between **Kubernetes Resources** (Pods) and **Ray
 **Rule of Thumb**: Ensure your Pods are large enough to fit at least one (or N) replicas plus overhead (Python runtime, Object Store).
 i.e., `Pod CPU >= Replicas × num_cpus + Overhead`.
 
+### Placement (CPU vs GPU Workers)
+
+Ray places a replica on any node with enough free resources, so a CPU-only
+replica could take a GPU worker's free CPUs and leave its served model
+unschedulable. The chart prevents this with a custom resource
+(`cpuWorkerResource` in `values.yaml`): CPU worker groups advertise
+`cpu_worker` through `rayStartParams.resources`, and every builder and the
+analysis runner request a unit of it in `ray_actor_options.resources`. Served
+models don't request it and go wherever their GPU fits.
+
 ## Autoscaling Architecture
 
 The Ray Serve Autoscaler runs inside the **Controller** actor and manages the number of replicas dynamically.

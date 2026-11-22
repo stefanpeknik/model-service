@@ -5,6 +5,7 @@ maxReplicas: 1
 rayStartParams:
   num-cpus: "4"
   object-store-memory: "1073741824"
+  resources: {{ include "model-service.cpuWorkerRayResources" . }}
 template:
   spec:
 {{- include "model-service.empaiaDns" . | nindent 4 }}

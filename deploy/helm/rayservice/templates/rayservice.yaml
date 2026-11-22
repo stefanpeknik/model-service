@@ -78,7 +78,7 @@ spec:
         import_path: model_service.analysis_runner.serve:app
         deployments:
           - name: AnalysisRunner
-            {{- toYaml .Values.analysisRunner.deployment | nindent 12 }}
+            {{- include "model-service.cpuOnlyDeployment" (dict "root" $ "deployment" .Values.analysisRunner.deployment) | nindent 12 }}
             user_config:
               shared_storage_roots: {{ toJson .Values.sharedStorageRoots }}
               {{- with .Values.analysisRunner.userConfig }}
@@ -109,7 +109,7 @@ spec:
         route_prefix: /builders/{{ $id }}
         deployments:
           - name: BuilderDeployment
-            {{- toYaml $builder.deployment | nindent 12 }}
+            {{- include "model-service.cpuOnlyDeployment" (dict "root" $ "deployment" $builder.deployment) | nindent 12 }}
             user_config:
               builder_id: {{ $id }}
               shared_storage_roots: {{ toJson $.Values.sharedStorageRoots }}
