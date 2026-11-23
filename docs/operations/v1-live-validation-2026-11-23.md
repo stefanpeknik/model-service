@@ -15,6 +15,7 @@ pre-rebuild deployment (`golden-references-2026-11-22.md`).
 | 10 | `unit-2c04d52` | prostate-heatmap EMPAIA app from `expose.empaia`, registration reconcile |
 | 11 | `unit-984bed7` | builders and transitional code removed (analyses only) |
 | 12 | `unit-aeed9eb` | code-review fixes (`GET /<model>/describe`, MLflow checksum, renames) |
+| 15 | `unit-9037eb7` | final v1: EPISeg applies its session options, untestable EMPAIA primitive pieces removed, core trims |
 | 14 | `unit-7247440` | persona-review fixes: validation, destination checks, sigmoid/softmax, provenance on results |
 | 13 | `unit-2646342` | builder-era names removed, `src/components` split, one fresh migration on a dropped database |
 
@@ -37,6 +38,20 @@ always the same six model-service objects, changes as listed above.
 - EMPAIA: preprocessing job via `scripts/request_preprocessing.py` on slide
   `7a072fd9`; execution `e6efffba` (`prostate-heatmap`, digest `bccb915a…`)
   succeeded with one processing and one finish attempt.
+
+## Results on revision 15 (final v1 state)
+
+- Health, deployments and catalog: ok, ready, loaded; no API errors.
+- `pytest -m live tests/live` per model: all three 3 passed, including
+  Virchow2's unpooled raw reply after the host took over token dropping.
+- `prostate-classifier-1`'s digest changed to `4d68c49caf25` because the
+  removed `apply_session_options` option counted in every `onnx` digest; its
+  TensorRT engine was rebuilt once (the first prostate test took 19.5 min).
+  Virchow2 (`93df152b6d03`) and Prov-GigaPath (`0394c8a44dd9`) are unchanged.
+- Scheduled run `96e35a01` succeeded with `served_models` recorded
+  (prostate on `TensorrtExecutionProvider`); a directory as `output_path`
+  gets 422; SDK integration test passed; EMPAIA preprocessing job `1f1e9de8`
+  succeeded (one processing, one finish attempt).
 
 ## Results on revision 14 (after the persona review)
 
