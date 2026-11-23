@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
 
+    from model_service.catalog.served_models.declaration import ServedModel
     from model_service.components.columns import Col
 
 
@@ -28,5 +29,5 @@ class Run:
     """
 
     work_dir: Path
-    model: Any = None
+    model: ServedModel | None = None
     columns: Mapping[str, Col] = field(default_factory=dict)

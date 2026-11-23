@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     import numpy as np
 
     from model_service.components import Batch
+    from model_service.components.run import Run
 
 
 SLIDE = "slide"
@@ -160,7 +161,7 @@ class SlideTiles(Source):
         return None
 
     @contextmanager
-    def open(self, inputs: dict[str, Path], run: Any) -> Iterator[Opened]:
+    def open(self, inputs: dict[str, Path], run: Run) -> Iterator[Opened]:
         """Open the slide (and mask), find tissue, and lay out the grid.
 
         Args:

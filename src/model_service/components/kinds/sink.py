@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from model_service.components.columns import Batch
+    from model_service.components.run import Run
     from model_service.components.slots import Slot
 
 
@@ -47,7 +48,7 @@ class Sink(Component):
     options: SinkOptions
 
     @abstractmethod
-    def open(self, frame: dict[str, Any], run: Any) -> None:
+    def open(self, frame: dict[str, Any], run: Run) -> None:
         """Start collecting; called once, before any batch.
 
         Args:

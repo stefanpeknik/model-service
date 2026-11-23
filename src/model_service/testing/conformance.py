@@ -16,7 +16,7 @@ Sources: give the declared frame fields and load the declared columns.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
 
@@ -116,11 +116,37 @@ def _sink(component: type[Component], work_dir: Path) -> list[str]:
     unknown = sorted(component.frame_reads - fake_frame().keys())
     if unknown:
         return [f"frame_reads {unknown} are not fields a slide source gives"]
+    # A sink may need one model output kind (an embedding table needs
+    # embeddings), so it conforms if it works with either.
+    first: list[str] = []
+    for kind in ("scores", "embedding"):
+        failures = _sink_with(component, work_dir / kind, fake_model({"kind": kind}))
+        if not failures:
+            return []
+        first = first or failures
+    return first
+
+
+def _sink_with(component: type[Sink], work_dir: Path, model: Any) -> list[str]:
+    """Run a sink with no items and with some, and check it wrote an artifact.
+
+    Args:
+        component: The sink class.
+        work_dir: A directory to create the runs' directories in.
+        model: The stand-in served model the run gets.
+
+    Returns:
+        What failed.
+    """
     failures = []
     for label, batches in (("no items", []), ("two items", None)):
         directory = work_dir / label.replace(" ", "-")
-        directory.mkdir()
-        path = run_component(component, batches, model=fake_model(), work_dir=directory)
+        directory.mkdir(parents=True)
+        try:
+            path = run_component(component, batches, model=model, work_dir=directory)
+        except Exception as error:
+            failures.append(f"raised {type(error).__name__}: {error}")
+            continue
         if not path.exists():
             failures.append(f"wrote no artifact for {label} ({path} is missing)")
     return failures

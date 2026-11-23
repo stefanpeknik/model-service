@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from model_service.components import Batch
+    from model_service.components.run import Run
 
 
 class EmbeddingTableSink(Sink):
@@ -54,7 +55,7 @@ class EmbeddingTableSink(Sink):
         }
     )
 
-    def open(self, frame: dict[str, Any], run: Any) -> None:
+    def open(self, frame: dict[str, Any], run: Run) -> None:
         """Start the writer thread and create the table with its header.
 
         Args:
@@ -63,11 +64,13 @@ class EmbeddingTableSink(Sink):
                 features the rows hold.
 
         Raises:
-            ValueError: If the run has no served model.
+            ValueError: If the run has no served model or it returns scores.
         """
         model = run.model
         if model is None:
             raise ValueError("embedding_table needs a model step for its header")
+        if model.output.kind != "embedding":
+            raise ValueError("embedding_table needs a model that returns embeddings")
         header = embedding_table.Header(
             model_id=model.id,
             summary_names=tuple(model.output.summaries),

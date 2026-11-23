@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from model_service.components.columns import Batch, Col
+    from model_service.components.run import Run
     from model_service.components.slots import Slot
 
 
@@ -60,7 +61,7 @@ class Source(Component):
         return {}
 
     @abstractmethod
-    def open(self, inputs: dict[str, Path], run: Any) -> AbstractContextManager[Opened]:
+    def open(self, inputs: dict[str, Path], run: Run) -> AbstractContextManager[Opened]:
         """Open the inputs for one run.
 
         Args:

@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from model_service.components import Batch
+    from model_service.components.run import Run
 
 
 class ScoreGridSink(Sink):
@@ -48,7 +49,7 @@ class ScoreGridSink(Sink):
         }
     )
 
-    def open(self, frame: dict[str, Any], run: Any) -> None:
+    def open(self, frame: dict[str, Any], run: Run) -> None:
         """Size the grid from the frame and the `scores` shape.
 
         Args:
