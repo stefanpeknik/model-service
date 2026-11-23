@@ -1,9 +1,9 @@
 # Spec: model-service rebuilt from components, served models and analyses
 
 Status: implemented on the `unit-platform` branch, November 2026. It
-supersedes the [core specification](spec.md) wherever they differ.
-[How model-service is put together](architecture/core.md) describes the code
-as built, and the [guides](guides/add-a-model.md) show how to use it.
+supersedes the [core specification](core-spec.md) wherever they differ.
+[How model-service is put together](../architecture/core.md) describes the code
+as built, and the [guides](../guides/add-a-model.md) show how to use it.
 
 Each decision below is traced by name to a ticket of the wayfinder map this
 spec was assembled from. The map, its tickets and the prototypes it cites live
@@ -364,7 +364,7 @@ The builders retire only once all four analyses pass verification.
   - three guides replace `adding-models` and `adding-builders`;
   - the README and architecture docs are rewritten for the new concepts;
   - dated operations records and `docs/history/` stay as records;
-  - the current `docs/spec.md` is marked superseded by this spec;
+  - the current `docs/spec.md` (now `docs/history/core-spec.md`) is marked superseded by this spec;
   - live validation of the rebuild gets its own dated operations file.
 - **Evidence and prototypes:**
   - the map's research reports are on the local branches `research/contact-surface-inventory` and `research/provider-io-inventory`;

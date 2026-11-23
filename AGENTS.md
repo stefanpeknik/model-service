@@ -4,8 +4,7 @@ Model-service runs **served models** and whole-slide **analyses**, both YAML
 files in `catalog/` built from **components** in
 `src/model_service/components/`. Start at
 [docs/architecture/core.md](docs/architecture/core.md); terms are in
-[docs/glossary.md](docs/glossary.md) and the plan in
-[docs/spec-components.md](docs/spec-components.md).
+[docs/glossary.md](docs/glossary.md).
 
 - Adding or changing a served-model file: follow
   [docs/guides/add-a-model.md](docs/guides/add-a-model.md).
@@ -20,8 +19,8 @@ files in `catalog/` built from **components** in
   (`tests/test_generated.py` fails until you do).
 - Checking catalog files: `uv run pytest tests/catalog`.
 
-`docs/history/`, dated `docs/operations/` records and `docs/spec.md` describe
-earlier designs (builders, workflows) and are records, not instructions.
+`docs/history/` and the dated `docs/operations/` records describe earlier
+designs and the plans that replaced them. They are records, not instructions.
 
 Keep documentation aligned with changes. Record live validation separately from
 local test results, in a dated file under `docs/operations/`. Tests need

@@ -33,7 +33,6 @@ nav:
       - Glossary: glossary.md
   - Architecture:
       - How it is put together: architecture/core.md
-      - Specification: spec-components.md
       - How the chart deploys the catalog: architecture/deployment.md
       - EMPAIA integration: architecture/empaia.md
       - Module graph: architecture/module-graph.md

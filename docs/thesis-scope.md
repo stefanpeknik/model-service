@@ -2,7 +2,7 @@
 
 The starting point is the team's model-service at commit `3d37a6e` ("Fix:
 issues (#9)"): Ray Serve model classes for a binary classifier,
-semantic segmentation, Virchow2 and Prov-GigaPath, a heatmap builder script and
+semantic segmentation, Virchow2 and Prov-GigaPath, a heatmap script and
 Helm charts. Callers reached each model through the Ray HTTP proxy.
 
 What the department can do now that it could not before: queue many slides

@@ -27,7 +27,6 @@ are stale.
 | Read | For |
 | --- | --- |
 | [How model-service is put together](architecture/core.md) | Packages, request flow, capacity and failure behaviour |
-| [Specification](spec-components.md) | The plan this design was built from: components, served models, analyses |
 | [How the chart deploys the catalog](architecture/deployment.md) | Helm values, from catalog file to Serve application |
 | [EMPAIA integration](architecture/empaia.md) | How an EMPAIA job flows through model-service, modes, SDK use |
 | [Module graph](architecture/module-graph.md) | Which package imports which, by process |
@@ -48,8 +47,9 @@ are stale.
 | [Composed providers, 2026-11-01](operations/empaia-provider-composition-2026-11-01.md), [score-grid heatmaps, 2026-10-31](operations/empaia-score-grid-2026-10-31.md) | ProstHM runs on the test instance: 102 s cold, 49 s warm |
 | [operations/](operations/) | Every dated record, from the first EMPAIA job (2026-10-21) on |
 
-Dated operations records describe the system as it was on their date. The
-older ones use the retired builder vocabulary, as do the journals and reviews
-in [history/](history/), which describe the earlier workflow design. Neither
-is instructions. The [core specification](spec.md) is superseded and kept for
-its acceptance record.
+Dated operations records describe the system as it was on their date, in
+the words of that time. So does [history/](history/): journals and reviews of
+the first workflow design, the [core specification](history/core-spec.md)
+with its acceptance record, and the [components
+specification](history/components-spec.md) the current design was built
+from. None of it is instructions.

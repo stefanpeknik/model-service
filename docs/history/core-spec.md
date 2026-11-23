@@ -1,18 +1,18 @@
 # Model-service core: builders, model catalog and durable execution
 
 > **Superseded** by [the components, served models and analyses
-> specification](spec-components.md). The builders, inference contracts and
+> specification](components-spec.md). The builders, inference contracts and
 > model files described here are gone, and so are scheduled raw tiles. The
 > scheduler, durable executions and
 > provider finish it specifies were kept, and the acceptance evidence below
 > still stands as a record.
 
 Status: implemented and accepted live on 2026-10-14
-([evidence](operations/core-acceptance-2026-10-14.md)); scheduled raw inference
+([evidence](../operations/core-acceptance-2026-10-14.md)); scheduled raw inference
 added and accepted on 2026-10-15
-([evidence](operations/raw-inference-acceptance-2026-10-15.md)); the EMPAIA
+([evidence](../operations/raw-inference-acceptance-2026-10-15.md)); the EMPAIA
 bridge ran end to end against the EMPAIA test instance on 2026-10-25
-([evidence](operations/empaia-test-instance-2026-10-25.md)). Branch
+([evidence](../operations/empaia-test-instance-2026-10-25.md)). Branch
 `claude/empaia-http-protocol`.
 
 This is the specification for finishing model-service so that EMPAIA (or any

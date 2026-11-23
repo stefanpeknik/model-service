@@ -1,7 +1,7 @@
 # Core acceptance in peknik-ns, 2026-10-14
 
 Live checks of the builder + model catalog core against the acceptance list in
-[the specification](../spec.md). Local test results are separate: 250 unit and
+[the specification](../history/core-spec.md). Local test results are separate: 250 unit and
 PostgreSQL-backed tests passed at the same revisions.
 
 ## What ran
