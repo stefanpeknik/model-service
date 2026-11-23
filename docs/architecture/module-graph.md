@@ -43,7 +43,7 @@ flowchart LR
 
   subgraph sg_shared["Shared, light: every process"]
     catalog["catalog<br/>loader · served_models · analyses"]
-    registry["registry<br/>scan · FOLDERS · EMPAIA pickers"]
+    registry["registry<br/>scan · EMPAIA pickers"]
     formats["formats"]
     contracts["contracts"]
   end
@@ -72,7 +72,7 @@ flowchart LR
   app_service --> contracts
 
   runner --> catalog & base & providers & host & formats & contracts
-  host --> catalog & base
+  host --> catalog & base & pieces
 
   catalog --> registry & base & pieces & contracts & ead
   registry --> base
@@ -96,7 +96,9 @@ A few arrows cross into packages of another process at module level only:
   `slide_tiles` imports `slides` inside its methods only, so the API never
   loads OpenSlide;
 - `analysis_runner` imports `served_model.guards` to check each model's
-  output against its declaration.
+  output against its declaration;
+- `served_model.replies` imports the `cls_mean_pool` step to drop register
+  tokens from the raw route's unpooled reply.
 
 Between the two top-level packages, `components.base` imports nothing from
 `model_service` at run time (`tests/test_process_boundaries.py` checks it).

@@ -20,8 +20,9 @@ catalog file may name the component, and its folder there must match it:
 | A new kind of output file | sink | `sinks/`, plus a module in `src/model_service/formats/` if the format is new |
 | A new EMPAIA input or output type | converter, publisher | `empaia/converters/`, `empaia/publishers/` |
 
-A component in the wrong folder fails the scan with an error naming the
-folder it belongs in.
+Each kind's base class in `src/components/base/` names both: its `slots`
+and its `folder`. A component in the wrong folder fails the scan with an
+error naming the folder it belongs in.
 
 Start from your kind's template in
 [src/components/_templates/](../../src/components/_templates/):
