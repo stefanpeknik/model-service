@@ -1,7 +1,7 @@
 # Module graph
 
-Drawn from the runtime imports in `src/model_service` on 2026-11-22 (imports
-under `TYPE_CHECKING` are left out). Solid arrows mean "imports"; dashed
+Drawn from the runtime imports in `src/model_service` and `src/components` on
+2026-11-23 (imports under `TYPE_CHECKING` are left out). Solid arrows mean "imports"; dashed
 arrows are calls across a process or network boundary that no import shows.
 `tests/test_process_boundaries.py` checks the part that matters most: the API
 process loads no Ray, ONNX Runtime, torch, OpenSlide or replica code, and
@@ -43,12 +43,17 @@ flowchart LR
 
   subgraph sg_shared["Shared, light: every process"]
     catalog["catalog<br/>loader · served_models · analyses"]
-    components["components<br/>kinds · registry · the components"]
+    registry["registry<br/>scan · FOLDERS · EMPAIA pickers"]
     formats["formats"]
     contracts["contracts"]
   end
 
-  testing["testing<br/>fakes, run_component, conformance"]
+  subgraph sg_components["components (top-level package: what an author writes)"]
+    base["components.base<br/>kinds · Options · Col · Run · Problem · slots"]
+    pieces["steps · loaders · runtimes<br/>sources · sinks · empaia"]
+    testing["components.testing<br/>fakes, run_component, conformance"]
+  end
+
   reference["reference<br/>tools/generate.py"]
   pg[("PostgreSQL")]:::ext
   jes["EMPAIA JES / App Service"]:::ext
@@ -63,19 +68,20 @@ flowchart LR
   providers --> standalone & empaia
   standalone --> providers & scheduler & contracts
   empaia --> providers & jobs & ead & app_service
-  jobs --> providers & app_service & ead & scheduler & http & catalog & components & formats & contracts
-  ead --> empaia & catalog & components
+  jobs --> providers & app_service & ead & scheduler & http & catalog & registry & base & formats & contracts
+  ead --> empaia & catalog & base
   app_service --> contracts
 
-  runner --> catalog & components & providers & host & formats & contracts
-  host --> catalog & components
+  runner --> catalog & base & providers & host & formats & contracts
+  host --> catalog & base
 
-  catalog --> components & contracts & ead
-  components --> formats & slides & app_service & contracts
-  slides --> contracts
-  testing --> components
-  reference --> catalog & components & formats
+  catalog --> registry & base & pieces & contracts & ead
+  registry --> base
+  pieces --> base & formats & slides & app_service & contracts
+  testing --> base & formats & app_service
+  reference --> catalog & registry & base & formats
 
+  registry -.->|imports each folder by name| pieces
   store -.->|SQL| pg
   scheduler -.->|HTTP run request| runner
   runner -.->|Ray handle: infer, describe| host
@@ -87,11 +93,18 @@ A few arrows cross into packages of another process at module level only:
 
 - `catalog` imports `providers.empaia.ead` for the EMPAIA vocabulary (modes,
   triggers, viewer settings) that `expose.empaia` is checked against;
-- the EMPAIA converters and publishers in `components` import the gateway
-  errors and types of `providers.empaia.app_service`, and `slide_tiles`
-  imports `slides` inside its methods only, so the API never loads OpenSlide;
+- the EMPAIA converters and publishers in `components.empaia` import the
+  gateway errors and types of `providers.empaia.app_service`, and
+  `slide_tiles` imports `slides` inside its methods only, so the API never
+  loads OpenSlide;
 - `analysis_runner` imports `served_model.guards` to check each model's
   output against its declaration.
+
+Between the two top-level packages, `components.base` imports nothing from
+`model_service` at run time (`tests/test_process_boundaries.py` checks it).
+The component folders import `model_service.formats`, `contracts` and the
+EMPAIA gateway; none of those import `components`, and the registry finds
+the folders by name, so no import cycle crosses the two packages.
 
 `scheduler ⇄ store`, `empaia ⇄ ead` and `scheduler → api` exist at package
 level only; the modules on each side import different files, so no import

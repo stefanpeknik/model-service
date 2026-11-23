@@ -29,6 +29,15 @@ EMPAIA app.
   EMPAIA test instance; not yet in production. What the thesis added to the
   original model-service: [thesis scope](docs/thesis-scope.md).
 
+## Start here
+
+You'll write in two places. YAML goes in `catalog/`, one file per served
+model or analysis. Code goes in `src/components/`, one small class per file,
+in the folder that says where it may be used. Copy a template from
+`src/components/_templates/` and subclass a kind from `src/components/base/`.
+Everything in `src/model_service/` is the plumbing that loads, checks and runs
+those two, and a new model or analysis shouldn't need to touch it.
+
 ## Reference
 
 Generated from the code and the catalog by `tools/generate.py`, so they
@@ -85,13 +94,20 @@ catalog/
   analyses/<id>.yaml                 one file per analysis
   environments/<env>/                per-cluster patches of those files
   .schemas/                          generated JSON Schemas
-src/model_service/
-  components/             loaders, runtimes, steps, sources, sinks, EMPAIA converters and publishers
+src/components/           what you write
+  steps/                  pre/post steps of a served model and steps of an analysis
+  loaders/  runtimes/     where weights come from and what runs them (served models)
+  sources/  sinks/        where an analysis's items come from and what it writes
+  empaia/                 converters/ and publishers/ for EMPAIA inputs and outputs
+  base/                   the kind classes you subclass, Options, Col, Run, Problem
+  _templates/             one file per kind to copy
+  testing/                fake slides and models, run_component, conformance suites
+src/model_service/        the plumbing
   catalog/                loading and checking catalog files
+  registry/               the scan that finds components and checks their folders
   served_model/           the generic host that serves every served model
   analysis_runner/        the Ray Serve app that runs every analysis
   formats/                data formats sinks write and readers open
-  testing/                fake slides and models, run_component, conformance suites
   api/                    the public API process, with the durable scheduler in api/scheduler/
   providers/              where runs read input and publish output: standalone, empaia/
   slides/                 slide reading and tissue detection for sources
@@ -100,6 +116,7 @@ src/model_service/
 deploy/helm/rayservice/   the chart; reads catalog/ through a symlink
 docs/                     guides, generated reference, architecture, dated operations records
 tests/                    unit, catalog, chart and PostgreSQL tests; tests/live/ for the cluster
+tools/                    generate.py for the reference; warm_model.py, request_preprocessing.py for the cluster
 ```
 
 ## Develop

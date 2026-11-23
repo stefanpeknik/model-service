@@ -1,8 +1,8 @@
 # Project context
 
 Model-service runs **served models** and whole-slide **analyses**, both YAML
-files in `catalog/` built from **components** in
-`src/model_service/components/`. Start at
+files in `catalog/` built from **components** in `src/components/`.
+`src/model_service/` is the plumbing that loads, checks and runs them. Start at
 [docs/architecture/core.md](docs/architecture/core.md); terms are in
 [docs/glossary.md](docs/glossary.md).
 

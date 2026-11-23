@@ -8,35 +8,44 @@ docs.
 
 ## Pick the kind and the folder
 
-The kind decides where a catalog file may name the component, and the folder
-under `src/model_service/components/` must match it:
+Everything you write lives in `src/components/`. The kind decides where a
+catalog file may name the component, and its folder there must match it:
 
-| You need | Kind | Folder |
+| You need | Kind | Folder in `src/components/` |
 | --- | --- | --- |
-| Weights from somewhere new | loader | `served_model/loaders/` |
-| A new way to run weights | runtime | `served_model/runtimes/` |
+| Weights from somewhere new | loader | `loaders/` |
+| A new way to run weights | runtime | `runtimes/` |
 | A per-tile transform, in a served model's `pre:`/`post:` or as an analysis step | step | `steps/` |
-| A new way to produce items from a slide | source | `analysis/sources/` |
-| A new kind of output file | sink | `analysis/sinks/`, plus a module in `src/model_service/formats/` if the format is new |
-| A new EMPAIA input or output type | converter, publisher | `empaia/input_converters/`, `empaia/publishers/` |
+| A new way to produce items from a slide | source | `sources/` |
+| A new kind of output file | sink | `sinks/`, plus a module in `src/model_service/formats/` if the format is new |
+| A new EMPAIA input or output type | converter, publisher | `empaia/converters/`, `empaia/publishers/` |
 
-Start from your kind's template in [templates/](templates/):
-[loader](templates/loader.py), [runtime](templates/runtime.py),
-[step](templates/step.py), [source](templates/source.py),
-[sink](templates/sink.py), [converter](templates/converter.py) or
-[publisher](templates/publisher.py). Copy it into the folder, then replace
-`my_component`, `MyComponent` and the `<placeholders>`. Each template passes
-its kind's conformance suite as copied (`tests/components/test_templates.py`
-checks that), so the suite's first failure points at your change.
+A component in the wrong folder fails the scan with an error naming the
+folder it belongs in.
 
-Each kind's base class in `src/model_service/components/kinds/` documents
-the methods to write, and [Components](../reference/components.md) links
+Start from your kind's template in
+[src/components/_templates/](../../src/components/_templates/):
+[loader](../../src/components/_templates/loader.py),
+[runtime](../../src/components/_templates/runtime.py),
+[step](../../src/components/_templates/step.py),
+[source](../../src/components/_templates/source.py),
+[sink](../../src/components/_templates/sink.py),
+[converter](../../src/components/_templates/converter.py) or
+[publisher](../../src/components/_templates/publisher.py). Copy it into the
+folder, then replace `my_component`, `MyComponent` and the `<placeholders>`.
+Each template passes its kind's conformance suite as copied
+(`tests/components/test_templates.py` checks that), so the suite's first
+failure points at your change. The scan skips `_templates/`, so the
+templates never show up as components.
+
+Each kind's base class in `src/components/base/` (`step.py`, `sink.py`, ...)
+documents the methods to write, and [Components](../reference/components.md) links
 the code of every existing component, often the closest example.
 
 ## Write it
 
 Say a model returns logits and you want probabilities. A step in the served
-model's `post:` fixes that. `src/model_service/components/steps/softmax.py`:
+model's `post:` fixes that. `src/components/steps/softmax.py`:
 
 ```python
 """The `softmax` step: turns a model's logits into probabilities."""
@@ -48,11 +57,11 @@ from typing import TYPE_CHECKING, Any, ClassVar
 import numpy as np
 from pydantic import Field
 
-from model_service.components import Col, Options, Step
+from components.base import Col, Options, Step
 
 
 if TYPE_CHECKING:
-    from model_service.components import Batch
+    from components.base import Batch
 
 
 class SoftmaxOptions(Options):
@@ -133,23 +142,23 @@ declared dimensions, then runs the component the way its kind is used:
   file and two uint8 tiles; a runtime of a weights format writes a tiny
   model (`onnx.py` writes a two-node graph, `timm.py` timm's `test_vit`);
 - a converter's `io_fragment` has a string `type`, and `materialize` reads
-  a fake EMPAIA job (`model_service.testing.FakeGateway`) into a file in
+  a fake EMPAIA job (`components.testing.FakeGateway`) into a file in
   its directory or a JSON value without writing to the job;
 - a publisher's `io_fragment` has a `type` it emits, `prepare` on a sample
   file of its format writes nothing, and the commit it returns writes.
 
 A converter for a new EAD type adds example input data to
 `EXAMPLE_INPUTS`, and a publisher of a new format adds a sample writer to
-`SAMPLES`, both in `src/model_service/testing/empaia.py`.
+`SAMPLES`, both in `src/components/testing/empaia.py`.
 
-Add a test of what your component computes. `model_service.testing` runs a
+Add a test of what your component computes. `components.testing` runs a
 component the way the runner would, without Ray or a cluster:
 
 ```python
 import numpy as np
 
-from model_service.components.steps.softmax import Softmax
-from model_service.testing import run_component
+from components.steps.softmax import Softmax
+from components.testing import run_component
 
 
 def test_softmax_gives_probabilities_that_sum_to_one() -> None:

@@ -17,7 +17,7 @@ writing Python or rebuilding an image.
 | --- | --- | --- |
 | Public API | One HTTP entry point for analyses, executions and the catalog, with auth hooks, capacity checks and health | `src/model_service/api/` (incl. `api/http/`) |
 | Durable scheduler | Executions stored in PostgreSQL: queueing until every served model a run calls has capacity, leases, retries, deadlines, cancellation, priorities | `src/model_service/api/scheduler/` |
-| Components | Small reusable classes of seven kinds (loader, runtime, step, source, sink, EMPAIA converter and publisher) that catalog files name, found by a folder scan, each with a conformance suite | `src/model_service/components/`, `src/model_service/testing/` |
+| Components | Small reusable classes of seven kinds (loader, runtime, step, source, sink, EMPAIA converter and publisher) that catalog files name, found by a folder scan, each with a conformance suite | `src/components/`, `src/model_service/registry/` |
 | Catalog | Served-model and analysis files with per-cluster patches, checked before deployment with errors naming the file, the YAML path and a fix; the API reloads it without restarting | `catalog/`, `src/model_service/catalog/` |
 | Served models | One generic Ray Serve host for every trained model, checking each batch against the file's declaration and reporting a digest of what it computes | `src/model_service/served_model/` |
 | Analyses | One generic runner for every whole-slide job: heatmaps (score grids) and tile embeddings (HDF5) today, in versioned data formats | `src/model_service/analysis_runner/`, `src/model_service/formats/` |
