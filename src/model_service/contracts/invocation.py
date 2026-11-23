@@ -49,9 +49,7 @@ class ProviderInput:
     kind: Literal[InputKind.PROVIDER] = InputKind.PROVIDER
 
 
-type BuilderInput = Annotated[
-    SharedPathInput | ProviderInput, Field(discriminator="kind")
-]
+type RunInput = Annotated[SharedPathInput | ProviderInput, Field(discriminator="kind")]
 
 
 # Which access adapter resolves an invocation's inputs and outputs; each
@@ -122,7 +120,7 @@ class Invocation:
         output_path: Where the single artifact output is written, if set.
     """
 
-    inputs: Annotated[dict[str, BuilderInput], Field(strict=True)]
+    inputs: Annotated[dict[str, RunInput], Field(strict=True)]
     configuration: JsonObject | None
     input_access: InputAccessContext
     deadline_at: Deadline

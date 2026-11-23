@@ -46,20 +46,18 @@ class SharedArtifact:
     kind: Literal[OutputKind.SHARED_ARTIFACT] = OutputKind.SHARED_ARTIFACT
 
 
-type BuilderOutput = Annotated[
-    InlineOutput | SharedArtifact, Field(discriminator="kind")
-]
+type RunOutput = Annotated[InlineOutput | SharedArtifact, Field(discriminator="kind")]
 
 
 @dataclass(frozen=True, slots=True)
-class BuilderResult:
+class RunResult:
     """A run's result.
 
     Attributes:
         outputs: One output per declared output name.
     """
 
-    outputs: Annotated[dict[str, BuilderOutput], Field(strict=True)]
+    outputs: Annotated[dict[str, RunOutput], Field(strict=True)]
 
 
-RESULT: TypeAdapter[BuilderResult] = TypeAdapter(BuilderResult)
+RESULT: TypeAdapter[RunResult] = TypeAdapter(RunResult)

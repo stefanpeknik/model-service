@@ -25,10 +25,10 @@ from model_service.api.http.scheduling import require_idempotency_key, submit
 from model_service.api.http.synchronous import run_synchronously, runs_unavailable
 from model_service.api.scheduler.public import AnalysisScheduleRequest, ScheduleResult
 from model_service.catalog.analyses import FOLDER
-from model_service.contracts.caller_request import BuilderRequest
+from model_service.contracts.caller_request import RunRequest
 from model_service.contracts.invocation import Deadline
 from model_service.contracts.json_values import JsonValue
-from model_service.contracts.result import BuilderResult, OutputKind
+from model_service.contracts.result import OutputKind, RunResult
 from model_service.formats.known import get_format
 
 
@@ -42,7 +42,7 @@ if TYPE_CHECKING:
     from model_service.catalog.analyses import Analysis
 
 
-class ImmediateAnalysisRequest(BuilderRequest):
+class ImmediateAnalysisRequest(RunRequest):
     """A synchronous analysis run: the request plus a deadline.
 
     Attributes:
@@ -52,7 +52,7 @@ class ImmediateAnalysisRequest(BuilderRequest):
     deadline_at: Deadline
 
 
-class ScheduledAnalysisRequest(BuilderRequest):
+class ScheduledAnalysisRequest(RunRequest):
     """A request plus a timeout; the `Idempotency-Key` header names it."""
 
     requested_timeout_seconds: Annotated[int, Field(strict=True, gt=0)] | None = None
@@ -186,7 +186,7 @@ def create_router(
     )
     async def run_analysis(
         request: Request, analysis_id: str, body: ImmediateAnalysisRequest
-    ) -> BuilderResult:
+    ) -> RunResult:
         """Run an analysis and wait for its result.
 
         The run is abandoned when the client disconnects.

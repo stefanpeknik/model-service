@@ -18,9 +18,9 @@ from pydantic import ValidationError
 from model_service.components import EmpaiaInput
 from model_service.components.empaia import converter
 from model_service.contracts.failures import (
-    BuilderFailure,
     FailureCode,
     InvalidInvocation,
+    RunFailure,
 )
 from model_service.contracts.invocation import ExecutionContext, ProviderInput
 from model_service.directories import make_shared_directory, remove_directory
@@ -182,7 +182,7 @@ class EmpaiaInputAccessFactory(InputAccessFactory):
             InvalidInvocation: If a context is malformed, the contexts name different
                 jobs, there is no attempt ID, an input is not a provider input, or the
                 gateway returns a path outside the input's directory or not a file.
-            BuilderFailure: With `INPUT_UNAVAILABLE` and the gateway's safe message and
+            RunFailure: With `INPUT_UNAVAILABLE` and the gateway's safe message and
                 retry flag, if materializing raises `EmpaiaGatewayError`.
         """
         try:
@@ -243,7 +243,7 @@ class EmpaiaInputAccessFactory(InputAccessFactory):
             await asyncio.to_thread(remove_directory, root)
             if isinstance(error, EmpaiaGatewayError):
                 # Keep the gateway's safe reason instead of an unexpected failure's.
-                raise BuilderFailure(
+                raise RunFailure(
                     code=FailureCode.INPUT_UNAVAILABLE,
                     safe_message=error.safe_message,
                     retryable=error.retryable,

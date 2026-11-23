@@ -48,7 +48,7 @@ from model_service.contracts.invocation import (
     InputAccessContext,
     Invocation,
 )
-from model_service.contracts.result import BuilderResult, SharedArtifact
+from model_service.contracts.result import RunResult, SharedArtifact
 from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from tests.support.memory_repository import FakeDispatch, InMemoryExecutionRepository
@@ -152,7 +152,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         scheduler, worker = self._scheduler_and_worker(
             repository,
             BlockingProvider(),
-            FakeDispatch({"a1": lambda _i, _c: BuilderResult(outputs={})}),
+            FakeDispatch({"a1": lambda _i, _c: RunResult(outputs={})}),
             lease_duration=timedelta(milliseconds=30),
         )
         admitted = await scheduler.schedule(self._request())
@@ -180,7 +180,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
 
         async def dispatch(
             _invocation: Invocation, _execution_context: ExecutionContext
-        ) -> BuilderResult:
+        ) -> RunResult:
             try:
                 await asyncio.Event().wait()
             finally:
@@ -210,11 +210,11 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
                     raise ExecutionRepositoryUnavailableError("database blip")
                 return await super().renew(execution_id, fencing_token, lease_duration)
 
-        result = BuilderResult(outputs={})
+        result = RunResult(outputs={})
 
         async def dispatch(
             _invocation: Invocation, _execution_context: ExecutionContext
-        ) -> BuilderResult:
+        ) -> RunResult:
             await asyncio.sleep(0.15)
             return result
 
@@ -260,7 +260,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         async def dispatch(
             _invocation: Invocation,
             _execution_context: ExecutionContext,
-        ) -> BuilderResult:
+        ) -> RunResult:
             nonlocal calls
             calls += 1
             if calls == 1:
@@ -268,8 +268,8 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
                     await asyncio.Event().wait()
                 except asyncio.CancelledError:
                     stopped.set()
-                    return BuilderResult(outputs={"stale": SharedArtifact("/stale")})
-            return BuilderResult(outputs={})
+                    return RunResult(outputs={"stale": SharedArtifact("/stale")})
+            return RunResult(outputs={})
 
         repository = FailingRenewalRepository(
             clock=clock,
@@ -293,7 +293,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls, 2)
         self.assertEqual(
             (await scheduler.get(admitted.execution.id)).result,
-            BuilderResult(outputs={}),
+            RunResult(outputs={}),
         )
 
     async def test_expired_lease_rejects_settlement_before_recovery(self) -> None:
@@ -314,7 +314,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             await repository.settle(
                 claim.execution_id,
                 claim.fencing_token,
-                ProcessingSucceeded(BuilderResult(outputs={})),
+                ProcessingSucceeded(RunResult(outputs={})),
             )
         self.assertIsNone((await repository.get(admitted.execution.id)).result)
 
@@ -347,12 +347,12 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
 
         async def dispatch(
             invocation: Invocation, _execution_context: ExecutionContext
-        ) -> BuilderResult:
+        ) -> RunResult:
             started.append(invocation.deadline_at.isoformat())
             if len(started) == 2:
                 both_started.set()
             await release.wait()
-            return BuilderResult(outputs={})
+            return RunResult(outputs={})
 
         fake = FakeDispatch({"a1": dispatch, "a2": dispatch})
         scheduler, worker = self._scheduler_and_worker(
@@ -471,13 +471,13 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         now = datetime(2026, 9, 17, 8, tzinfo=UTC)
-        result = BuilderResult(outputs={})
+        result = RunResult(outputs={})
         dispatches = 0
 
         def dispatch(
             _invocation: Invocation,
             _execution_context: ExecutionContext,
-        ) -> BuilderResult:
+        ) -> RunResult:
             nonlocal dispatches
             dispatches += 1
             return result
@@ -527,7 +527,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         def fail(
             _invocation: Invocation,
             _execution_context: ExecutionContext,
-        ) -> BuilderResult:
+        ) -> RunResult:
             """Inject the configured remote failure for safe classification or terminal reporting checks."""
             raise RemoteFailureError(
                 code="invalid_slide",
@@ -579,7 +579,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         def fail(
             _invocation: Invocation,
             _execution_context: ExecutionContext,
-        ) -> BuilderResult:
+        ) -> RunResult:
             """Inject the configured remote failure for safe classification or terminal reporting checks."""
             raise RemoteFailureError(
                 code="invalid_slide",
@@ -625,11 +625,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             repository,
             provider,
             FakeDispatch(
-                {
-                    "a1": lambda _invocation, _execution_context: BuilderResult(
-                        outputs={}
-                    )
-                }
+                {"a1": lambda _invocation, _execution_context: RunResult(outputs={})}
             ),
         )
         admitted = await scheduler.schedule(self._request())
@@ -660,11 +656,11 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
 
         def dispatch(
             invocation: Invocation, execution_context: ExecutionContext
-        ) -> BuilderResult:
+        ) -> RunResult:
             self.assertNotIn("credential", invocation.input_access.state)
             self.assertNotIn("processing_attempt_id", invocation.input_access.state)
             seen_contexts.append(execution_context)
-            return BuilderResult(outputs={})
+            return RunResult(outputs={})
 
         scheduler, worker = self._scheduler_and_worker(
             repository,
@@ -700,7 +696,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             active_work=ActiveWorkRegistry(),
             providers={provider.name: provider},
             dispatch=FakeDispatch(
-                {"a1": lambda _invocation, _context: BuilderResult(outputs={})}
+                {"a1": lambda _invocation, _context: RunResult(outputs={})}
             ),
             owner="worker-1",
             lease_duration=timedelta(minutes=1),
@@ -726,8 +722,8 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
-        result = BuilderResult(outputs={})
-        outcomes: list[BuilderResult | Exception] = [
+        result = RunResult(outputs={})
+        outcomes: list[RunResult | Exception] = [
             ConfirmedRejectionError(),
             result,
         ]
@@ -735,7 +731,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         def dispatch(
             _invocation: Invocation,
             _execution_context: ExecutionContext,
-        ) -> BuilderResult:
+        ) -> RunResult:
             outcome = outcomes.pop(0)
             if isinstance(outcome, Exception):
                 raise outcome
@@ -797,7 +793,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         def dispatch(
             _invocation: Invocation,
             _execution_context: ExecutionContext,
-        ) -> BuilderResult:
+        ) -> RunResult:
             raise UnknownOutcomeError
 
         repository = InMemoryExecutionRepository(
@@ -854,7 +850,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         async def dispatch(
             _invocation: Invocation,
             _execution_context: ExecutionContext,
-        ) -> BuilderResult:
+        ) -> RunResult:
             started.set()
             try:
                 await asyncio.Event().wait()
@@ -900,12 +896,12 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         started = asyncio.Event()
         release = asyncio.Event()
-        result = BuilderResult(outputs={})
+        result = RunResult(outputs={})
 
         async def dispatch(
             _invocation: Invocation,
             _execution_context: ExecutionContext,
-        ) -> BuilderResult:
+        ) -> RunResult:
             started.set()
             await release.wait()
             return result

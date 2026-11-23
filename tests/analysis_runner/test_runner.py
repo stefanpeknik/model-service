@@ -16,7 +16,7 @@ import pytest
 
 from model_service.analysis_runner import Concurrency, run_analysis
 from model_service.catalog import load_catalog
-from model_service.contracts.failures import BuilderFailure, InvalidInvocation
+from model_service.contracts.failures import InvalidInvocation, RunFailure
 from model_service.formats import score_grid
 from model_service.testing import fake_model, fake_slide, run_component
 from tests.support.analysis_catalog import REGISTRY, served_model, write
@@ -165,7 +165,7 @@ def test_a_model_free_analysis_runs_without_handles(
 def test_a_failing_model_fails_the_run_with_its_code_and_writes_nothing(
     tmp_path: Path, slide: Path, out: Path, model: Model, code: str, retryable: bool
 ) -> None:
-    with pytest.raises(BuilderFailure) as raised:
+    with pytest.raises(RunFailure) as raised:
         run(analysis(tmp_path, HEATMAP), slide, {"heatmap": out / "heatmap.npz"}, model)
 
     assert (raised.value.code, raised.value.retryable) == (code, retryable)
@@ -187,7 +187,7 @@ def test_features_that_change_shape_between_tiles_fail_the_embedding_table(
             self.calls += 1
             return np.ones(4 if self.calls < 5 else 5, np.float32)
 
-    with pytest.raises(BuilderFailure) as raised:
+    with pytest.raises(RunFailure) as raised:
         run(resolved, slide, {"embeddings": out / "embeddings.h5"}, Growing())
 
     assert (raised.value.code, raised.value.retryable) == (
@@ -253,7 +253,7 @@ def test_several_sinks_write_all_their_outputs_or_none(
 
     # The failing run scores differently, so a heatmap it replaced would show.
     other_scores = Model(output=np.full((1, 1, 1), 0.25, np.float32))
-    with pytest.raises(BuilderFailure, match="failed unexpectedly"):
+    with pytest.raises(RunFailure, match="failed unexpectedly"):
         run(
             analysis(tmp_path, two_sinks % ", fail_on_close: true"),
             slide,

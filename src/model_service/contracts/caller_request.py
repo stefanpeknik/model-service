@@ -7,15 +7,15 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field
 
 from model_service.contracts.invocation import (
-    BuilderInput,
     Deadline,
     InputAccessContext,
     Invocation,
+    RunInput,
 )
 from model_service.contracts.json_values import JsonObject
 
 
-class BuilderRequest(BaseModel):
+class RunRequest(BaseModel):
     """Inputs and their access, settings, and an optional output path.
 
     Attributes:
@@ -28,7 +28,7 @@ class BuilderRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    inputs: Annotated[dict[str, BuilderInput], Field(strict=True)]
+    inputs: Annotated[dict[str, RunInput], Field(strict=True)]
     input_access: InputAccessContext
     configuration: Annotated[
         JsonObject | None,

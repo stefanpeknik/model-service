@@ -24,8 +24,8 @@ class ApiErrorCode(StrEnum):
     SCHEDULE_CONFLICT = "schedule_conflict"
     SCHEDULING_UNAVAILABLE = "scheduling_unavailable"
     UNKNOWN_EXECUTION = "unknown_execution"
-    BUILDER_BACKPRESSURE = "builder_backpressure"
-    BUILDER_UNAVAILABLE = "builder_unavailable"
+    RUNNER_BACKPRESSURE = "builder_backpressure"
+    RUNNER_UNAVAILABLE = "builder_unavailable"
     UNAUTHENTICATED = "unauthenticated"
     FORBIDDEN = "forbidden"
 

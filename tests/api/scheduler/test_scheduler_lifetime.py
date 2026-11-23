@@ -12,7 +12,7 @@ from model_service.api.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.api.scheduler.internal_state import RenewDirective, RetryPolicy
 from model_service.api.scheduler.public import AnalysisScheduleRequest
 from model_service.api.scheduler.status import ExecutionStatus
-from model_service.contracts.result import BuilderResult
+from model_service.contracts.result import RunResult
 from tests.support.memory_repository import FakeDispatch, InMemoryExecutionRepository
 from tests.support.scheduling import (
     MutableClock,
@@ -58,9 +58,9 @@ class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):
     @staticmethod
     def completed_dispatch(
         _invocation: Invocation, _execution_context: ExecutionContext
-    ) -> BuilderResult:
+    ) -> RunResult:
         """Return an empty successful result for scheduler lifetime checks."""
-        return BuilderResult(outputs={})
+        return RunResult(outputs={})
 
     async def schedule(
         self, scheduler: ExecutionScheduler, key: str = "request-1"
@@ -116,7 +116,7 @@ class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):
 
         async def dispatch(
             _invocation: Invocation, _execution_context: ExecutionContext
-        ) -> BuilderResult:
+        ) -> RunResult:
             """Simulate the scenario computation, using events or injected failures to control completion and ownership races."""
             started.set()
             try:
@@ -164,7 +164,7 @@ class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):
 
         async def dispatch(
             _invocation: Invocation, _execution_context: ExecutionContext
-        ) -> BuilderResult:
+        ) -> RunResult:
             """Simulate the scenario computation, using events or injected failures to control completion and ownership races."""
             started.set()
             await asyncio.Event().wait()
@@ -202,7 +202,7 @@ class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):
 
         async def dispatch(
             _invocation: Invocation, _execution_context: ExecutionContext
-        ) -> BuilderResult:
+        ) -> RunResult:
             """Simulate the scenario computation, using events or injected failures to control completion and ownership races."""
             started.set()
             try:

@@ -22,7 +22,7 @@ from model_service.contracts.invocation import (
     Invocation,
     SharedPathInput,
 )
-from model_service.contracts.result import BuilderResult, InlineOutput
+from model_service.contracts.result import InlineOutput, RunResult
 
 
 if TYPE_CHECKING:
@@ -38,7 +38,7 @@ class HttpAnalysisDispatchTests(unittest.IsolatedAsyncioTestCase):
         self,
         handler: Callable[[httpx.Request], httpx.Response],
         context: ExecutionContext | None = None,
-    ) -> BuilderResult:
+    ) -> RunResult:
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             return await HTTPAnalysisDispatch(
                 client, origin="http://ray:8000/"
@@ -77,7 +77,7 @@ class HttpAnalysisDispatchTests(unittest.IsolatedAsyncioTestCase):
             ),
         )
 
-        self.assertEqual(result, BuilderResult(outputs={"score": InlineOutput(0.9)}))
+        self.assertEqual(result, RunResult(outputs={"score": InlineOutput(0.9)}))
         [request] = requests
         self.assertEqual(request.url, "http://ray:8000/analyses/")
         body = json.loads(request.content)

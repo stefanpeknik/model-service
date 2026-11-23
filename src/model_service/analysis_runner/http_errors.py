@@ -12,13 +12,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from model_service.contracts.analysis_http import ErrorCode
-from model_service.contracts.failures import BuilderFailure, InvalidInvocation
+from model_service.contracts.failures import InvalidInvocation, RunFailure
 
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
 
-    from model_service.contracts.result import BuilderResult
+    from model_service.contracts.result import RunResult
 
 
 def error(
@@ -41,7 +41,7 @@ def error(
     )
 
 
-async def answer_http(run: Awaitable[BuilderResult]) -> BuilderResult:
+async def answer_http(run: Awaitable[RunResult]) -> RunResult:
     """Await a run and translate its exceptions into the safe error envelope.
 
     Args:
@@ -63,7 +63,7 @@ async def answer_http(run: Awaitable[BuilderResult]) -> BuilderResult:
             str(exc),
             retryable=False,
         ) from exc
-    except BuilderFailure as exc:
+    except RunFailure as exc:
         raise error(
             status.HTTP_503_SERVICE_UNAVAILABLE
             if exc.retryable

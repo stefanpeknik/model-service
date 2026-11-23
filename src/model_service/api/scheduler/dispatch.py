@@ -18,7 +18,7 @@ from model_service.contracts.result import RESULT
 
 if TYPE_CHECKING:
     from model_service.contracts.analysis_http import AnalysisRunRequest
-    from model_service.contracts.result import BuilderResult
+    from model_service.contracts.result import RunResult
 
 
 _ERROR_RESPONSE = TypeAdapter(ErrorResponse)
@@ -71,7 +71,7 @@ class HTTPAnalysisDispatch:
         self._client = client
         self._origin = origin.rstrip("/")
 
-    async def run_analysis(self, request: AnalysisRunRequest) -> BuilderResult:
+    async def run_analysis(self, request: AnalysisRunRequest) -> RunResult:
         """Post one resolved analysis to the analysis runner and classify the outcome.
 
         Args:
@@ -95,7 +95,7 @@ class HTTPAnalysisDispatch:
 
     async def _post(
         self, path: str, payload: object, deadline_at: datetime
-    ) -> BuilderResult:
+    ) -> RunResult:
         """Post a run request with the time left as timeout, and classify the answer."""
         timeout = max((deadline_at - datetime.now(UTC)).total_seconds(), 0.001)
         try:

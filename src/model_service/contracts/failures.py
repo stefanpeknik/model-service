@@ -28,7 +28,7 @@ class UnknownAnalysisError(KeyError):
     """No deployed analysis has the requested id."""
 
 
-class BuilderFailure(RuntimeError):
+class RunFailure(RuntimeError):
     """A caller-safe failure with a stable code and a retry decision."""
 
     def __init__(self, *, code: str, safe_message: str, retryable: bool) -> None:

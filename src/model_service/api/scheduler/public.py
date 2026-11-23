@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 from model_service.api.scheduler.status import ExecutionStatus
 from model_service.contracts.invocation import Invocation
 from model_service.contracts.json_values import JsonValue
-from model_service.contracts.result import BuilderResult
+from model_service.contracts.result import RunResult
 
 
 if TYPE_CHECKING:
@@ -31,7 +31,7 @@ type ProviderName = str
 
 @dataclass(frozen=True, slots=True)
 class AnalysisScheduleRequest:
-    """An analysis run; `body` is provider-specific, a `BuilderRequest` for standalone.
+    """An analysis run; `body` is provider-specific, a `RunRequest` for standalone.
 
     The provider prepares the invocation; its `configuration` holds the
     caller's settings, which the scheduler resolves the analysis with.
@@ -94,7 +94,7 @@ class ExecutionView:
     analysis_digest: str | None
     status: ExecutionStatus
     configuration: dict[str, JsonValue] | None = None
-    result: BuilderResult | None = None
+    result: RunResult | None = None
     error: ExecutionError | None = None
     # A failure or cancellation not yet reported to the provider.
     provider_pending: bool = False
@@ -170,7 +170,7 @@ class PreparedInvocation:
 class ProviderSuccess:
     """Give provider finish the durable result to publish."""
 
-    result: BuilderResult
+    result: RunResult
     # What produced it: the analysis document says what each output is.
     target: ExecutionTarget
 

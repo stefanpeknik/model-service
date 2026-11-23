@@ -85,7 +85,7 @@ if TYPE_CHECKING:
     from model_service.catalog.analyses import Analysis
     from model_service.components import Commit
     from model_service.contracts.json_values import JsonValue
-    from model_service.contracts.result import BuilderResult
+    from model_service.contracts.result import RunResult
     from model_service.providers.empaia.app_service.gateway import (
         ComponentUse,
         EmpaiaGateway,
@@ -415,7 +415,7 @@ def _use(component: Any) -> ComponentUse:
 
 
 def _published(
-    publications: Publications, result: BuilderResult
+    publications: Publications, result: RunResult
 ) -> list[tuple[str, ComponentUse, Any]]:
     """Each output to publish with its recorded publisher and stored output.
 

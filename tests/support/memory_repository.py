@@ -35,7 +35,7 @@ from model_service.api.scheduler.transitions.execution_transitions import (
     ExecutionTransitions,
 )
 from model_service.contracts.invocation import ExecutionContext, Invocation
-from model_service.contracts.result import BuilderResult
+from model_service.contracts.result import RunResult
 
 
 if TYPE_CHECKING:
@@ -349,7 +349,7 @@ def _group(execution: ExecutionRecord) -> object:
 
 
 type Handler = Callable[
-    [Invocation, ExecutionContext], BuilderResult | Awaitable[BuilderResult]
+    [Invocation, ExecutionContext], RunResult | Awaitable[RunResult]
 ]
 
 
@@ -360,7 +360,7 @@ class FakeDispatch:
         self._handlers = dict(handlers)
         self.analyses: list[AnalysisRunRequest] = []
 
-    async def run_analysis(self, request: AnalysisRunRequest) -> BuilderResult:
+    async def run_analysis(self, request: AnalysisRunRequest) -> RunResult:
         self.analyses.append(request)
         value = self._handlers[str(request.analysis["id"])](
             request.invocation, request.execution_context

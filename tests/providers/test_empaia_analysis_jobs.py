@@ -49,7 +49,7 @@ if TYPE_CHECKING:
     from model_service.catalog import Catalog
     from model_service.contracts.analysis_http import AnalysisRunRequest
     from model_service.contracts.json_values import JsonValue
-    from model_service.contracts.result import BuilderResult
+    from model_service.contracts.result import RunResult
     from model_service.providers.empaia.app_service.gateway import MutationGuard
 
 
@@ -165,7 +165,7 @@ class Runner:
     def __init__(self, replica: AnalysisReplica) -> None:
         self.replica = replica
 
-    async def run_analysis(self, request: AnalysisRunRequest) -> BuilderResult:
+    async def run_analysis(self, request: AnalysisRunRequest) -> RunResult:
         return await self.replica.run(request)
 
 

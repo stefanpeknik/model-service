@@ -29,14 +29,14 @@ from model_service.api.scheduler.public import (
     ProviderSuccess,
     SubmissionIdentity,
 )
-from model_service.contracts.caller_request import BuilderRequest
+from model_service.contracts.caller_request import RunRequest
 from model_service.contracts.failures import InvalidInvocation
 from model_service.contracts.invocation import (
     SHARED_STORAGE,
     ExecutionContext,
     SharedPathInput,
 )
-from model_service.contracts.result import BuilderResult, SharedArtifact
+from model_service.contracts.result import RunResult, SharedArtifact
 from model_service.directories import make_shared_directory, remove_directory
 from model_service.providers.provider import ProviderAdapter
 from model_service.providers.standalone.provider import STANDALONE_PROVIDER
@@ -56,7 +56,7 @@ if TYPE_CHECKING:
         ProviderFinishOutcome,
     )
     from model_service.contracts.json_values import JsonValue
-    from model_service.contracts.result import BuilderOutput
+    from model_service.contracts.result import RunOutput
 
 
 class StandaloneProviderAdapter(ProviderAdapter):
@@ -123,7 +123,7 @@ class StandaloneProviderAdapter(ProviderAdapter):
         the analysis with them and checks the inputs against it.
 
         Args:
-            request: The schedule request; its body is a `BuilderRequest`.
+            request: The schedule request; its body is a `RunRequest`.
             deadline_at: When the execution must finish; validation runs as of just
                 before it.
 
@@ -137,7 +137,7 @@ class StandaloneProviderAdapter(ProviderAdapter):
                 an allowed root.
         """
         try:
-            body = BuilderRequest.model_validate(request.body)
+            body = RunRequest.model_validate(request.body)
         except ValidationError as error:
             raise InvalidScheduleRequestError(
                 "schedule request body is invalid"
@@ -164,7 +164,7 @@ class StandaloneProviderAdapter(ProviderAdapter):
         outcome: ProviderFinishOutcome,
         *,
         before_mutation: BeforeMutation,
-    ) -> BuilderResult | None:
+    ) -> RunResult | None:
         """Move accepted artifacts to their requested paths and remove the attempts.
 
         A retry after a partial move finds the moved files in place. Executions
@@ -193,14 +193,14 @@ class StandaloneProviderAdapter(ProviderAdapter):
                     safe_message="could not move the result to its output path",
                     retryable=True,
                 ) from error
-            result = BuilderResult(outputs)
+            result = RunResult(outputs)
         await asyncio.to_thread(remove_directory, attempts)
         return result
 
 
 def _move_outputs(
-    root: Path, attempts: Path, outputs: Mapping[str, BuilderOutput]
-) -> dict[str, BuilderOutput]:
+    root: Path, attempts: Path, outputs: Mapping[str, RunOutput]
+) -> dict[str, RunOutput]:
     """Move an attempt's artifacts to their requested paths under the root.
 
     Blocking file work, so the caller runs it in a thread.

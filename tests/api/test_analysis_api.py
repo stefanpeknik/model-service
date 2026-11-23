@@ -18,7 +18,7 @@ from model_service.api.scheduler.dispatch import (
 from model_service.api.synchronous_runs import SynchronousAnalysisService
 from model_service.catalog import load_catalog
 from model_service.catalog.analyses import load_resolved, resolve_run
-from model_service.contracts.result import BuilderResult, SharedArtifact
+from model_service.contracts.result import RunResult, SharedArtifact
 from model_service.formats import score_grid
 
 
@@ -32,7 +32,7 @@ pytestmark = pytest.mark.anyio
 
 CATALOG = load_catalog(Path(__file__).resolve().parents[2] / "catalog", "rationai-test")
 RUN = "/v1/analyses/prostate-heatmap/run"
-RESULT = BuilderResult(
+RESULT = RunResult(
     {"heatmap": SharedArtifact("/mnt/shared/out.npz", score_grid.MEDIA_TYPE)}
 )
 
@@ -44,7 +44,7 @@ class FakeRunner:
         self.requests: list[AnalysisRunRequest] = []
         self.error = error
 
-    async def run_analysis(self, request: AnalysisRunRequest) -> BuilderResult:
+    async def run_analysis(self, request: AnalysisRunRequest) -> RunResult:
         self.requests.append(request)
         if self.error is not None:
             raise self.error

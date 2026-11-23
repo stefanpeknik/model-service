@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
     from fastapi import HTTPException, Request
 
-    from model_service.contracts.result import BuilderResult
+    from model_service.contracts.result import RunResult
 
 
 def runs_unavailable(what: str) -> HTTPException:
@@ -36,13 +36,13 @@ def runs_unavailable(what: str) -> HTTPException:
         The HTTP error to raise.
     """
     return http_error(
-        503, ApiErrorCode.BUILDER_UNAVAILABLE, f"{what} are unavailable", retryable=True
+        503, ApiErrorCode.RUNNER_UNAVAILABLE, f"{what} are unavailable", retryable=True
     )
 
 
 async def run_synchronously(
-    request: Request, operation: Awaitable[BuilderResult]
-) -> BuilderResult:
+    request: Request, operation: Awaitable[RunResult]
+) -> RunResult:
     """Await a run while the caller stays connected, mapping its failures.
 
     Args:
@@ -70,7 +70,7 @@ async def run_synchronously(
             headers = {"Retry-After": str(int(error.retry_after.total_seconds()))}
         raise http_error(
             429,
-            ApiErrorCode.BUILDER_BACKPRESSURE,
+            ApiErrorCode.RUNNER_BACKPRESSURE,
             "analysis runner capacity is temporarily unavailable",
             retryable=True,
             headers=headers,
@@ -85,7 +85,7 @@ async def run_synchronously(
     except UnknownOutcomeError as error:
         raise http_error(
             503,
-            ApiErrorCode.BUILDER_UNAVAILABLE,
+            ApiErrorCode.RUNNER_UNAVAILABLE,
             "analysis outcome is unknown",
             retryable=True,
         ) from error

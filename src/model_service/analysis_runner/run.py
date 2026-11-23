@@ -27,9 +27,9 @@ from model_service.analysis_runner.timing import Timings
 from model_service.catalog.analyses import ModelStep
 from model_service.components import Run, rows
 from model_service.contracts.failures import (
-    BuilderFailure,
     FailureCode,
     InvalidInvocation,
+    RunFailure,
 )
 
 
@@ -100,7 +100,7 @@ async def run_analysis(
     Raises:
         InvalidInvocation: For missing, unknown or unreadable inputs, or
             outputs that don't match the sinks or replace an input.
-        BuilderFailure: `model_failed`, `invalid_model_output`, or
+        RunFailure: `model_failed`, `invalid_model_output`, or
             `builder_internal_error` for anything else that went wrong.
     """
     _check_inputs(analysis, inputs)
@@ -114,11 +114,11 @@ async def run_analysis(
         return await _Run(analysis, models, concurrency, report_progress).run(
             inputs, outputs
         )
-    except (InvalidInvocation, BuilderFailure):
+    except (InvalidInvocation, RunFailure):
         raise
     except Exception as error:
         logger.exception("analysis %s failed unexpectedly", analysis.id)
-        raise BuilderFailure(
+        raise RunFailure(
             code=FailureCode.INTERNAL_ERROR,
             safe_message=f"analysis {analysis.id!r} failed unexpectedly",
             retryable=True,

@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from model_service.api.routes.v1.analyses import ImmediateAnalysisRequest
     from model_service.api.scheduler.protocols import AnalysisDispatch
     from model_service.catalog import Catalog
-    from model_service.contracts.result import BuilderResult
+    from model_service.contracts.result import RunResult
 
 
 class SynchronousAnalysisService:
@@ -38,7 +38,7 @@ class SynchronousAnalysisService:
 
     async def run(
         self, analysis_id: str, request: ImmediateAnalysisRequest
-    ) -> BuilderResult:
+    ) -> RunResult:
         """Resolve the analysis with the request's settings, check the request, run it.
 
         The runner gets the resolved document, so it executes what was

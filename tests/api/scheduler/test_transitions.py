@@ -19,7 +19,7 @@ from model_service.api.scheduler.transitions.execution_transitions import (
     ExecutionTransitions,
 )
 from model_service.contracts.invocation import InputAccessContext, Invocation
-from model_service.contracts.result import BuilderResult
+from model_service.contracts.result import RunResult
 
 
 NOW = datetime(2026, 11, 2, tzinfo=UTC)
@@ -53,7 +53,7 @@ def publishing() -> ExecutionRecord:
         admitted,
         status=ExecutionStatus.RUNNING,
         work_kind=WorkKind.PROVIDER_FINISH,
-        result=BuilderResult({}),
+        result=RunResult({}),
         finish_attempts=3,
         fencing_token="token",
         lease_owner="worker",

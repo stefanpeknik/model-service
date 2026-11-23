@@ -23,7 +23,7 @@ from model_service.contracts.invocation import (
     Invocation,
     SharedPathInput,
 )
-from model_service.contracts.result import BuilderResult, SharedArtifact
+from model_service.contracts.result import RunResult, SharedArtifact
 from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 
@@ -187,7 +187,7 @@ class SharedStorageTests(unittest.TestCase):
 
         write("failed")
         success = ProviderSuccess(
-            BuilderResult({"heatmap": SharedArtifact(str(write("accepted")))}),
+            RunResult({"heatmap": SharedArtifact(str(write("accepted")))}),
             ExecutionTarget("prostate-heatmap", ("prostate-classifier-1",)),
         )
         finish = StandaloneProviderAdapter(self.adapter).finish
@@ -200,7 +200,7 @@ class SharedStorageTests(unittest.TestCase):
         retried = asyncio.run(finish(context, success, before_mutation=noop))
 
         final = self.allowed.resolve() / "outputs" / "heatmap.tiff"
-        self.assertEqual(moved, BuilderResult({"heatmap": SharedArtifact(str(final))}))
+        self.assertEqual(moved, RunResult({"heatmap": SharedArtifact(str(final))}))
         self.assertEqual(retried, moved)
         self.assertEqual(final.read_bytes(), b"accepted")
         self.assertEqual(list((self.allowed / ".attempts").iterdir()), [])

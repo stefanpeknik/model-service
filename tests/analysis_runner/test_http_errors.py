@@ -10,7 +10,7 @@ from fastapi import HTTPException
 
 from model_service.analysis_runner.http_errors import answer_http
 from model_service.contracts.analysis_http import ErrorCode
-from model_service.contracts.failures import BuilderFailure, InvalidInvocation
+from model_service.contracts.failures import InvalidInvocation, RunFailure
 
 
 def answer(failure: Exception) -> tuple[dict[str, object], int]:
@@ -38,7 +38,7 @@ def test_a_failure_keeps_its_safe_classification(
     retryable: bool, status_code: int
 ) -> None:
     detail, actual = answer(
-        BuilderFailure(
+        RunFailure(
             code="model_failed",
             safe_message="model is unavailable",
             retryable=retryable,

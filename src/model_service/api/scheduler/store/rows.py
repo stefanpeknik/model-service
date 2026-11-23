@@ -33,7 +33,7 @@ from model_service.api.scheduler.internal_state import WorkKind
 from model_service.api.scheduler.status import ExecutionStatus
 from model_service.contracts.invocation import Invocation
 from model_service.contracts.json_values import JsonValue
-from model_service.contracts.result import BuilderResult
+from model_service.contracts.result import RunResult
 
 
 if TYPE_CHECKING:
@@ -42,7 +42,7 @@ if TYPE_CHECKING:
 
 DEFAULT_SCHEMA = "model_service"
 _INVOCATION: TypeAdapter[Invocation] = TypeAdapter(Invocation)
-_RESULT: TypeAdapter[BuilderResult] = TypeAdapter(BuilderResult)
+_RESULT: TypeAdapter[RunResult] = TypeAdapter(RunResult)
 
 
 class InvocationType(TypeDecorator[Invocation]):
@@ -83,15 +83,13 @@ class InvocationType(TypeDecorator[Invocation]):
         return _INVOCATION.validate_python(value) if value is not None else None
 
 
-class ResultType(TypeDecorator[BuilderResult]):
+class ResultType(TypeDecorator[RunResult]):
     """Stores a run result as JSONB."""
 
     impl = JSONB(none_as_null=True)
     cache_ok = True
 
-    def process_bind_param(
-        self, value: BuilderResult | None, dialect: Dialect
-    ) -> object:
+    def process_bind_param(self, value: RunResult | None, dialect: Dialect) -> object:
         """Serialize a run result to JSON for the JSONB column.
 
         Args:
@@ -103,9 +101,7 @@ class ResultType(TypeDecorator[BuilderResult]):
         """
         return _RESULT.dump_python(value, mode="json") if value is not None else None
 
-    def process_result_value(
-        self, value: object, dialect: Dialect
-    ) -> BuilderResult | None:
+    def process_result_value(self, value: object, dialect: Dialect) -> RunResult | None:
         """Validate the column's JSON back into a run result.
 
         Args:
@@ -176,7 +172,7 @@ class ExecutionRow(Base):
     lease_owner: Mapped[str | None] = mapped_column(Text)
     fencing_token: Mapped[str | None] = mapped_column(UUID(as_uuid=False))
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    result: Mapped[BuilderResult | None] = mapped_column(ResultType())
+    result: Mapped[RunResult | None] = mapped_column(ResultType())
     error_code: Mapped[str | None] = mapped_column(Text)
     error_message: Mapped[str | None] = mapped_column(Text)
     priority: Mapped[int] = mapped_column(Integer, server_default=literal(1))

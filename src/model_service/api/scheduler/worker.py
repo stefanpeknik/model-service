@@ -42,7 +42,7 @@ from model_service.api.scheduler.store.repository import (
 from model_service.contracts.analysis_http import AnalysisRunRequest
 from model_service.contracts.invocation import ExecutionContext
 from model_service.contracts.log_context import logging_execution
-from model_service.contracts.result import BuilderResult
+from model_service.contracts.result import RunResult
 
 
 logger = logging.getLogger(__name__)
@@ -408,7 +408,7 @@ class ExecutionWorker:
         except UnknownOutcomeError:
             return ProcessingFailed(
                 error=ExecutionError(
-                    code=ExecutionErrorCode.BUILDER_OUTCOME_UNKNOWN,
+                    code=ExecutionErrorCode.RUN_OUTCOME_UNKNOWN,
                     message="analysis dispatch outcome is unknown",
                 ),
                 retryable=True,
@@ -433,7 +433,7 @@ def _finish_outcome(claim: WorkClaim) -> ProviderFinishOutcome:
         RuntimeError: The claim lacks the stored result or error its kind requires, or its kind is not provider work.
     """
     if claim.kind is WorkKind.PROVIDER_FINISH:
-        if not isinstance(claim.result, BuilderResult):
+        if not isinstance(claim.result, RunResult):
             raise RuntimeError("provider finish requires a durable result")
         return ProviderSuccess(claim.result, claim.target)
     if claim.kind is WorkKind.PROVIDER_FAILURE_REPORT:

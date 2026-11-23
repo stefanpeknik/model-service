@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from model_service.api.scheduler.targets import ExecutionTarget
     from model_service.contracts.invocation import Invocation
     from model_service.contracts.json_values import JsonValue
-    from model_service.contracts.result import BuilderResult
+    from model_service.contracts.result import RunResult
 
 
 class WorkKind(StrEnum):
@@ -125,7 +125,7 @@ class ExecutionRecord:
     lease_owner: str | None
     fencing_token: str | None
     lease_expires_at: datetime | None
-    result: BuilderResult | None
+    result: RunResult | None
     error: ExecutionError | None
     created_at: datetime
     updated_at: datetime
@@ -159,7 +159,7 @@ class WorkClaim:
     protected_context: dict[str, JsonValue]
     attempt: int
     fencing_token: str
-    result: BuilderResult | None
+    result: RunResult | None
     error: ExecutionError | None
 
 
@@ -167,7 +167,7 @@ class WorkClaim:
 class ProcessingSucceeded:
     """Report a computation result to store before scheduling provider finish."""
 
-    result: BuilderResult
+    result: RunResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,7 +175,7 @@ class ProviderFinishSucceeded:
     """Report that publication or terminal reporting completed successfully."""
 
     # Replaces the stored result when the provider moved its outputs.
-    result: BuilderResult | None = None
+    result: RunResult | None = None
 
 
 @dataclass(frozen=True, slots=True)

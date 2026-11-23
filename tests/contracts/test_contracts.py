@@ -1,13 +1,19 @@
-"""Check the wire format of invocations, results and analysis run requests."""
+"""Check the wire format of invocations, results, run requests and error codes."""
 
 import unittest
 from datetime import UTC, datetime
 
 from pydantic import TypeAdapter, ValidationError
 
+from model_service.api.http.errors import ApiErrorCode
+from model_service.api.scheduler.status import ExecutionErrorCode
 from model_service.contracts.analysis_http import ANALYSIS_RUN_REQUEST
+from model_service.contracts.analysis_http import ErrorCode as RunnerErrorCode
+from model_service.contracts.caller_request import RunRequest
+from model_service.contracts.failures import FailureCode
 from model_service.contracts.invocation import INVOCATION, ExecutionContext, InputKind
 from model_service.contracts.result import RESULT, OutputKind
+from model_service.formats import embedding_table, score_grid
 
 
 INVOCATION_BODY = {
@@ -83,6 +89,47 @@ class ContractTests(unittest.TestCase):
             ExecutionContext(protected_context={"invalid": float("nan")})
         with self.assertRaises(ValidationError):
             TypeAdapter(ExecutionContext).validate_python({"unexpected": True})
+
+    def test_codes_and_media_types_keep_their_wire_values(self) -> None:
+        # Callers, the RationAI SDK and stored executions read these strings,
+        # so renaming the Python names must never change them.
+        self.assertEqual(
+            {code.name: code.value for code in FailureCode},
+            {
+                "DEADLINE_EXCEEDED": "builder_deadline_exceeded",
+                "INTERNAL_ERROR": "builder_internal_error",
+                "INPUT_UNAVAILABLE": "input_unavailable",
+                "MODEL_FAILED": "model_failed",
+                "MODEL_CONTRACT_MISMATCH": "model_contract_mismatch",
+                "INVALID_MODEL_OUTPUT": "invalid_model_output",
+            },
+        )
+        self.assertEqual(ApiErrorCode.RUNNER_BACKPRESSURE, "builder_backpressure")
+        self.assertEqual(ApiErrorCode.RUNNER_UNAVAILABLE, "builder_unavailable")
+        self.assertEqual(
+            ExecutionErrorCode.RUN_OUTCOME_UNKNOWN, "builder_outcome_unknown"
+        )
+        self.assertEqual(
+            RunnerErrorCode.INVALID_INVOCATION, "invalid_builder_invocation"
+        )
+        self.assertEqual(RunnerErrorCode.UNAVAILABLE, "builder_unavailable")
+        self.assertEqual(
+            score_grid.MEDIA_TYPE, "application/vnd.rationai.score-grid+npz; version=1"
+        )
+        self.assertEqual(
+            embedding_table.MEDIA_TYPE,
+            "application/vnd.rationai.embedding-table+hdf5; version=2",
+        )
+
+    def test_run_request_keeps_its_field_names(self) -> None:
+        body = {
+            "inputs": {"slide": {"kind": "shared_path", "path": "slide.svs"}},
+            "input_access": {"kind": "shared_storage", "state": {}},
+            "configuration": {"stride": 512},
+            "output_path": "out.npz",
+        }
+
+        self.assertEqual(RunRequest.model_validate(body).model_dump(mode="json"), body)
 
 
 if __name__ == "__main__":

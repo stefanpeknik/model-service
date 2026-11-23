@@ -18,7 +18,7 @@ from model_service.api.scheduler.public import (
 )
 from model_service.api.scheduler.targets import ExecutionTarget
 from model_service.contracts.invocation import InputAccessContext, Invocation
-from model_service.contracts.result import BuilderResult
+from model_service.contracts.result import RunResult
 
 
 if TYPE_CHECKING:
@@ -73,7 +73,7 @@ class ExecutionRepositoryContract:
         assert newer_claim is not None
         assert newer_claim.execution_id == newer_id
         await self.repository.settle(
-            newer_id, newer_claim.fencing_token, ProcessingSucceeded(BuilderResult({}))
+            newer_id, newer_claim.fencing_token, ProcessingSucceeded(RunResult({}))
         )
         await self.repository.settle(
             older_id, older_claim.fencing_token, ProcessingRejected(timedelta(0))
@@ -137,11 +137,11 @@ class ExecutionRepositoryContract:
         newer = await self.repository.claim_due("worker", timedelta(seconds=30))
         assert newer is not None
         await self.repository.settle(
-            newer_id, newer.fencing_token, ProcessingSucceeded(BuilderResult({}))
+            newer_id, newer.fencing_token, ProcessingSucceeded(RunResult({}))
         )
         await self._advance_time(timedelta(milliseconds=10))
         await self.repository.settle(
-            older_id, older.fencing_token, ProcessingSucceeded(BuilderResult({}))
+            older_id, older.fencing_token, ProcessingSucceeded(RunResult({}))
         )
 
         selected = await self.repository.claim_due("worker", timedelta(seconds=30))
@@ -270,7 +270,7 @@ class ExecutionRepositoryContract:
             await self.repository.settle(
                 execution_id,
                 claim.fencing_token,
-                ProcessingSucceeded(BuilderResult({})),
+                ProcessingSucceeded(RunResult({})),
             )
         except StaleWorkClaimError:
             pass
@@ -289,7 +289,7 @@ class ExecutionRepositoryContract:
         await self.repository.settle(
             execution_id,
             processing.fencing_token,
-            ProcessingSucceeded(BuilderResult({})),
+            ProcessingSucceeded(RunResult({})),
         )
         finish = await self.repository.claim_due("worker", timedelta(seconds=30))
         assert finish is not None

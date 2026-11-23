@@ -63,8 +63,8 @@ from model_service.contracts.invocation import (
 from model_service.contracts.json_values import JsonValue
 from model_service.contracts.result import (
     RESULT,
-    BuilderResult,
     InlineOutput,
+    RunResult,
     SharedArtifact,
 )
 from tests.support.repository_contract import ExecutionRepositoryContract
@@ -670,7 +670,7 @@ class PostgresExecutionRepositoryTests(
                 sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema))
             )
 
-    async def _install_pre_orm_record(self) -> tuple[str, Admission, BuilderResult]:
+    async def _install_pre_orm_record(self) -> tuple[str, Admission, RunResult]:
         admission = self._admission("pre-orm")
         admission = replace(
             admission,
@@ -683,7 +683,7 @@ class PostgresExecutionRepositoryTests(
             ),
             protected_context={"credential": "historical-test-token"},
         )
-        result = BuilderResult(
+        result = RunResult(
             outputs={
                 "score": InlineOutput(value=0.9),
                 "empty": InlineOutput(value={}),
@@ -791,7 +791,7 @@ class PostgresExecutionRepositoryTests(
             await self.repository.settle(
                 claim.execution_id,
                 claim.fencing_token,
-                ProcessingSucceeded(BuilderResult(outputs={})),
+                ProcessingSucceeded(RunResult(outputs={})),
             )
         durable = await self.repository.get(admitted.execution.id)
         self.assertIsNone(durable.result)
@@ -855,7 +855,7 @@ class PostgresExecutionRepositoryTests(
         self.assertEqual(replacement.execution_id, admitted.execution.id)
         self.assertNotEqual(replacement.fencing_token, abandoned.fencing_token)
         self.assertEqual(replacement.attempt, 2)
-        result = BuilderResult(outputs={"score": InlineOutput(value=0.9)})
+        result = RunResult(outputs={"score": InlineOutput(value=0.9)})
         with self.assertRaises(StaleWorkClaimError):
             await self.repository.settle(
                 abandoned.execution_id,
@@ -915,7 +915,7 @@ class PostgresExecutionRepositoryTests(
             await self.repository.settle(
                 claim.execution_id,
                 claim.fencing_token,
-                ProcessingSucceeded(BuilderResult(outputs={})),
+                ProcessingSucceeded(RunResult(outputs={})),
             )
 
     async def test_expired_finish_lease_preserves_result_and_processing_attempt(
@@ -927,7 +927,7 @@ class PostgresExecutionRepositoryTests(
             timedelta(seconds=1),
         )
         assert processing is not None
-        result = BuilderResult(outputs={"score": InlineOutput(value=0.9)})
+        result = RunResult(outputs={"score": InlineOutput(value=0.9)})
         await self.repository.settle(
             processing.execution_id,
             processing.fencing_token,
@@ -972,7 +972,7 @@ class PostgresExecutionRepositoryTests(
             await self.repository.settle(
                 claim.execution_id,
                 claim.fencing_token,
-                ProcessingSucceeded(BuilderResult(outputs={})),
+                ProcessingSucceeded(RunResult(outputs={})),
             )
         failed = await self.repository.get(admitted.execution.id)
         self.assertEqual(failed.status, "failed")

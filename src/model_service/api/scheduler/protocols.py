@@ -16,7 +16,7 @@ if TYPE_CHECKING:
         ScheduleResult,
     )
     from model_service.contracts.analysis_http import AnalysisRunRequest
-    from model_service.contracts.result import BuilderResult
+    from model_service.contracts.result import RunResult
 
 
 class Scheduler(Protocol):
@@ -51,6 +51,6 @@ class Scheduler(Protocol):
 class AnalysisDispatch(Protocol):
     """How the API runs a resolved analysis on the analysis runner."""
 
-    async def run_analysis(self, request: AnalysisRunRequest) -> BuilderResult:
+    async def run_analysis(self, request: AnalysisRunRequest) -> RunResult:
         """Run one resolved analysis and return its result."""
         ...

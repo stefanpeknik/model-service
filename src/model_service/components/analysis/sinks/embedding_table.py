@@ -12,7 +12,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from model_service.components import Col, Sink
-from model_service.contracts.failures import BuilderFailure, FailureCode
+from model_service.contracts.failures import FailureCode, RunFailure
 from model_service.formats import embedding_table
 
 
@@ -101,7 +101,7 @@ class EmbeddingTableSink(Sink):
             batch: `tile_x`, `tile_y` and `features`, in key order.
 
         Raises:
-            BuilderFailure: `invalid_model_output` if an earlier batch's
+            RunFailure: `invalid_model_output` if an earlier batch's
                 features changed shape; any other failure of an earlier
                 write as it was raised.
         """
@@ -121,7 +121,7 @@ class EmbeddingTableSink(Sink):
             The written file.
 
         Raises:
-            BuilderFailure: `invalid_model_output` if the features changed
+            RunFailure: `invalid_model_output` if the features changed
                 shape between tiles.
         """
         self._submit(lambda: self._table().close())
@@ -160,7 +160,7 @@ def _result(future: Future[None]) -> None:
     try:
         future.result()
     except embedding_table.RowShapeError as error:
-        raise BuilderFailure(
+        raise RunFailure(
             code=FailureCode.INVALID_MODEL_OUTPUT,
             safe_message="embedding feature dimensions changed between tiles",
             retryable=False,

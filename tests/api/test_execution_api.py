@@ -35,7 +35,7 @@ from model_service.api.scheduler.store.repository import (
 from model_service.api.synchronous_runs import SynchronousAnalysisService
 from model_service.catalog import load_catalog
 from model_service.catalog.analyses import resolve_run
-from model_service.contracts.result import BuilderResult, InlineOutput
+from model_service.contracts.result import InlineOutput, RunResult
 from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from tests.support.memory_repository import InMemoryExecutionRepository
@@ -51,7 +51,7 @@ if TYPE_CHECKING:
     from model_service.catalog import Catalog
     from model_service.contracts.analysis_http import AnalysisRunRequest
 
-    type Handler = Callable[[AnalysisRunRequest], Awaitable[BuilderResult]]
+    type Handler = Callable[[AnalysisRunRequest], Awaitable[RunResult]]
 
 
 CATALOG = load_catalog(Path(__file__).resolve().parents[2] / "catalog", "rationai-test")
@@ -79,10 +79,10 @@ class FakeDispatch:
         self.calls: list[AnalysisRunRequest] = []
         self._handler = handler
 
-    async def run_analysis(self, request: AnalysisRunRequest) -> BuilderResult:
+    async def run_analysis(self, request: AnalysisRunRequest) -> RunResult:
         self.calls.append(request)
         if self._handler is None:
-            return BuilderResult(outputs={"score": InlineOutput(value=0.9)})
+            return RunResult(outputs={"score": InlineOutput(value=0.9)})
         return await self._handler(request)
 
 
@@ -343,7 +343,7 @@ class DisconnectTests(ApiTestCase):
         started = asyncio.Event()
         cancelled = asyncio.Event()
 
-        async def wait_forever(*_args: object) -> BuilderResult:
+        async def wait_forever(*_args: object) -> RunResult:
             started.set()
             try:
                 await asyncio.Event().wait()

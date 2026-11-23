@@ -36,7 +36,7 @@ from model_service.contracts.analysis_http import (
     ErrorCode,
     ErrorResponse,
 )
-from model_service.contracts.result import BuilderResult
+from model_service.contracts.result import RunResult
 
 
 fastapi = FastAPI()
@@ -64,10 +64,10 @@ class AnalysisRunnerDeployment:
 
     @fastapi.post(
         "/",
-        response_model=BuilderResult,
+        response_model=RunResult,
         responses={code: {"model": ErrorResponse} for code in (422, 500, 503)},
     )
-    async def run(self, body: AnalysisRunRequest) -> BuilderResult:
+    async def run(self, body: AnalysisRunRequest) -> RunResult:
         """Run one resolved analysis over HTTP.
 
         Args:

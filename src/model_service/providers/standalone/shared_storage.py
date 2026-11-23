@@ -23,9 +23,9 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
     from model_service.contracts.invocation import (
-        BuilderInput,
         ExecutionContext,
         Invocation,
+        RunInput,
     )
 
 
@@ -52,7 +52,7 @@ class SharedStorageAccess(InputAccess):
     def __init__(
         self,
         root: Path,
-        inputs: dict[str, BuilderInput],
+        inputs: dict[str, RunInput],
         *,
         output_prefix: str = "",
     ) -> None:

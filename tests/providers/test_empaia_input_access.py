@@ -25,9 +25,9 @@ from model_service.catalog import load_catalog
 from model_service.catalog.analyses import resolve_run
 from model_service.contracts.analysis_http import AnalysisRunRequest
 from model_service.contracts.failures import (
-    BuilderFailure,
     FailureCode,
     InvalidInvocation,
+    RunFailure,
 )
 from model_service.contracts.invocation import (
     INVOCATION,
@@ -174,7 +174,7 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
                 adapter = EmpaiaInputAccessFactory(
                     lambda _c: Gateway(), Path(directory)
                 )
-                with self.assertRaises(BuilderFailure) as raised:
+                with self.assertRaises(RunFailure) as raised:
                     await adapter.create(slide_job(), attempt())
                 self.assertEqual(raised.exception.code, FailureCode.INPUT_UNAVAILABLE)
                 self.assertEqual(list(Path(directory).rglob("inputs")), [])

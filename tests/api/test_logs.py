@@ -20,7 +20,7 @@ from model_service.api.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.api.scheduler.running_work import ActiveWorkRegistry
 from model_service.api.scheduler.worker import ExecutionWorker
 from model_service.catalog import Catalog
-from model_service.contracts.result import BuilderResult, InlineOutput
+from model_service.contracts.result import InlineOutput, RunResult
 from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from tests.support.log_capture import capture_logs
@@ -109,9 +109,9 @@ class RequestIdTests(unittest.IsolatedAsyncioTestCase):
 class ExecutionIdTests(unittest.IsolatedAsyncioTestCase):
     async def test_log_lines_while_an_execution_runs_name_it(self) -> None:
         class LoggingDispatch:
-            async def run_analysis(self, request: AnalysisRunRequest) -> BuilderResult:
+            async def run_analysis(self, request: AnalysisRunRequest) -> RunResult:
                 logging.getLogger("model_service.tests").warning("dispatching")
-                return BuilderResult({"heatmap": InlineOutput(1)})
+                return RunResult({"heatmap": InlineOutput(1)})
 
         with TemporaryDirectory() as directory:
             root = Path(directory)

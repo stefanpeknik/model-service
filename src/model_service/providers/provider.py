@@ -42,7 +42,7 @@ if TYPE_CHECKING:
     from model_service.catalog import Catalog
     from model_service.contracts.invocation import InputAccessKind
     from model_service.contracts.json_values import JsonValue
-    from model_service.contracts.result import BuilderResult
+    from model_service.contracts.result import RunResult
     from model_service.providers.input_access import InputAccessFactory
 
 
@@ -87,7 +87,7 @@ class ProviderAdapter(ABC):
         outcome: ProviderFinishOutcome,
         *,
         before_mutation: BeforeMutation,
-    ) -> BuilderResult | None:
+    ) -> RunResult | None:
         """Publish or report a stored outcome to the provider.
 
         Awaits before_mutation before the first external change. Scheduling and

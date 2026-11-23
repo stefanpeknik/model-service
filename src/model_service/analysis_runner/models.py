@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import numpy as np
 
-from model_service.contracts.failures import BuilderFailure, FailureCode
+from model_service.contracts.failures import FailureCode, RunFailure
 from model_service.served_model.guards import ModelOutputError, check_output
 
 
@@ -98,14 +98,14 @@ def model_call(
         in the declared shape) to a batch with `tile`.
 
     Raises:
-        BuilderFailure: From the returned function: `model_failed` (retryable)
+        RunFailure: From the returned function: `model_failed` (retryable)
             when a call fails, `invalid_model_output` (not retryable) when an
             output breaks the served model's `output:` declaration.
     """
     model = step.model
 
-    def invalid() -> BuilderFailure:
-        return BuilderFailure(
+    def invalid() -> RunFailure:
+        return RunFailure(
             code=FailureCode.INVALID_MODEL_OUTPUT,
             safe_message=f"model {model.id!r} returned an invalid output",
             retryable=False,
@@ -117,7 +117,7 @@ def model_call(
         except ModelOutputError as error:
             raise invalid() from error
         except Exception as error:
-            raise BuilderFailure(
+            raise RunFailure(
                 code=FailureCode.MODEL_FAILED,
                 safe_message=f"model {model.id!r} request failed",
                 retryable=True,

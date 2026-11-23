@@ -67,7 +67,7 @@ if TYPE_CHECKING:
     from model_service.api.scheduler.public import ExecutionView
     from model_service.catalog import Catalog
     from model_service.contracts.json_values import JsonValue
-    from model_service.contracts.result import BuilderResult
+    from model_service.contracts.result import RunResult
     from model_service.providers.empaia.app_service.gateway import MutationGuard
 
 
@@ -172,7 +172,7 @@ class Runs:
         self.core = core
         self.count = 0
 
-    async def run_analysis(self, request: AnalysisRunRequest) -> BuilderResult:
+    async def run_analysis(self, request: AnalysisRunRequest) -> RunResult:
         assert self.core is not None, "nothing runs here"
         self.count += 1
         return await self.core.run(request)
@@ -198,7 +198,7 @@ class Failing:
     def __init__(self, message: str) -> None:
         self.message = message
 
-    async def run_analysis(self, request: AnalysisRunRequest) -> BuilderResult:
+    async def run_analysis(self, request: AnalysisRunRequest) -> RunResult:
         raise RemoteFailureError(
             code="invalid_builder_invocation",
             safe_message=self.message,

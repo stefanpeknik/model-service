@@ -23,7 +23,7 @@ from model_service.api.scheduler.public import (
 from model_service.api.scheduler.targets import ExecutionTarget
 from model_service.components import EmpaiaOutput
 from model_service.components.empaia import publisher
-from model_service.contracts.result import BuilderResult, SharedArtifact
+from model_service.contracts.result import RunResult, SharedArtifact
 from model_service.formats import score_grid, value
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
@@ -218,7 +218,7 @@ def analysis_success(
     outputs: dict[str, SharedArtifact], sinks: list[str]
 ) -> ProviderSuccess:
     return ProviderSuccess(
-        BuilderResult(outputs=dict(outputs)),
+        RunResult(outputs=dict(outputs)),
         ExecutionTarget(
             "a1",
             ("m1",),
@@ -297,7 +297,7 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
         gateway = AsyncMock()
         # A builder-era job: no document, no publications.
         old = ProviderSuccess(
-            BuilderResult(
+            RunResult(
                 outputs={"heatmap": SharedArtifact("/x.npz", score_grid.MEDIA_TYPE)}
             ),
             ExecutionTarget("prostate-heatmap", ("prostate-classifier-1",)),

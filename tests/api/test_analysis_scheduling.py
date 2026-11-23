@@ -16,7 +16,7 @@ from model_service.api.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.api.scheduler.internal_state import RetryPolicy
 from model_service.catalog import Catalog, load_catalog
 from model_service.catalog.analyses import resolve_run
-from model_service.contracts.result import BuilderResult, SharedArtifact
+from model_service.contracts.result import RunResult, SharedArtifact
 from model_service.formats import score_grid
 from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
@@ -44,13 +44,13 @@ class FakeRunner:
         self.root = root
         self.failures = failures
 
-    async def run_analysis(self, request: AnalysisRunRequest) -> BuilderResult:
+    async def run_analysis(self, request: AnalysisRunRequest) -> RunResult:
         self.requests.append(request)
         if len(self.requests) <= self.failures:
             raise RemoteFailureError(
                 code="model_failed", safe_message="try again", retryable=True
             )
-        return BuilderResult(
+        return RunResult(
             {
                 "heatmap": SharedArtifact(
                     str(self.root / "out.npz"), score_grid.MEDIA_TYPE

@@ -29,13 +29,13 @@ from model_service.analysis_runner.progress import reporting_progress
 from model_service.analysis_runner.run import Concurrency, run_analysis
 from model_service.catalog.analyses import ResolvedAnalysisInvalid, load_resolved
 from model_service.contracts.failures import (
-    BuilderFailure,
     FailureCode,
     InvalidInvocation,
+    RunFailure,
 )
 from model_service.contracts.invocation import ExecutionContext
 from model_service.contracts.log_context import logging_execution
-from model_service.contracts.result import BuilderResult, SharedArtifact
+from model_service.contracts.result import RunResult, SharedArtifact
 from model_service.formats.known import get_format
 from model_service.providers.input_access import close_resource
 
@@ -104,7 +104,7 @@ class AnalysisReplica:
         self._progress_interval_seconds = progress_interval_seconds
         self._cleanup_timeout_seconds = cleanup_timeout_seconds
 
-    async def run(self, request: AnalysisRunRequest) -> BuilderResult:
+    async def run(self, request: AnalysisRunRequest) -> RunResult:
         """Check and run one request before its deadline.
 
         Args:
@@ -116,7 +116,7 @@ class AnalysisReplica:
         Raises:
             InvalidInvocation: The document was changed or doesn't resolve,
                 or the inputs, root or output path are invalid.
-            BuilderFailure: `model_contract_mismatch` (a served model runs
+            RunFailure: `model_contract_mismatch` (a served model runs
                 another declaration), `builder_deadline_exceeded`, or what
                 the run raised (`model_failed`, `invalid_model_output`,
                 `builder_internal_error`).
@@ -136,7 +136,7 @@ class AnalysisReplica:
             except TimeoutError as error:
                 if not timeout.expired():
                     raise
-                raise BuilderFailure(
+                raise RunFailure(
                     code=FailureCode.DEADLINE_EXCEEDED,
                     safe_message="analysis deadline was exceeded",
                     retryable=False,
@@ -144,7 +144,7 @@ class AnalysisReplica:
 
     async def _run(
         self, resolved: ResolvedAnalysis, request: AnalysisRunRequest
-    ) -> BuilderResult:
+    ) -> RunResult:
         """Verify the models, open the access, run, and close the access."""
         analysis = resolved.analysis
         models = {
@@ -174,7 +174,7 @@ class AnalysisReplica:
         finally:
             await self._close(access)
         formats = {s.options.output: get_format(s.format) for s in analysis.sinks}
-        return BuilderResult(
+        return RunResult(
             outputs={
                 name: SharedArtifact(str(path), formats[name].media_type)
                 for name, path in written.items()
@@ -187,13 +187,13 @@ class AnalysisReplica:
         try:
             running = await handle.describe()
         except Exception as error:
-            raise BuilderFailure(
+            raise RunFailure(
                 code=FailureCode.MODEL_FAILED,
                 safe_message=f"model {model_id!r} could not be reached",
                 retryable=True,
             ) from error
         if not isinstance(running, dict) or running.get("digest") != digest:
-            raise BuilderFailure(
+            raise RunFailure(
                 code=FailureCode.MODEL_CONTRACT_MISMATCH,
                 safe_message=(
                     f"model {model_id!r} is running a declaration that differs "

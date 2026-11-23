@@ -18,7 +18,7 @@ from model_service.api.scheduler.public import (
     ProviderSuccess,
 )
 from model_service.api.scheduler.targets import ExecutionTarget
-from model_service.contracts.result import BuilderResult, SharedArtifact
+from model_service.contracts.result import RunResult, SharedArtifact
 from model_service.formats import score_grid
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
@@ -45,7 +45,7 @@ JOB = {
 def heatmap_success(artifact: Path) -> ProviderSuccess:
     """The job's result: the heatmap its one sink wrote."""
     return ProviderSuccess(
-        BuilderResult(
+        RunResult(
             outputs={"heatmap": SharedArtifact(str(artifact), score_grid.MEDIA_TYPE)}
         ),
         ExecutionTarget(
