@@ -316,11 +316,15 @@ def test_the_run_logs_the_time_each_step_takes(
             {"heatmap": "slide.tiff"},
             "must not replace an input",
         ),
+        ({"slide": "slide.tiff"}, {"heatmap": "out"}, "is a directory"),
+        ({"slide": "slide.tiff"}, {"heatmap": "slide.tiff/h.npz"}, "not a directory"),
+        ({"slide": "slide.tiff"}, {"heatmap": "x" * 250 + ".npz"}, "name is too long"),
     ],
 )
 def test_inputs_and_outputs_that_do_not_fit_are_refused(
     tmp_path: Path,
     slide: Path,
+    out: Path,
     inputs: dict[str, str],
     outputs: dict[str, str],
     message: str,
@@ -338,3 +342,26 @@ def test_inputs_and_outputs_that_do_not_fit_are_refused(
         )
 
     assert message in str(raised.value)
+
+
+def test_a_directory_given_as_an_output_is_refused_and_left_intact(
+    tmp_path: Path, slide: Path, out: Path
+) -> None:
+    (out / "keep.txt").write_text("results")
+
+    with pytest.raises(InvalidInvocation, match="is a directory"):
+        run(analysis(tmp_path, HEATMAP), slide, {"heatmap": out})
+
+    assert (out / "keep.txt").read_text() == "results"
+
+
+def test_two_outputs_with_the_same_destination_are_refused(
+    tmp_path: Path, slide: Path, out: Path
+) -> None:
+    two_sinks = "[{use: score_grid, output: heatmap}, {use: score_table, output: table}]"
+    same = {"heatmap": out / "a.npz", "table": out / "sub" / ".." / "a.npz"}
+
+    with pytest.raises(InvalidInvocation, match="same path"):
+        run(analysis(tmp_path, two_sinks), slide, same)
+
+    assert list(out.iterdir()) == []

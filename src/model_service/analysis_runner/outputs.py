@@ -34,7 +34,7 @@ class Staging:
         """
         self._destinations = dict(destinations)
         self._dirs = {
-            name: path.parent / f".{path.name}.{uuid4().hex}.partial"
+            name: path.parent / _staging_name(path)
             for name, path in self._destinations.items()
         }
 
@@ -99,6 +99,8 @@ class Staging:
             for name, artifact in artifacts.items():
                 destination = self._destinations[name]
                 previous = None
+                if destination.is_dir():
+                    raise IsADirectoryError(f"{destination} is a directory")
                 if destination.exists():
                     previous = self._dirs[name] / f".previous.{uuid4().hex}"
                     os.replace(destination, previous)
@@ -114,6 +116,22 @@ class Staging:
         return {name: self._destinations[name] for name in artifacts}
 
 
+# Most file systems cap a file name at 255 bytes.
+_NAME_MAX = 255
+
+
+def _staging_name(destination: Path) -> str:
+    """A fresh name for the hidden staging directory of `destination`.
+
+    Args:
+        destination: The output's destination path.
+
+    Returns:
+        The directory name, unique per call.
+    """
+    return f".{destination.name}.{uuid4().hex}.partial"
+
+
 def check_destinations(
     destinations: Mapping[str, Path], outputs: Collection[str], inputs: Collection[Path]
 ) -> None:
@@ -125,8 +143,9 @@ def check_destinations(
         inputs: The run's input paths.
 
     Raises:
-        InvalidInvocation: For a missing or unknown output, or a destination
-            that is one of the inputs.
+        InvalidInvocation: For a missing or unknown output, a destination
+            that is one of the inputs, an existing directory, shared by two
+            outputs, under a file, or too long a name to stage.
     """
     missing = sorted(set(outputs) - set(destinations))
     unknown = sorted(set(destinations) - set(outputs))
@@ -138,3 +157,38 @@ def check_destinations(
     sources = {path.resolve() for path in inputs}
     if any(path.resolve() in sources for path in destinations.values()):
         raise InvalidInvocation("output must not replace an input")
+    seen: dict[Path, str] = {}
+    for name, path in sorted(destinations.items()):
+        resolved = path.resolve()
+        if resolved in seen:
+            raise InvalidInvocation(
+                f"outputs {seen[resolved]!r} and {name!r} have the same path {path}"
+            )
+        seen[resolved] = name
+        _check_destination(name, path)
+
+
+def _check_destination(name: str, path: Path) -> None:
+    """Refuse a destination the staging can't write next to or replace.
+
+    Args:
+        name: The output name, for the message.
+        path: Its destination.
+
+    Raises:
+        InvalidInvocation: If the path is a directory, too long a name to
+            stage, or has a file where a folder should be.
+    """
+    if path.is_dir():
+        raise InvalidInvocation(
+            f"output {name!r} path {path} is a directory; give a file path"
+        )
+    if len(os.fsencode(_staging_name(path))) > _NAME_MAX:
+        raise InvalidInvocation(f"output {name!r} file name is too long: {path.name}")
+    ancestor = path.parent
+    while not ancestor.exists() and ancestor != ancestor.parent:
+        ancestor = ancestor.parent
+    if not ancestor.is_dir():
+        raise InvalidInvocation(
+            f"output {name!r} path {path}: {ancestor} is not a directory"
+        )
