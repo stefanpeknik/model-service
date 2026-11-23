@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
@@ -35,6 +35,8 @@ class ServedModel:
         batching: How requests are batched.
         resources: What a replica reserves.
         serving: Scaling and queue limits.
+        declaration: The file after the environment's patch, as the chart
+            hands it to the host and an analysis run records it.
     """
 
     id: str
@@ -47,6 +49,7 @@ class ServedModel:
     batching: Batching
     resources: Resources
     serving: Serving
+    declaration: dict[str, Any] = field(compare=False, repr=False)
 
     @cached_property
     def digest(self) -> str:

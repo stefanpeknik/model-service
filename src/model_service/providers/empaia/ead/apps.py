@@ -165,12 +165,10 @@ def analysis_apps(catalog: Catalog) -> list[AnalysisApp]:
     Raises:
         jsonschema.ValidationError: If a generated EAD fails the EAD v3 schema.
     """
-    from model_service.catalog.analyses import FOLDER
-
     return [
-        analysis_app(entry.value)
-        for _, entry in sorted(catalog.entries(FOLDER).items())
-        if entry.value.empaia is not None
+        analysis_app(analysis)
+        for _, analysis in sorted(catalog.analyses.items())
+        if analysis.empaia is not None
     ]
 
 

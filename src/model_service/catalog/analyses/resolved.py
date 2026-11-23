@@ -32,13 +32,11 @@ from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import ValidationError
 
-from model_service.catalog.analyses.kind import FOLDER, Analyses
+from model_service.catalog.analyses.document import FOLDER, build_analysis
 from model_service.catalog.analyses.model_step import ModelStep
-from model_service.catalog.catalog import Entry
-from model_service.catalog.context import References, ResolveContext
+from model_service.catalog.context import ResolveContext
 from model_service.catalog.errors import CatalogInvalid
-from model_service.catalog.served_models import FOLDER as SERVED_MODELS
-from model_service.catalog.served_models import ServedModels, resolve_served_model
+from model_service.catalog.served_models import resolve_served_model
 from model_service.contracts.failures import InvalidInvocation, UnknownAnalysisError
 from model_service.registry import default_registry
 
@@ -49,6 +47,7 @@ if TYPE_CHECKING:
     from components.base import Component
     from model_service.catalog.analyses.declaration import Analysis
     from model_service.catalog.catalog import Catalog
+    from model_service.catalog.served_models import ServedModel
     from model_service.registry import Registry
 
 
@@ -103,10 +102,9 @@ def resolve_run(
         InvalidInvocation: For a setting the analysis doesn't take or an
             invalid value; the message names the settings.
     """
-    entry = catalog.entries(FOLDER).get(analysis_id)
-    if entry is None:
+    analysis = catalog.analyses.get(analysis_id)
+    if analysis is None:
         raise UnknownAnalysisError(analysis_id)
-    analysis: Analysis = entry.value
     try:
         analysis = analysis.with_settings(settings or {})
     except ValidationError as error:
@@ -116,7 +114,6 @@ def resolve_run(
         ) from error
     except ValueError as error:
         raise InvalidInvocation(str(error)) from error
-    served = catalog.entries(SERVED_MODELS)
     document: dict[str, Any] = {
         "id": analysis.id,
         "summary": analysis.summary,
@@ -127,7 +124,7 @@ def resolve_run(
         ],
         "sinks": [_component(s) for s in analysis.sinks],
         "served_models": {
-            model_id: {DIGEST: model.digest, "declaration": served[model_id].document}
+            model_id: {DIGEST: model.digest, "declaration": model.declaration}
             for model_id, model in analysis.models.items()
         },
     }
@@ -160,14 +157,14 @@ def load_resolved(
                 "the analysis document does not match its digest"
             )
         analysis_id = body["id"]
-        served: dict[str, Entry] = {}
+        served: dict[str, ServedModel] = {}
         for model_id, item in body["served_models"].items():
             model = resolve_served_model(model_id, item["declaration"], registry)
             if model.digest != item[DIGEST]:
                 raise ResolvedAnalysisInvalid(
                     f"served model {model_id!r} resolves to another digest here"
                 )
-            served[model_id] = Entry(model_id, "", item["declaration"], model)
+            served[model_id] = model
         fields = ("summary", "source", "steps", "sinks")
         analysis = _resolve_analysis(
             analysis_id, {k: body[k] for k in fields}, served, registry
@@ -184,7 +181,7 @@ def load_resolved(
 def _resolve_analysis(
     analysis_id: str,
     document: dict[str, Any],
-    served: dict[str, Entry],
+    served: dict[str, ServedModel],
     registry: Registry,
 ) -> Analysis:
     """Resolve an analysis document against the given served models alone.
@@ -201,16 +198,16 @@ def _resolve_analysis(
     Raises:
         ResolvedAnalysisInvalid: If the document doesn't resolve.
     """
-    kinds = {SERVED_MODELS: ServedModels(), FOLDER: Analyses()}
-    references = References(kinds)
-    references.entries[SERVED_MODELS] = served
     ctx = ResolveContext(
-        registry, references, lambda _: f"{FOLDER}/{analysis_id}.yaml", analysis_id
+        registry,
+        lambda _: f"{FOLDER}/{analysis_id}.yaml",
+        analysis_id,
+        served_models=served,
     )
-    value = Analyses().resolve(document, ctx)
-    if ctx.errors or value is None:
+    analysis = build_analysis(document, ctx)
+    if ctx.errors or analysis is None:
         raise CatalogInvalid(ctx.errors)
-    return cast("Analysis", value)
+    return analysis
 
 
 def _component(component: Component) -> dict[str, Any]:

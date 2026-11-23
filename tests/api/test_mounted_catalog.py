@@ -26,14 +26,14 @@ SMALL = served_document()
 
 
 def heatmap() -> dict[str, Any]:
-    return load_catalog(CATALOG).entries("analyses")["prostate-heatmap"].document
+    return load_catalog(CATALOG).analyses["prostate-heatmap"].declaration
 
 
 def prostate() -> dict[str, Any]:
-    entry = load_catalog(CATALOG, "rationai-test").entries("served-models")[
+    entry = load_catalog(CATALOG, "rationai-test").served_models[
         "prostate-classifier-1"
     ]
-    return entry.document
+    return entry.declaration
 
 
 def mount(
@@ -49,7 +49,7 @@ def mount(
 
 
 def served_ids(catalog: MountedCatalog) -> list[str]:
-    return list(catalog.resolved.entries("served-models"))
+    return list(catalog.resolved.served_models)
 
 
 def test_a_changed_catalog_is_picked_up_in_place(tmp_path: Path) -> None:
@@ -106,9 +106,9 @@ def test_analyses_load_beside_the_served_models_they_call(tmp_path: Path) -> Non
 
     catalog = MountedCatalog(directory)
 
-    (analysis,) = catalog.resolved.entries("analyses").values()
+    (analysis,) = catalog.resolved.analyses.values()
     assert analysis.id == "prostate-heatmap"
-    assert list(analysis.value.models) == ["prostate-classifier-1"]
+    assert list(analysis.models) == ["prostate-classifier-1"]
 
 
 def test_an_analysis_naming_an_undeployed_served_model_names_it(
@@ -133,7 +133,7 @@ def test_a_reload_brings_new_analyses(tmp_path: Path) -> None:
     )
     catalog.refresh()
 
-    assert list(catalog.resolved.entries("analyses")) == ["prostate-heatmap"]
+    assert list(catalog.resolved.analyses) == ["prostate-heatmap"]
 
 
 async def until(condition: Callable[[], bool]) -> None:

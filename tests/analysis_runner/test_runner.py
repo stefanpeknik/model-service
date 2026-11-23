@@ -52,7 +52,7 @@ def analysis(
         sinks: {sinks}
         """,
     )
-    return load_catalog(root, registry=REGISTRY).entries("analyses")["a1"].value
+    return load_catalog(root, registry=REGISTRY).analyses["a1"]
 
 
 class Model:

@@ -19,8 +19,6 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from model_service.api.catalog_files import CatalogError, read_catalog
-from model_service.catalog.analyses import FOLDER as ANALYSES
-from model_service.catalog.served_models import FOLDER as SERVED_MODELS
 
 
 if TYPE_CHECKING:
@@ -96,8 +94,8 @@ class MountedCatalog:
         self._current, self._fingerprint, self._error = catalog, seen, None
         logger.info(
             "model catalog reloaded: %s; analyses: %s",
-            ", ".join(catalog.entries(SERVED_MODELS)) or "no models",
-            ", ".join(catalog.entries(ANALYSES)) or "none",
+            ", ".join(catalog.served_models) or "no models",
+            ", ".join(catalog.analyses) or "none",
         )
         return True
 

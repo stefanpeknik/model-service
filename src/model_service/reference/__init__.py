@@ -5,7 +5,7 @@ the format modules and `catalog/`; `tools/generate.py` writes them and a
 test fails when the committed copies differ. The generated files are:
 
 - `catalog/.schemas/<folder>.schema.json` and `<folder>.patch.schema.json`
-  for each document kind;
+  for served-model and analysis files;
 - the `# yaml-language-server: $schema=…` first line of each catalog file;
 - `docs/reference/components.md`, `served-models.md`, `analyses.md` and
   `formats.md`.
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from model_service.catalog import DEFAULT_KINDS, load_catalog
+from model_service.catalog import load_catalog
 from model_service.reference.analyses_page import analyses_page
 from model_service.reference.components_page import components_page
 from model_service.reference.formats_page import formats_page
@@ -43,8 +43,8 @@ def generated(repo: Path) -> dict[Path, str]:
     registry = default_registry()
     catalog = load_catalog(repo / CATALOG)
     return {
-        **schema_files(DEFAULT_KINDS, registry, CATALOG),
-        **linked_files(DEFAULT_KINDS, repo, CATALOG),
+        **schema_files(registry, CATALOG),
+        **linked_files(repo, CATALOG),
         REFERENCE / "components.md": components_page(registry, catalog),
         REFERENCE / "served-models.md": served_models_page(catalog, repo / CATALOG),
         REFERENCE / "analyses.md": analyses_page(catalog),

@@ -58,7 +58,7 @@ def analysis(root: Path, *, stride: float = 0.5, size: int = 1) -> Analysis:
         sinks: [{{use: score_grid, output: heatmap}}]
         """,
     )
-    return load_catalog(catalog, registry=REGISTRY).entries("analyses")["a1"].value
+    return load_catalog(catalog, registry=REGISTRY).analyses["a1"]
 
 
 def checkerboard(width: int, height: int) -> np.ndarray:

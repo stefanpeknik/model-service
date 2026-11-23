@@ -24,7 +24,6 @@ from model_service.api.http.errors import ERRORS
 from model_service.api.http.scheduling import require_idempotency_key, submit
 from model_service.api.http.synchronous import run_synchronously, runs_unavailable
 from model_service.api.scheduler.public import AnalysisScheduleRequest, ScheduleResult
-from model_service.catalog.analyses import FOLDER
 from model_service.contracts.caller_request import RunRequest
 from model_service.contracts.invocation import Deadline
 from model_service.contracts.json_values import JsonValue
@@ -175,9 +174,7 @@ def create_router(
         Returns:
             Every analysis with its inputs, outputs, settings and models.
         """
-        return [
-            analysis_view(entry.value) for entry in catalog().entries(FOLDER).values()
-        ]
+        return [analysis_view(analysis) for analysis in catalog().analyses.values()]
 
     @router.post(
         "/{analysis_id}/run",

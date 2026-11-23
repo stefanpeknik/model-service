@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from model_service.catalog.analyses import FOLDER, ModelStep
-from model_service.catalog.analyses.kind import Fields
+from model_service.catalog.analyses.document import Fields
 from model_service.formats.known import get_format
 from model_service.reference.markdown import (
     GENERATED,
@@ -19,7 +19,7 @@ from model_service.reference.markdown import (
 
 
 if TYPE_CHECKING:
-    from model_service.catalog import Catalog, Entry
+    from model_service.catalog import Catalog
     from model_service.catalog.analyses import Analysis
     from model_service.catalog.analyses.exposure import EmpaiaExposure
 
@@ -53,23 +53,22 @@ def analyses_page(catalog: Catalog) -> str:
             ],
         ),
     ]
-    for entry in catalog.entries(FOLDER).values():
-        parts += _analysis(entry)
+    for analysis in catalog.analyses.values():
+        parts += _analysis(analysis)
     return "\n\n".join(p for p in parts if p) + "\n"
 
 
-def _analysis(entry: Entry) -> list[str]:
+def _analysis(analysis: Analysis) -> list[str]:
     """One analysis's section.
 
     Args:
-        entry: The analysis's catalog entry.
+        analysis: The analysis.
 
     Returns:
         The section's Markdown blocks.
     """
-    analysis: Analysis = entry.value
-    written = entry.document
-    file = entry.file
+    written = analysis.declaration
+    file = f"catalog/{FOLDER}/{analysis.id}.yaml"
     rows = [
         ["Source", code(written["source"])],
         ["Tiles", _tiles(analysis)],

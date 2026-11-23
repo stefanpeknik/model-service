@@ -18,7 +18,7 @@ CATALOG = REPO / "catalog"
 
 def test_a_served_model_deploys_on_the_generic_host_with_its_declaration() -> None:
     model_id = "episeg-1"
-    entry = load_catalog(CATALOG).entries("served-models")[model_id]
+    entry = load_catalog(CATALOG).served_models[model_id]
 
     app = serve_application(entry, cache_root="/mnt/cache/trt_cache")
     (deployment,) = app.pop("deployments")
@@ -32,13 +32,13 @@ def test_a_served_model_deploys_on_the_generic_host_with_its_declaration() -> No
     assert deployment["name"] == "ServedModel"
     assert user_config == {
         "id": model_id,
-        "declaration": entry.document,
+        "declaration": entry.declaration,
         "cache_root": "/mnt/cache/trt_cache",
     }
 
 
 def test_the_host_reads_back_the_model_the_catalog_resolved() -> None:
-    entry = load_catalog(CATALOG).entries("served-models")["prostate-classifier-1"]
+    entry = load_catalog(CATALOG).served_models["prostate-classifier-1"]
     (deployment,) = serve_application(entry, cache_root="/cache")["deployments"]
 
     model, cache_root = host_config(deployment["user_config"])
@@ -46,7 +46,7 @@ def test_the_host_reads_back_the_model_the_catalog_resolved() -> None:
         {k: v for k, v in deployment["user_config"].items() if k != "cache_root"}
     )
 
-    assert (model.id, model.digest) == ("prostate-classifier-1", entry.value.digest)
+    assert (model.id, model.digest) == ("prostate-classifier-1", entry.digest)
     assert (cache_root, default_root) == (Path("/cache"), Path(DEFAULT_CACHE_ROOT))
 
 
@@ -62,7 +62,7 @@ def test_serving_limits_follow_the_batch_size_unless_given(tmp_path: Path) -> No
         "resources: {gpus: 0.5, memory_gib: 1.5}\n"
         "serving: {max_replicas: 1, max_queued_requests: 10}\n"
     )
-    entry = load_catalog(root).entries("served-models")["m1"]
+    entry = load_catalog(root).served_models["m1"]
 
     (deployment,) = serve_application(entry, cache_root="/c")["deployments"]
 

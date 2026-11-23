@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import ConfigDict, create_model
@@ -36,6 +36,7 @@ class Analysis:
         inputs: Input name to whether a run must give it; the union of what
             the components read.
         columns: The columns that reach the sinks, with every dimension known.
+        declaration: The file after the environment's patch.
         empaia: The EMPAIA app it becomes, from `expose.empaia`; None if
             it is not offered in EMPAIA.
     """
@@ -47,6 +48,7 @@ class Analysis:
     sinks: tuple[Sink, ...]
     inputs: Mapping[str, bool]
     columns: Mapping[str, Col]
+    declaration: dict[str, Any] = field(compare=False, repr=False)
     empaia: EmpaiaExposure | None = None
 
     @property

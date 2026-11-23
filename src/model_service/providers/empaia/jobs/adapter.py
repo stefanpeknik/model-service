@@ -262,15 +262,12 @@ class EmpaiaProviderAdapter(ProviderAdapter):
         Raises:
             InvalidScheduleRequestError: It is not deployed or has no `expose.empaia`.
         """
-        from model_service.catalog.analyses import FOLDER
-
-        entries = self._catalog().entries(FOLDER) if self._catalog else {}
-        entry = entries.get(analysis_id)
-        if entry is None or entry.value.empaia is None:
+        found = self._catalog().analyses if self._catalog else {}
+        analysis = found.get(analysis_id)
+        if analysis is None or analysis.empaia is None:
             raise InvalidScheduleRequestError(
                 f"analysis {analysis_id!r} is not offered in EMPAIA"
             )
-        analysis: Analysis = entry.value
         return analysis
 
     async def finish(

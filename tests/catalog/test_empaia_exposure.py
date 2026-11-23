@@ -47,8 +47,8 @@ def errors(root: Path) -> list[str]:
 
 @pytest.mark.parametrize("environment", [None, "rationai-test"])
 def test_the_prostate_heatmap_is_the_prostate_app(environment: str | None) -> None:
-    analysis = load_catalog(CATALOG, environment).entries("analyses")
-    app = analysis["prostate-heatmap"].value.empaia
+    analysis = load_catalog(CATALOG, environment).analyses
+    app = analysis["prostate-heatmap"].empaia
 
     # EMPAIA knows the app by these; changing them registers a new app.
     assert (app.name, app.name_short) == ("Prostate cancer heatmap", "ProstHM")
@@ -64,7 +64,7 @@ def test_standalone_parameters_are_per_run_settings(root: Path) -> None:
         APP.replace("standalone:", "standalone: {parameters: [stride_fraction]}"),
     )
 
-    app = load_catalog(root, registry=REGISTRY).entries("analyses")["a1"].value.empaia
+    app = load_catalog(root, registry=REGISTRY).analyses["a1"].empaia
 
     assert app.parameters == ("stride_fraction",)
 
@@ -72,7 +72,7 @@ def test_standalone_parameters_are_per_run_settings(root: Path) -> None:
 def test_an_analysis_without_expose_is_no_app(root: Path) -> None:
     write(root, "analyses/a1.yaml", APP[: APP.index("    expose:")])
 
-    analysis = load_catalog(root, registry=REGISTRY).entries("analyses")["a1"].value
+    analysis = load_catalog(root, registry=REGISTRY).analyses["a1"]
 
     assert analysis.empaia is None
 

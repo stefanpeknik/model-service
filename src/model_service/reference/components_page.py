@@ -15,9 +15,7 @@ from components.base import (
     Source,
     per_run_fields,
 )
-from model_service.catalog.analyses import FOLDER as ANALYSES
 from model_service.catalog.analyses import ModelStep
-from model_service.catalog.served_models import FOLDER as SERVED_MODELS
 from model_service.reference.markdown import (
     GENERATED,
     code,
@@ -32,6 +30,7 @@ from model_service.reference.markdown import (
 if TYPE_CHECKING:
     from components.base import Col, Component, Slot
     from model_service.catalog import Catalog
+    from model_service.catalog.analyses import Analysis
     from model_service.registry import Registry
 
 
@@ -240,31 +239,37 @@ def _used_in(catalog: Catalog) -> dict[tuple[str, str], list[str]]:
     Returns:
         Each component's links, in file order, without repeats.
     """
+    named: list[tuple[str, list[Component]]] = [
+        (
+            f"[`{model.id}`](served-models.md#{model.id})",
+            [model.weights, model.runtime, *model.pre, *model.post],
+        )
+        for model in catalog.served_models.values()
+    ]
+    named += [
+        (f"[`{analysis.id}`](analyses.md#{analysis.id})", _components_of(analysis))
+        for analysis in catalog.analyses.values()
+    ]
     used: dict[tuple[str, str], list[str]] = defaultdict(list)
-    for folder in (SERVED_MODELS, ANALYSES):
-        for entry in catalog.entries(folder).values():
-            page = "served-models" if folder == SERVED_MODELS else "analyses"
-            link = f"[`{entry.id}`]({page}.md#{entry.id})"
-            for component in _components_of(entry.value):
-                key = (component.kind, component.name)
-                if link not in used[key]:
-                    used[key].append(link)
+    for link, components in named:
+        for component in components:
+            key = (component.kind, component.name)
+            if link not in used[key]:
+                used[key].append(link)
     return used
 
 
-def _components_of(value: Any) -> list[Component]:
-    """Every component a resolved served model or analysis names.
+def _components_of(analysis: Analysis) -> list[Component]:
+    """Every component an analysis names.
 
     Args:
-        value: A resolved served model or analysis.
+        analysis: The analysis.
 
     Returns:
         Its components, model steps left out.
     """
-    if hasattr(value, "runtime"):
-        return [value.weights, value.runtime, *value.pre, *value.post]
-    steps = [s for s in value.steps if not isinstance(s, ModelStep)]
-    exposed = []
-    if value.empaia is not None:
-        exposed = [*value.empaia.inputs.values(), *value.empaia.outputs.values()]
-    return [value.source, *steps, *value.sinks, *exposed]
+    steps = [s for s in analysis.steps if not isinstance(s, ModelStep)]
+    exposed: list[Component] = []
+    if analysis.empaia is not None:
+        exposed = [*analysis.empaia.inputs.values(), *analysis.empaia.outputs.values()]
+    return [analysis.source, *steps, *analysis.sinks, *exposed]

@@ -46,8 +46,8 @@ NEW_NAMESPACE = "org.empaia.rationai.prostate_heatmap.v3.0"
 
 
 def prostate_app(environment: str | None = None) -> AnalysisApp:
-    analyses = load_catalog(CATALOG, environment).entries("analyses")
-    return analysis_app(analyses["prostate-heatmap"].value)
+    analyses = load_catalog(CATALOG, environment).analyses
+    return analysis_app(analyses["prostate-heatmap"])
 
 
 def tmp_app(tmp_path: Path, expose: str) -> AnalysisApp:
@@ -71,8 +71,8 @@ def tmp_app(tmp_path: Path, expose: str) -> AnalysisApp:
         """.rstrip(" ")
         + "\n".join(f"            {line}" for line in expose.splitlines()),
     )
-    analyses = load_catalog(root, registry=REGISTRY).entries("analyses")
-    return analysis_app(analyses["a1"].value)
+    analyses = load_catalog(root, registry=REGISTRY).analyses
+    return analysis_app(analyses["a1"])
 
 
 @pytest.mark.parametrize("environment", [None, "rationai-test"])
@@ -101,7 +101,7 @@ def test_every_exposed_analysis_yields_a_valid_app_in_every_environment() -> Non
         catalog = load_catalog(CATALOG, environment)
         apps = analysis_apps(catalog)
 
-        exposed = [i for i, e in catalog.entries("analyses").items() if e.value.empaia]
+        exposed = [i for i, e in catalog.analyses.items() if e.empaia]
         assert [app.analysis_id for app in apps] == exposed
         assert "prostate-heatmap" in exposed
 

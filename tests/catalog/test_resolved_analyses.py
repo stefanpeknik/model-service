@@ -46,7 +46,7 @@ def test_a_run_resolves_every_option_and_names_its_served_models(
     catalog: Catalog,
 ) -> None:
     resolved = resolve_run(catalog, "a1", {"stride_fraction": 0.25})
-    m1 = catalog.entries("served-models")["m1"]
+    m1 = catalog.served_models["m1"]
 
     assert resolved.document["source"] == {
         "use": "slide_tiles",
@@ -60,7 +60,7 @@ def test_a_run_resolves_every_option_and_names_its_served_models(
     assert resolved.document["steps"] == [{"model": "m1"}]
     assert resolved.document["sinks"] == [{"use": "score_grid", "output": "heatmap"}]
     assert resolved.document["served_models"] == {
-        "m1": {"digest": m1.value.digest, "declaration": m1.document}
+        "m1": {"digest": m1.digest, "declaration": m1.declaration}
     }
     assert resolved.analysis.settings()["stride_fraction"] == 0.25
 
@@ -73,15 +73,13 @@ def test_the_runner_reads_back_exactly_what_was_resolved(catalog: Catalog) -> No
     assert loaded.document == resolved.document
     assert loaded.digest == resolved.digest
     assert loaded.analysis.settings() == resolved.analysis.settings()
-    assert loaded.model_digests == {
-        "m1": catalog.entries("served-models")["m1"].value.digest
-    }
+    assert loaded.model_digests == {"m1": catalog.served_models["m1"].digest}
 
 
 @pytest.mark.parametrize("environment", [None, "rationai-test"])
 def test_the_repo_analyses_read_back(environment: str | None) -> None:
     catalog = load_catalog(CATALOG, environment)
-    for analysis_id in catalog.entries("analyses"):
+    for analysis_id in catalog.analyses:
         resolved = resolve_run(catalog, analysis_id)
 
         assert load_resolved(resolved.document).document == resolved.document

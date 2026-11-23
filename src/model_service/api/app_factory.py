@@ -40,9 +40,7 @@ from model_service.api.scheduler.store.postgres.repository import (
 from model_service.api.scheduler.store.protected_context import ProtectedContextCipher
 from model_service.api.scheduler.targets import CapacityKind
 from model_service.api.synchronous_runs import SynchronousAnalysisService
-from model_service.catalog.analyses import FOLDER as ANALYSES
 from model_service.catalog.analyses import resolve_run
-from model_service.catalog.served_models import FOLDER as SERVED_MODELS
 from model_service.providers.registry import PROVIDERS
 from model_service.providers.standalone.provider import STANDALONE_PROVIDER
 
@@ -112,9 +110,9 @@ def capacity_limits(catalog: Callable[[], Catalog], default: int) -> CapacityLim
             How many attempts may hold a slot at once.
         """
         if key.kind is CapacityKind.MODEL:
-            entry = catalog().entries(SERVED_MODELS).get(key.id)
-            if entry is not None and entry.value.serving.max_concurrent_runs:
-                return int(entry.value.serving.max_concurrent_runs)
+            model = catalog().served_models.get(key.id)
+            if model is not None and model.serving.max_concurrent_runs:
+                return int(model.serving.max_concurrent_runs)
         return default
 
     return limit
@@ -367,8 +365,8 @@ def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
             client,
             origin=config.ray_serve_origin,
             routes=lambda: (
-                [f"/{model_id}" for model_id in catalog().entries(SERVED_MODELS)]
-                + (["/analyses"] if catalog().entries(ANALYSES) else [])
+                [f"/{model_id}" for model_id in catalog().served_models]
+                + (["/analyses"] if catalog().analyses else [])
             ),
         ),
         catalog_status=mounted.status,

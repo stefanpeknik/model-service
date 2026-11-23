@@ -14,8 +14,6 @@ from fastapi import APIRouter
 
 from model_service.api.http.auth import Access, Action
 from model_service.api.http.errors import ERRORS, lookup_error
-from model_service.catalog.analyses import FOLDER as ANALYSES
-from model_service.catalog.served_models import FOLDER as SERVED_MODELS
 from model_service.contracts.failures import UnknownModelError
 from model_service.contracts.json_values import JsonValue
 
@@ -56,17 +54,17 @@ def model_view(model_id: str, catalog: Catalog) -> ModelView:
     Raises:
         UnknownModelError: If no deployed served model has this ID.
     """
-    entry = catalog.entries(SERVED_MODELS).get(model_id)
-    if entry is None:
+    model = catalog.served_models.get(model_id)
+    if model is None:
         raise UnknownModelError(model_id)
     return ModelView(
         id=model_id,
-        declaration=entry.document,
-        digest=entry.value.digest,
+        declaration=model.declaration,
+        digest=model.digest,
         analyses=[
             analysis.id
-            for analysis in catalog.entries(ANALYSES).values()
-            if model_id in analysis.value.models
+            for analysis in catalog.analyses.values()
+            if model_id in analysis.models
         ],
     )
 
@@ -94,7 +92,7 @@ def create_router(catalog: Callable[[], Catalog], access: Access) -> APIRouter:
             Every served model in the catalog.
         """
         current = catalog()
-        return [model_view(i, current) for i in current.entries(SERVED_MODELS)]
+        return [model_view(i, current) for i in current.served_models]
 
     @router.get(
         "/{model_id}",

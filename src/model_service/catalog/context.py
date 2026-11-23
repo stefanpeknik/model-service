@@ -1,9 +1,10 @@
-"""What a document kind resolves one document with.
+"""What one catalog document is resolved with.
 
 The context resolves `{use: <name>, ...options}` values against the component
-registry, validates plain fields, follows references to earlier kinds and
-collects every mistake in the standard format, attributed to the file that
-supplied the value (the base file or the environment's patch).
+registry, validates plain fields, follows `{model: <id>}` references to the
+served models resolved before and collects every mistake in the standard
+format, attributed to the file that supplied the value (the base file or the
+environment's patch).
 """
 
 from __future__ import annotations
@@ -20,30 +21,15 @@ from model_service.catalog.validation import problems
 
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Mapping, Set
 
     from pydantic import BaseModel
 
     from components.base.component import Component
     from components.base.slots import Slot
-    from model_service.catalog.catalog import Entry
     from model_service.catalog.errors import YamlPath
-    from model_service.catalog.kinds import DocumentKind
+    from model_service.catalog.served_models import ServedModel
     from model_service.registry import Registry
-
-
-class References:
-    """The documents resolved so far, for references between kinds."""
-
-    def __init__(self, kinds: Mapping[str, DocumentKind]) -> None:
-        """Start empty.
-
-        Args:
-            kinds: Every document kind by folder.
-        """
-        self.kinds = kinds
-        self.entries: dict[str, dict[str, Entry]] = {f: {} for f in kinds}
-        self.failed: dict[str, set[str]] = {f: set() for f in kinds}
 
 
 class ResolveContext:
@@ -52,21 +38,24 @@ class ResolveContext:
     def __init__(
         self,
         registry: Registry,
-        references: References,
         file_of: Callable[[YamlPath], str],
         document_id: str = "",
+        served_models: Mapping[str, ServedModel] | None = None,
+        failed_models: Set[str] = frozenset(),
     ) -> None:
-        """Bind the registry, earlier documents and file attribution.
+        """Bind the registry, the served models and file attribution.
 
         Args:
             registry: The components catalog files may name.
-            references: The documents of earlier kinds.
             file_of: The file that supplied the value at a path.
             document_id: The document's ID, its file name without `.yaml`.
+            served_models: The served models an analysis may call, by ID.
+            failed_models: IDs of served-model files that failed to resolve.
         """
         self.document_id = document_id
         self.registry = registry
-        self.references = references
+        self.served_models = served_models or {}
+        self.failed_models = failed_models
         self.file_of = file_of
         self.errors: list[CatalogError] = []
 
@@ -147,31 +136,28 @@ class ResolveContext:
                 self._report((*path, *loc), problem, hint)
             return None
 
-    def reference(self, folder: str, value: object, path: YamlPath) -> Entry | None:
-        """Follow a reference to a document of an earlier kind.
+    def served_model(self, value: object, path: YamlPath) -> ServedModel | None:
+        """Follow a `{model: <id>}` reference to a served model.
 
-        A reference to a document that failed to resolve returns None without
-        a second error; that document's own errors already say what's wrong.
+        A reference to a served model that failed to resolve returns None
+        without a second error; its own errors already say what's wrong.
 
         Args:
-            folder: The referenced kind's folder.
             value: The referenced ID.
             path: Where the reference sits.
 
         Returns:
-            The referenced entry, or None.
+            The served model, or None.
         """
-        entries = self.references.entries[folder]
-        if isinstance(value, str) and value in entries:
-            return entries[value]
-        if isinstance(value, str) and value in self.references.failed[folder]:
+        if isinstance(value, str) and value in self.served_models:
+            return self.served_models[value]
+        if isinstance(value, str) and value in self.failed_models:
             return None
-        title = self.references.kinds[folder].title
         self.error(
             path,
-            f"no {title} `{value}`",
-            f"{title.capitalize()}s: {_names(sorted(entries))}",
-            f"add catalog/{folder}/{value}.yaml or fix the name",
+            f"no served model `{value}`",
+            f"Served models: {_names(sorted(self.served_models))}",
+            f"add catalog/served-models/{value}.yaml or fix the name",
         )
         return None
 

@@ -8,13 +8,9 @@ Ray, so the chart's tests and the API can use them.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from model_service.catalog.served_models import ServedModel, resolve_served_model
-
-
-if TYPE_CHECKING:
-    from model_service.catalog import Entry
 
 
 IMPORT_PATH = "model_service.served_model.serve:app"
@@ -24,7 +20,7 @@ GIB = 1024**3
 
 
 def serve_application(
-    entry: Entry, *, cache_root: str, setup_timeout_seconds: int | None = None
+    model: ServedModel, *, cache_root: str, setup_timeout_seconds: int | None = None
 ) -> dict[str, Any]:
     """One `serveConfigV2` application for a served model.
 
@@ -32,7 +28,7 @@ def serve_application(
     from the environment's values; everything else is here.
 
     Args:
-        entry: The served model's catalog entry.
+        model: The served model, as the catalog resolved it.
         cache_root: The environment's cache root, on a shared volume.
         setup_timeout_seconds: The environment's limit on setting up a
             replica's runtime environment (Ray's default, 600, when None).
@@ -43,7 +39,6 @@ def serve_application(
         carries the Serve options and the `user_config`. With a setup
         timeout, the application's `runtime_env.config` carries it.
     """
-    model: ServedModel = entry.value
     application: dict[str, Any] = {
         "name": model.id,
         "route_prefix": f"/{model.id}",
@@ -60,7 +55,7 @@ def serve_application(
                 **deployment_options(model),
                 "user_config": {
                     "id": model.id,
-                    "declaration": entry.document,
+                    "declaration": model.declaration,
                     "cache_root": cache_root,
                 },
             }

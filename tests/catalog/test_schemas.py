@@ -14,7 +14,6 @@ import pytest
 import yaml
 from jsonschema import Draft202012Validator
 
-from model_service.catalog import DEFAULT_KINDS
 from model_service.reference.schemas import schema_files
 from model_service.registry import default_registry
 
@@ -22,7 +21,7 @@ from model_service.registry import default_registry
 CATALOG = Path(__file__).resolve().parents[2] / "catalog"
 SCHEMAS = {
     path.name: Draft202012Validator(json.loads(text))
-    for path, text in schema_files(DEFAULT_KINDS, default_registry(), Path()).items()
+    for path, text in schema_files(default_registry(), Path()).items()
 }
 
 

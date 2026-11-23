@@ -79,7 +79,7 @@ def catalog_data(objects: dict[tuple[str, str], Any]) -> dict[str, Any]:
 def test_a_served_model_deploys_as_serve_application_builds_it(
     values: tuple[Path, ...], environment: str | None, model_id: str, mlflow: str
 ) -> None:
-    entry = load_catalog(CATALOG, environment).entries("served-models")[model_id]
+    entry = load_catalog(CATALOG, environment).served_models[model_id]
     expected = serve_application(
         entry, cache_root="/mnt/cache/trt_cache", setup_timeout_seconds=1800
     )
@@ -109,7 +109,7 @@ def test_the_base_values_serve_every_model_on_the_generic_host() -> None:
     apps = applications(render())
 
     assert set(apps) == {
-        *load_catalog(CATALOG).entries("served-models"),
+        *load_catalog(CATALOG).served_models,
         "analysis-runner",
     }
     assert {
@@ -120,16 +120,17 @@ def test_the_base_values_serve_every_model_on_the_generic_host() -> None:
 def test_the_api_catalog_carries_the_deployed_served_models() -> None:
     data = catalog_data(render(TEST_VALUES))
     catalog = load_catalog(CATALOG, "rationai-test")
-    entries = catalog.entries("served-models")
-    analyses = catalog.entries("analyses")
+    entries = catalog.served_models
+    analyses = catalog.analyses
 
     assert data["catalog.json"] == {
         "served-models": {
-            model_id: entries[model_id].document
+            model_id: entries[model_id].declaration
             for model_id in ("prostate-classifier-1", "virchow2", "prov-gigapath")
         },
         "analyses": {
-            analysis_id: analyses[analysis_id].document for analysis_id in TEST_ANALYSES
+            analysis_id: analyses[analysis_id].declaration
+            for analysis_id in TEST_ANALYSES
         },
     }
     # The catalog is all the API reads.
@@ -144,12 +145,12 @@ def test_the_api_reads_the_rendered_catalog(tmp_path: Path) -> None:
 
     catalog = MountedCatalog(tmp_path)
 
-    served = catalog.resolved.entries("served-models")
+    served = catalog.resolved.served_models
     assert sorted(served) == ["prostate-classifier-1", "prov-gigapath", "virchow2"]
-    assert served["prostate-classifier-1"].value.input.tile_size == 512
-    prostate = catalog.resolved.entries("analyses")["prostate-heatmap"].value
+    assert served["prostate-classifier-1"].input.tile_size == 512
+    prostate = catalog.resolved.analyses["prostate-heatmap"]
     assert prostate.empaia is not None
-    assert sorted(catalog.resolved.entries("analyses")) == sorted(TEST_ANALYSES)
+    assert sorted(catalog.resolved.analyses) == sorted(TEST_ANALYSES)
 
 
 def test_an_environment_deploys_a_named_subset_or_none() -> None:
@@ -225,9 +226,7 @@ def test_without_analyses_there_is_no_runner() -> None:
 def test_the_base_values_deploy_every_analysis() -> None:
     data = catalog_data(render())
 
-    assert set(data["catalog.json"]["analyses"]) == set(
-        load_catalog(CATALOG).entries("analyses")
-    )
+    assert set(data["catalog.json"]["analyses"]) == set(load_catalog(CATALOG).analyses)
 
 
 def test_an_analysis_calling_an_undeployed_served_model_fails_the_render() -> None:

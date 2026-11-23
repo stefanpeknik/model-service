@@ -7,6 +7,12 @@ identifies what it computes; the host reports it from `describe()`.
 """
 
 from model_service.catalog.served_models.declaration import ServedModel
+from model_service.catalog.served_models.document import (
+    FOLDER,
+    build_served_model,
+    resolve_served_model,
+    served_model_schema,
+)
 from model_service.catalog.served_models.fields import (
     Batching,
     EmbeddingOutput,
@@ -15,11 +21,6 @@ from model_service.catalog.served_models.fields import (
     Resources,
     ScoresOutput,
     Serving,
-)
-from model_service.catalog.served_models.kind import (
-    FOLDER,
-    ServedModels,
-    resolve_served_model,
 )
 
 
@@ -32,7 +33,8 @@ __all__ = [
     "Resources",
     "ScoresOutput",
     "ServedModel",
-    "ServedModels",
     "Serving",
+    "build_served_model",
     "resolve_served_model",
+    "served_model_schema",
 ]

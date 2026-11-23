@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from model_service.catalog.analyses import FOLDER as ANALYSES
 from model_service.catalog.served_models import FOLDER, ScoresOutput
 from model_service.catalog.served_models.fields import Fields
 from model_service.reference.markdown import GENERATED, code, facts, table
@@ -32,10 +31,10 @@ def served_models_page(catalog: Catalog, root: Path) -> str:
         The page.
     """
     callers: dict[str, list[str]] = {}
-    for entry in catalog.entries(ANALYSES).values():
-        for model_id in entry.value.models:
+    for analysis in catalog.analyses.values():
+        for model_id in analysis.models:
             callers.setdefault(model_id, []).append(
-                f"[`{entry.id}`](analyses.md#{entry.id})"
+                f"[`{analysis.id}`](analyses.md#{analysis.id})"
             )
     parts = [
         GENERATED,
@@ -55,9 +54,9 @@ def served_models_page(catalog: Catalog, root: Path) -> str:
             ],
         ),
     ]
-    for model_id, entry in catalog.entries(FOLDER).items():
-        model: ServedModel = entry.value
-        written = entry.document
+    for model_id, model in catalog.served_models.items():
+        written = model.declaration
+        file = f"catalog/{FOLDER}/{model_id}.yaml"
         rows = [
             ["Weights", code(written["weights"])],
             ["Runtime", code(written["runtime"])],
@@ -74,7 +73,7 @@ def served_models_page(catalog: Catalog, root: Path) -> str:
             ["Resources", code(written["resources"])],
             ["Called by", ", ".join(callers.get(model_id, [])) or "no analysis"],
             ["Patched in", _patches(root, model_id) or "no environment"],
-            ["File", f"[`catalog/{FOLDER}/{model_id}.yaml`](../../{entry.file})"],
+            ["File", f"[`{file}`](../../{file})"],
         ]
         parts += [f"## `{model_id}`", facts(rows)]
     return "\n\n".join(parts) + "\n"

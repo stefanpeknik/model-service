@@ -40,7 +40,7 @@ def write(root: Path, name: str, text: str) -> None:
 
 
 def served(root: Path, model_id: str = "m1") -> ServedModel:
-    return load_catalog(root).entries("served-models")[model_id].value
+    return load_catalog(root).served_models[model_id]
 
 
 def test_the_digest_follows_what_the_model_computes_not_how_it_is_scheduled(

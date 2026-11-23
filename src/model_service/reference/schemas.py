@@ -1,6 +1,6 @@
 """JSON Schema files for catalog files, and the line linking each file to its schema.
 
-Every document kind with a schema gets `catalog/.schemas/<folder>.schema.json`
+Served-model and analysis files each get `catalog/.schemas/<folder>.schema.json`
 and, for environment patches, `<folder>.patch.schema.json`. Each catalog file
 starts with a `# yaml-language-server: $schema=<relative path>` comment, which
 editors with the YAML language server read; the loader and Helm ignore it.
@@ -12,14 +12,12 @@ import json
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
-from model_service.catalog.loader import ENVIRONMENTS
+from model_service.catalog import analyses, served_models
+from model_service.catalog.loader import ENVIRONMENTS, FOLDERS
 from model_service.catalog.schema import file_schema, patch_schema
 
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
-
-    from model_service.catalog import DocumentKind
     from model_service.registry import Registry
 
 
@@ -27,46 +25,41 @@ SCHEMAS = ".schemas"
 MODELINE = "# yaml-language-server: $schema="
 
 
-def schema_files(
-    kinds: Sequence[DocumentKind], registry: Registry, catalog: Path
-) -> dict[Path, str]:
-    """The schema of each document kind, and of its patches.
+def schema_files(registry: Registry, catalog: Path) -> dict[Path, str]:
+    """The schema of served-model and analysis files, and of their patches.
 
     Args:
-        kinds: The document kinds.
         registry: The components files may name.
         catalog: The catalog directory, relative to the repo.
 
     Returns:
         File contents by path relative to the repo.
     """
+    models = {
+        served_models.FOLDER: served_models.served_model_schema(registry),
+        analyses.FOLDER: analyses.analysis_schema(registry),
+    }
     files = {}
-    for kind in kinds:
-        model = kind.schema(registry)
-        if model is None:
-            continue
+    for folder, model in models.items():
         schema = file_schema(model)
-        files[catalog / SCHEMAS / f"{kind.folder}.schema.json"] = _json(schema)
-        files[catalog / SCHEMAS / f"{kind.folder}.patch.schema.json"] = _json(
+        files[catalog / SCHEMAS / f"{folder}.schema.json"] = _json(schema)
+        files[catalog / SCHEMAS / f"{folder}.patch.schema.json"] = _json(
             patch_schema(schema)
         )
     return files
 
 
-def linked_files(
-    kinds: Sequence[DocumentKind], repo: Path, catalog: Path
-) -> dict[Path, str]:
+def linked_files(repo: Path, catalog: Path) -> dict[Path, str]:
     """Every catalog file, starting with the line that links its schema.
 
     Args:
-        kinds: The document kinds; files of a kind without a schema are left out.
         repo: The repository root.
         catalog: The catalog directory, relative to `repo`.
 
     Returns:
         File contents by path relative to the repo.
     """
-    folders = {kind.folder for kind in kinds}
+    folders = set(FOLDERS)
     files = {}
     for path in sorted((repo / catalog).rglob("*.yaml")):
         relative = path.relative_to(repo / catalog)

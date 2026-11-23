@@ -9,7 +9,11 @@ executes, and `load_resolved` reads that document back on the runner.
 """
 
 from model_service.catalog.analyses.declaration import Analysis, AnalysisStep
-from model_service.catalog.analyses.kind import FOLDER, Analyses
+from model_service.catalog.analyses.document import (
+    FOLDER,
+    analysis_schema,
+    build_analysis,
+)
 from model_service.catalog.analyses.model_step import ModelStep
 from model_service.catalog.analyses.resolved import (
     ResolvedAnalysis,
@@ -21,12 +25,13 @@ from model_service.catalog.analyses.resolved import (
 
 __all__ = [
     "FOLDER",
-    "Analyses",
     "Analysis",
     "AnalysisStep",
     "ModelStep",
     "ResolvedAnalysis",
     "ResolvedAnalysisInvalid",
+    "analysis_schema",
+    "build_analysis",
     "load_resolved",
     "resolve_run",
 ]

@@ -281,7 +281,7 @@ async def test_runs_are_unavailable_without_a_runner() -> None:
 
 
 async def test_models_list_served_models_with_declarations_and_analyses() -> None:
-    served = CATALOG.entries("served-models")
+    served = CATALOG.served_models
     app = create_app(NoScheduler(), catalog=lambda: CATALOG)  # type: ignore[arg-type]
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://model-service"
@@ -305,5 +305,5 @@ async def test_models_list_served_models_with_declarations_and_analyses() -> Non
     assert prostate["declaration"]["weights"]["uri"].startswith(
         "mlflow-artifacts:/169/"
     )
-    assert prostate["digest"] == served["prostate-classifier-1"].value.digest
+    assert prostate["digest"] == served["prostate-classifier-1"].digest
     assert "virchow2-embeddings" in by_id["virchow2"]["analyses"]

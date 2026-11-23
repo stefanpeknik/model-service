@@ -2,13 +2,14 @@
 
 Layout, relative to the catalog root:
 
-- `<folder>/<id>.yaml`: one document per file, the file name is its ID; each
-  document kind owns one folder (`served-models/`, `analyses/`);
+- `served-models/<id>.yaml` and `analyses/<id>.yaml`: one document per file,
+  the file name is its ID;
 - `environments/<env>/<folder>/<id>.yaml`: a patch holding only what differs
   in that environment, deep-merged over the base file.
 
-Every file is read and every document resolved before anything is reported,
-so one load lists every mistake.
+Served models resolve first, so analyses can call them. Every file is read
+and every document resolved before anything is reported, so one load lists
+every mistake.
 """
 
 from __future__ import annotations
@@ -18,26 +19,27 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from model_service.catalog.catalog import Catalog, Entry
-from model_service.catalog.context import References, ResolveContext
-from model_service.catalog.default_kinds import DEFAULT_KINDS
+from model_service.catalog import analyses, served_models
+from model_service.catalog.catalog import Catalog
+from model_service.catalog.context import ResolveContext
 from model_service.catalog.errors import CatalogError, CatalogInvalid
 from model_service.catalog.merge import deep_merge
 from model_service.registry import default_registry
 
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Mapping
     from pathlib import Path
 
     from model_service.catalog.errors import YamlPath
-    from model_service.catalog.kinds import DocumentKind
+    from model_service.catalog.served_models import ServedModel
     from model_service.registry import Registry
 
 
 ENVIRONMENTS = "environments"
 ID = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 MAPPING = "A mapping of keys to values"
+FOLDERS = (served_models.FOLDER, analyses.FOLDER)
 
 
 def environments(root: Path) -> list[str]:
@@ -61,7 +63,6 @@ def load_catalog(
     root: Path,
     environment: str | None = None,
     *,
-    kinds: Sequence[DocumentKind] = DEFAULT_KINDS,
     registry: Registry | None = None,
 ) -> Catalog:
     """Read, patch and resolve every document of a catalog directory.
@@ -69,7 +70,6 @@ def load_catalog(
     Args:
         root: The catalog directory.
         environment: Whose patches to apply; None for the base files alone.
-        kinds: The document kinds, in resolution order.
         registry: The components documents may name; this repo's by default.
 
     Returns:
@@ -78,7 +78,7 @@ def load_catalog(
     Raises:
         CatalogInvalid: With every error found, in the standard format.
     """
-    loader = _Loader(root, kinds, registry or default_registry())
+    loader = _Loader(root, registry or default_registry())
     if environment is not None and environment not in environments(root):
         loader.file_error(
             root / ENVIRONMENTS / environment,
@@ -96,18 +96,14 @@ def load_catalog(
 class _Loader:
     """One load: the files found, the errors so far."""
 
-    def __init__(
-        self, root: Path, kinds: Sequence[DocumentKind], registry: Registry
-    ) -> None:
+    def __init__(self, root: Path, registry: Registry) -> None:
         """Start a load of one catalog root.
 
         Args:
             root: The catalog folder.
-            kinds: The document kinds, in resolution order.
             registry: The components files may name.
         """
         self.root = root
-        self.kinds = {kind.folder: kind for kind in kinds}
         self.registry = registry
         self.errors: list[CatalogError] = []
 
@@ -134,7 +130,7 @@ class _Loader:
         self.errors.append(CatalogError(self.show(path), "", what, fits, hint))
 
     def load(self, environment: str | None) -> Catalog:
-        """Resolve every kind's documents in order.
+        """Resolve the served models, then the analyses.
 
         Args:
             environment: Whose patches to apply, or None for the base files.
@@ -143,22 +139,54 @@ class _Loader:
             The catalog; `self.errors` holds what failed.
         """
         bases, patches = self._files(environment)
-        references = References(self.kinds)
-        for folder, kind in self.kinds.items():
-            for path in bases[folder]:
-                self._resolve(
-                    kind, path, patches.pop((folder, path.stem), None), references
+        folder = served_models.FOLDER
+        models = self._folder(
+            folder, served_models.build_served_model, bases, patches, {}, set()
+        )
+        failed = {path.stem for path in bases[folder]} - models.keys()
+        found = self._folder(
+            analyses.FOLDER, analyses.build_analysis, bases, patches, models, failed
+        )
+        return Catalog(environment, models, found)
+
+    def _folder[T](
+        self,
+        folder: str,
+        build: Callable[[dict[str, Any], ResolveContext], T | None],
+        bases: dict[str, list[Path]],
+        patches: dict[tuple[str, str], Path],
+        models: Mapping[str, ServedModel],
+        failed: set[str],
+    ) -> dict[str, T]:
+        """Resolve every document of one folder and report stray patches.
+
+        Args:
+            folder: `served-models` or `analyses`.
+            build: Resolves one merged document through a context.
+            bases: Base files by folder.
+            patches: This environment's patches by (folder, file stem).
+            models: The served models an analysis may call.
+            failed: IDs of served-model files that failed to resolve.
+
+        Returns:
+            The resolved documents by ID.
+        """
+        resolved: dict[str, T] = {}
+        for path in bases[folder]:
+            patch = patches.get((folder, path.stem))
+            value = self._resolve(build, path, patch, models, failed)
+            if value is not None:
+                resolved[path.stem] = value
+        for (patched_folder, stem), path in sorted(patches.items()):
+            if patched_folder == folder and stem not in {p.stem for p in bases[folder]}:
+                known = ", ".join(p.name for p in bases[folder]) or "none"
+                self.file_error(
+                    path,
+                    "patches a file that does not exist",
+                    f"Base files in {folder}/: {known}",
+                    "name the patch after the file it changes",
                 )
-            for (patched_folder, _), path in sorted(patches.items()):
-                if patched_folder == folder:
-                    known = ", ".join(p.name for p in bases[folder]) or "none"
-                    self.file_error(
-                        path,
-                        "patches a file that does not exist",
-                        f"Base files in {folder}/: {known}",
-                        "name the patch after the file it changes",
-                    )
-        return Catalog(environment, references.entries)
+        return resolved
 
     def _files(
         self, environment: str | None
@@ -173,21 +201,19 @@ class _Loader:
         Returns:
             Base files by folder, and patches by (folder, file stem).
         """
-        bases: dict[str, list[Path]] = {folder: [] for folder in self.kinds}
+        bases: dict[str, list[Path]] = {folder: [] for folder in FOLDERS}
         patches: dict[tuple[str, str], Path] = {}
         for path in sorted(self.root.rglob("*.yaml")):
             parts = path.relative_to(self.root).parts
             if any(part.startswith(".") for part in parts):
                 continue
-            if len(parts) == 2 and parts[0] in self.kinds:
+            if len(parts) == 2 and parts[0] in FOLDERS:
                 bases[parts[0]].append(path)
-            elif (
-                len(parts) == 4 and parts[0] == ENVIRONMENTS and parts[2] in self.kinds
-            ):
+            elif len(parts) == 4 and parts[0] == ENVIRONMENTS and parts[2] in FOLDERS:
                 if parts[1] == environment:
                     patches[(parts[2], path.stem)] = path
             else:
-                folders = [f"{f}/" for f in sorted(self.kinds)]
+                folders = [f"{f}/" for f in sorted(FOLDERS)]
                 self.file_error(
                     path,
                     "not a catalog folder",
@@ -196,22 +222,26 @@ class _Loader:
                 )
         return bases, patches
 
-    def _resolve(
+    def _resolve[T](
         self,
-        kind: DocumentKind,
+        build: Callable[[dict[str, Any], ResolveContext], T | None],
         path: Path,
         patch_path: Path | None,
-        references: References,
-    ) -> None:
-        """Read, patch and resolve one document, recording it or its errors.
+        models: Mapping[str, ServedModel],
+        failed_models: set[str],
+    ) -> T | None:
+        """Read, patch and resolve one document, recording its errors.
 
         Args:
-            kind: The document kind of its folder.
+            build: Resolves the merged document through a context.
             path: The base file.
             patch_path: The environment's patch of it, if any.
-            references: Where resolved documents and failed IDs are recorded.
+            models: The served models an analysis may call.
+            failed_models: IDs of served models that failed to resolve.
+
+        Returns:
+            The resolved document, or None after an error.
         """
-        failed = references.failed[kind.folder]
         if not ID.fullmatch(path.stem):
             self.file_error(
                 path,
@@ -219,13 +249,11 @@ class _Loader:
                 "Lowercase letters, digits and single hyphens, e.g. `my-model`",
                 "rename the file; its name is the public ID",
             )
-            failed.add(path.stem)
-            return
+            return None
         document = self._read(path)
         patch = self._read(patch_path) if patch_path is not None else {}
         if document is None or patch is None:
-            failed.add(path.stem)
-            return
+            return None
         merged, patched = deep_merge(document, patch)
 
         def file_of(at: YamlPath) -> str:
@@ -240,15 +268,12 @@ class _Loader:
             hit = any(at[:n] in patched for n in range(1, len(at) + 1))
             return self.show(patch_path if hit and patch_path else path)
 
-        ctx = ResolveContext(self.registry, references, file_of, path.stem)
-        value = kind.resolve(merged, ctx)
+        ctx = ResolveContext(self.registry, file_of, path.stem, models, failed_models)
+        value = build(merged, ctx)
         if ctx.errors:
             self.errors += ctx.errors
-            failed.add(path.stem)
-            return
-        references.entries[kind.folder][path.stem] = Entry(
-            path.stem, self.show(path), merged, value
-        )
+            return None
+        return value
 
     def _read(self, path: Path) -> dict[str, Any] | None:
         """Parse one YAML file into a mapping, or record why it isn't one.

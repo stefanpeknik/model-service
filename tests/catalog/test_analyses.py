@@ -34,7 +34,7 @@ def root(tmp_path: Path) -> Path:
 
 
 def analysis(root: Path, analysis_id: str = "a1") -> Analysis:
-    return load_catalog(root, registry=REGISTRY).entries("analyses")[analysis_id].value
+    return load_catalog(root, registry=REGISTRY).analyses[analysis_id]
 
 
 def errors(root: Path) -> list[str]:
@@ -44,11 +44,9 @@ def errors(root: Path) -> list[str]:
 
 
 def heatmap_ids() -> list[str]:
-    analyses = load_catalog(CATALOG).entries("analyses")
+    analyses = load_catalog(CATALOG).analyses
     return sorted(
-        i
-        for i, e in analyses.items()
-        if any(s.name == "score_grid" for s in e.value.sinks)
+        i for i, e in analyses.items() if any(s.name == "score_grid" for s in e.sinks)
     )
 
 
@@ -58,9 +56,9 @@ def test_heatmap_analyses_tile_at_their_models_geometry(
     environment: str | None, analysis_id: str
 ) -> None:
     catalog = load_catalog(CATALOG, environment)
-    heatmap = catalog.entries("analyses")[analysis_id].value
+    heatmap = catalog.analyses[analysis_id]
     (model_id,) = heatmap.models
-    served = catalog.entries("served-models")[model_id].value
+    served = catalog.served_models[model_id]
 
     assert heatmap.source.name == "slide_tiles"
     assert (heatmap.source.options.tile_size, heatmap.source.options.mpp) == (
@@ -81,7 +79,7 @@ def test_heatmap_analyses_tile_at_their_models_geometry(
 def test_the_prostate_and_episeg_heatmaps_tile_half_a_tile_apart(
     environment: str | None, analysis_id: str, score_map: tuple[int, int, int]
 ) -> None:
-    heatmap = load_catalog(CATALOG, environment).entries("analyses")[analysis_id].value
+    heatmap = load_catalog(CATALOG, environment).analyses[analysis_id]
 
     assert heatmap.settings() == {
         "stride_fraction": 0.5,

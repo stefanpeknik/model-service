@@ -1,7 +1,7 @@
 """JSON Schemas of catalog files, built from the component classes.
 
-Each document kind gives a pydantic model of its file (`DocumentKind.schema`)
-in which every component slot is a union of the components usable there, each
+`served_model_schema` and `analysis_schema` give a pydantic model of their
+file in which every component slot is a union of the components usable there, each
 a `{use: <name>, …options}` object. Editors read the generated schemas for
 autocompletion and inline errors; the catalog loader stays the authority, so
 a file the schema accepts can still fail a load-time check.
@@ -67,7 +67,7 @@ def file_schema(model: type[BaseModel]) -> dict[str, Any]:
     """The JSON Schema of a whole catalog file.
 
     Args:
-        model: The document kind's file model.
+        model: The file's model.
 
     Returns:
         A draft 2020-12 schema.
