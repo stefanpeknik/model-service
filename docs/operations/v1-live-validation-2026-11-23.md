@@ -15,6 +15,7 @@ pre-rebuild deployment (`golden-references-2026-11-22.md`).
 | 10 | `unit-2c04d52` | prostate-heatmap EMPAIA app from `expose.empaia`, registration reconcile |
 | 11 | `unit-984bed7` | builders and transitional code removed (analyses only) |
 | 12 | `unit-aeed9eb` | code-review fixes (`GET /<model>/describe`, MLflow checksum, renames) |
+| 13 | `unit-2646342` | builder-era names removed, `src/components` split, one fresh migration on a dropped database |
 
 Before each upgrade the rendered manifest was diffed against the live one:
 always the same six model-service objects, changes as listed above.
@@ -35,6 +36,19 @@ always the same six model-service objects, changes as listed above.
 - EMPAIA: preprocessing job via `scripts/request_preprocessing.py` on slide
   `7a072fd9`; execution `e6efffba` (`prostate-heatmap`, digest `bccb915a…`)
   succeeded with one processing and one finish attempt.
+
+## Results on revision 13 (final)
+
+The `model_service` schema was dumped and dropped first; the API created it
+from the single `0001-create-executions` migration (no rows carried over).
+
+- `pytest -m live tests/live` per model: all three 3 passed; digests
+  unchanged (`10a8ee8a2b15`, `93df152b6d03`, `0394c8a44dd9`), prostate on
+  `TensorrtExecutionProvider`.
+- SDK `tests/integration/test_analyses.py` (branch `analyses`, builder-era
+  code removed) passed.
+- EMPAIA preprocessing job `3d28a298` succeeded (one processing, one finish
+  attempt); both API pods re-registered app `d3560de0` with no errors.
 
 ## Results on revision 12 (after the code review)
 
