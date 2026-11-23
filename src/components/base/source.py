@@ -7,7 +7,10 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from pydantic import Field
+
 from components.base.component import Component
+from components.base.options import Options
 from components.base.slots import SOURCE
 
 
@@ -37,12 +40,42 @@ class Opened:
     load: Callable[[Sequence[Any]], Batch]
 
 
+class TileGeometryOptions(Options):
+    """Options of a source that reads tiles at a model's geometry.
+
+    A source whose `Options` derive from this takes `tile_size` and `mpp`
+    from the analysis's first model step wherever the file leaves them out;
+    the catalog fills them in when the analysis loads and refuses a value
+    that differs from the model's.
+
+    Attributes:
+        tile_size: Tile edge in pixels.
+        mpp: Microns per pixel to read at.
+    """
+
+    tile_size: int | None = Field(
+        None,
+        gt=0,
+        description="Tile edge in pixels; the first model step's when left out.",
+        strict=True,
+    )
+    mpp: float | None = Field(
+        None,
+        gt=0,
+        allow_inf_nan=False,
+        description=(
+            "Microns per pixel to read at (the closest slide level); the first "
+            "model step's when left out."
+        ),
+    )
+
+
 class Source(Component):
     """Produces an analysis's items from its inputs, e.g. tiles of a slide.
 
-    A source whose options include `tile_size` and `mpp` takes its tile
-    geometry from the analysis's first model step wherever the file leaves
-    them out; the catalog fills them in when the analysis loads.
+    A source whose options derive from `TileGeometryOptions` takes
+    `tile_size` and `mpp` from the analysis's first model step wherever the
+    file leaves them out; the catalog fills them in when the analysis loads.
 
     Attributes:
         frame: The fields of the frame row the source gives.

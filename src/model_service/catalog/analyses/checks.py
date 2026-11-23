@@ -12,7 +12,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
-from components.base import Problem, Source, per_run_fields, slots
+from components.base import (
+    Problem,
+    Source,
+    TileGeometryOptions,
+    per_run_fields,
+    slots,
+)
 from components.base.columns import resolved
 from model_service.catalog.analyses.model_step import ModelStep
 
@@ -27,7 +33,6 @@ if TYPE_CHECKING:
     from model_service.catalog.served_models import ServedModel
 
 
-GEOMETRY = ("tile_size", "mpp")
 MODEL_COLUMNS = {
     "scores": "a model step with `output: {kind: scores}`",
     "features": "a model step with `output: {kind: embedding, …}`",
@@ -49,7 +54,8 @@ def fill_geometry(
 
     Returns:
         The source with the first model step's `tile_size` and `mpp`; as
-        given if it has no such options or there is no model step.
+        given if its options aren't `TileGeometryOptions` or there is no
+        model step.
     """
     models = [(i, s.model) for i, s in enumerate(steps) if isinstance(s, ModelStep)]
     for i, other in models[1:]:
@@ -63,9 +69,9 @@ def fill_geometry(
                 "Model steps that read the same tiles",
                 "an analysis reads one tile geometry; split it into two analyses",
             )
-    if not set(GEOMETRY) <= set(source.Options.model_fields):
+    if not isinstance(source.options, TileGeometryOptions):
         return source
-    given = {k: getattr(source.options, k) for k in GEOMETRY}
+    given = {"tile_size": source.options.tile_size, "mpp": source.options.mpp}
     if not models:
         if None in given.values():
             problem = Problem(
@@ -77,7 +83,7 @@ def fill_geometry(
             _report(ctx, ("source",), source, problem, "set `tile_size` and `mpp`")
         return source
     model = models[0][1]
-    wanted = dict(zip(GEOMETRY, _geometry(model), strict=True))
+    wanted = {"tile_size": model.input.tile_size, "mpp": model.input.mpp}
     for key, value in given.items():
         if value is not None and value != wanted[key]:
             problem = Problem(

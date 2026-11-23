@@ -36,7 +36,7 @@ from components.base.runtime import (
 )
 from components.base.sink import Sink, SinkOptions
 from components.base.slots import Slot
-from components.base.source import Opened, Source
+from components.base.source import Opened, Source, TileGeometryOptions
 from components.base.step import Step
 
 
@@ -68,6 +68,7 @@ __all__ = [
     "Slot",
     "Source",
     "Step",
+    "TileGeometryOptions",
     "per_run_fields",
     "rows",
     "with_overrides",

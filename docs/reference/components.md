@@ -171,8 +171,8 @@ vectors leave the replica.
 
 The mean is computed with PyTorch, the way the encoder's own code pools,
 so the features match it bit for bit; PyTorch must be installed where
-the step runs. A caller that skips pooling gets the class token and the
-patch tokens, without the registers.
+the step runs. A raw-inference caller that asks for unpooled tokens gets
+the class token and the patch tokens, without the registers.
 
 - **Usable in:** served model `pre:`, served model `post:`, analysis `steps:`
 - **Example:** `{use: cls_mean_pool, registers: 4}`
@@ -268,9 +268,9 @@ each pixel gets its own distribution.
 
 Produces an analysis's items from its inputs, e.g. tiles of a slide.
 
-A source whose options include `tile_size` and `mpp` takes its tile
-geometry from the analysis's first model step wherever the file leaves
-them out; the catalog fills them in when the analysis loads.
+A source whose options derive from `TileGeometryOptions` takes
+`tile_size` and `mpp` from the analysis's first model step wherever the
+file leaves them out; the catalog fills them in when the analysis loads.
 
 ### `slide_tiles` (source)
 

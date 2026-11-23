@@ -13,7 +13,14 @@ from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal
 
 from pydantic import Field
 
-from components.base import Col, Opened, Options, PerRun, Problem, Source
+from components.base import (
+    Col,
+    Opened,
+    PerRun,
+    Problem,
+    Source,
+    TileGeometryOptions,
+)
 
 
 if TYPE_CHECKING:
@@ -71,24 +78,9 @@ TissueFraction = Annotated[
 ]
 
 
-class SlideTilesOptions(Options):
+class SlideTilesOptions(TileGeometryOptions):
     """Options of `slide_tiles`."""
 
-    tile_size: int | None = Field(
-        None,
-        gt=0,
-        description="Tile edge in pixels; the first model step's when left out.",
-        strict=True,
-    )
-    mpp: float | None = Field(
-        None,
-        gt=0,
-        allow_inf_nan=False,
-        description=(
-            "Microns per pixel to read at (the closest slide level); the first "
-            "model step's when left out."
-        ),
-    )
     region_of_interest: Literal["required", "optional", "ignored"] = Field(
         "optional",
         description=(
