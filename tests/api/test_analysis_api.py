@@ -216,12 +216,12 @@ async def test_an_unknown_setting_is_named() -> None:
     [
         (
             RemoteFailureError(
-                code="model_contract_mismatch",
-                safe_message="model changed",
+                code="invalid_model_output",
+                safe_message="model returned an invalid output",
                 retryable=False,
             ),
             422,
-            "model_contract_mismatch",
+            "invalid_model_output",
             False,
         ),
         (

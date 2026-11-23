@@ -5,7 +5,8 @@ Per request, in order, before the deadline:
 1. the resolved document is read back and its digest checked;
 2. each served model it names is asked for `describe()`, and a digest that
    differs from the document's, or weights other than the ones its file pins
-   (a Hugging Face commit, an MLflow `sha256`), is `model_contract_mismatch`;
+   (a Hugging Face commit, an MLflow `sha256`), is `model_contract_mismatch`,
+   retryable since Ray may not have caught up with a catalog change yet;
 3. the provider's input access opens the inputs and says where outputs
    go: below the request's shared-storage root, which must lie within the
    replica's allowed roots, or in an EMPAIA job's workspace, with each input
@@ -212,7 +213,9 @@ class AnalysisReplica:
 
         Raises:
             RunFailure: `model_failed` (retryable) if `describe()` fails;
-                `model_contract_mismatch` if the digest or pinned weights differ.
+                `model_contract_mismatch` (retryable: Ray may still be rolling out
+                the catalog the analysis was admitted with) if the digest or pinned
+                weights differ.
         """
         handle = self._models(model_id)
         try:
@@ -230,7 +233,7 @@ class AnalysisReplica:
                     f"model {model_id!r} is running a declaration that differs "
                     "from the one the analysis was admitted with"
                 ),
-                retryable=False,
+                retryable=True,
             )
         if weights is not None and running.get("weights_revision") != weights:
             raise RunFailure(
@@ -238,7 +241,7 @@ class AnalysisReplica:
                 safe_message=(
                     f"model {model_id!r} is running other weights than its file pins"
                 ),
-                retryable=False,
+                retryable=True,
             )
         return handle
 
