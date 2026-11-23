@@ -39,7 +39,7 @@ class Rectangle(InputConverter):
             The rectangle entry, referencing the slide.
         """
         return {
-            "type": "rectangle",
+            "type": self.ead_type,
             "reference": f"io.{item.slide}",
             "classes": [ROI_CLASS],
         }
