@@ -246,7 +246,7 @@ def _outputs(
     """Where each output goes: `output_path` for an analysis with one output.
 
     Without `output_path`, each output is `<output>.<format extension>` at
-    the root, as the builders named theirs.
+    the root.
     """
     paths = {
         s.options.output: f"{s.options.output}.{get_format(s.format).extension}"

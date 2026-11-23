@@ -1,4 +1,4 @@
-"""The raw-inference route: an LZ4 tile in, a reply in today's format out.
+"""The raw-inference route: an LZ4 tile in, a reply in the output's format out.
 
 The format follows from `output:`, with no per-model code:
 

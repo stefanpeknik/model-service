@@ -8,7 +8,7 @@ wrapper only adapts Serve to `ServedModelHost`:
 - `reconfigure(user_config)` builds a new host, on start and on every
   `user_config` change;
 - handle methods: `infer(tile)` and `describe()`;
-- `POST /`: the raw-inference route, in today's format for the output kind.
+- `POST /`: the raw-inference route, replying in the output kind's format.
 """
 
 from __future__ import annotations
@@ -72,7 +72,7 @@ class ServedModelDeployment:
             request: An LZ4-compressed uint8 tile, `(tile_size, tile_size, 3)`.
 
         Returns:
-            The reply in today's format for the declared output.
+            The reply in the declared output's format.
         """
         reply = await self.host.raw(await request.body(), request.headers)
         return Response(

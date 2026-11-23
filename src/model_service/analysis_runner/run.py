@@ -3,8 +3,7 @@
 Each key the source gives is one task: the source loads its item in the read
 pool, the steps run in order (model steps await the served model, component
 steps run in the pool), and the rows go to the sinks. Rows reach unordered
-sinks as each task finishes, as today's heatmap loop updates its grid, and in
-key order when any sink is ordered. A key whose item the source drops (a
+sinks as each task finishes, and in key order when any sink is ordered. A key whose item the source drops (a
 background tile) still counts toward progress.
 """
 

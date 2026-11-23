@@ -13,8 +13,8 @@ Per request, in order:
 A raw request that skips `post:` gets each post step's `skipped` instead of
 steps 4 and 5.
 
-Steps run per tile because today's models transform and pool per tile, so the
-results stay bit-identical to theirs.
+Steps run one tile at a time, so a tile's result never depends on the batch
+it arrived in.
 """
 
 from __future__ import annotations
@@ -90,7 +90,7 @@ class ServedModelHost:
         return await self._infer(tile, True)
 
     async def raw(self, body: bytes, headers: Mapping[str, str]) -> RawReply:
-        """Answer a raw-inference request in today's format for this output.
+        """Answer a raw-inference request in the reply format of this output.
 
         Args:
             body: The LZ4-compressed uint8 tile, `(tile_size, tile_size, 3)`.

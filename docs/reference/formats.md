@@ -16,8 +16,7 @@ A data format is a named, versioned file shape. Sinks write one, publishers read
 `embedding_table` v2: one feature row per tile of a slide level.
 
 Media type `application/vnd.rationai.embedding-table+hdf5; version=2`. An
-HDF5 file (`.h5`) whose layout is the tile-embeddings builder's, which already
-calls it `schema_version` 2:
+HDF5 file (`.h5`), whose `schema_version` attribute is 2:
 
 - `coordinates`: int64 (tiles, 2), each tile's top-left corner (x, y) in
   pixels of the slide level the tiles were read at;
@@ -75,8 +74,7 @@ Cell (r, c) covers the level's pixels from (c, r) * cell_size; the grid may
 reach past the level's edge. Reading it needs only NumPy (`numpy.load`), and an
 image of the slide's size is the grid scaled by `cell_size`. Several channels
 are allowed; a consumer that needs one (an EMPAIA continuous pixelmap) checks
-it itself. Written by the `score_grid` sink; the layout is the heatmap
-builder's.
+it itself. Written by the `score_grid` sink.
 
 ## `value`
 

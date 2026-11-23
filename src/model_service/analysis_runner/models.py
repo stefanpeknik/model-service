@@ -129,7 +129,7 @@ def model_call(
 
     async def call(batch: Batch) -> Batch:
         tiles = batch["tile"]
-        # One await per tile, so one tile in flight interleaves as today.
+        # A single tile skips gather, so its call is awaited directly.
         if len(tiles) == 1:
             outputs = [await infer(tiles[0])]
         else:

@@ -16,8 +16,7 @@ Cell (r, c) covers the level's pixels from (c, r) * cell_size; the grid may
 reach past the level's edge. Reading it needs only NumPy (`numpy.load`), and an
 image of the slide's size is the grid scaled by `cell_size`. Several channels
 are allowed; a consumer that needs one (an EMPAIA continuous pixelmap) checks
-it itself. Written by the `score_grid` sink; the layout is the heatmap
-builder's.
+it itself. Written by the `score_grid` sink.
 """
 
 from __future__ import annotations
@@ -42,7 +41,7 @@ EXTENSION = "npz"
 """The file name suffix, without the dot."""
 MEDIA_TYPE = media_type("score-grid", EXTENSION, VERSION)
 LEGACY_MEDIA_TYPE = "application/x-npz"
-"""What the heatmap builder stored the same layout as; readers still take it."""
+"""The media type older stored results give this layout; readers still take it."""
 
 KNOWN = (MEDIA_TYPE, LEGACY_MEDIA_TYPE)
 

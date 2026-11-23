@@ -82,7 +82,7 @@ class AnalysisOutputView:
     """An analysis output, as the catalog lists it.
 
     Attributes:
-        kind: How it is returned: always a file on shared storage today.
+        kind: How it is returned: always a file on shared storage.
         format: The data format's name, e.g. `score_grid`.
         media_type: The format's versioned media type.
     """

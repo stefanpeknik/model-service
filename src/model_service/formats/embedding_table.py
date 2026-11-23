@@ -1,8 +1,7 @@
 """`embedding_table` v2: one feature row per tile of a slide level.
 
 Media type `application/vnd.rationai.embedding-table+hdf5; version=2`. An
-HDF5 file (`.h5`) whose layout is the tile-embeddings builder's, which already
-calls it `schema_version` 2:
+HDF5 file (`.h5`), whose `schema_version` attribute is 2:
 
 - `coordinates`: int64 (tiles, 2), each tile's top-left corner (x, y) in
   pixels of the slide level the tiles were read at;
@@ -58,7 +57,7 @@ EXTENSION = "h5"
 """The file name suffix, without the dot."""
 MEDIA_TYPE = media_type("embedding-table", "hdf5", VERSION)
 LEGACY_MEDIA_TYPE = "application/x-hdf5"
-"""What the tile-embeddings builder stored the same layout as; readers still take it."""
+"""The media type older stored results give this layout; readers still take it."""
 COORDINATE_SPACE = "slide_level"
 
 KNOWN = (MEDIA_TYPE, LEGACY_MEDIA_TYPE)
@@ -119,7 +118,7 @@ class Header:
     stride: int
 
     def attributes(self) -> dict[str, Any]:
-        """The file attributes, in the order the builder wrote them.
+        """The file attributes, in the order they are written.
 
         Returns:
             Attribute name to value, `tile_count` aside.
@@ -238,8 +237,8 @@ class TableWriter:
                 f"{self._features.shape[1:]}; every tile has the same shape"
             )
         count = len(self._coordinates)
-        # Grow both datasets before writing either, as the builder did, so the
-        # file's bytes are the builder's.
+        # Grow both datasets before writing either, so their lengths never
+        # differ, even if the second write fails.
         self._coordinates.resize(count + rows, axis=0)
         self._features.resize(count + rows, axis=0)
         self._coordinates[count:] = coordinates
