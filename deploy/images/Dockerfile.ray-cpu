@@ -35,6 +35,7 @@ LABEL org.opencontainers.image.revision=${SOURCE_REVISION}
 
 WORKDIR /app
 ENV PYTHONPATH=/app
+COPY src/components components
 COPY src/model_service model_service
 
 RUN /home/ray/anaconda3/bin/python -c "\
@@ -44,4 +45,5 @@ from ratiopath.openslide import OpenSlide; \
 from ratiopath.tiling import grid_tiles; \
 import model_service.analysis_runner.serve; \
 import model_service.served_model.serve; \
+from model_service.registry import default_registry; default_registry(); \
 assert torch.__version__.endswith('+cpu'), torch.__version__"

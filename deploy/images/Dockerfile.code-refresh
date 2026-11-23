@@ -12,7 +12,8 @@ USER root
 RUN if [ -n "$EXTRA_PACKAGES" ]; then \
         uv pip install --system --python "$PYTHON" --no-cache $EXTRA_PACKAGES; \
     fi
-RUN rm -rf /app/model_service
+RUN rm -rf /app/components /app/model_service
+COPY src/components /app/components
 COPY src/model_service /app/model_service
 ARG SOURCE_REVISION
 LABEL org.opencontainers.image.revision=${SOURCE_REVISION}
