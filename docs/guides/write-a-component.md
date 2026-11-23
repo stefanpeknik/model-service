@@ -112,9 +112,8 @@ What each part is for:
   if callers may change it for one run; it then becomes an analysis setting
   and an EMPAIA job parameter.
 - `reads` and `adds` declare the columns, as dtype and shape without the
-  batch axis. A dimension is a number, `None` for any size, the name of one
-  of your options, or `model.input.tile_size`-style fields of the served
-  model. The catalog check uses them to tell a file author that your step
+  batch axis. A dimension is a number, `None` for any size, or the name of
+  one of your options. The catalog check uses them to tell a file author that your step
   doesn't fit before anything runs. A served model's runtime output is the
   column `output`; in an analysis, a model step adds `scores` or `features`.
 - The class docstring is the component's reference page.

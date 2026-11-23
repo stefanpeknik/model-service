@@ -6,8 +6,8 @@ for every registered component; a newcomer's component is covered as soon as
 it is in its folder.
 
 Every kind: a docstring, a description on every option, valid
-`example_options`, symbolic dimensions that name an option or `model.<field>`,
-`may_add` covering `adds`, and a `hint()` that answers.
+`example_options`, symbolic dimensions that name an option, and a `hint()`
+that answers.
 Steps: keep the batch length and add the declared columns as declared.
 Sinks: read only frame fields a slide source gives, and write an artifact
 with zero items and with some.
@@ -46,7 +46,7 @@ from components.base import (
     Source,
     Step,
 )
-from components.base.columns import MODEL_PREFIX, Col, rows
+from components.base.columns import Col, resolved, rows
 from components.base.problems import Problem
 from tests.components.helpers import offline
 from tests.components.helpers.empaia import FakeGateway, sample_artifact
@@ -139,18 +139,10 @@ def _declaration(component: type[Component]) -> list[str]:
         columns |= component.frame
     for column, col in columns.items():
         for dim in col.shape or ():
-            if (
-                isinstance(dim, str)
-                and not dim.startswith(MODEL_PREFIX)
-                and dim not in component.Options.model_fields
-            ):
+            if isinstance(dim, str) and dim not in component.Options.model_fields:
                 failures.append(
-                    f"column `{column}` has dimension `{dim}`, which is neither an "
-                    "option nor `model.<field>`"
+                    f"column `{column}` has dimension `{dim}`, which is not an option"
                 )
-    missing = sorted(set(component.adds) - component.may_add)
-    if missing:
-        failures.append(f"may_add lacks columns it adds: {missing}")
     hint = component.hint(Problem("conformance", "a check failed", "something else"))
     if hint is not None and not isinstance(hint, str):
         failures.append("hint() must return a string or None")
@@ -166,11 +158,11 @@ def _step(step: Step) -> list[str]:
     Returns:
         What failed.
     """
-    model = fake_model()
-    reads, adds = step.columns(model)
+    reads = resolved(step.reads, step.options)
+    adds = resolved(step.adds, step.options)
     failures = []
     for n in (1, 3):
-        out = run_component(step, fake_batch(reads, n), model=model)
+        out = run_component(step, fake_batch(reads, n))
         if rows(out) != n:
             failures.append(
                 f"returned {rows(out)} rows for {n}; a step keeps every row"
@@ -247,7 +239,9 @@ def _source(source: Source, work_dir: Path) -> list[str]:
     ]
     if rows(result.batch) > len(result.keys):
         failures.append(f"loaded {rows(result.batch)} rows for {len(result.keys)} keys")
-    return failures + _columns_match(source.columns(None)[1], result.batch, "adds")
+    return failures + _columns_match(
+        resolved(source.adds, source.options), result.batch, "adds"
+    )
 
 
 def _columns_match(declared: Mapping[str, Col], batch: Batch, what: str) -> list[str]:

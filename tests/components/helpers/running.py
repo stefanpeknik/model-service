@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from components.base import Sink, Source, Step
-from components.base.columns import Col
+from components.base.columns import Col, resolved
 from components.base.run import Run
 from tests.components.helpers.slides import fake_frame, fake_slide
 
@@ -100,8 +100,8 @@ def run_component(
             source's inputs by name. By default: random data for the declared
             reads, or a fake slide for each input.
         options: Options when `component` is a class.
-        model: The served-model declaration for `model.` dimensions; a sink
-            and source also get it as `run.model`.
+        model: The served-model declaration a sink or source gets as
+            `run.model`.
         work_dir: Where sinks write and fake inputs go; needed for sources
             and sinks.
         frame: A sink's frame row; `fake_frame()` by default.
@@ -117,7 +117,7 @@ def run_component(
     built = instance(component, options)
     if isinstance(built, Step):
         if data is None:
-            data = fake_batch(built.columns(model)[0], rows=2)
+            data = fake_batch(resolved(built.reads, built.options), rows=2)
         return built(dict(data))
     if not isinstance(built, Source | Sink):
         raise TypeError(
@@ -127,7 +127,7 @@ def run_component(
     if work_dir is None:
         raise ValueError(f"run_component needs work_dir to run a {built.kind}")
     if isinstance(built, Sink):
-        reads = built.columns(model)[0]
+        reads = resolved(built.reads, built.options)
         batches = [fake_batch(reads, 2)] if data is None else data
         batches = [batches] if isinstance(batches, Mapping) else list(batches)
         run = Run(work_dir, model, _known(reads, batches[0] if batches else {}))

@@ -22,9 +22,7 @@ class MeanIntensity(Step):
 
     name = "mean_intensity"
     Options = MeanIntensityOptions
-    reads: ClassVar[dict[str, Col]] = {
-        "tile": Col("uint8", (3, "model.input.tile_size", "model.input.tile_size"))
-    }
+    reads: ClassVar[dict[str, Col]] = {"tile": Col("uint8", (3, None, None))}
     adds: ClassVar[dict[str, Col]] = {"scores": Col("float32", ("channels", 1, 1))}
 
     def __call__(self, batch: Batch) -> Batch:

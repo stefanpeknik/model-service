@@ -1,28 +1,26 @@
-"""Columns a component reads and adds, with symbolic dimensions.
+"""Columns a component reads and adds.
 
 A batch is `dict[str, ndarray]`; row i of every column belongs to the same item.
 A column's declared shape leaves out the batch axis. A dimension is a fixed
-size, `None` for any size, the name of one of the component's options, or
-`model.<path>` for a field of the served-model declaration (for example
-`model.input.tile_size`), filled in once the model is known.
+size, `None` for any size, or the name of one of the component's options,
+filled in from the option's value.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     import numpy as np
     from pydantic import BaseModel
 
 
 type Dim = int | str | None
 type Batch = dict[str, np.ndarray]
-
-MODEL_PREFIX = "model."
 
 
 @dataclass(frozen=True)
@@ -67,52 +65,38 @@ class Col:
             )
         )
 
-    def resolve(self, options: BaseModel, model: object | None) -> Col:
-        """Fill in option and model dimensions where they are known.
+    def resolve(self, options: BaseModel) -> Col:
+        """Fill in the dimensions named after options.
 
         Args:
             options: The component's validated options.
-            model: The served-model declaration, or None before it is known.
 
         Returns:
-            The column with every resolvable dimension replaced by its value.
+            The column with each option-named dimension replaced by its value.
         """
         if self.shape is None:
             return self
         dims: list[Dim] = []
         origins: list[str] = []
         for dim in self.shape:
-            if isinstance(dim, str) and dim.startswith(MODEL_PREFIX):
-                value = model_field(model, dim) if model is not None else None
-                if value is not None:
-                    origins.append(f"model {getattr(model, 'id', '')}".rstrip())
-                    dim = value
-            elif isinstance(dim, str) and getattr(options, dim, None) is not None:
+            if isinstance(dim, str) and getattr(options, dim, None) is not None:
                 origins.append(f"{dim}: {getattr(options, dim)}")
                 dim = getattr(options, dim)
             dims.append(dim)
         return Col(self.dtype, tuple(dims), ", ".join(dict.fromkeys(origins)))
 
 
-def model_field(model: object, dim: str) -> Any:
-    """Look up a `model.<path>` dimension on a served-model declaration.
+def resolved(columns: Mapping[str, Col], options: BaseModel) -> dict[str, Col]:
+    """Columns with their option-named dimensions filled in.
 
     Args:
-        model: The declaration; nested parts may be objects or mappings.
-        dim: The symbolic dimension, e.g. `model.output.channels`.
+        columns: A component's `reads`, `adds` or `frame`.
+        options: The component's validated options.
 
     Returns:
-        The value at the path, or None if any part is missing.
+        The columns, each resolved against `options`.
     """
-    value: Any = model
-    for part in dim.removeprefix(MODEL_PREFIX).split("."):
-        if isinstance(value, Mapping):
-            value = value.get(part)
-        else:
-            value = getattr(value, part, None)
-        if value is None:
-            return None
-    return value
+    return {name: col.resolve(options) for name, col in columns.items()}
 
 
 def rows(batch: Batch) -> int:

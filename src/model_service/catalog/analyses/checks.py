@@ -2,7 +2,7 @@
 
 - geometry: the source takes `tile_size`/`mpp` from the first model step, and
   every model step must take the same tiles;
-- the column fold over source, steps and sinks, with model dimensions known;
+- the column fold over source, steps and sinks, with the models' dimensions;
 - the frame fields sinks read;
 - per-run settings, one flat name each;
 - one sink per output name.
@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 
 from components.base import Problem, Source, per_run_fields, slots
+from components.base.columns import resolved
 from model_service.catalog.analyses.model_step import ModelStep
 
 
@@ -108,22 +109,22 @@ def fold_columns(
         The columns that reach the sinks.
     """
     available: dict[str, tuple[Col, str]] = {
-        name: (col, f"`{source.name}`") for name, col in source.columns(None)[1].items()
+        name: (col, f"`{source.name}`")
+        for name, col in resolved(source.adds, source.options).items()
     }
-    model: ServedModel | None = None
     for i, step in enumerate(steps):
         if isinstance(step, ModelStep):
-            model = step.model
             reads, adds = step.columns()
             label = step.label
         else:
-            reads, adds = step.columns(model)
+            reads = resolved(step.reads, step.options)
+            adds = resolved(step.adds, step.options)
             label = f"`{step.name}`"
         _check_reads(ctx, ("steps", i), label, step, reads, available)
         available |= {name: (col, label) for name, col in adds.items()}
     for i, sink in enumerate(sinks):
         _check_frame(ctx, ("sinks", i), sink, source)
-        reads = sink.columns(model)[0]
+        reads = resolved(sink.reads, sink.options)
         _check_reads(ctx, ("sinks", i), f"`{sink.name}`", sink, reads, available)
     return {name: col for name, (col, _) in available.items()}
 
@@ -224,7 +225,7 @@ def _check_reads(
                     c.name
                     for slot in (slots.SOURCE, slots.STEPS)
                     for c in ctx.registry.usable_in(slot)
-                    if name in c.may_add
+                    if name in c.adds
                 }
             )
             problem = Problem(

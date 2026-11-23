@@ -40,8 +40,6 @@ class Component(ABC):
             example in generated docs.
         reads: Columns read from each batch.
         adds: Columns added to each batch.
-        may_add: Every column the component can add under some options; it
-            tells a reader which component would provide a missing column.
         options: The validated options of this instance.
     """
 
@@ -52,7 +50,6 @@ class Component(ABC):
     example_options: ClassVar[dict[str, Any]] = {}
     reads: ClassVar[dict[str, Col]] = {}
     adds: ClassVar[dict[str, Col]] = {}
-    may_add: ClassVar[frozenset[str]] = frozenset()
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Check a concrete component's declaration when its class is created.
@@ -79,8 +76,6 @@ class Component(ABC):
                 f"{cls.__qualname__}.Options must derive from "
                 f"{base.__module__}.{base.__qualname__}"
             )
-        if "may_add" not in cls.__dict__:
-            cls.may_add = frozenset(cls.adds)
 
     def __init__(self, options: BaseOptions) -> None:
         """Hold validated options.
@@ -104,24 +99,6 @@ class Component(ABC):
             pydantic.ValidationError: If the values do not fit `Options`.
         """
         return cls(cls.Options.model_validate(values))
-
-    def columns(self, model: object | None) -> tuple[dict[str, Col], dict[str, Col]]:
-        """The columns read and added, with known dimensions filled in.
-
-        Override this when what is read or added depends on options or on the
-        model beyond filling in dimensions, e.g. a channel count that follows
-        an option.
-
-        Args:
-            model: The served-model declaration, or None before it is known.
-
-        Returns:
-            The read and added columns.
-        """
-        return (
-            {k: c.resolve(self.options, model) for k, c in self.reads.items()},
-            {k: c.resolve(self.options, model) for k, c in self.adds.items()},
-        )
 
     @classmethod
     def hint(cls, problem: Problem) -> str | None:
