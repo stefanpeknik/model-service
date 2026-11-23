@@ -253,7 +253,7 @@ def test_several_sinks_write_all_their_outputs_or_none(
 
     # The failing run scores differently, so a heatmap it replaced would show.
     other_scores = Model(output=np.full((1, 1, 1), 0.25, np.float32))
-    with pytest.raises(RunFailure, match="failed unexpectedly"):
+    with pytest.raises(RunFailure, match="failed unexpectedly") as raised:
         run(
             analysis(tmp_path, two_sinks % ", fail_on_close: true"),
             slide,
@@ -261,6 +261,7 @@ def test_several_sinks_write_all_their_outputs_or_none(
             other_scores,
         )
 
+    assert (raised.value.code, raised.value.retryable) == ("run_internal_error", True)
     assert {name: path.read_bytes() for name, path in outputs.items()} == before
     assert sorted(p.name for p in out.iterdir()) == ["heatmap.npz", "table.npz"]
 
