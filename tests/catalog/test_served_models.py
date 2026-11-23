@@ -121,3 +121,62 @@ def test_a_hugging_face_revision_must_be_a_commit(root: Path) -> None:
         "change under the same file. Hint: copy the full commit hash from the "
         "history of the repository's files on huggingface.co"
     ]
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "where"),
+    [
+        ("range: [0, 1]", "range: [0, .nan]", "output.range[1]"),
+        ("range: [0, 1]", "range: [-.inf, 1]", "output.range[0]"),
+        ("wait_s: 0.01", "wait_s: .inf", "batching.wait_s"),
+        ("memory_gib: 2", "memory_gib: .nan", "resources.memory_gib"),
+        ("cpus: 1", "cpus: .inf", "resources.cpus"),
+        ("tile_size: 64", "tile_size: true", "input.tile_size"),
+        ("max_size: 8", "max_size: 8.0", "batching.max_size"),
+    ],
+)
+def test_values_of_the_wrong_kind_are_refused(
+    root: Path, old: str, new: str, where: str
+) -> None:
+    write(root, "served-models/m1.yaml", MODEL.replace(old, new))
+
+    with pytest.raises(CatalogInvalid) as raised:
+        load_catalog(root)
+
+    (error,) = raised.value.errors
+    assert f"m1.yaml:{where}:" in str(error)
+
+
+def test_min_replicas_may_not_exceed_max_replicas(root: Path) -> None:
+    write(
+        root,
+        "served-models/m1.yaml",
+        MODEL + "    serving: {min_replicas: 3, max_replicas: 2}\n",
+    )
+
+    with pytest.raises(CatalogInvalid) as raised:
+        load_catalog(root)
+
+    (error,) = raised.value.errors
+    assert "min_replicas" in str(error) and "max_replicas" in str(error)
+
+
+def test_an_unknown_nested_key_is_named_by_its_full_path(root: Path) -> None:
+    write(
+        root,
+        "served-models/m1.yaml",
+        MODEL.replace("wait_s: 0.01", "wait_s: 0.01, wait: 1").replace(
+            "range: [0, 1]", "range: [0, 1], chanels: 2"
+        ),
+    )
+
+    with pytest.raises(CatalogInvalid) as raised:
+        load_catalog(root)
+
+    assert sorted(str(e) for e in raised.value.errors) == [
+        "catalog/served-models/m1.yaml:batching.wait: unknown key `batching.wait`. "
+        "Keys of batching: max_size, wait_s. Hint: did you mean `wait_s`?",
+        "catalog/served-models/m1.yaml:output.chanels: unknown key "
+        "`output.chanels`. Keys of output: channels, dtype, kind, range, size. "
+        "Hint: did you mean `channels`?",
+    ]

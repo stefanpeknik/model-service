@@ -78,6 +78,7 @@ class SlideTilesOptions(Options):
         None,
         gt=0,
         description="Tile edge in pixels; the first model step's when left out.",
+        strict=True,
     )
     mpp: float | None = Field(
         None,

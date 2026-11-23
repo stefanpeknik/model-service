@@ -27,7 +27,7 @@ class MyComponentOptions(Options):
         threads: <A setting of the library>.
     """
 
-    threads: int = Field(1, ge=1, description="<What the option changes>.")
+    threads: int = Field(1, ge=1, description="<What the option changes>.", strict=True)
 
 
 class MyComponent(Runtime):

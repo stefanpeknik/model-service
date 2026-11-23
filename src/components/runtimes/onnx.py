@@ -57,6 +57,7 @@ class OnnxOptions(Options):
             "TensorRT builder optimisation level: higher builds slower and may "
             "run faster."
         ),
+        strict=True,
     )
     fp16: bool = Field(True, description="Let TensorRT use FP16 kernels.")
     apply_session_options: bool = Field(
@@ -67,7 +68,9 @@ class OnnxOptions(Options):
             "for every core)."
         ),
     )
-    threads: int = Field(1, ge=1, description="ONNX Runtime's intra-op threads.")
+    threads: int = Field(
+        1, ge=1, description="ONNX Runtime's intra-op threads.", strict=True
+    )
     output_dtype: Literal["float32", "float16"] | None = Field(
         None,
         description=(

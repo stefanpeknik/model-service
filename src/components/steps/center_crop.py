@@ -24,7 +24,7 @@ class CenterCropOptions(Options):
     """
 
     size: int = Field(
-        gt=0, description="The edge of the centre square kept, in pixels."
+        gt=0, description="The edge of the centre square kept, in pixels.", strict=True
     )
 
 

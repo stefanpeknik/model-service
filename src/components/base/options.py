@@ -30,9 +30,9 @@ PerRun = Annotated[T, PER_RUN]
 
 
 class Options(BaseModel):
-    """Base of every component's options: unknown keys are errors."""
+    """Base of every component's options: unknown keys, NaN and infinity are errors."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
 
 def per_run_fields(options: type[BaseModel]) -> frozenset[str]:

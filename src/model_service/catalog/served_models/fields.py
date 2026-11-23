@@ -8,9 +8,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Block(BaseModel):
-    """A block of a served-model file: unknown keys are errors."""
+    """A block of a served-model file: unknown keys, NaN and infinity are errors."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
 
 class Input(Block):
@@ -21,7 +21,7 @@ class Input(Block):
         mpp: Microns per pixel the model was trained at.
     """
 
-    tile_size: int = Field(gt=0, description="Tile edge in pixels.")
+    tile_size: int = Field(gt=0, description="Tile edge in pixels.", strict=True)
     mpp: float = Field(
         gt=0, allow_inf_nan=False, description="Microns per pixel of the tiles."
     )
@@ -39,9 +39,12 @@ class ScoresOutput(Block):
     """
 
     kind: Literal["scores"] = Field(description="`scores` or `embedding`.")
-    channels: int = Field(1, gt=0, description="Score channels.")
+    channels: int = Field(1, gt=0, description="Score channels.", strict=True)
     size: int = Field(
-        1, gt=0, description="Edge of the score map; 1 for one score per tile."
+        1,
+        gt=0,
+        description="Edge of the score map; 1 for one score per tile.",
+        strict=True,
     )
     dtype: Literal["float32", "float16"] = Field(
         "float32", description="The scores' dtype: `float32` or `float16`."
@@ -100,7 +103,9 @@ class Batching(Block):
         wait_s: How long a batch waits to fill.
     """
 
-    max_size: int = Field(gt=0, description="The largest batch the runtime gets.")
+    max_size: int = Field(
+        gt=0, description="The largest batch the runtime gets.", strict=True
+    )
     wait_s: float = Field(ge=0, description="Seconds a batch waits to fill up.")
 
 
@@ -131,20 +136,27 @@ class Serving(Block):
         max_concurrent_runs: Scheduled analysis runs using the model at once.
     """
 
-    min_replicas: int = Field(0, ge=0, description="Replicas kept when idle.")
-    max_replicas: int = Field(4, ge=1, description="The most replicas.")
+    min_replicas: int = Field(
+        0, ge=0, description="Replicas kept when idle.", strict=True
+    )
+    max_replicas: int = Field(4, ge=1, description="The most replicas.", strict=True)
     target_ongoing_requests: int | None = Field(
         None,
         gt=0,
         description="Requests per replica the autoscaler aims at; half a batch.",
+        strict=True,
     )
     max_ongoing_requests: int | None = Field(
-        None, gt=0, description="Requests one replica takes at once; two batches."
+        None,
+        gt=0,
+        description="Requests one replica takes at once; two batches.",
+        strict=True,
     )
     max_queued_requests: int | None = Field(
         None,
         gt=0,
         description="Requests queued before callers are refused; sixteen batches.",
+        strict=True,
     )
     downscale_delay_s: float | None = Field(
         None,
@@ -161,7 +173,25 @@ class Serving(Block):
             "Scheduled analysis runs using this model at once; the API's "
             "PER_MODEL_LIMIT when left out."
         ),
+        strict=True,
     )
+
+    @model_validator(mode="after")
+    def _replicas_in_order(self) -> Serving:
+        """Refuse more replicas kept idle than allowed at all.
+
+        Returns:
+            The serving block.
+
+        Raises:
+            ValueError: If `min_replicas` is above `max_replicas`.
+        """
+        if self.min_replicas > self.max_replicas:
+            raise ValueError(
+                f"min_replicas ({self.min_replicas}) must not exceed "
+                f"max_replicas ({self.max_replicas})"
+            )
+        return self
 
 
 class Fields(Block):

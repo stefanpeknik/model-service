@@ -358,7 +358,9 @@ def test_a_directory_given_as_an_output_is_refused_and_left_intact(
 def test_two_outputs_with_the_same_destination_are_refused(
     tmp_path: Path, slide: Path, out: Path
 ) -> None:
-    two_sinks = "[{use: score_grid, output: heatmap}, {use: score_table, output: table}]"
+    two_sinks = (
+        "[{use: score_grid, output: heatmap}, {use: score_table, output: table}]"
+    )
     same = {"heatmap": out / "a.npz", "table": out / "sub" / ".." / "a.npz"}
 
     with pytest.raises(InvalidInvocation, match="same path"):

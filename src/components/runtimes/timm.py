@@ -41,6 +41,7 @@ class TimmOptions(Options):
             "Classifier outputs, passed to timm's constructor; 0 removes the head, "
             "so the model returns its features. Left out, the folder's config decides."
         ),
+        strict=True,
     )
     mlp_layer: Literal["swiglu_packed"] | None = Field(
         None,

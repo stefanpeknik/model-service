@@ -29,7 +29,7 @@ class MyComponentOptions(Options):
         tile_size: Tile edge in pixels.
     """
 
-    tile_size: int = Field(64, ge=1, description="Tile edge in pixels.")
+    tile_size: int = Field(64, ge=1, description="Tile edge in pixels.", strict=True)
 
 
 class MyComponent(Source):

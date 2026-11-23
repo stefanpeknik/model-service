@@ -28,7 +28,7 @@ class ContinuousPixelmapOptions(PublisherOptions):
     """Options of `continuous_pixelmap`."""
 
     tile_size: int = Field(
-        512, ge=256, le=2048, description="Pixelmap tile edge in pixels."
+        512, ge=256, le=2048, description="Pixelmap tile edge in pixels.", strict=True
     )
 
 

@@ -30,6 +30,7 @@ class ClsMeanPoolOptions(Options):
             "Register tokens after the class token, left out of the mean and of "
             "unpooled tokens (Virchow2 has 4)."
         ),
+        strict=True,
     )
 
 

@@ -30,6 +30,7 @@ class ResizeOptions(Options):
             "The shorter edge after resizing, in pixels; the longer edge keeps "
             "the aspect ratio, so a square tile becomes `size` x `size`."
         ),
+        strict=True,
     )
     interpolation: Literal["bilinear", "bicubic", "nearest"] = Field(
         "bilinear",
