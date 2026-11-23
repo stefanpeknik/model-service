@@ -11,17 +11,17 @@ ARG UV_HTTP_TIMEOUT=300
 ARG UV_CONCURRENT_DOWNLOADS=4
 
 # The Ray head and CPU workers: the analysis runner runs here, and Serve
-# imports every app here, the models' included. The builders (the analysis
-# runner's, named before analyses replaced the builders), inference and cpu
-# extras, pinned by uv.lock; the base image's Ray stays. The EMPAIA SDK is a
-# git dependency on a GitLab fork, so build with `--ssh default`.
+# imports every app here, the models' included. The analysis-runner,
+# served-models and cpu extras, pinned by uv.lock; the base image's Ray
+# stays. The EMPAIA SDK is a git dependency on a GitLab fork, so build with
+# `--ssh default`.
 COPY pyproject.toml uv.lock /tmp/project/
 RUN --mount=type=ssh cd /tmp/project \
     && export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new" \
         GIT_CONFIG_COUNT=1 \
         GIT_CONFIG_KEY_0=url.git@gitlab.ics.muni.cz:rationai/digital-pathology/production/services/models.git.insteadOf \
         GIT_CONFIG_VALUE_0=https://github.com/AigoPath/EMPAIA-Models.git \
-    && uv export --frozen --no-dev --extra builders --extra inference --extra cpu \
+    && uv export --frozen --no-dev --extra analysis-runner --extra served-models --extra cpu \
         --no-emit-project --no-emit-package ray \
         --format pylock.toml -o /tmp/pylock.ray-cpu.toml \
     && uv pip install --python /home/ray/anaconda3/bin/python --no-cache \

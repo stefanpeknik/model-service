@@ -110,7 +110,7 @@ export GIT_CONFIG_COUNT=1 \
   GIT_CONFIG_KEY_0=url.git@gitlab.ics.muni.cz:rationai/digital-pathology/production/services/models.git.insteadOf \
   GIT_CONFIG_VALUE_0=https://github.com/AigoPath/EMPAIA-Models.git
 export UV_CACHE_DIR=.cache/uv
-uv sync --extra api --extra builders --extra inference --extra cpu
+uv sync --extra api --extra analysis-runner --extra served-models --extra cpu
 podman run -d --name ms-test-pg -p 127.0.0.1:55432:5432 \
   -e POSTGRES_PASSWORD=test docker.io/library/postgres:17-alpine
 TEST_POSTGRES_DSN=postgresql://postgres:test@127.0.0.1:55432/postgres uv run pytest
@@ -119,8 +119,8 @@ uv run mypy src
 PYTHONPATH=src uv run scripts/generate.py   # after changing components, formats or catalog/
 ```
 
-The `builders` extra installs the analysis runner's dependencies; it keeps
-its old name until the lock file is regenerated. Without `TEST_POSTGRES_DSN`
+Each process has its extra: `api`, `analysis-runner` and `served-models`,
+with `cpu` or `gpu` for the runtimes. Without `TEST_POSTGRES_DSN`
 the PostgreSQL tests are skipped. Tests marked `live` call the deployed
 cluster and run only with `uv run pytest -m live`.
 
