@@ -56,16 +56,13 @@ VERSION = 2
 EXTENSION = "h5"
 """The file name suffix, without the dot."""
 MEDIA_TYPE = media_type("embedding-table", "hdf5", VERSION)
-LEGACY_MEDIA_TYPE = "application/x-hdf5"
-"""The media type older stored results give this layout; readers still take it."""
 COORDINATE_SPACE = "slide_level"
 
-KNOWN = (MEDIA_TYPE, LEGACY_MEDIA_TYPE)
+KNOWN = (MEDIA_TYPE,)
 
 __all__ = [
     "EXTENSION",
     "KNOWN",
-    "LEGACY_MEDIA_TYPE",
     "MEDIA_TYPE",
     "NAME",
     "VERSION",

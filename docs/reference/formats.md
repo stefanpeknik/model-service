@@ -7,7 +7,6 @@ A data format is a named, versioned file shape. Sinks write one, publishers read
 ## `embedding_table`
 
 - **Media type:** `application/vnd.rationai.embedding-table+hdf5; version=2`
-- **Also read:** `application/x-hdf5`
 - **File suffix:** `.h5`
 - **Written by:** [`embedding_table`](components.md#embedding_table-sink)
 - **Published to EMPAIA by:** no publisher yet
@@ -50,7 +49,6 @@ sink; `TableWriter` appends rows as they come.
 ## `score_grid`
 
 - **Media type:** `application/vnd.rationai.score-grid+npz; version=1`
-- **Also read:** `application/x-npz`
 - **File suffix:** `.npz`
 - **Written by:** [`score_grid`](components.md#score_grid-sink)
 - **Published to EMPAIA by:** [`continuous_pixelmap`](components.md#continuous_pixelmap-publisher) as `continuous_pixelmap`
@@ -79,7 +77,6 @@ it itself. Written by the `score_grid` sink.
 ## `value`
 
 - **Media type:** `application/vnd.rationai.value+json; version=1`
-- **Also read:** nothing older
 - **File suffix:** `.json`
 - **Written by:** no sink yet
 - **Published to EMPAIA by:** [`primitive`](components.md#primitive-publisher) as `bool`, `float`, `integer`, `string`

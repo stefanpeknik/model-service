@@ -147,8 +147,10 @@ def test_a_reader_takes_todays_media_type_and_refuses_an_unknown_version(
     assert embedding_table.MEDIA_TYPE == (
         "application/vnd.rationai.embedding-table+hdf5; version=2"
     )
-    legacy = embedding_table.read(path, media_type="application/x-hdf5")
+    table = embedding_table.read(path, media_type=embedding_table.MEDIA_TYPE)
 
-    assert legacy.features.shape == (2, 2, 3)
+    assert table.features.shape == (2, 2, 3)
     with pytest.raises(embedding_table.UnsupportedFormat, match="version=3"):
         embedding_table.read(path, media_type=newer)
+    with pytest.raises(embedding_table.UnsupportedFormat):
+        embedding_table.read(path, media_type="application/x-hdf5")

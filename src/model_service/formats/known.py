@@ -21,7 +21,7 @@ class Format:
         name: The name sinks declare, e.g. `score_grid`.
         media_type: The versioned vendor media type.
         extension: The file name suffix, without the dot.
-        known: Every media type its reader takes, older layouts included.
+        known: Every media type its reader takes.
         module: The module that declares it; its docstring is its reference page.
     """
 

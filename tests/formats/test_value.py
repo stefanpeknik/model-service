@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from model_service.formats import value
+from model_service.formats import score_grid, value
 from model_service.formats.known import format_of, get_format
 from model_service.formats.media_type import UnsupportedFormat
 
@@ -43,7 +43,8 @@ def test_an_unknown_version_is_refused(tmp_path: Path) -> None:
         value.read(path, "application/vnd.rationai.value+json; version=2")
 
 
-def test_a_stored_media_type_names_its_format_old_layouts_included() -> None:
+def test_a_stored_media_type_names_its_format() -> None:
     assert format_of(value.MEDIA_TYPE) is get_format("value")
-    assert format_of("application/x-npz") is get_format("score_grid")
+    assert format_of(score_grid.MEDIA_TYPE) is get_format("score_grid")
+    assert format_of("application/x-npz") is None
     assert format_of("image/tiff") is None

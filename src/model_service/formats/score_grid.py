@@ -40,15 +40,12 @@ VERSION = 1
 EXTENSION = "npz"
 """The file name suffix, without the dot."""
 MEDIA_TYPE = media_type("score-grid", EXTENSION, VERSION)
-LEGACY_MEDIA_TYPE = "application/x-npz"
-"""The media type older stored results give this layout; readers still take it."""
 
-KNOWN = (MEDIA_TYPE, LEGACY_MEDIA_TYPE)
+KNOWN = (MEDIA_TYPE,)
 
 __all__ = [
     "EXTENSION",
     "KNOWN",
-    "LEGACY_MEDIA_TYPE",
     "MEDIA_TYPE",
     "NAME",
     "VERSION",

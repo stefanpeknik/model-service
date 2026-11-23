@@ -49,11 +49,9 @@ def formats_page(registry: Registry) -> str:
             for c in registry
             if issubclass(c, Publisher) and c.reads_format == name
         ]
-        older = [code(k) for k in found.known if k != found.media_type]
         path = found.module.replace(".", "/")
         rows = [
             ["Media type", code(found.media_type)],
-            ["Also read", ", ".join(older) or "nothing older"],
             ["File suffix", code(f".{found.extension}")],
             ["Written by", ", ".join(writers) or "no sink yet"],
             ["Published to EMPAIA by", "; ".join(readers) or "no publisher yet"],
