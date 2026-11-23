@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from components.base.slots import Slot
 
 
-NAME = re.compile(r"^[a-z][a-z0-9]*(_[a-z0-9]+)*$")
+NAME = re.compile(r"[a-z][a-z0-9]*(_[a-z0-9]+)*")
 
 
 class Component(ABC):
@@ -64,7 +64,7 @@ class Component(ABC):
         super().__init_subclass__(**kwargs)
         if "name" not in cls.__dict__:
             return
-        if not isinstance(cls.name, str) or not NAME.match(cls.name):
+        if not isinstance(cls.name, str) or not NAME.fullmatch(cls.name):
             raise TypeError(
                 f"{cls.__qualname__}.name {cls.name!r} must be snake_case, "
                 "e.g. 'cls_mean_pool'"
