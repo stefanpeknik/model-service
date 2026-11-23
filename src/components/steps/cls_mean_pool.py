@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar
 
-import numpy as np
 from pydantic import Field
 
 from components.base import Step
@@ -44,8 +43,8 @@ class ClsMeanPool(Step):
 
     The mean is computed with PyTorch, the way the encoder's own code pools,
     so the features match it bit for bit; PyTorch must be installed where
-    the step runs. A caller that skips pooling gets the class token and the
-    patch tokens, without the registers.
+    the step runs. A raw-inference caller that asks for unpooled tokens gets
+    the class token and the patch tokens, without the registers.
     """
 
     name = "cls_mean_pool"
@@ -70,15 +69,3 @@ class ClsMeanPool(Step):
         patches = tokens[:, 1 + self.options.registers :]
         pooled = torch.stack([tokens[:, 0], patches.mean(dim=1)], dim=1)
         return batch | {"output": pooled.numpy()}
-
-    def skipped(self, batch: Batch) -> Batch:
-        """Drop the register tokens, which unpooled callers never got.
-
-        Args:
-            batch: `output`, tokens `(rows, tokens, dim)`.
-
-        Returns:
-            The batch with the class token and patch tokens in `output`.
-        """
-        registers = np.arange(1, 1 + self.options.registers)
-        return batch | {"output": np.delete(batch["output"], registers, axis=1)}

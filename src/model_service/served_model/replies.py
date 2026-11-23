@@ -5,9 +5,9 @@ The format follows from `output:`, with no per-model code:
 - one score per tile (`scores`, 1 channel, size 1): the score as a JSON float;
 - a score map: the scores' bytes, LZ4-compressed;
 - an embedding: the features' bytes, LZ4-compressed, with `x-output-shape`.
-  `x-pool-tokens: false` skips `post:` (each step's `skipped`, so Virchow2's
-  reply has no register tokens), and `x-output-dtype` casts the features
-  (float32 by default).
+  `x-pool-tokens: false` skips `post:` and replies with the runtime's tokens
+  minus the register tokens a `cls_mean_pool` post step names (`unpooled`),
+  and `x-output-dtype` casts the features (float32 by default).
 
 The request body is an LZ4-compressed uint8 RGB tile, `(tile_size,
 tile_size, 3)` (channels last). Unifying these formats is a later change,
@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from pydantic import TypeAdapter
 
+from components.steps.cls_mean_pool import ClsMeanPool
 from model_service.catalog.served_models import ScoresOutput
 
 
@@ -83,9 +84,30 @@ async def raw_reply(
         return RawReply(lz4.frame.compress(scores.tobytes()), BYTES)
     post = headers.get("x-pool-tokens", "true").lower() == "true"
     dtype = np.dtype(headers.get("x-output-dtype", "float32").lower())
-    features = (await infer(tile, post)).astype(dtype, copy=False)
+    output = await infer(tile, post)
+    features = (output if post else unpooled(model, output)).astype(dtype, copy=False)
     return RawReply(
         lz4.frame.compress(features.tobytes()),
         BYTES,
         {"x-output-shape": str(features.shape)},
     )
+
+
+def unpooled(model: ServedModel, tokens: np.ndarray) -> np.ndarray:
+    """The tokens an `x-pool-tokens: false` caller gets: no register tokens.
+
+    Register tokens follow the class token, and a `cls_mean_pool` post step
+    says how many there are (Virchow2 has 4). Pooling leaves them out, so
+    unpooled callers never got them either.
+
+    Args:
+        model: The served model.
+        tokens: The runtime's output for one tile, `(tokens, dim)`.
+
+    Returns:
+        The class token and the patch tokens.
+    """
+    registers = sum(
+        step.options.registers for step in model.post if isinstance(step, ClsMeanPool)
+    )
+    return np.delete(tokens, np.arange(1, 1 + registers), axis=0)

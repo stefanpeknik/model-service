@@ -10,8 +10,8 @@ Per request, in order:
    column `output`, so only reduced data leaves the replica;
 5. the output is checked against `output:` (shape, dtype, finite, range).
 
-A raw request that skips `post:` gets each post step's `skipped` instead of
-steps 4 and 5.
+A raw request for unpooled tokens skips steps 4 and 5; the raw route then
+drops the register tokens itself (`replies.unpooled`).
 
 Steps run one tile at a time, so a tile's result never depends on the batch
 it arrived in.
@@ -128,7 +128,7 @@ class ServedModelHost:
         }
 
     async def _infer(self, tile: np.ndarray, post: bool) -> np.ndarray:
-        """Infer one tile; without `post`, skip each post step, unchecked.
+        """Infer one tile; without `post`, return the runtime's output unchecked.
 
         Args:
             tile: uint8 RGB `(3, tile_size, tile_size)`.
@@ -140,7 +140,7 @@ class ServedModelHost:
         check_tile(self.model, tile)
         output = await self._batcher.submit(_apply(self.model.pre, "tile", tile))
         if not post:
-            return _apply(self.model.post, "output", output, skipped=True)
+            return output
         return check_output(self.model, _apply(self.model.post, "output", output))
 
     def _run_batch(self, tiles: list[np.ndarray]) -> list[np.ndarray]:
@@ -157,21 +157,17 @@ class ServedModelHost:
         return list(output)
 
 
-def _apply(
-    steps: Sequence[Step], column: str, value: np.ndarray, *, skipped: bool = False
-) -> np.ndarray:
-    """Run steps (or what skipping them leaves) on one item as a one-row batch.
+def _apply(steps: Sequence[Step], column: str, value: np.ndarray) -> np.ndarray:
+    """Run steps on one item as a one-row batch.
 
     Args:
         steps: The steps, in order.
         column: The column they read and write.
         value: The item.
-        skipped: Whether to run each step's `skipped` instead.
 
     Returns:
         The item after the steps.
     """
     for step in steps:
-        run = step.skipped if skipped else step
-        value = run({column: value[None]})[column][0]
+        value = step({column: value[None]})[column][0]
     return value
