@@ -4,7 +4,8 @@ Per request, in order, before the deadline:
 
 1. the resolved document is read back and its digest checked;
 2. each served model it names is asked for `describe()`, and a digest that
-   differs from the document's is `model_contract_mismatch`;
+   differs from the document's, or weights other than the ones its file pins
+   (a Hugging Face commit, an MLflow `sha256`), is `model_contract_mismatch`;
 3. the provider's input access opens the inputs and says where outputs
    go: below the request's shared-storage root, which must lie within the
    replica's allowed roots, or in an EMPAIA job's workspace, with each input
@@ -148,7 +149,9 @@ class AnalysisReplica:
         """Verify the models, open the access, run, and close the access."""
         analysis = resolved.analysis
         models = {
-            model_id: await self._verified(model_id, digest)
+            model_id: await self._verified(
+                model_id, digest, analysis.models[model_id].weights.expected_revision()
+            )
             for model_id, digest in resolved.model_digests.items()
         }
         invocation = request.invocation
@@ -181,8 +184,23 @@ class AnalysisReplica:
             }
         )
 
-    async def _verified(self, model_id: str, digest: str) -> DescribedModel:
-        """A served model's handle, after its `describe()` matched the document."""
+    async def _verified(
+        self, model_id: str, digest: str, weights: str | None
+    ) -> DescribedModel:
+        """A served model's handle, after its `describe()` matched the document.
+
+        Args:
+            model_id: The served model.
+            digest: Its digest in the resolved document.
+            weights: The weights revision its file pins, or None if it pins none.
+
+        Returns:
+            The handle.
+
+        Raises:
+            RunFailure: `model_failed` (retryable) if `describe()` fails;
+                `model_contract_mismatch` if the digest or pinned weights differ.
+        """
         handle = self._models(model_id)
         try:
             running = await handle.describe()
@@ -198,6 +216,14 @@ class AnalysisReplica:
                 safe_message=(
                     f"model {model_id!r} is running a declaration that differs "
                     "from the one the analysis was admitted with"
+                ),
+                retryable=False,
+            )
+        if weights is not None and running.get("weights_revision") != weights:
+            raise RunFailure(
+                code=FailureCode.MODEL_CONTRACT_MISMATCH,
+                safe_message=(
+                    f"model {model_id!r} is running other weights than its file pins"
                 ),
                 retryable=False,
             )

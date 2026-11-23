@@ -39,8 +39,9 @@ resources: {gpus: 1, cpus: 4, memory_gib: 12}
 ```
 
 - `weights` says where the weights come from. An MLflow URI names one run's
-  file. A Hugging Face repository needs the full commit hash as `revision`,
-  so the weights can't change under the same file.
+  file; add `sha256:` (the file's `sha256sum`) so overwritten weights are
+  refused instead of served. A Hugging Face repository needs the full commit
+  hash as `revision`, so the weights can't change under the same file.
 - `input` is the tile edge in pixels and the microns per pixel the model was
   trained at. Get `mpp` right: analyses read the slide level closest to it.
 - `output` is `{kind: scores, channels, size}` for a score map of

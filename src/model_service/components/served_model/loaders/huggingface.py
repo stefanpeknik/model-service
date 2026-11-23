@@ -88,6 +88,14 @@ class Huggingface(Loader):
         """
         return f"{self.options.repo}@{self.options.revision}"
 
+    def expected_revision(self) -> str:
+        """The commit is pinned, so the revision is known before fetching.
+
+        Returns:
+            `<repo>@<commit>`.
+        """
+        return self.revision()
+
     @classmethod
     def hint(cls, problem: Problem) -> str | None:
         """Point a revision that is not a commit hash at the repository's history.

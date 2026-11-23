@@ -45,13 +45,20 @@ if TYPE_CHECKING:
 class Handle:
     """A served model's handle: the fake model, reporting a digest."""
 
-    def __init__(self, digest: str) -> None:
+    def __init__(
+        self, digest: str, weights_revision: str = "/weights/model.onnx"
+    ) -> None:
         self.digest = digest
+        self.weights_revision = weights_revision
         self.model = fake_model(tile_size=64, mpp=0.5)
         self.calls = 0
 
     async def describe(self) -> dict[str, Any]:
-        return {"id": "m1", "digest": self.digest}
+        return {
+            "id": "m1",
+            "digest": self.digest,
+            "weights_revision": self.weights_revision,
+        }
 
     async def infer(self, tile: np.ndarray) -> np.ndarray:
         self.calls += 1
@@ -158,6 +165,46 @@ def test_a_served_model_running_another_declaration_is_a_contract_mismatch(
     assert "m1" in raised.value.safe_message
     assert handle.calls == 0
     assert not (storage / "out").exists()
+
+
+URI = "file:///weights/model.onnx"
+SHA256 = "a" * 64
+
+
+@pytest.mark.parametrize(
+    ("running", "refused"),
+    [(f"{URI}@sha256:{SHA256}", False), (f"{URI}@sha256:{'b' * 64}", True)],
+)
+def test_a_served_model_must_run_the_weights_its_file_pins(
+    tmp_path: Path, storage: Path, running: str, refused: bool
+) -> None:
+    root = tmp_path / "catalog"
+    pinned = served_model().replace(
+        "{use: local, path: /weights/model.onnx}",
+        f'{{use: mlflow, uri: "{URI}", sha256: "{SHA256}"}}',
+    )
+    write(root, "served-models/m1.yaml", pinned)
+    write(
+        root,
+        "analyses/a1.yaml",
+        """
+        source: {use: slide_tiles, skip_background: false}
+        steps: [{model: m1}]
+        sinks: [{use: score_grid, output: heatmap}]
+        """,
+    )
+    resolved = resolve_run(load_catalog(root, registry=REGISTRY), "a1")
+    handle = Handle(resolved.model_digests["m1"], running)
+
+    if not refused:
+        run(request(resolved, storage), handle, storage)
+        assert handle.calls > 0
+        return
+    with pytest.raises(RunFailure) as raised:
+        run(request(resolved, storage), handle, storage)
+    assert raised.value.code == "model_contract_mismatch"
+    assert "weights" in raised.value.safe_message
+    assert handle.calls == 0
 
 
 def test_a_root_outside_the_allowed_ones_is_refused(

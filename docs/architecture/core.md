@@ -87,7 +87,8 @@ request body. Adding a provider means a package and one entry in `PROVIDERS`
    analysis runner (`/analyses/`). Scheduled: it stores both on the execution,
    and every attempt sends that document.
 4. The runner checks each served model's `describe()` digest against the
-   document, opens inputs through an access adapter, runs, and commits its
+   document, and its weights revision where the served-model file pins one
+   (see below), opens inputs through an access adapter, runs, and commits its
    outputs all or nothing. Scheduled attempts write under
    `.attempts/<execution>/<hash of attempt token>/` so a stale attempt never
    overwrites a newer one.
@@ -95,6 +96,23 @@ request body. Adding a provider means a package and one entry in `PROVIDERS`
    artifacts to their requested paths, stores those paths in the result and
    removes the execution's attempt directories; EMPAIA publishes to the
    AppService.
+
+### Which weights a served model runs
+
+The digest covers the served-model file, so a replica deployed from another
+file is refused. The file names its weights, but only some names fix the
+bytes:
+
+- `huggingface` pins a commit, so the runner compares `describe()`'s
+  `weights_revision` (`<repo>@<commit>`) with the file's.
+- `mlflow` names a run's artifact by URI, and an artifact can be overwritten
+  under the same URI. The loader checksums what it downloaded, so
+  `describe()` and the replica's start-up log show
+  `<uri>@sha256:<hex>`. With `sha256:` in the file, a download with other
+  bytes fails the replica's start and the runner compares the revision too.
+  Without it, which the catalog's MLflow models have today, nothing checks
+  the bytes: a changed artifact is visible in `describe()` but runs.
+- `local` names a path; the bytes at it are not checked.
 
 A scheduled analysis (`POST /v1/analyses/{a}/schedule`, the synchronous
 run's body with `requested_timeout_seconds` instead of a deadline and an

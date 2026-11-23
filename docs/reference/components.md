@@ -63,7 +63,9 @@ Downloads one artifact (e.g. an ONNX file) from MLflow.
 
 `weights: {use: mlflow, uri: "mlflow-artifacts:/65/<run>/artifacts/model.onnx"}`.
 The tracking server comes from the environment (`MLFLOW_TRACKING_URI`),
-which each deployment environment sets once.
+which each deployment environment sets once. After the download the
+revision carries the artifact's SHA-256, so `describe()` names the bytes
+that run; `sha256:` pins them.
 
 - **Usable in:** served model `weights:`, analysis step `weights:`
 - **Example:** `{use: mlflow, uri: 'mlflow-artifacts:/0/0123456789abcdef/artifacts/model.onnx'}`
@@ -72,7 +74,8 @@ which each deployment environment sets once.
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `uri` | string | required | The artifact's URI, e.g. `mlflow-artifacts:/<experiment>/<run>/artifacts/<path>`; it names one run's file, so it pins the weights. |
+| `uri` | string | required | The artifact's URI, e.g. `mlflow-artifacts:/<experiment>/<run>/artifacts/<path>`; it names one run's file. |
+| `sha256` | string | not set | The artifact's SHA-256 (`sha256sum` of the file). A run's artifact can be overwritten under the same URI; with this set, a download with other bytes is refused and the analysis runner checks it. |
 
 ## Runtimes
 

@@ -381,10 +381,24 @@
       "description": "Downloads one artifact (e.g. an ONNX file) from MLflow.",
       "properties": {
         "uri": {
-          "description": "The artifact's URI, e.g. `mlflow-artifacts:/<experiment>/<run>/artifacts/<path>`; it names one run's file, so it pins the weights.",
+          "description": "The artifact's URI, e.g. `mlflow-artifacts:/<experiment>/<run>/artifacts/<path>`; it names one run's file.",
           "minLength": 1,
           "title": "Uri",
           "type": "string"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The artifact's SHA-256 (`sha256sum` of the file). A run's artifact can be overwritten under the same URI; with this set, a download with other bytes is refused and the analysis runner checks it.",
+          "title": "Sha256"
         },
         "use": {
           "const": "mlflow",

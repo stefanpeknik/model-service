@@ -40,6 +40,20 @@ class Loader(Component):
     def revision(self) -> str:
         """Name the exact weights this loader fetches, for `describe()`.
 
+        After `fetch` it may also name what was fetched, e.g. a checksum of
+        the downloaded file.
+
         Returns:
             A pinned reference: an artifact URI, a repo revision, a path.
         """
+
+    def expected_revision(self) -> str | None:
+        """The revision `revision()` must give after `fetch`, if the options pin it.
+
+        The analysis runner compares it with the served model's `describe()`,
+        so weights that changed under the same options are refused.
+
+        Returns:
+            The pinned revision, or None when the options don't pin the content.
+        """
+        return None
