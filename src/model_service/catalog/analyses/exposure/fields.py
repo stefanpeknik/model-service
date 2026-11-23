@@ -24,7 +24,11 @@ class StandaloneFields(_Strict):
 
     parameters: tuple[str, ...] = Field(
         (),
-        description="Per-run settings users fill in per job; the rest keep the file's values.",
+        description=(
+            "Per-run settings users fill in per job; the rest keep the file's "
+            "values. Needs a converter of EAD type `primitive`, which no "
+            "component provides yet."
+        ),
     )
 
 

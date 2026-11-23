@@ -7,8 +7,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import ValidationError
 
-from components.base import slots
-from components.empaia.converters.primitive import primitive_of
+from components.base import EmpaiaInput, slots
 from model_service.catalog.analyses.exposure.fields import EmpaiaFields, ExposeFields
 from model_service.catalog.validation import problems
 from model_service.providers.empaia.ead.vocabulary import AppMode, Trigger, ViewerConfig
@@ -25,6 +24,8 @@ if TYPE_CHECKING:
 
 
 WSI = "wsi"
+# The EAD type standalone parameters are offered as.
+PRIMITIVE = "primitive"
 # The input types an analysis need not declare, by input name.
 DEFAULT_INPUT_TYPES = {"slide": WSI, "region_of_interest": "rectangle"}
 PATH: YamlPath = ("expose", "empaia")
@@ -40,6 +41,8 @@ class EmpaiaExposure:
         description: What it finds, without the modes' sentences.
         modes: The offered modes, standalone first.
         parameters: The settings users fill in per standalone job.
+        parameter_converter: The converter of the `primitive` type that
+            offers and reads them; None without parameters.
         triggers: The slides EMPAIA preprocesses with it.
         inputs: The converter of each input, in the analysis's input order.
         slide: The input that is the slide, which other entries reference.
@@ -57,6 +60,7 @@ class EmpaiaExposure:
     slide: str
     outputs: Mapping[str, Publisher]
     viewer: ViewerConfig = field(default_factory=ViewerConfig)
+    parameter_converter: InputConverter | None = None
 
     def mode_inputs(self, mode: AppMode, required: Mapping[str, bool]) -> list[str]:
         """The inputs a mode takes: every one standalone, the required ones in preprocessing.
@@ -98,7 +102,7 @@ def resolve_exposure(
         return None
     inputs = _inputs(ctx, fields, analysis)
     slide = _slide(ctx, inputs)
-    parameters = _parameters(ctx, fields, analysis)
+    resolved_parameters = _parameters(ctx, fields, analysis)
     outputs = _outputs(ctx, fields, analysis)
     _viewer(ctx, fields, analysis)
     modes = fields.modes
@@ -114,8 +118,14 @@ def resolve_exposure(
             "Standalone mode only, or an optional input",
             "drop `preprocessing:` or make the input optional in the source",
         )
-    if inputs is None or slide is None or parameters is None or outputs is None:
+    if (
+        inputs is None
+        or slide is None
+        or resolved_parameters is None
+        or outputs is None
+    ):
         return None
+    parameters, parameter_converter = resolved_parameters
     if ctx.errors:
         return None
     return EmpaiaExposure(
@@ -131,6 +141,7 @@ def resolve_exposure(
             if settings is not None
         ),
         parameters=parameters,
+        parameter_converter=parameter_converter,
         triggers=modes.preprocessing.triggers if modes.preprocessing else (),
         inputs=inputs,
         slide=slide,
@@ -179,7 +190,8 @@ def _inputs(
         if len(found) != 1:
             ctx.error(
                 (*path, TYPE),
-                f"{len(found)} converters take EMPAIA type `{ead_type}`",
+                f"{len(found) or 'no'} converter{'s' * (len(found) > 1)} "
+                f"take{'s' * (len(found) < 2)} EMPAIA type `{ead_type}`",
                 f"Input types: {', '.join(_input_types(ctx))}",
                 "pick a type one converter takes",
             )
@@ -221,8 +233,8 @@ def _slide(
 
 def _parameters(
     ctx: ResolveContext, fields: EmpaiaFields, analysis: Analysis
-) -> tuple[str, ...] | None:
-    """Check the standalone parameters are plain per-run settings.
+) -> tuple[tuple[str, ...], InputConverter | None] | None:
+    """Check the standalone parameters are per-run settings a converter offers.
 
     Args:
         ctx: Collects errors.
@@ -230,14 +242,27 @@ def _parameters(
         analysis: The resolved analysis.
 
     Returns:
-        The parameters, empty without standalone mode, or None after an error.
+        The parameters and the `primitive` converter that offers them (none
+        without parameters), or None after an error.
     """
     standalone = fields.modes.standalone
-    if standalone is None:
-        return ()
+    names = standalone.parameters if standalone is not None else ()
+    if not names:
+        return (), None
+    found = converters_for(PRIMITIVE, ctx.registry)
+    if len(found) != 1:
+        ctx.error(
+            (*PATH, "modes", "standalone", "parameters"),
+            f"{len(found) or 'no'} converter{'s' * (len(found) > 1)} "
+            f"take{'s' * (len(found) < 2)} EMPAIA type `{PRIMITIVE}`, which "
+            "standalone parameters are offered as",
+            f"Input types: {', '.join(_input_types(ctx))}",
+            f"leave out `parameters`, or add a converter of type `{PRIMITIVE}`",
+        )
+        return None
+    converter = cast("InputConverter", found[0].from_options({}))
     schema = analysis.settings_schema()["properties"]
     ok = True
-    names = standalone.parameters
     for i, name in enumerate(names):
         path: YamlPath = (*PATH, "modes", "standalone", "parameters", i)
         if name not in schema:
@@ -248,14 +273,6 @@ def _parameters(
                 "list per-run settings (`PerRun` options) only",
             )
             ok = False
-        elif primitive_of(schema[name]) is None:
-            ctx.error(
-                path,
-                f"setting `{name}` is not a bool, number or string",
-                "A setting of one plain scalar type",
-                "leave it out of the parameters",
-            )
-            ok = False
         elif name in analysis.inputs or names.index(name) != i:
             ctx.error(
                 path,
@@ -264,7 +281,18 @@ def _parameters(
                 "remove the repeat",
             )
             ok = False
-    return tuple(names) if ok else None
+        else:
+            try:
+                converter.io_fragment(EmpaiaInput(name, setting=schema[name]))
+            except ValueError as error:
+                ctx.error(
+                    path,
+                    str(error),
+                    f"A setting `{converter.name}` offers",
+                    "leave it out of the parameters",
+                )
+                ok = False
+    return (tuple(names), converter) if ok else None
 
 
 def _viewer(ctx: ResolveContext, fields: EmpaiaFields, analysis: Analysis) -> None:

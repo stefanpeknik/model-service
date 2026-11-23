@@ -21,7 +21,7 @@ Each file in `catalog/served-models/` is one trained model behind the generic ho
 ## `episeg-1`
 
 - **Weights:** `{use: mlflow, uri: 'mlflow-artifacts:/10/39f821ed5b964c71a603cc6db196f9fd/artifacts/checkpoints/epoch=19-step=32020/model.onnx/model.onnx'}`
-- **Runtime:** `{use: onnx, tensorrt: true, workspace_gib: 6, optimization_level: 3, apply_session_options: false, output_dtype: float16}`
+- **Runtime:** `{use: onnx, tensorrt: true, workspace_gib: 6, optimization_level: 3, output_dtype: float16}`
 - **Pre:** none
 - **Post:** none
 - **Input:** 1024 px tiles at 0.468 µm/px

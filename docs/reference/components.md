@@ -102,7 +102,6 @@ directory, so a changed model never reuses a stale engine.
 | `workspace_gib` | number > 0 | `8` | GPU memory TensorRT may use to choose kernels; too little rules out the fast ones for large tiles. |
 | `optimization_level` | integer ≥ 0, ≤ 5 | `1` | TensorRT builder optimisation level: higher builds slower and may run faster. |
 | `fp16` | boolean | `true` | Let TensorRT use FP16 kernels. |
-| `apply_session_options` | boolean | `true` | Give the session `threads`, all graph optimisations and sequential execution. `false` leaves ONNX Runtime's defaults (intra-op threads for every core). |
 | `threads` | integer ≥ 1 | `1` | ONNX Runtime's intra-op threads. |
 | `output_dtype` | `float32` or `float16` | not set | Cast the graph's output to this dtype, e.g. `float16` to halve a score map; left out, the output keeps the graph's dtype. |
 
@@ -352,20 +351,6 @@ picks the converter, so nothing is guessed from the data. A converter
 contributes the input's EAD io entry and materialises it for a run: a
 file in the attempt's workspace, or a value read at admission.
 
-### `primitive` (converter)
-
-An analysis setting offered as an EMPAIA primitive input in standalone mode.
-
-Its type and description come from the setting; the user's value is
-read when the job is admitted and overrides the file's.
-
-- **Usable in:** EMPAIA exposure `inputs:`
-- **Example:** `{inputs: {<name>: {type: primitive}}}`
-- **EAD input type:** `primitive`
-- **Gives:** a value
-- **Used in:** no catalog file yet
-- **Code:** [`src/components/empaia/converters/primitive.py`](../../src/components/empaia/converters/primitive.py)
-
 ### `rectangle` (converter)
 
 A rectangle on the app's slide, given to the analysis as a region-of-interest mask.
@@ -426,22 +411,3 @@ a multi-channel grid is refused when the analysis loads.
 | --- | --- | --- | --- |
 | `type` | string | required | The EAD output type to publish as, e.g. `continuous_pixelmap`. |
 | `tile_size` | integer ≥ 256, ≤ 2048 | `512` | Pixelmap tile edge in pixels. |
-
-### `primitive` (publisher)
-
-Posts one scalar as the primitive type the analysis names.
-
-The value must fit the type: a bool is not an integer, a float takes
-whole numbers, and an empty string is refused. It is checked before
-anything is posted.
-
-- **Usable in:** EMPAIA exposure `outputs:`
-- **Example:** `{outputs: {<output>: {type: float}}}`
-- **Reads:** [`value`](formats.md#value)
-- **EAD output types:** `bool`, `float`, `integer`, `string`
-- **Used in:** no catalog file yet
-- **Code:** [`src/components/empaia/publishers/primitive.py`](../../src/components/empaia/publishers/primitive.py)
-
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `type` | string | required | The EAD output type to publish as, e.g. `continuous_pixelmap`. |

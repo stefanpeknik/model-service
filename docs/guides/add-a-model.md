@@ -66,7 +66,7 @@ and lists every mistake in one run. Each error names the file, the YAML path,
 what's wrong, what would fit and how to fix it:
 
 ```text
-catalog/served-models/my-classifier.yaml:runtime.thread: unknown option `thread`. Options of `onnx`: apply_session_options, fp16, optimization_level, output_dtype, tensorrt, threads, workspace_gib. Hint: did you mean `threads`?
+catalog/served-models/my-classifier.yaml:runtime.thread: unknown option `thread`. Options of `onnx`: fp16, optimization_level, output_dtype, tensorrt, threads, workspace_gib. Hint: did you mean `threads`?
 ```
 
 Then regenerate the reference docs, which list your model, and commit them

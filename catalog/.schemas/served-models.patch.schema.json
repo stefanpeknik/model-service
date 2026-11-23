@@ -407,12 +407,6 @@
           "title": "Fp16",
           "type": "boolean"
         },
-        "apply_session_options": {
-          "default": true,
-          "description": "Give the session `threads`, all graph optimisations and sequential execution. `false` leaves ONNX Runtime's defaults (intra-op threads for every core).",
-          "title": "Apply Session Options",
-          "type": "boolean"
-        },
         "threads": {
           "default": 1,
           "description": "ONNX Runtime's intra-op threads.",

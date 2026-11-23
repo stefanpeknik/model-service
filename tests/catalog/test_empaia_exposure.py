@@ -108,7 +108,7 @@ PREFIX = "catalog/analyses/a1.yaml:expose.empaia"
             [
                 f"{PREFIX}.outputs.heatmap.type: no publisher takes `score_grid` "
                 "as EMPAIA type `nominal_pixelmap`. Types for `score_grid`: "
-                "continuous_pixelmap. Hint: pick one of them, or leave the output "
+                "continuous_pixelmap, string. Hint: pick one of them, or leave the output "
                 "out of EMPAIA"
             ],
             id="an output type nothing publishes",
@@ -196,4 +196,39 @@ def test_a_multi_channel_grid_is_no_continuous_pixelmap(root: Path) -> None:
         f"{PREFIX}.outputs.heatmap.type: a continuous pixelmap carries one "
         "channel; the scores have 2. A model step whose scores have one channel. "
         "Hint: change the model or the output's type"
+    ]
+
+
+def test_an_input_type_no_converter_takes_is_named(root: Path) -> None:
+    write(
+        root,
+        "analyses/a1.yaml",
+        APP.replace(
+            "outputs:",
+            "inputs: {region_of_interest: {type: polygon}}\n        outputs:",
+        ),
+    )
+
+    assert errors(root) == [
+        f"{PREFIX}.inputs.region_of_interest.type: no converter takes EMPAIA "
+        "type `polygon`. Input types: primitive, rectangle, string, wsi. Hint: pick a type "
+        "one converter takes"
+    ]
+
+
+def test_standalone_parameters_need_a_primitive_converter(root: Path) -> None:
+    write(
+        root,
+        "analyses/a1.yaml",
+        APP.replace("standalone:", "standalone: {parameters: [stride_fraction]}"),
+    )
+
+    with pytest.raises(CatalogInvalid) as raised:
+        load_catalog(root)
+
+    assert [str(e) for e in raised.value.errors] == [
+        f"{PREFIX}.modes.standalone.parameters: no converter takes EMPAIA type "
+        "`primitive`, which standalone parameters are offered as. Input types: "
+        "rectangle, wsi. Hint: leave out `parameters`, or add a converter of "
+        "type `primitive`"
     ]

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import Field, ValidationInfo, field_validator
+from pydantic import Field
 
 from components.base import Runtime
 from components.base.options import Options
@@ -28,8 +28,6 @@ class OnnxOptions(Options):
         workspace_gib: TensorRT's workspace for choosing kernels.
         optimization_level: TensorRT's builder optimisation level.
         fp16: Whether TensorRT may use FP16 kernels.
-        apply_session_options: Whether the session gets `threads`, all graph
-            optimisations and sequential execution, or ONNX Runtime's defaults.
         threads: ONNX Runtime's intra-op threads.
         output_dtype: The dtype the graph's output is cast to, if any.
     """
@@ -60,14 +58,6 @@ class OnnxOptions(Options):
         strict=True,
     )
     fp16: bool = Field(True, description="Let TensorRT use FP16 kernels.")
-    apply_session_options: bool = Field(
-        True,
-        description=(
-            "Give the session `threads`, all graph optimisations and sequential "
-            "execution. `false` leaves ONNX Runtime's defaults (intra-op threads "
-            "for every core)."
-        ),
-    )
     threads: int = Field(
         1, ge=1, description="ONNX Runtime's intra-op threads.", strict=True
     )
@@ -78,28 +68,6 @@ class OnnxOptions(Options):
             "score map; left out, the output keeps the graph's dtype."
         ),
     )
-
-    @field_validator("threads")
-    @classmethod
-    def _threads_need_session_options(cls, threads: int, info: ValidationInfo) -> int:
-        """Refuse `threads` when the session options aren't applied.
-
-        Args:
-            threads: The value given.
-            info: The options validated so far.
-
-        Returns:
-            The threads.
-
-        Raises:
-            ValueError: With `apply_session_options: false`.
-        """
-        if not info.data.get("apply_session_options", True):
-            raise ValueError(
-                "threads has no effect with apply_session_options: false; "
-                "remove threads or apply the session options"
-            )
-        return threads
 
 
 class Onnx(Runtime):
@@ -171,9 +139,7 @@ class Onnx(Runtime):
         return list(self._session.get_providers())
 
     def _session_options(self) -> Any:
-        """The session options, or None for ONNX Runtime's defaults."""
-        if not self.options.apply_session_options:
-            return None
+        """The session options: `threads`, all graph optimisations, sequential."""
         import onnxruntime as ort
 
         sess_options = ort.SessionOptions()
