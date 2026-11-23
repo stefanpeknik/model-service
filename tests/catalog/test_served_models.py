@@ -88,17 +88,15 @@ def test_a_wrong_value_and_an_unknown_key_are_refused_with_what_fits(
     ]
 
 
-def test_threads_are_refused_where_session_options_are_not_applied(
-    root: Path,
-) -> None:
-    runtime = "{use: onnx, apply_session_options: false, threads: 4}"
+def test_the_onnx_runtime_always_applies_its_session_options(root: Path) -> None:
+    runtime = "{use: onnx, apply_session_options: false}"
     write(root, "served-models/m1.yaml", MODEL.replace("{use: onnx}", runtime))
 
     with pytest.raises(CatalogInvalid) as raised:
         load_catalog(root)
 
     (error,) = raised.value.errors
-    assert "threads has no effect with apply_session_options: false" in str(error)
+    assert "unknown option `apply_session_options`" in str(error)
 
 
 def test_a_hugging_face_revision_must_be_a_commit(root: Path) -> None:

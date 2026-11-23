@@ -102,7 +102,6 @@ directory, so a changed model never reuses a stale engine.
 | `workspace_gib` | number > 0 | `8` | GPU memory TensorRT may use to choose kernels; too little rules out the fast ones for large tiles. |
 | `optimization_level` | integer ≥ 0, ≤ 5 | `1` | TensorRT builder optimisation level: higher builds slower and may run faster. |
 | `fp16` | boolean | `true` | Let TensorRT use FP16 kernels. |
-| `apply_session_options` | boolean | `true` | Give the session `threads`, all graph optimisations and sequential execution. `false` leaves ONNX Runtime's defaults (intra-op threads for every core). |
 | `threads` | integer ≥ 1 | `1` | ONNX Runtime's intra-op threads. |
 | `output_dtype` | `float32` or `float16` | not set | Cast the graph's output to this dtype, e.g. `float16` to halve a score map; left out, the output keeps the graph's dtype. |
 
