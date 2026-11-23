@@ -50,6 +50,13 @@ from the single `0001-create-executions` migration (no rows carried over).
 - EMPAIA preprocessing job `3d28a298` succeeded (one processing, one finish
   attempt); both API pods re-registered app `d3560de0` with no errors.
 
+- EMPAIA standalone job `d2ff60c2`, started in the case browser with an ROI:
+  execution `5f2a0539` came in as `STANDALONE` with inputs typed `wsi` and
+  `rectangle` and succeeded (one processing, one finish attempt; 20.6 s of
+  runner time, 3 min 19 s including a CPU worker start). Both heatmaps were
+  checked in the viewer: the standalone one covers only the ROI, and the
+  rendering (yellow shader, 50% opacity, threshold 65) is unchanged.
+
 ## Results on revision 12 (after the code review)
 
 - `pytest -m live tests/live` per model: all three 3 passed.
@@ -92,5 +99,3 @@ from the single `0001-create-executions` migration (no rows carried over).
   internal MLflow, which the test cluster can't reach, so there are no golden
   references. It is covered by the local equivalence test written before the
   old class was removed and by the catalog checks.
-- **EMPAIA standalone job** (rectangle input from the case browser) and a look
-  at the heatmaps in the viewer: these need a person in the case browser.
