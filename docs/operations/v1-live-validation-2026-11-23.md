@@ -15,6 +15,7 @@ pre-rebuild deployment (`golden-references-2026-11-22.md`).
 | 10 | `unit-2c04d52` | prostate-heatmap EMPAIA app from `expose.empaia`, registration reconcile |
 | 11 | `unit-984bed7` | builders and transitional code removed (analyses only) |
 | 12 | `unit-aeed9eb` | code-review fixes (`GET /<model>/describe`, MLflow checksum, renames) |
+| 14 | `unit-7247440` | persona-review fixes: validation, destination checks, sigmoid/softmax, provenance on results |
 | 13 | `unit-2646342` | builder-era names removed, `src/components` split, one fresh migration on a dropped database |
 
 Before each upgrade the rendered manifest was diffed against the live one:
@@ -37,7 +38,19 @@ always the same six model-service objects, changes as listed above.
   `7a072fd9`; execution `e6efffba` (`prostate-heatmap`, digest `bccb915a…`)
   succeeded with one processing and one finish attempt.
 
-## Results on revision 13 (final)
+## Results on revision 14 (after the persona review)
+
+- `pytest -m live tests/live` per model: all three 3 passed.
+- Scheduled run `a0bb5bd0` succeeded; its result records what ran:
+  `served_models.prostate-classifier-1` with digest `10a8ee8a2b15…`, weights
+  `…/prostate_model_norm.onnx@sha256:a4db8c01…` and
+  `TensorrtExecutionProvider` first.
+- A synchronous run with `output_path: slides` (an existing directory) is
+  refused with 422 `invalid_run_request`; nothing is moved or deleted.
+- SDK `tests/integration/test_analyses.py` passed (parses `served_models`).
+- EMPAIA preprocessing job `efb2b856` succeeded.
+
+## Results on revision 13 
 
 The `model_service` schema was dumped and dropped first; the API created it
 from the single `0001-create-executions` migration (no rows carried over).
