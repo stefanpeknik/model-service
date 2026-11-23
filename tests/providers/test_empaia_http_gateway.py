@@ -19,15 +19,18 @@ from components.empaia.converters.wsi import Wsi
 from components.empaia.publishers.continuous_pixelmap import (
     ContinuousPixelmap,
 )
-from components.empaia.publishers.primitive import primitive_body
 from model_service.formats.score_grid import MEDIA_TYPE, ScoreGrid
 from model_service.formats.score_grid import write as write_score_grid
 from model_service.providers.empaia.app_service.gateway import (
     EmpaiaGatewayError,
-    PrimitiveType,
 )
 from model_service.providers.empaia.app_service.http import HttpEmpaiaGateway
-from tests.support.empaia_fixtures import PIXELMAP_ID, SLIDE_ID, created
+from tests.support.empaia_fixtures import (
+    PIXELMAP_ID,
+    SLIDE_ID,
+    created,
+    score_body,
+)
 
 
 RECTANGLE = Rectangle(Rectangle.Options())
@@ -258,9 +261,7 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             client=await self.appservice(httpx.MockTransport(handle)),
         )
 
-        await gateway.post_output(
-            "score", primitive_body("score", "job-1", PrimitiveType.FLOAT, 0.75)
-        )
+        await gateway.post_output("score", score_body())
         await gateway.finalize()
         await gateway.report_failure("failed safely")
         await gateway.close()

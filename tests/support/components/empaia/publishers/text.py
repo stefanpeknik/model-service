@@ -13,7 +13,7 @@ class Text(Publisher):
     """Test publisher: shares its name with the `text` converter."""
 
     name = "text"
-    reads_format = "value"
+    reads_format = "score_grid"
     emits = frozenset({"string"})
     example_options: ClassVar[dict[str, Any]] = {"type": "string"}
 

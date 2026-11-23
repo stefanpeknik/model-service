@@ -8,17 +8,16 @@ from aiohttp import web
 from aiohttp.test_utils import TestServer
 from rationai.empaia import Client
 
-from components.empaia.publishers.primitive import primitive_body
 from model_service.providers.empaia.app_service.gateway import (
     EmpaiaGatewayError,
-    PrimitiveType,
 )
 from model_service.providers.empaia.app_service.http import (
     HttpEmpaiaGateway,
 )
+from tests.support.empaia_fixtures import score_body
 
 
-SCORE = primitive_body("score", "job-1", PrimitiveType.FLOAT, 0.75)
+SCORE = score_body()
 
 
 class SdkGatewayContractTests(unittest.IsolatedAsyncioTestCase):

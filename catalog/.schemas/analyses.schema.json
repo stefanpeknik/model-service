@@ -71,7 +71,6 @@
         "type": {
           "description": "The EAD type.",
           "enum": [
-            "primitive",
             "rectangle",
             "wsi"
           ],
@@ -90,14 +89,8 @@
       "description": "`{type: <EAD type>, …options}`: the type and the sink's data format pick the publisher.",
       "properties": {
         "type": {
+          "const": "continuous_pixelmap",
           "description": "The EAD type.",
-          "enum": [
-            "bool",
-            "continuous_pixelmap",
-            "float",
-            "integer",
-            "string"
-          ],
           "title": "Type",
           "type": "string"
         }
@@ -200,7 +193,7 @@
       "properties": {
         "parameters": {
           "default": [],
-          "description": "Per-run settings users fill in per job; the rest keep the file's values.",
+          "description": "Per-run settings users fill in per job; the rest keep the file's values. Needs a converter of EAD type `primitive`, which no component provides yet.",
           "items": {
             "type": "string"
           },
