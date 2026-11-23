@@ -268,10 +268,10 @@ class _Loader:
         try:
             text = data.decode("utf-8")
         except UnicodeDecodeError as error:
-            line = data[: error.start].count(b"\n") + 1
+            bad_line = data[: error.start].count(b"\n") + 1
             self.file_error(
                 path,
-                f"not UTF-8 text: byte 0x{data[error.start]:02x} on line {line}",
+                f"not UTF-8 text: byte 0x{data[error.start]:02x} on line {bad_line}",
                 MAPPING,
                 "save the file as UTF-8",
             )
