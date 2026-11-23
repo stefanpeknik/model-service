@@ -14,7 +14,7 @@ servedModelSettings:
 
 # EPISeg's weights are out of reach here, so not its heatmap.
 analyses: [prostate-heatmap, virchow2-embeddings, prov-gigapath-embeddings]
-# Sized like the heatmap builder it replaced.
+# One run per replica and two waiting; idle replicas scale to zero.
 analysisRunner:
   deployment:
     max_ongoing_requests: 1

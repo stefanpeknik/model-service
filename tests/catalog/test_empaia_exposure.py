@@ -46,7 +46,7 @@ def errors(root: Path) -> list[str]:
 
 
 @pytest.mark.parametrize("environment", [None, "rationai-test"])
-def test_the_prostate_heatmap_is_todays_prostate_app(environment: str | None) -> None:
+def test_the_prostate_heatmap_is_the_prostate_app(environment: str | None) -> None:
     analysis = load_catalog(CATALOG, environment).entries("analyses")
     app = analysis["prostate-heatmap"].value.empaia
 

@@ -179,9 +179,6 @@ def test_catalog_changes_reach_the_api_without_rolling_it() -> None:
     (mount,) = [m for m in container["volumeMounts"] if m["name"] == "model-catalog"]
     (volume,) = [v for v in pod["spec"]["volumes"] if v["name"] == "model-catalog"]
     env = {e["name"]: e.get("value") for e in container["env"]}
-    # The catalog alone says what is deployed.
-    assert "BUILDER_IDS" not in env
-
     assert "annotations" not in pod["metadata"]
     # kubelet updates a ConfigMap volume in place only without subPath or items.
     assert "subPath" not in mount

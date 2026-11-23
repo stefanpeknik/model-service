@@ -1,7 +1,7 @@
 # We need to build libvips and openslide from source to get the required features.
 # The base image needs to extend rayproject/ray image which is based on ubuntu:22.04.
 # Our images are based on ubuntu:24.04, therefore, we can't reuse them.
-FROM ubuntu:22.04 AS builder
+FROM ubuntu:22.04 AS build
 
 ARG VIPS_VERSION=8.17.2
 
@@ -33,7 +33,7 @@ RUN cd /tmp && \
 
 FROM rayproject/ray:2.53.0-py312
 
-COPY --from=builder /usr/local/ /usr/local/
+COPY --from=build /usr/local/ /usr/local/
 
 # Make sure the dynamic linker can find libraries built into /usr/local/lib, LD_LIBRARY_PATH starts with a colon
 ENV LD_LIBRARY_PATH="/usr/local/lib${LD_LIBRARY_PATH}"

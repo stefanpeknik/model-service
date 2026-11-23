@@ -1,8 +1,8 @@
 """`score_grid`: averages per-tile score maps into a `score_grid` file.
 
-Overlapping scores are averaged by ratiopath's memory-mapped `MaskBuilder`, as
-in the heatmap builder. The grid's geometry comes from the source's frame; its
-channels and per-tile map size from the `scores` column's shape.
+Ratiopath's memory-mapped `MaskBuilder` averages overlapping scores. The
+grid's geometry comes from the source's frame; its channels and per-tile map
+size from the `scores` column's shape.
 """
 
 from __future__ import annotations
@@ -69,7 +69,7 @@ class ScoreGridSink(Sink):
         self._path: Path = (
             run.work_dir / f"{self.options.output}.{score_grid.EXTENSION}"
         )
-        self._builder = MaskBuilder(
+        self._mask = MaskBuilder(
             source_extents=(frame["extent_y"], frame["extent_x"]),
             source_tile_extent=(frame["tile_extent_y"], frame["tile_extent_x"]),
             output_tile_extent=(height, width),
@@ -87,7 +87,7 @@ class ScoreGridSink(Sink):
         import numpy as np
 
         coords = np.stack([batch["tile_y"], batch["tile_x"]], axis=1)
-        self._builder.update_batch(batch=batch["scores"], coords=coords)
+        self._mask.update_batch(batch=batch["scores"], coords=coords)
 
     def close(self) -> Path:
         """Average and write the grid; the memory map is removed either way.
@@ -98,12 +98,12 @@ class ScoreGridSink(Sink):
         import numpy as np
 
         try:
-            finalized = self._builder.finalize()
+            finalized = self._mask.finalize()
             values = np.asarray(finalized["mask"], dtype=np.float32)
             counts = np.asarray(finalized["overlap_counter"])
             # The grid covers the padded span, so a cell is span / cells
             # pixels of the level along each axis.
-            scale_y, scale_x = self._builder.span / np.asarray(values.shape[1:])
+            scale_y, scale_x = self._mask.span / np.asarray(values.shape[1:])
             frame = self._frame
             score_grid.write(
                 self._path,
@@ -117,9 +117,9 @@ class ScoreGridSink(Sink):
                 ),
             )
         finally:
-            self._builder.cleanup()
+            self._mask.cleanup()
         return self._path
 
     def abort(self) -> None:
         """Remove the memory map of a failed run."""
-        self._builder.cleanup()
+        self._mask.cleanup()

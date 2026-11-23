@@ -1,4 +1,4 @@
-"""The `embedding_table` data format: today's HDF5 layout under a versioned media type."""
+"""The `embedding_table` data format: the HDF5 layout under a versioned media type."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-TODAYS_ATTRS: dict[str, Any] = {
+LAYOUT_ATTRS: dict[str, Any] = {
     "schema_version": 2,
     "model_id": "virchow2",
     "summary_names": ("global", "local_mean"),
@@ -34,18 +34,18 @@ TODAYS_ATTRS: dict[str, Any] = {
 }
 
 
-def write_todays_layout(
+def write_layout(
     path: Path,
     *,
     attrs: dict[str, Any] | None = None,
     coordinates: Any = ((0, 0), (224, 0)),
     features: Any = None,
 ) -> Path:
-    """An HDF5 file with the datasets and attributes today's embeddings builder writes."""
+    """An HDF5 file with the datasets and attributes of embedding_table v2."""
     if features is None:
         features = np.arange(2 * 2 * 3, dtype=np.float32).reshape(2, 2, 3)
     with h5py.File(path, "w") as file:
-        for key, value in (TODAYS_ATTRS | (attrs or {})).items():
+        for key, value in (LAYOUT_ATTRS | (attrs or {})).items():
             if value is not None:
                 file.attrs[key] = value
         if coordinates is not None:
@@ -54,8 +54,8 @@ def write_todays_layout(
     return path
 
 
-def test_a_file_in_todays_layout_reads_and_checks(tmp_path: Path) -> None:
-    path = write_todays_layout(tmp_path / "table.h5")
+def test_a_file_in_the_layout_reads_and_checks(tmp_path: Path) -> None:
+    path = write_layout(tmp_path / "table.h5")
 
     table = embedding_table.read(path)
 
@@ -91,7 +91,7 @@ def test_a_file_in_todays_layout_reads_and_checks(tmp_path: Path) -> None:
 def test_what_write_writes_reads_back_and_checks(
     tmp_path: Path, summaries: tuple[str, ...], features: np.ndarray
 ) -> None:
-    original = embedding_table.read(write_todays_layout(tmp_path / "a.h5"))
+    original = embedding_table.read(write_layout(tmp_path / "a.h5"))
     header = replace(original.header, summary_names=summaries)
     coordinates = np.array([[0, 0], [224, 0]][: len(features)], np.int64).reshape(-1, 2)
     table = embedding_table.EmbeddingTable(header, coordinates, features)
@@ -124,7 +124,7 @@ def test_what_write_writes_reads_back_and_checks(
 def test_check_names_what_breaks_the_layout(
     tmp_path: Path, change: dict[str, Any], problem: str
 ) -> None:
-    path = write_todays_layout(tmp_path / "table.h5", **change)
+    path = write_layout(tmp_path / "table.h5", **change)
 
     problems = embedding_table.check(path)
 
@@ -138,10 +138,10 @@ def test_check_refuses_a_file_that_is_not_hdf5(tmp_path: Path) -> None:
     assert embedding_table.check(path)[0].startswith("not an HDF5 file")
 
 
-def test_a_reader_takes_todays_media_type_and_refuses_an_unknown_version(
+def test_a_reader_takes_its_media_type_and_refuses_others(
     tmp_path: Path,
 ) -> None:
-    path = write_todays_layout(tmp_path / "table.h5")
+    path = write_layout(tmp_path / "table.h5")
     newer = embedding_table.MEDIA_TYPE.replace("version=2", "version=3")
 
     assert embedding_table.MEDIA_TYPE == (

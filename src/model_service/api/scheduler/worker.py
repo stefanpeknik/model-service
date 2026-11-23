@@ -387,7 +387,7 @@ class ExecutionWorker:
             protected_context=claim.protected_context,
         )
         try:
-            # Every attempt runs the document admitted, not today's catalog.
+            # Every attempt runs the document admitted, not the catalog as it is now.
             result = await self._dispatch.run_analysis(
                 AnalysisRunRequest(claim.invocation, claim.target.analysis, context)
             )

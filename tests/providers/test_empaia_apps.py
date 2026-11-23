@@ -36,8 +36,8 @@ from tests.support.analysis_catalog import served_model as model
 
 
 CATALOG = Path(__file__).resolve().parents[2] / "catalog"
-# Today's app, as the builder-keyed EAD generation made it from
-# prostate-classifier-1's `empaia` block (recorded at e91f62d).
+# The prostate app as the test marketplace listed it at e91f62d, under its
+# earlier namespace.
 BEFORE = json.loads(
     (Path(__file__).parent / "fixtures/prostate-heatmap-app-before.json").read_text()
 )
@@ -76,7 +76,7 @@ def tmp_app(tmp_path: Path, expose: str) -> AnalysisApp:
 
 
 @pytest.mark.parametrize("environment", [None, "rationai-test"])
-def test_the_prostate_app_is_todays_apart_from_its_namespace(
+def test_the_prostate_app_matches_its_recording_apart_from_its_namespace(
     environment: str | None,
 ) -> None:
     app = prostate_app(environment)
@@ -281,11 +281,12 @@ def listed_app(portal_app_id: str, namespace: str, image: str) -> dict[str, obje
     }
 
 
-# The builder-era prostate app, as ticket 11 left it in the test marketplace.
-BUILDER_ERA_APP = listed_app(
-    "builder-era",
+# An app this deployment registered under the prostate app's earlier
+# namespace, at a route no analysis has now.
+RETIRED_APP = listed_app(
+    "retired",
     OLD_NAMESPACE,
-    "http::model-service/builders/heatmap/models/prostate-classifier-1",
+    "http::model-service/analyses/heatmap-prostate-classifier-1",
 )
 # Apps model-service never registered: a RationAI container app under the same
 # namespace prefix, another model-service deployment's app, another vendor's.
@@ -353,7 +354,7 @@ class ReconcileTests(unittest.IsolatedAsyncioTestCase):
     async def test_a_renamed_app_replaces_the_old_and_foreign_apps_stay(
         self,
     ) -> None:
-        marketplace = FakeMarketplace(BUILDER_ERA_APP, *FOREIGN_APPS)
+        marketplace = FakeMarketplace(RETIRED_APP, *FOREIGN_APPS)
         app = prostate_app()
 
         await register_until_done(marketplace.client(), [app], retry_seconds=0)
@@ -362,10 +363,10 @@ class ReconcileTests(unittest.IsolatedAsyncioTestCase):
             sorted(marketplace.apps),
             sorted([app.portal_app_id, *(a["id"] for a in FOREIGN_APPS)]),
         )
-        self.assertEqual(marketplace.deleted, ["builder-era"])
+        self.assertEqual(marketplace.deleted, ["retired"])
 
     async def test_replicas_reconciling_together_and_again_agree(self) -> None:
-        marketplace = FakeMarketplace(BUILDER_ERA_APP, *FOREIGN_APPS)
+        marketplace = FakeMarketplace(RETIRED_APP, *FOREIGN_APPS)
         app = prostate_app()
         expected = sorted([app.portal_app_id, *(a["id"] for a in FOREIGN_APPS)])
 
@@ -383,7 +384,7 @@ class ReconcileTests(unittest.IsolatedAsyncioTestCase):
         await register_until_done(marketplace.client(), [app], retry_seconds=0)
 
         self.assertEqual(sorted(marketplace.apps), expected)
-        self.assertEqual(marketplace.deleted, ["builder-era"])
+        self.assertEqual(marketplace.deleted, ["retired"])
         registered = marketplace.apps[app.portal_app_id]["active_app_views"]["v3"]
         self.assertEqual(
             (registered["app"]["id"], registered["app"]["ead"]), (app.app_id, app.ead)
@@ -456,9 +457,9 @@ class TriggerTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_each_analysis_triggers_its_own_app_only(self) -> None:
         ours = "model-service:model-service"
-        # Ours, for the builder-era app the prostate analysis replaces.
+        # Ours, for the retired app the prostate analysis replaces.
         self.items[:] = [
-            {**self.trigger("a", ours, "PROSTATE"), "portal_app_id": "builder-era"}
+            {**self.trigger("a", ours, "PROSTATE"), "portal_app_id": "retired"}
         ]
         with tempfile.TemporaryDirectory() as tmp:
             other = tmp_app(
@@ -467,7 +468,7 @@ class TriggerTests(unittest.IsolatedAsyncioTestCase):
                 "  preprocessing:\n"
                 "    triggers: [{tissue: PROSTATE, stain: H_AND_E}]",
             )
-        marketplace = FakeMarketplace(BUILDER_ERA_APP)
+        marketplace = FakeMarketplace(RETIRED_APP)
 
         await register_until_done(
             marketplace.client(), [self.app, other], self.mds(ours), retry_seconds=0

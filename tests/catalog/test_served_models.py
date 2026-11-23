@@ -66,7 +66,7 @@ def test_the_digest_follows_what_the_model_computes_not_how_it_is_scheduled(
     )
 
 
-def test_keys_of_todays_model_files_are_refused_with_what_fits(
+def test_a_wrong_value_and_an_unknown_key_are_refused_with_what_fits(
     root: Path,
 ) -> None:
     write(

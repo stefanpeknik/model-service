@@ -53,18 +53,14 @@ class RawCase:
 
 @dataclass(frozen=True, slots=True)
 class RunCase:
-    """A v1 analysis; its references were recorded through the builder it replaced.
+    """An analysis with recorded references; the manifest says what recorded them.
 
     Attributes:
         analysis: The analysis ID.
-        builder: The builder the references were recorded through.
-        model: The model that builder ran.
         extension: The output file's extension.
     """
 
     analysis: str
-    builder: str
-    model: str
     extension: str
 
 
@@ -81,10 +77,10 @@ RAW_CASES = {
 RUN_CASES = {
     case.analysis: case
     for case in (
-        RunCase("prostate-heatmap", "heatmap", "prostate-classifier-1", "npz"),
-        RunCase("episeg-heatmap", "heatmap", "episeg-1", "npz"),
-        RunCase("virchow2-embeddings", "tile-embeddings", "virchow2", "h5"),
-        RunCase("prov-gigapath-embeddings", "tile-embeddings", "prov-gigapath", "h5"),
+        RunCase("prostate-heatmap", "npz"),
+        RunCase("episeg-heatmap", "npz"),
+        RunCase("virchow2-embeddings", "h5"),
+        RunCase("prov-gigapath-embeddings", "h5"),
     )
 }
 

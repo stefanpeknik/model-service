@@ -51,7 +51,7 @@ def errors(root: Path) -> list[str]:
         ("episeg-heatmap", "episeg-1", (1, 1024, 1024)),
     ],
 )
-def test_heatmap_analyses_keep_the_heatmap_builders_settings_on_their_model(
+def test_heatmap_analyses_tile_at_their_models_geometry_half_a_tile_apart(
     environment: str | None,
     analysis_id: str,
     model_id: str,
@@ -61,7 +61,6 @@ def test_heatmap_analyses_keep_the_heatmap_builders_settings_on_their_model(
     served = catalog.entries("served-models")[model_id].value
     heatmap = catalog.entries("analyses")[analysis_id].value
 
-    # The retired heatmap builder's defaults.
     assert heatmap.settings() == {
         "stride_fraction": 0.5,
         "skip_background": True,

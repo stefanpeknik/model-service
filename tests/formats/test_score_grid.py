@@ -1,4 +1,4 @@
-"""The `score_grid` data format: today's npz layout under a versioned media type."""
+"""The `score_grid` data format: the npz layout under a versioned media type."""
 
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def write_todays_layout(path: Path, **changes: object) -> Path:
-    """An npz with the keys and dtypes today's heatmap builder writes."""
+def write_layout(path: Path, **changes: object) -> Path:
+    """An npz with the keys and dtypes of score_grid v1."""
     arrays = {
         "values": np.array([[[0.25, 1.0], [0.0, 0.5]]], np.float32),
         "scored": np.array([[True, True], [False, True]]),
@@ -29,8 +29,8 @@ def write_todays_layout(path: Path, **changes: object) -> Path:
     return path
 
 
-def test_a_file_in_todays_layout_reads_and_checks(tmp_path: Path) -> None:
-    path = write_todays_layout(tmp_path / "grid.npz")
+def test_a_file_in_the_layout_reads_and_checks(tmp_path: Path) -> None:
+    path = write_layout(tmp_path / "grid.npz")
 
     grid = score_grid.read(path)
 
@@ -47,7 +47,7 @@ def test_a_file_in_todays_layout_reads_and_checks(tmp_path: Path) -> None:
 
 
 def test_what_write_writes_reads_back_unchanged(tmp_path: Path) -> None:
-    original = score_grid.read(write_todays_layout(tmp_path / "a.npz"))
+    original = score_grid.read(write_layout(tmp_path / "a.npz"))
 
     score_grid.write(tmp_path / "b.npz", original)
     copy = score_grid.read(tmp_path / "b.npz")
@@ -74,7 +74,7 @@ def test_what_write_writes_reads_back_unchanged(tmp_path: Path) -> None:
 def test_check_names_what_breaks_the_layout(
     tmp_path: Path, changes: dict[str, object], problem: str
 ) -> None:
-    path = write_todays_layout(tmp_path / "grid.npz", **changes)
+    path = write_layout(tmp_path / "grid.npz", **changes)
 
     problems = score_grid.check(path)
 
@@ -82,7 +82,7 @@ def test_check_names_what_breaks_the_layout(
 
 
 def test_a_reader_refuses_a_version_it_does_not_know(tmp_path: Path) -> None:
-    path = write_todays_layout(tmp_path / "grid.npz")
+    path = write_layout(tmp_path / "grid.npz")
     newer = score_grid.MEDIA_TYPE.replace("version=1", "version=2")
 
     assert score_grid.MEDIA_TYPE == (

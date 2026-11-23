@@ -1,8 +1,8 @@
 """Publishers carry stored outputs into EMPAIA, and finish publishes all or nothing.
 
 The equivalence test replays the score grid of the recorded fixture through
-`continuous_pixelmap`; the fixture holds what today's `ScoreGridPublisher`
-uploaded for it (recorded at e91f62d, before that publisher was replaced).
+`continuous_pixelmap`; the fixture holds the pixelmap the prostate app
+uploaded for it, recorded at e91f62d.
 """
 
 from __future__ import annotations
@@ -86,7 +86,9 @@ async def publish_grid(
 
 
 class ContinuousPixelmapTests(unittest.IsolatedAsyncioTestCase):
-    async def test_publisher_calls_match_todays_for_the_same_score_grid(self) -> None:
+    async def test_publisher_calls_match_the_recording_for_the_same_score_grid(
+        self,
+    ) -> None:
         before = np.load(FIXTURES / "prostate-heatmap-pixelmap-before.npz")
         gateway = PyramidGateway(slide_info(2048, 1536, 7))
 
