@@ -97,5 +97,6 @@ from the single `0001-create-executions` migration (no rows carried over).
 
 - **EPISeg** (`episeg-1`, `episeg-heatmap`): its weights are only on the
   internal MLflow, which the test cluster can't reach, so there are no golden
-  references. It is covered by the local equivalence test written before the
-  old class was removed and by the catalog checks.
+  references. A local equivalence test compared the old class with
+  `episeg-1.yaml` on stand-in weights, but it was deleted with the class
+  (commit `9845355`), so today only the catalog checks cover it.

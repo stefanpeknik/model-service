@@ -30,14 +30,16 @@ writing Python or rebuilding an image.
 The team's model maths is unchanged. The four model classes became
 served-model files on the generic host, built from the `onnx` and `timm`
 runtimes and a few steps (`resize`, `center_crop`, `normalize`,
-`cls_mean_pool`). Each file reproduces its class bit for bit, known quirks
-included: Prov-GigaPath still crops its 224 px tile to the centre, and EPISeg
-still runs on ONNX Runtime's default session options because its class passed
-them under a keyword ONNX Runtime ignores. Each class was compared with its
-file on stand-in weights in the tests, and on the cluster against the
-[golden references](operations/golden-references-2026-11-22.md), before it
-was deleted. EPISeg had only the first check: the test cluster can't reach
-its weights. The fixes come later, under new model IDs.
+`cls_mean_pool`). Each file keeps its class's quirks: Prov-GigaPath still
+crops its 224 px tile to the centre, and EPISeg still runs on ONNX Runtime's
+default session options because its class passed them under a keyword ONNX
+Runtime ignores. Before each class was deleted, a test ran it and its file on
+stand-in weights on the CPU and got equal outputs. On the cluster, with the
+real weights and fp16 or TensorRT, the prostate, Virchow2 and Prov-GigaPath
+models match the [golden references](operations/golden-references-2026-11-22.md)
+within their tolerances, not bit for bit. EPISeg had only the CPU check,
+since the test cluster can't reach its weights. The fixes come later, under
+new model IDs.
 
 The baseline's heatmap script became the `prostate-heatmap` and
 `episeg-heatmap` analyses, and the team's tiling and tissue code is reused
