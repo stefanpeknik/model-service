@@ -52,6 +52,8 @@ ban-relative-imports = "all"
 
 [lint.isort]
 lines-after-imports = 2
+# `components` is generic enough that a third-party package could share it.
+known-first-party = ["components", "model_service", "tests"]
 
 [lint.pydocstyle]
 convention = "google"
