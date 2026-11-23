@@ -44,11 +44,12 @@ the code of every existing component, often the closest example.
 
 ## Write it
 
-Say a model returns logits and you want probabilities. A step in the served
-model's `post:` fixes that. `src/components/steps/softmax.py`:
+Say you want a mask, not a score map: every score at or above a cutoff
+becomes 1, the rest 0. A step in the served model's `post:` does that.
+`src/components/steps/threshold.py`:
 
 ```python
-"""The `softmax` step: turns a model's logits into probabilities."""
+"""The `threshold` step: scores at or above a cutoff become 1, the rest 0."""
 
 from __future__ import annotations
 
@@ -64,41 +65,42 @@ if TYPE_CHECKING:
     from components.base import Batch
 
 
-class SoftmaxOptions(Options):
-    """Options of the `softmax` step."""
+class ThresholdOptions(Options):
+    """Options of the `threshold` step."""
 
-    temperature: float = Field(
-        1.0, gt=0, description="Divides the logits first; above 1 flattens the scores."
-    )
+    at: float = Field(0.5, description="The cutoff; scores at or above it become 1.")
 
 
-class Softmax(Step):
-    """Turns per-channel logits into probabilities that sum to 1.
+class Threshold(Step):
+    """Turns scores into a 0/1 mask at a cutoff.
 
-    `post: [{use: softmax}]` fixes a model that returns logits, so its
-    file can declare `output: {range: [0, 1]}`.
+    `post: [{use: threshold, at: 0.65}]` after a model that returns
+    probabilities gives 1 where the score reaches 0.65.
     """
 
-    name = "softmax"
-    Options = SoftmaxOptions
-    example_options: ClassVar[dict[str, Any]] = {"temperature": 1.0}
-    reads: ClassVar[dict[str, Col]] = {"output": Col("float32", (None, None, None))}
-    adds: ClassVar[dict[str, Col]] = {"output": Col("float32", (None, None, None))}
-    options: SoftmaxOptions
+    name = "threshold"
+    Options = ThresholdOptions
+    example_options: ClassVar[dict[str, Any]] = {"at": 0.5}
+    reads: ClassVar[dict[str, Col]] = {"output": Col("float32", None)}
+    adds: ClassVar[dict[str, Col]] = {"output": Col("float32", None)}
+    options: ThresholdOptions
 
     def __call__(self, batch: Batch) -> Batch:
-        """Apply softmax over the channel axis.
+        """Compare every score with the cutoff.
 
         Args:
-            batch: `output`, logits `(rows, channels, size, size)`.
+            batch: `output`, scores of any shape.
 
         Returns:
-            The batch with probabilities in `output`.
+            The batch with 0 or 1 in `output`.
         """
-        logits = batch["output"] / self.options.temperature
-        exp = np.exp(logits - logits.max(axis=1, keepdims=True))
-        return batch | {"output": exp / exp.sum(axis=1, keepdims=True)}
+        mask = batch["output"] >= self.options.at
+        return batch | {"output": mask.astype(np.float32)}
 ```
+
+The shared steps in `src/components/steps/` are real examples of the same
+shape: `sigmoid.py` and `softmax.py` turn logits into probabilities, and
+`normalize.py`, `resize.py` and `center_crop.py` prepare tiles.
 
 What each part is for:
 
@@ -159,17 +161,16 @@ a component the way the runner would, without Ray or a cluster:
 ```python
 import numpy as np
 
-from components.steps.softmax import Softmax
+from components.steps.threshold import Threshold
 from tests.components.helpers import run_component
 
 
-def test_softmax_gives_probabilities_that_sum_to_one() -> None:
-    logits = np.array([[[[2.0]], [[0.0]], [[-1.0]]]], dtype=np.float32)
+def test_threshold_keeps_scores_at_or_above_the_cutoff() -> None:
+    scores = np.array([[0.2, 0.5, 0.9]], dtype=np.float32)
 
-    out = run_component(Softmax, {"output": logits})
+    out = run_component(Threshold, {"output": scores}, options={"at": 0.5})
 
-    np.testing.assert_allclose(out["output"].sum(axis=1), 1.0, rtol=1e-6)
-    assert out["output"][0, 0, 0, 0] > out["output"][0, 1, 0, 0]
+    np.testing.assert_array_equal(out["output"], [[0.0, 1.0, 1.0]])
 ```
 
 The other helpers cover the rest of the kinds:
@@ -197,6 +198,6 @@ else checks the file before a replica imports it.
 ## Use it
 
 Name it in a catalog file and check that file:
-`post: [{use: softmax}]` in a served model, then `uv run pytest tests/catalog`.
+`post: [{use: threshold}]` in a served model, then `uv run pytest tests/catalog`.
 A component is code, so deploying it needs a new image; catalog files that
 use it deploy with `helm upgrade` once the image runs.
