@@ -270,3 +270,13 @@ def test_a_mistake_is_reported_where_it_is(
         write(root, name, text)
 
     assert errors(root) == expected
+
+
+@pytest.mark.parametrize(
+    "source", ["{use: slide_tiles, tile_size: true}", "{use: slide_tiles, mpp: .nan}"]
+)
+def test_a_source_option_of_the_wrong_kind_is_refused(root: Path, source: str) -> None:
+    write(root, "analyses/a1.yaml", HEATMAP.replace("{use: slide_tiles}", source))
+
+    (error,) = errors(root)
+    assert error.startswith("catalog/analyses/a1.yaml:source.")
