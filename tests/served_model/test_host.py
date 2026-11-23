@@ -15,8 +15,9 @@ import lz4.frame
 import numpy as np
 import pytest
 
+from components.base import Runtime
 from model_service.catalog.served_models import resolve_served_model
-from model_service.components import Registry, Runtime, default_registry
+from model_service.registry import Registry, default_registry
 from model_service.served_model.guards import ModelInputError, ModelOutputError
 from model_service.served_model.host import ServedModelHost
 from tests.support import onnx_graphs
@@ -26,7 +27,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-    from model_service.components import BatchFunction, RuntimeContext
+    from components.base import BatchFunction, RuntimeContext
 
 
 TILE = 8

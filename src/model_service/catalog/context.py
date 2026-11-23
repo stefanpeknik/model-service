@@ -13,10 +13,10 @@ from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
+from components.base import KINDS
+from components.base.problems import Problem
 from model_service.catalog.errors import CatalogError, render_path
 from model_service.catalog.validation import problems
-from model_service.components.kinds import KINDS
-from model_service.components.problems import Problem
 
 
 if TYPE_CHECKING:
@@ -24,12 +24,12 @@ if TYPE_CHECKING:
 
     from pydantic import BaseModel
 
+    from components.base.component import Component
+    from components.base.slots import Slot
     from model_service.catalog.catalog import Entry
     from model_service.catalog.errors import YamlPath
     from model_service.catalog.kinds import DocumentKind
-    from model_service.components.component import Component
-    from model_service.components.registry import Registry
-    from model_service.components.slots import Slot
+    from model_service.registry import Registry
 
 
 class References:

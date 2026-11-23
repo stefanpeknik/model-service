@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from components.base import Col
 from model_service.catalog import CatalogInvalid, load_catalog
-from model_service.components import Col
 from tests.support.analysis_catalog import REGISTRY, write
 from tests.support.analysis_catalog import served_model as model
 

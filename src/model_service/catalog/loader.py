@@ -23,7 +23,7 @@ from model_service.catalog.context import References, ResolveContext
 from model_service.catalog.default_kinds import DEFAULT_KINDS
 from model_service.catalog.errors import CatalogError, CatalogInvalid
 from model_service.catalog.merge import deep_merge
-from model_service.components.registry import default_registry
+from model_service.registry import default_registry
 
 
 if TYPE_CHECKING:
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
     from model_service.catalog.errors import YamlPath
     from model_service.catalog.kinds import DocumentKind
-    from model_service.components.registry import Registry
+    from model_service.registry import Registry
 
 
 ENVIRONMENTS = "environments"

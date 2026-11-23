@@ -1,4 +1,4 @@
-"""Each kind's template in `docs/guides/templates/`, copied and named, conforms."""
+"""Each kind's template in `src/components/_templates/`, copied and named, conforms."""
 
 from __future__ import annotations
 
@@ -8,11 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from model_service.components import KINDS, Component
-from model_service.testing import conformance
+from components.base import KINDS, Component
+from components.testing import conformance
+from model_service.registry import default_registry
 
 
-TEMPLATES = Path(__file__).resolve().parents[2] / "docs" / "guides" / "templates"
+TEMPLATES = Path(__file__).resolve().parents[2] / "src" / "components" / "_templates"
 
 
 def copied(template: Path, directory: Path) -> type[Component]:
@@ -41,11 +42,11 @@ def copied(template: Path, directory: Path) -> type[Component]:
 
 
 def test_every_kind_has_one_template() -> None:
-    assert {t.stem for t in TEMPLATES.glob("*.py")} == {k.kind for k in KINDS}
+    assert {t.stem for t in TEMPLATES.glob("[!_]*.py")} == {k.kind for k in KINDS}
 
 
 @pytest.mark.parametrize(
-    "template", sorted(TEMPLATES.glob("*.py")), ids=lambda t: t.stem
+    "template", sorted(TEMPLATES.glob("[!_]*.py")), ids=lambda t: t.stem
 )
 def test_a_copied_template_conforms(template: Path, tmp_path: Path) -> None:
     component = copied(template, tmp_path)
@@ -55,3 +56,7 @@ def test_a_copied_template_conforms(template: Path, tmp_path: Path) -> None:
     assert component.kind == template.stem
     assert component.name == f"copied_{template.stem}"
     assert conformance.check(component, work_dir) == []
+
+
+def test_the_templates_are_not_registered() -> None:
+    assert default_registry().named("my_component") == []

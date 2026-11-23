@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from model_service.catalog import DocumentKind
-    from model_service.components.registry import Registry
+    from model_service.registry import Registry
 
 
 SCHEMAS = ".schemas"

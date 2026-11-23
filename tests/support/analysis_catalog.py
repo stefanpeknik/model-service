@@ -9,7 +9,7 @@ from __future__ import annotations
 import textwrap
 from typing import TYPE_CHECKING
 
-from model_service.components import Registry, default_registry
+from model_service.registry import Registry, default_registry
 
 
 if TYPE_CHECKING:

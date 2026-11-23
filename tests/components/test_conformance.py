@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 from pydantic import Field
 
-from model_service.components import (
+from components.base import (
     Col,
     Commit,
     EmpaiaInput,
@@ -22,24 +22,18 @@ from model_service.components import (
     Loader,
     Options,
     Publisher,
-    Registry,
     Runtime,
     Sink,
     Step,
-    default_registry,
 )
-from model_service.testing import conformance
+from components.testing import conformance
+from model_service.registry import Registry, default_registry
 
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from model_service.components import (
-        Batch,
-        BatchFunction,
-        Component,
-        RuntimeContext,
-    )
+    from components.base import Batch, BatchFunction, Component, RuntimeContext
 
 
 COMPONENTS = [*default_registry(), *Registry.scan("tests.support.components")]

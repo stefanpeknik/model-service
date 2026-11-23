@@ -18,9 +18,9 @@ from pydantic import ConfigDict, Field
 if TYPE_CHECKING:
     from pydantic import BaseModel
 
-    from model_service.components.component import Component
-    from model_service.components.registry import Registry
-    from model_service.components.slots import Slot
+    from components.base.component import Component
+    from components.base.slots import Slot
+    from model_service.registry import Registry
 
 
 def with_use(component: type[Component]) -> type[BaseModel]:

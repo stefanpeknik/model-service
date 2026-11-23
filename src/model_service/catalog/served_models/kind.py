@@ -6,22 +6,22 @@ from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import Field, create_model
 
+from components.base import Loader, Runtime, Step, slots
 from model_service.catalog.context import References, ResolveContext
 from model_service.catalog.errors import CatalogInvalid
 from model_service.catalog.kinds import DocumentKind
 from model_service.catalog.schema import first_paragraph, usable
 from model_service.catalog.served_models.declaration import ServedModel
 from model_service.catalog.served_models.fields import Fields
-from model_service.components import Loader, Runtime, Step, slots
-from model_service.components.registry import default_registry
+from model_service.registry import default_registry
 
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
 
+    from components.base import Slot
     from model_service.catalog.errors import YamlPath
-    from model_service.components import Slot
-    from model_service.components.registry import Registry
+    from model_service.registry import Registry
 
 
 FOLDER = "served-models"

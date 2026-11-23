@@ -16,12 +16,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from model_service.catalog import DEFAULT_KINDS, load_catalog
-from model_service.components.registry import default_registry
 from model_service.reference.analyses_page import analyses_page
 from model_service.reference.components_page import components_page
 from model_service.reference.formats_page import formats_page
 from model_service.reference.schemas import linked_files, schema_files
 from model_service.reference.served_models_page import served_models_page
+from model_service.registry import default_registry
 
 
 CATALOG = Path("catalog")

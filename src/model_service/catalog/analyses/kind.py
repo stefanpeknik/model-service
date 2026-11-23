@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
+from components.base import slots
 from model_service.catalog.analyses import checks
 from model_service.catalog.analyses.declaration import Analysis
 from model_service.catalog.analyses.exposure import exposure_schema, resolve_exposure
@@ -14,16 +15,15 @@ from model_service.catalog.analyses.model_step import ModelStep
 from model_service.catalog.kinds import DocumentKind
 from model_service.catalog.schema import first_paragraph, usable
 from model_service.catalog.served_models import FOLDER as SERVED_MODELS
-from model_service.components import slots
 
 
 if TYPE_CHECKING:
+    from components.base import Sink, Source, Step
     from model_service.catalog.analyses.declaration import AnalysisStep
     from model_service.catalog.context import ResolveContext
     from model_service.catalog.errors import YamlPath
     from model_service.catalog.served_models import ServedModel
-    from model_service.components import Sink, Source, Step
-    from model_service.components.registry import Registry
+    from model_service.registry import Registry
 
 
 FOLDER = "analyses"

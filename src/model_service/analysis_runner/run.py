@@ -20,11 +20,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from components.base import Run, rows
 from model_service.analysis_runner.models import model_call
 from model_service.analysis_runner.outputs import Staging, check_destinations
 from model_service.analysis_runner.timing import Timings
 from model_service.catalog.analyses import ModelStep
-from model_service.components import Run, rows
 from model_service.contracts.failures import (
     FailureCode,
     InvalidInvocation,
@@ -35,9 +35,9 @@ from model_service.contracts.failures import (
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping, Sequence
 
+    from components.base import Batch, Sink
     from model_service.analysis_runner.models import ModelHandle
     from model_service.catalog.analyses import Analysis
-    from model_service.components import Batch, Sink
 
 
 logger = logging.getLogger(__name__)

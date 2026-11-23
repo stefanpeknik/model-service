@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Any
 
-from model_service.components import Batch, Sink
+from components.base import Batch, Sink
 
 
 class StraySink(Sink):

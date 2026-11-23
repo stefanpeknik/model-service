@@ -12,13 +12,13 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from components.base import slots
 from model_service.catalog import DocumentKind
-from model_service.components import slots
 
 
 if TYPE_CHECKING:
+    from components.base import Component
     from model_service.catalog import ResolveContext
-    from model_service.components import Component
 
 
 class _ModelFields(BaseModel):

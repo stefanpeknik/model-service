@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import ValidationError
 
+from components.base import EmpaiaInput, EmpaiaOutput
 from model_service.api.scheduler.public import (
     AnalysisScheduleRequest,
     InvalidScheduleRequestError,
@@ -35,8 +36,6 @@ from model_service.api.scheduler.public import (
     ProviderSuccess,
     SubmissionIdentity,
 )
-from model_service.components import EmpaiaInput, EmpaiaOutput
-from model_service.components.empaia import converter, publisher
 from model_service.contracts.invocation import (
     InputAccessContext,
     Invocation,
@@ -76,15 +75,16 @@ from model_service.providers.empaia.jobs.payload import (
     schedule_payload,
 )
 from model_service.providers.provider import ProviderAdapter
+from model_service.registry.empaia import converter, publisher
 
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from components.base import Commit
     from model_service.api.scheduler.public import BeforeMutation
     from model_service.catalog import Catalog
     from model_service.catalog.analyses import Analysis
-    from model_service.components import Commit
     from model_service.contracts.json_values import JsonValue
     from model_service.contracts.result import RunResult
     from model_service.providers.empaia.app_service.gateway import (

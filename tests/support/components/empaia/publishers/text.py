@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from model_service.components import Commit, EmpaiaOutput, Publisher
+from components.base import Commit, EmpaiaOutput, Publisher
 
 
 if TYPE_CHECKING:

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from model_service.components.served_model.loaders.mlflow import Mlflow
+from components.loaders.mlflow import Mlflow
 
 
 if TYPE_CHECKING:

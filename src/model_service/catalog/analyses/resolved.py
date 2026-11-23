@@ -39,17 +39,17 @@ from model_service.catalog.context import References, ResolveContext
 from model_service.catalog.errors import CatalogInvalid
 from model_service.catalog.served_models import FOLDER as SERVED_MODELS
 from model_service.catalog.served_models import ServedModels, resolve_served_model
-from model_service.components.registry import default_registry
 from model_service.contracts.failures import InvalidInvocation, UnknownAnalysisError
+from model_service.registry import default_registry
 
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from components.base import Component
     from model_service.catalog.analyses.declaration import Analysis
     from model_service.catalog.catalog import Catalog
-    from model_service.components import Component
-    from model_service.components.registry import Registry
+    from model_service.registry import Registry
 
 
 DIGEST = "digest"

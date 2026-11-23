@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 import httpx
 from fastapi import FastAPI
 
+from components.testing import fake_model, fake_slide
 from model_service.analysis_runner.http_errors import answer_http
 from model_service.analysis_runner.replica import AnalysisReplica
 from model_service.analysis_runner.settings import ReplicaSettings
@@ -39,7 +40,6 @@ from model_service.contracts.invocation import (
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.app_service.types import DirectAccess
 from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessFactory
-from model_service.testing import fake_model, fake_slide
 from tests.support.analysis_catalog import REGISTRY, served_model, write
 from tests.support.empaia_fixtures import StrictGateway
 

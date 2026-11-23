@@ -7,10 +7,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from model_service.catalog.analyses import FOLDER as ANALYSES
-from model_service.catalog.analyses import ModelStep
-from model_service.catalog.served_models import FOLDER as SERVED_MODELS
-from model_service.components import (
+from components.base import (
     KINDS,
     InputConverter,
     Publisher,
@@ -18,7 +15,9 @@ from model_service.components import (
     Source,
     per_run_fields,
 )
-from model_service.components.registry import FOLDERS
+from model_service.catalog.analyses import FOLDER as ANALYSES
+from model_service.catalog.analyses import ModelStep
+from model_service.catalog.served_models import FOLDER as SERVED_MODELS
 from model_service.reference.markdown import (
     GENERATED,
     code,
@@ -28,12 +27,13 @@ from model_service.reference.markdown import (
     options_table,
     table,
 )
+from model_service.registry import FOLDERS
 
 
 if TYPE_CHECKING:
+    from components.base import Col, Component, Slot
     from model_service.catalog import Catalog
-    from model_service.components import Col, Component, Slot
-    from model_service.components.registry import Registry
+    from model_service.registry import Registry
 
 
 PAGE = Path("docs/reference/components.md")
@@ -57,7 +57,7 @@ def components_page(registry: Registry, catalog: Catalog) -> str:
         "A catalog file names a component with `{use: <name>, …options}`; "
         "EMPAIA converters and publishers are picked by `type:` instead. A "
         "component's kind decides where it may be named, and its folder under "
-        "`src/model_service/components/` says the same. To write one, see "
+        "`src/components/` says the same. To write one, see "
         "[Write a component](../guides/write-a-component.md).",
         table(
             ["Kind", "Usable in", "Folder"],
@@ -220,15 +220,15 @@ def _folders_of(kind: type[Component]) -> list[str]:
 
 
 def _folder(folder: str) -> str:
-    """A dotted folder name as a path.
+    """A dotted folder name as a path from the repository root.
 
     Args:
-        folder: E.g. `served_model.loaders`.
+        folder: E.g. `empaia.converters`.
 
     Returns:
-        E.g. `served_model/loaders/`.
+        E.g. `src/components/empaia/converters/`.
     """
-    return folder.replace(".", "/") + "/"
+    return "src/components/" + folder.replace(".", "/") + "/"
 
 
 def _plural(kind: str) -> str:

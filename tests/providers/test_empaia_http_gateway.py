@@ -13,13 +13,13 @@ from aiohttp import web
 from aiohttp.test_utils import TestServer
 from rationai.empaia import Client
 
-from model_service.components import EmpaiaInput, EmpaiaOutput
-from model_service.components.empaia.input_converters.rectangle import Rectangle
-from model_service.components.empaia.input_converters.wsi import Wsi
-from model_service.components.empaia.publishers.continuous_pixelmap import (
+from components.base import EmpaiaInput, EmpaiaOutput
+from components.empaia.converters.rectangle import Rectangle
+from components.empaia.converters.wsi import Wsi
+from components.empaia.publishers.continuous_pixelmap import (
     ContinuousPixelmap,
 )
-from model_service.components.empaia.publishers.primitive import primitive_body
+from components.empaia.publishers.primitive import primitive_body
 from model_service.formats.score_grid import MEDIA_TYPE, ScoreGrid
 from model_service.formats.score_grid import write as write_score_grid
 from model_service.providers.empaia.app_service.gateway import (

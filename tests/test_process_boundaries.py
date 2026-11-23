@@ -2,7 +2,8 @@
 
 The processes: the API (`api/`), the generic served-model host
 (`served_model/`) and the analysis runner (`analysis_runner/`); `catalog/`,
-`components/`, `formats/` and `contracts/` are shared and stay light.
+`registry/`, `formats/` and `contracts/` are shared and stay light, and so
+does the top-level `components` package every process scans.
 """
 
 from __future__ import annotations
@@ -76,9 +77,9 @@ class ProcessBoundaryTests(unittest.TestCase):
     ) -> None:
         """The API validates catalogs, so component declarations must stay light."""
         modules = loaded_modules(
-            "model_service.catalog, model_service.components, model_service.testing",
+            "model_service.catalog, model_service.registry, components.testing",
             then=(
-                "model_service.components.default_registry(); "
+                "model_service.registry.default_registry(); "
                 f"model_service.catalog.load_catalog(__import__('pathlib').Path({str(CATALOG)!r}))"
             ),
         )
@@ -98,6 +99,12 @@ class ProcessBoundaryTests(unittest.TestCase):
             ),
             [],
         )
+
+    def test_the_kind_base_classes_load_without_the_service(self) -> None:
+        """A component imports its kind; that must not pull in the plumbing."""
+        modules = loaded_modules("components.base")
+
+        self.assertEqual(under(modules, "model_service"), [])
 
     def test_the_replicas_load_no_api_code(self) -> None:
         for serve in ("analysis_runner", "served_model"):

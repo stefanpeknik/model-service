@@ -15,8 +15,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
-from model_service.components import EmpaiaInput
-from model_service.components.empaia import converter
+from components.base import EmpaiaInput
 from model_service.contracts.failures import (
     FailureCode,
     InvalidInvocation,
@@ -34,6 +33,7 @@ from model_service.providers.input_access import (
     InputAccessFactory,
     close_resource,
 )
+from model_service.registry.empaia import converter
 
 
 logger = logging.getLogger(__name__)

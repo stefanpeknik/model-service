@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from components.testing import fake_model, fake_slide
 from model_service.analysis_runner.replica import AnalysisReplica
 from model_service.analysis_runner.settings import ReplicaSettings
 from model_service.catalog import load_catalog
@@ -28,7 +29,6 @@ from model_service.contracts.invocation import (
 from model_service.contracts.result import RunResult, SharedArtifact
 from model_service.formats import score_grid
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
-from model_service.testing import fake_model, fake_slide
 from tests.support.analysis_catalog import REGISTRY, served_model, write
 
 

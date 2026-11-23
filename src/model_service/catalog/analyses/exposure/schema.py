@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, create_model
 from pydantic.fields import FieldInfo
 
+from components.base import slots
 from model_service.catalog.analyses.exposure.fields import EmpaiaFields, ExposeFields
-from model_service.components import slots
 
 
 if TYPE_CHECKING:
-    from model_service.components.registry import Registry
+    from model_service.registry import Registry
 
 
 def exposure_schema(registry: Registry) -> type[BaseModel]:

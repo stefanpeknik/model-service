@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from model_service.components import RuntimeContext
+from components.base import RuntimeContext
 from model_service.served_model.batching import Batcher
 from model_service.served_model.guards import check_output, check_rows, check_tile
 from model_service.served_model.replies import raw_reply
@@ -35,8 +35,8 @@ from model_service.served_model.replies import raw_reply
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
+    from components.base import Step
     from model_service.catalog.served_models import ServedModel
-    from model_service.components import Step
     from model_service.served_model.replies import RawReply
 
 logger = logging.getLogger(__name__)

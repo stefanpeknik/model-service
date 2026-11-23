@@ -2,17 +2,17 @@
 
 # Components
 
-A catalog file names a component with `{use: <name>, …options}`; EMPAIA converters and publishers are picked by `type:` instead. A component's kind decides where it may be named, and its folder under `src/model_service/components/` says the same. To write one, see [Write a component](../guides/write-a-component.md).
+A catalog file names a component with `{use: <name>, …options}`; EMPAIA converters and publishers are picked by `type:` instead. A component's kind decides where it may be named, and its folder under `src/components/` says the same. To write one, see [Write a component](../guides/write-a-component.md).
 
 | Kind | Usable in | Folder |
 | --- | --- | --- |
-| [loader](#loaders) | served model `weights:`, analysis step `weights:` | `served_model/loaders/` |
-| [runtime](#runtimes) | served model `runtime:` | `served_model/runtimes/` |
-| [step](#steps) | served model `pre:`, served model `post:`, analysis `steps:` | `steps/` |
-| [source](#sources) | analysis `source:` | `analysis/sources/` |
-| [sink](#sinks) | analysis `sinks:` | `analysis/sinks/` |
-| [converter](#converters) | EMPAIA exposure `inputs:` | `empaia/input_converters/`, `standalone/` |
-| [publisher](#publishers) | EMPAIA exposure `outputs:` | `empaia/publishers/`, `standalone/` |
+| [loader](#loaders) | served model `weights:`, analysis step `weights:` | `src/components/loaders/` |
+| [runtime](#runtimes) | served model `runtime:` | `src/components/runtimes/` |
+| [step](#steps) | served model `pre:`, served model `post:`, analysis `steps:` | `src/components/steps/` |
+| [source](#sources) | analysis `source:` | `src/components/sources/` |
+| [sink](#sinks) | analysis `sinks:` | `src/components/sinks/` |
+| [converter](#converters) | EMPAIA exposure `inputs:` | `src/components/empaia/converters/` |
+| [publisher](#publishers) | EMPAIA exposure `outputs:` | `src/components/empaia/publishers/` |
 
 ## Loaders
 
@@ -33,7 +33,7 @@ A gated repository needs `HF_TOKEN` in the environment.
 - **Usable in:** served model `weights:`, analysis step `weights:`
 - **Example:** `{use: huggingface, repo: paige-ai/Virchow2, revision: 3158645804b69e3f3bc4439d4116edddf0840a72}`
 - **Used in:** [`prov-gigapath`](served-models.md#prov-gigapath), [`virchow2`](served-models.md#virchow2)
-- **Code:** [`src/model_service/components/served_model/loaders/huggingface.py`](../../src/model_service/components/served_model/loaders/huggingface.py)
+- **Code:** [`src/components/loaders/huggingface.py`](../../src/components/loaders/huggingface.py)
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -51,7 +51,7 @@ the cluster the path must be on a mounted volume.
 - **Usable in:** served model `weights:`, analysis step `weights:`
 - **Example:** `{use: local, path: /data/model.onnx}`
 - **Used in:** no catalog file yet
-- **Code:** [`src/model_service/components/served_model/loaders/local.py`](../../src/model_service/components/served_model/loaders/local.py)
+- **Code:** [`src/components/loaders/local.py`](../../src/components/loaders/local.py)
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -70,7 +70,7 @@ that run; `sha256:` pins them.
 - **Usable in:** served model `weights:`, analysis step `weights:`
 - **Example:** `{use: mlflow, uri: 'mlflow-artifacts:/0/0123456789abcdef/artifacts/model.onnx'}`
 - **Used in:** [`episeg-1`](served-models.md#episeg-1), [`prostate-classifier-1`](served-models.md#prostate-classifier-1)
-- **Code:** [`src/model_service/components/served_model/loaders/mlflow.py`](../../src/model_service/components/served_model/loaders/mlflow.py)
+- **Code:** [`src/components/loaders/mlflow.py`](../../src/components/loaders/mlflow.py)
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -94,7 +94,7 @@ directory, so a changed model never reuses a stale engine.
 - **Usable in:** served model `runtime:`
 - **Example:** `{use: onnx}`
 - **Used in:** [`episeg-1`](served-models.md#episeg-1), [`prostate-classifier-1`](served-models.md#prostate-classifier-1)
-- **Code:** [`src/model_service/components/served_model/runtimes/onnx.py`](../../src/model_service/components/served_model/runtimes/onnx.py)
+- **Code:** [`src/components/runtimes/onnx.py`](../../src/components/runtimes/onnx.py)
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -123,7 +123,7 @@ transforms each one; with `transform: none` it takes the float batch that
 - **Usable in:** served model `runtime:`
 - **Example:** `{use: timm}`
 - **Used in:** [`prov-gigapath`](served-models.md#prov-gigapath), [`virchow2`](served-models.md#virchow2)
-- **Code:** [`src/model_service/components/served_model/runtimes/timm.py`](../../src/model_service/components/served_model/runtimes/timm.py)
+- **Code:** [`src/components/runtimes/timm.py`](../../src/components/runtimes/timm.py)
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -154,7 +154,7 @@ torchvision does.
 - **Reads:** `tile` `uint8[3,?,?]`
 - **Adds:** `tile` `uint8[3,size,size]`
 - **Used in:** [`prov-gigapath`](served-models.md#prov-gigapath)
-- **Code:** [`src/model_service/components/steps/center_crop.py`](../../src/model_service/components/steps/center_crop.py)
+- **Code:** [`src/components/steps/center_crop.py`](../../src/components/steps/center_crop.py)
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -179,7 +179,7 @@ patch tokens, without the registers.
 - **Reads:** `output` `float32[?,?]`
 - **Adds:** `output` `float32[2,?]`
 - **Used in:** [`virchow2`](served-models.md#virchow2)
-- **Code:** [`src/model_service/components/steps/cls_mean_pool.py`](../../src/model_service/components/steps/cls_mean_pool.py)
+- **Code:** [`src/components/steps/cls_mean_pool.py`](../../src/components/steps/cls_mean_pool.py)
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -199,7 +199,7 @@ the result matches it bit for bit.
 - **Reads:** `tile` `uint8[3,?,?]`
 - **Adds:** `tile` `float32[3,?,?]`
 - **Used in:** [`prov-gigapath`](served-models.md#prov-gigapath)
-- **Code:** [`src/model_service/components/steps/normalize.py`](../../src/model_service/components/steps/normalize.py)
+- **Code:** [`src/components/steps/normalize.py`](../../src/components/steps/normalize.py)
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -221,7 +221,7 @@ for bit; Pillow must be installed where the step runs.
 - **Reads:** `tile` `uint8[3,?,?]`
 - **Adds:** `tile` `uint8[3,?,?]`
 - **Used in:** [`prov-gigapath`](served-models.md#prov-gigapath)
-- **Code:** [`src/model_service/components/steps/resize.py`](../../src/model_service/components/steps/resize.py)
+- **Code:** [`src/components/steps/resize.py`](../../src/components/steps/resize.py)
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -250,7 +250,7 @@ than a tile.
 - **Frame:** `extent_x` `int64`, `extent_y` `int64`, `tile_extent_x` `int64`, `tile_extent_y` `int64`, `stride_x` `int64`, `stride_y` `int64`, `level` `int64`, `mpp_x` `float64`, `mpp_y` `float64`, `downsample` `float64`
 - **Adds:** `tile_x` `int64`, `tile_y` `int64`, `tile` `uint8[3,tile_size,tile_size]`
 - **Used in:** [`episeg-heatmap`](analyses.md#episeg-heatmap), [`prostate-heatmap`](analyses.md#prostate-heatmap), [`prov-gigapath-embeddings`](analyses.md#prov-gigapath-embeddings), [`virchow2-embeddings`](analyses.md#virchow2-embeddings)
-- **Code:** [`src/model_service/components/analysis/sources/slide_tiles.py`](../../src/model_service/components/analysis/sources/slide_tiles.py)
+- **Code:** [`src/components/sources/slide_tiles.py`](../../src/components/sources/slide_tiles.py)
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -281,7 +281,7 @@ skipped all of them, the table is empty.
 - **Frame fields read:** `downsample`, `extent_x`, `extent_y`, `level`, `mpp_x`, `mpp_y`, `stride_x`, `tile_extent_x`
 - **Rows in order:** yes
 - **Used in:** [`prov-gigapath-embeddings`](analyses.md#prov-gigapath-embeddings), [`virchow2-embeddings`](analyses.md#virchow2-embeddings)
-- **Code:** [`src/model_service/components/analysis/sinks/embedding_table.py`](../../src/model_service/components/analysis/sinks/embedding_table.py)
+- **Code:** [`src/components/sinks/embedding_table.py`](../../src/components/sinks/embedding_table.py)
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -301,7 +301,7 @@ of shape (channels, rows, columns), with which cells any tile covered.
 - **Frame fields read:** `extent_x`, `extent_y`, `level`, `mpp_x`, `mpp_y`, `stride_x`, `stride_y`, `tile_extent_x`, `tile_extent_y`
 - **Rows in order:** no
 - **Used in:** [`episeg-heatmap`](analyses.md#episeg-heatmap), [`prostate-heatmap`](analyses.md#prostate-heatmap)
-- **Code:** [`src/model_service/components/analysis/sinks/score_grid.py`](../../src/model_service/components/analysis/sinks/score_grid.py)
+- **Code:** [`src/components/sinks/score_grid.py`](../../src/components/sinks/score_grid.py)
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -328,7 +328,7 @@ read when the job is admitted and overrides the file's.
 - **EAD input type:** `primitive`
 - **Gives:** a value
 - **Used in:** no catalog file yet
-- **Code:** [`src/model_service/components/empaia/input_converters/primitive.py`](../../src/model_service/components/empaia/input_converters/primitive.py)
+- **Code:** [`src/components/empaia/converters/primitive.py`](../../src/components/empaia/converters/primitive.py)
 
 ### `rectangle` (converter)
 
@@ -343,7 +343,7 @@ with the region-of-interest class, so the viewer lets a user draw it.
 - **EAD input type:** `rectangle`
 - **Gives:** a file
 - **Used in:** [`prostate-heatmap`](analyses.md#prostate-heatmap)
-- **Code:** [`src/model_service/components/empaia/input_converters/rectangle.py`](../../src/model_service/components/empaia/input_converters/rectangle.py)
+- **Code:** [`src/components/empaia/converters/rectangle.py`](../../src/components/empaia/converters/rectangle.py)
 
 ### `wsi` (converter)
 
@@ -359,7 +359,7 @@ is refused: model-service does not download slides.
 - **EAD input type:** `wsi`
 - **Gives:** a file
 - **Used in:** [`prostate-heatmap`](analyses.md#prostate-heatmap)
-- **Code:** [`src/model_service/components/empaia/input_converters/wsi.py`](../../src/model_service/components/empaia/input_converters/wsi.py)
+- **Code:** [`src/components/empaia/converters/wsi.py`](../../src/components/empaia/converters/wsi.py)
 
 ## Publishers
 
@@ -384,7 +384,7 @@ a multi-channel grid is refused when the analysis loads.
 - **Reads:** [`score_grid`](formats.md#score_grid)
 - **EAD output types:** `continuous_pixelmap`
 - **Used in:** [`prostate-heatmap`](analyses.md#prostate-heatmap)
-- **Code:** [`src/model_service/components/empaia/publishers/continuous_pixelmap.py`](../../src/model_service/components/empaia/publishers/continuous_pixelmap.py)
+- **Code:** [`src/components/empaia/publishers/continuous_pixelmap.py`](../../src/components/empaia/publishers/continuous_pixelmap.py)
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -404,7 +404,7 @@ anything is posted.
 - **Reads:** [`value`](formats.md#value)
 - **EAD output types:** `bool`, `float`, `integer`, `string`
 - **Used in:** no catalog file yet
-- **Code:** [`src/model_service/components/empaia/publishers/primitive.py`](../../src/model_service/components/empaia/publishers/primitive.py)
+- **Code:** [`src/components/empaia/publishers/primitive.py`](../../src/components/empaia/publishers/primitive.py)
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |

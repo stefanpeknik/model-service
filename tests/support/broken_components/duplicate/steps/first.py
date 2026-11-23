@@ -1,4 +1,4 @@
-from model_service.components import Batch, Step
+from components.base import Batch, Step
 
 
 class First(Step):

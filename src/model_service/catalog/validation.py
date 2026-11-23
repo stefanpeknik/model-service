@@ -5,7 +5,7 @@ from __future__ import annotations
 import difflib
 from typing import TYPE_CHECKING, Any
 
-from model_service.components.problems import Problem
+from components.base.problems import Problem
 
 
 if TYPE_CHECKING:

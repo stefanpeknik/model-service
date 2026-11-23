@@ -13,7 +13,7 @@ An EAD (EMPAIA App Description) declares an app's inputs, outputs and modes.
 - ead/: apps.py generates each exposed analysis's app and EAD from its
   converters' and publishers' fragments; vocabulary.py holds modes, triggers
   and viewer settings.
-- Converters and publishers are components: components/empaia/.
+- Converters and publishers are components: src/components/empaia/.
 - registration.py, credentials.py: register apps in the marketplace.
 - settings.py: EMPAIA_* settings.
 """

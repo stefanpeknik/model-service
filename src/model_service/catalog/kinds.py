@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from pydantic import BaseModel
 
     from model_service.catalog.context import ResolveContext
-    from model_service.components.registry import Registry
+    from model_service.registry import Registry
 
 
 class DocumentKind(ABC):

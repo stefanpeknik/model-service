@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from model_service.components import Batch, Registry, Step, slots
-from model_service.components.registry import RegistryError
-from tests.support.components.empaia.input_converters.text import Text as TextIn
+from components.base import Batch, Step, slots
+from model_service.registry import Registry, RegistryError
+from tests.support.components.empaia.converters.text import Text as TextIn
 from tests.support.components.empaia.publishers.text import Text as TextOut
 from tests.support.components.steps.mean_intensity import MeanIntensity
 
@@ -35,7 +35,9 @@ def test_two_components_of_one_kind_with_one_name_fail_the_scan() -> None:
 
 
 def test_a_component_in_another_kinds_folder_fails_the_scan() -> None:
-    with pytest.raises(RegistryError, match=r"stray_sink is a sink.*steps/"):
+    with pytest.raises(
+        RegistryError, match=r"stray_sink is a sink.*misplaced/steps/.*misplaced/sinks/"
+    ):
         Registry.scan("tests.support.broken_components.misplaced")
 
 

@@ -15,8 +15,8 @@ import yaml
 from jsonschema import Draft202012Validator
 
 from model_service.catalog import DEFAULT_KINDS
-from model_service.components import default_registry
 from model_service.reference.schemas import schema_files
+from model_service.registry import default_registry
 
 
 CATALOG = Path(__file__).resolve().parents[2] / "catalog"

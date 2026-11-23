@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
+    from components.base import Component, Loader, Runtime, Step
     from model_service.catalog.served_models.fields import (
         Batching,
         Input,
@@ -17,7 +18,6 @@ if TYPE_CHECKING:
         Resources,
         Serving,
     )
-    from model_service.components import Component, Loader, Runtime, Step
 
 
 @dataclass(frozen=True)

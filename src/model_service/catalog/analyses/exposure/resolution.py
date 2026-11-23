@@ -7,21 +7,21 @@ from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import ValidationError
 
+from components.base import slots
+from components.empaia.converters.primitive import primitive_of
 from model_service.catalog.analyses.exposure.fields import EmpaiaFields, ExposeFields
 from model_service.catalog.validation import problems
-from model_service.components import slots
-from model_service.components.empaia import TYPE, converters_for, publishers_for
-from model_service.components.empaia.input_converters.primitive import primitive_of
 from model_service.providers.empaia.ead.vocabulary import AppMode, Trigger, ViewerConfig
+from model_service.registry.empaia import TYPE, converters_for, publishers_for
 
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from components.base import InputConverter, Publisher
     from model_service.catalog.analyses.declaration import Analysis
     from model_service.catalog.context import ResolveContext
     from model_service.catalog.errors import YamlPath
-    from model_service.components import InputConverter, Publisher
 
 
 WSI = "wsi"

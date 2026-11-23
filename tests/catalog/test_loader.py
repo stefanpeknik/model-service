@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from model_service.catalog import Catalog, CatalogInvalid, environments, load_catalog
-from model_service.components import Registry
+from model_service.registry import Registry
 from tests.support.catalog_kinds import TEST_KINDS
 
 

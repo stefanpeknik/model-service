@@ -14,11 +14,11 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
+from components.testing import fake_slide
 from model_service.analysis_runner import run_analysis
 from model_service.catalog import load_catalog
 from model_service.contracts.failures import InvalidInvocation
 from model_service.formats import score_grid
-from model_service.testing import fake_slide
 from tests.support.analysis_catalog import REGISTRY, served_model, write
 
 
