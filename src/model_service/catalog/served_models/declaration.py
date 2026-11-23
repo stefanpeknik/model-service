@@ -78,4 +78,12 @@ class ServedModel:
 
 
 def _component(component: Component) -> dict[str, Any]:
+    """A component as the digest covers it: its name and every option.
+
+    Args:
+        component: The component.
+
+    Returns:
+        `use` and every option, defaults included.
+    """
     return {"use": component.name, **component.options.model_dump(mode="json")}

@@ -202,7 +202,14 @@ class EmpaiaGateway(ABC):
 
     @abstractmethod
     async def has_input(self, name: str) -> bool:
-        """Check whether the job has the named input; optional inputs depend on the app's mode."""
+        """Check whether the job has the named input; optional inputs depend on the app's mode.
+
+        Args:
+            name: The EMPAIA input key.
+
+        Returns:
+            True if the job has it.
+        """
         ...
 
     @abstractmethod

@@ -79,6 +79,7 @@ class Primitive(Publisher):
         body = primitive_body(item.name, gateway.job_id, kind, scalar)
 
         async def commit() -> None:
+            """Post the prepared primitive."""
             await gateway.post_output(item.name, body)
 
         return commit

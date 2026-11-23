@@ -131,4 +131,14 @@ def check_output(model: ServedModel, output: np.ndarray) -> np.ndarray:
 
 
 def _error(model: ServedModel, returned: str, hint: str) -> ModelOutputError:
+    """An output error naming the model, what it returned and a fix.
+
+    Args:
+        model: The served model.
+        returned: What the output was.
+        hint: How to fix the model or its file.
+
+    Returns:
+        The error to raise.
+    """
     return ModelOutputError(f"{model.id} returned {returned}. Hint: {hint}")

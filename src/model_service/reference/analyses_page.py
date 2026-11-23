@@ -59,7 +59,14 @@ def analyses_page(catalog: Catalog) -> str:
 
 
 def _analysis(entry: Entry) -> list[str]:
-    """One analysis's section."""
+    """One analysis's section.
+
+    Args:
+        entry: The analysis's catalog entry.
+
+    Returns:
+        The section's Markdown blocks.
+    """
     analysis: Analysis = entry.value
     written = entry.document
     file = entry.file
@@ -103,7 +110,14 @@ def _analysis(entry: Entry) -> list[str]:
 
 
 def _tiles(analysis: Analysis) -> str:
-    """The tile geometry after the first model step filled it in."""
+    """The tile geometry after the first model step filled it in.
+
+    Args:
+        analysis: The resolved analysis.
+
+    Returns:
+        `<size> px at <mpp> µm/px`, or a note that the source decides.
+    """
     options = analysis.source.options
     size, mpp = getattr(options, "tile_size", None), getattr(options, "mpp", None)
     if size is None or mpp is None:
@@ -112,6 +126,15 @@ def _tiles(analysis: Analysis) -> str:
 
 
 def _step(step: object, written: object) -> str:
+    """A step as the analysis's table lists it.
+
+    Args:
+        step: The resolved step.
+        written: The step as the file wrote it.
+
+    Returns:
+        A link to a model step's served model, or the step as written.
+    """
     if isinstance(step, ModelStep):
         model_id = step.model.id
         return f"model [`{model_id}`](served-models.md#{model_id})"
@@ -119,6 +142,14 @@ def _step(step: object, written: object) -> str:
 
 
 def _inputs(analysis: Analysis) -> str:
+    """The analysis's inputs and whether each is required.
+
+    Args:
+        analysis: The resolved analysis.
+
+    Returns:
+        The inputs, comma-separated.
+    """
     return ", ".join(
         f"`{name}` ({'required' if required else 'optional'})"
         for name, required in analysis.inputs.items()
@@ -126,12 +157,28 @@ def _inputs(analysis: Analysis) -> str:
 
 
 def _output(sink: object) -> str:
+    """A sink's output with a link to its data format.
+
+    Args:
+        sink: The sink.
+
+    Returns:
+        `<output>: <format> (.<extension>)` in Markdown.
+    """
     name = sink.options.output  # type: ignore[attr-defined]
     found = get_format(sink.format)  # type: ignore[attr-defined]
     return f"`{name}`: [`{found.name}`](formats.md#{found.name}) (`.{found.extension}`)"
 
 
 def _empaia(app: EmpaiaExposure) -> str:
+    """The EMPAIA app an analysis becomes, in one line.
+
+    Args:
+        app: The resolved exposure.
+
+    Returns:
+        Its name, modes, published outputs, job parameters and triggers.
+    """
     modes = ", ".join(str(m) for m in app.modes)
     outputs = ", ".join(
         f"`{name}` as `{publisher.options.type}`"

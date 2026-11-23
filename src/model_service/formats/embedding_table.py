@@ -197,7 +197,13 @@ class TableWriter:
         error: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
-        """Release the file, finished or not."""
+        """Release the file, finished or not.
+
+        Args:
+            kind: The exception type, if the block raised.
+            error: The exception, if the block raised.
+            traceback: Its traceback.
+        """
         self.release()
 
     def release(self) -> None:
@@ -364,7 +370,15 @@ def check(path: Path) -> list[str]:
 
 
 def _check_rows(file: h5py.File, attrs: dict[str, Any]) -> list[str]:
-    """Check `coordinates` and `features` against each other and the header."""
+    """Check `coordinates` and `features` against each other and the header.
+
+    Args:
+        file: The open table.
+        attrs: Its attributes.
+
+    Returns:
+        One sentence per problem.
+    """
     problems = []
     coordinates, features = file["coordinates"], file["features"]
     if coordinates.dtype != np.int64 or coordinates.shape[1:] != (2,):
@@ -396,5 +410,12 @@ def _check_rows(file: h5py.File, attrs: dict[str, Any]) -> list[str]:
 
 
 def _text(value: Any) -> str:
-    """An HDF5 string attribute as `str`, whether stored as bytes or text."""
+    """An HDF5 string attribute as `str`, whether stored as bytes or text.
+
+    Args:
+        value: The attribute.
+
+    Returns:
+        The text.
+    """
     return value.decode() if isinstance(value, bytes) else str(value)

@@ -69,10 +69,26 @@ def facts(rows: Iterable[Sequence[str]]) -> str:
 
 
 def _row(cells: Sequence[str]) -> str:
+    """One Markdown table row.
+
+    Args:
+        cells: The row's cells.
+
+    Returns:
+        The row, cells escaped.
+    """
     return "| " + " | ".join(_cell(c) for c in cells) + " |"
 
 
 def _cell(text: str) -> str:
+    """A table cell's text on one line, with `|` escaped.
+
+    Args:
+        text: The cell's text.
+
+    Returns:
+        The escaped text.
+    """
     return " ".join(text.replace("|", "\\|").split())
 
 
@@ -109,7 +125,14 @@ def flow(value: object) -> str:
 
 
 def _plain(value: Any) -> Any:
-    """Tuples as lists, so YAML writes plain flow sequences."""
+    """Tuples as lists, so YAML writes plain flow sequences.
+
+    Args:
+        value: A JSON-compatible value.
+
+    Returns:
+        The value with only JSON types.
+    """
     return json.loads(json.dumps(value))
 
 

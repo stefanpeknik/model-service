@@ -108,6 +108,18 @@ def publisher(
 
 
 def _one[C](found: list[C], use: Mapping[str, Any]) -> list[C]:
+    """Exactly one match, or a lookup error naming how many there were.
+
+    Args:
+        found: The components matching `use`.
+        use: The recorded EAD type and options.
+
+    Returns:
+        `found`, of length one.
+
+    Raises:
+        LookupError: If none or several match.
+    """
     if len(found) != 1:
         raise LookupError(f"{len(found)} components take EMPAIA type {use.get(TYPE)!r}")
     return found

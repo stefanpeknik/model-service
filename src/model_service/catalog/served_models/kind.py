@@ -96,7 +96,14 @@ class ServedModels(DocumentKind):
 
 
 def _field(name: str) -> Any:
-    """A component field of the file schema, with `Fields`' description and default."""
+    """A component field of the file schema, with `Fields`' description and default.
+
+    Args:
+        name: The field, e.g. `weights`.
+
+    Returns:
+        The pydantic field.
+    """
     info = Fields.model_fields[name]
     if info.is_required():
         return Field(description=info.description)
@@ -106,6 +113,17 @@ def _field(name: str) -> Any:
 def _steps(
     ctx: ResolveContext, slot: Slot, value: object, path: YamlPath
 ) -> tuple[Step, ...]:
+    """Resolve `pre:` or `post:`; a step that fails is left out after its error.
+
+    Args:
+        ctx: Collects errors.
+        slot: The slot.
+        value: Its value.
+        path: Where it is in the file.
+
+    Returns:
+        The steps that resolved, in order.
+    """
     if value is None:
         return ()
     if not isinstance(value, list):

@@ -85,4 +85,12 @@ def format_of(media_type: str) -> Format | None:
 
 
 def _normalised(media_type: str) -> str:
+    """A media type with the whitespace around its parameters removed.
+
+    Args:
+        media_type: E.g. `application/x; version=1`.
+
+    Returns:
+        E.g. `application/x;version=1`.
+    """
     return ";".join(part.strip() for part in media_type.split(";"))

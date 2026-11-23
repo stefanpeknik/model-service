@@ -128,7 +128,15 @@ class ServedModelHost:
         }
 
     async def _infer(self, tile: np.ndarray, post: bool) -> np.ndarray:
-        """Infer one tile; without `post`, skip each post step, unchecked."""
+        """Infer one tile; without `post`, skip each post step, unchecked.
+
+        Args:
+            tile: uint8 RGB `(3, tile_size, tile_size)`.
+            post: Whether to run the post steps and check the output.
+
+        Returns:
+            The tile's output.
+        """
         check_tile(self.model, tile)
         output = await self._batcher.submit(_apply(self.model.pre, "tile", tile))
         if not post:
@@ -136,7 +144,14 @@ class ServedModelHost:
         return check_output(self.model, _apply(self.model.post, "output", output))
 
     def _run_batch(self, tiles: list[np.ndarray]) -> list[np.ndarray]:
-        """Run the runtime on one batch and split it back into tiles."""
+        """Run the runtime on one batch and split it back into tiles.
+
+        Args:
+            tiles: The batch's tiles, after the pre steps.
+
+        Returns:
+            One output per tile.
+        """
         output = np.asarray(self._run(np.stack(tiles, axis=0)))
         check_rows(self.model, output, len(tiles))
         return list(output)
@@ -145,7 +160,17 @@ class ServedModelHost:
 def _apply(
     steps: Sequence[Step], column: str, value: np.ndarray, *, skipped: bool = False
 ) -> np.ndarray:
-    """Run steps (or what skipping them leaves) on one item as a one-row batch."""
+    """Run steps (or what skipping them leaves) on one item as a one-row batch.
+
+    Args:
+        steps: The steps, in order.
+        column: The column they read and write.
+        value: The item.
+        skipped: Whether to run each step's `skipped` instead.
+
+    Returns:
+        The item after the steps.
+    """
     for step in steps:
         run = step.skipped if skipped else step
         value = run({column: value[None]})[column][0]

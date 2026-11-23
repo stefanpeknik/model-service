@@ -155,7 +155,15 @@ class Analyses(DocumentKind):
 
 
 def _steps(ctx: ResolveContext, value: object) -> list[AnalysisStep] | None:
-    """Resolve `steps:`; None if any step failed."""
+    """Resolve `steps:`; None if any step failed.
+
+    Args:
+        ctx: Collects errors and resolves references.
+        value: The `steps:` value.
+
+    Returns:
+        The model steps and component steps, in order, or None after an error.
+    """
     if value is None:
         return []
     if not isinstance(value, list):
@@ -193,7 +201,17 @@ def _steps(ctx: ResolveContext, value: object) -> list[AnalysisStep] | None:
 def _list(
     ctx: ResolveContext, slot: slots.Slot, value: object, *, required: bool
 ) -> list[Any]:
-    """Resolve a list of components under `slot`, reporting a missing one."""
+    """Resolve a list of components under `slot`, reporting a missing one.
+
+    Args:
+        ctx: Collects errors.
+        slot: The slot, `sinks:` for instance.
+        value: Its value.
+        required: Whether the list needs an entry.
+
+    Returns:
+        The components that resolved.
+    """
     key = slot.key
     if value is None or (required and value == []):
         if required:
@@ -212,7 +230,13 @@ def _list(
 
 
 def _not_a_list(ctx: ResolveContext, slot: slots.Slot, path: YamlPath) -> None:
-    """Report a slot that holds something other than a list."""
+    """Report a slot that holds something other than a list.
+
+    Args:
+        ctx: Collects errors.
+        slot: The slot.
+        path: Where it is in the file.
+    """
     ctx.error(
         path,
         "not a list",

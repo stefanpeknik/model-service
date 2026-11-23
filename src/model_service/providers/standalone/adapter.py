@@ -170,6 +170,11 @@ class StandaloneProviderAdapter(ProviderAdapter):
         A retry after a partial move finds the moved files in place. Executions
         admitted without an attempts directory keep their outputs where they are.
 
+        Args:
+            protected_context: The execution's shared-storage root and attempts group.
+            outcome: The processing outcome.
+            before_mutation: Unused; nothing outside shared storage changes.
+
         Returns:
             On success, the result with the requested paths; otherwise None.
 

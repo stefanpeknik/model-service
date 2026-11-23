@@ -91,6 +91,14 @@ def patch_schema(schema: dict[str, Any]) -> dict[str, Any]:
     """
 
     def relax(node: Any) -> Any:
+        """Drop `required` and discriminators, turning `oneOf` into `anyOf`.
+
+        Args:
+            node: A part of the schema.
+
+        Returns:
+            The relaxed part.
+        """
         if isinstance(node, dict):
             relaxed = {
                 ("anyOf" if k == "oneOf" else k): relax(v)
@@ -108,7 +116,14 @@ def patch_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def _without_attributes(node: Any) -> Any:
-    """Drop the `Attributes:` section models' docstrings bring into descriptions."""
+    """Drop the `Attributes:` section models' docstrings bring into descriptions.
+
+    Args:
+        node: A part of a schema.
+
+    Returns:
+        The part, descriptions trimmed.
+    """
     if isinstance(node, dict):
         return {
             k: v.split("\n\nAttributes:", 1)[0]

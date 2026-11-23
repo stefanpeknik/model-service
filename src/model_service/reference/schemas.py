@@ -101,4 +101,12 @@ def with_modeline(text: str, line: str) -> str:
 
 
 def _json(schema: dict[str, object]) -> str:
+    """A schema as the JSON file holds it.
+
+    Args:
+        schema: The JSON schema.
+
+    Returns:
+        The schema, indented, with a final newline.
+    """
     return json.dumps(schema, indent=2, ensure_ascii=False) + "\n"

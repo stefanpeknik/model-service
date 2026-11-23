@@ -131,6 +131,12 @@ def _fingerprint(directory: Path) -> str:
 
     kubelet's own entries (`..data` and the timestamped folders) are skipped;
     the files are symlinks into them, followed.
+
+    Args:
+        directory: The mounted ConfigMap directory.
+
+    Returns:
+        The hex digest, or `unreadable` if a file can't be read.
     """
     digest = hashlib.sha256()
     try:

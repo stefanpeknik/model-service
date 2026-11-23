@@ -96,7 +96,21 @@ class HTTPAnalysisDispatch:
     async def _post(
         self, path: str, payload: object, deadline_at: datetime
     ) -> RunResult:
-        """Post a run request with the time left as timeout, and classify the answer."""
+        """Post a run request with the time left as timeout, and classify the answer.
+
+        Args:
+            path: The runner route, e.g. `/analyses/`.
+            payload: The JSON run request.
+            deadline_at: When the run must finish.
+
+        Returns:
+            The runner's result.
+
+        Raises:
+            ConfirmedRejectionError: The runner or Ray Serve refused it for capacity.
+            RemoteFailureError: The runner answered a caller-safe failure.
+            UnknownOutcomeError: The call failed in a way that leaves the outcome unknown.
+        """
         timeout = max((deadline_at - datetime.now(UTC)).total_seconds(), 0.001)
         try:
             response = await self._client.post(

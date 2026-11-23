@@ -45,6 +45,12 @@ class MlflowOptions(Options):
 
         The served-model digest, and the TensorRT cache directory named after
         it, then stay what they were before the option existed.
+
+        Args:
+            handler: Pydantic's default serializer.
+
+        Returns:
+            The options, `sha256` only when set.
         """
         data: dict[str, Any] = handler(self)
         if data.get("sha256") is None:

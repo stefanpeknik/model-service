@@ -105,6 +105,11 @@ def model_call(
     model = step.model
 
     def invalid() -> RunFailure:
+        """The failure of an output that breaks the served model's declaration.
+
+        Returns:
+            `invalid_model_output`, not retryable.
+        """
         return RunFailure(
             code=FailureCode.INVALID_MODEL_OUTPUT,
             safe_message=f"model {model.id!r} returned an invalid output",
@@ -112,6 +117,18 @@ def model_call(
         )
 
     async def infer(tile: np.ndarray) -> np.ndarray:
+        """Infer one tile and check the output against the declaration.
+
+        Args:
+            tile: uint8 `(3, tile_size, tile_size)`.
+
+        Returns:
+            The checked output.
+
+        Raises:
+            RunFailure: `model_failed` (retryable) when the call fails,
+                `invalid_model_output` when the output breaks the declaration.
+        """
         try:
             output = await handle.infer(tile)
         except ModelOutputError as error:
@@ -128,6 +145,14 @@ def model_call(
             raise invalid() from error
 
     async def call(batch: Batch) -> Batch:
+        """Infer every tile of a batch, one call each, and add the step's column.
+
+        Args:
+            batch: Rows with `tile`.
+
+        Returns:
+            The batch with the step's column, float32.
+        """
         tiles = batch["tile"]
         # A single tile skips gather, so its call is awaited directly.
         if len(tiles) == 1:

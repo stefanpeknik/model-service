@@ -116,6 +116,14 @@ class Timm(Runtime):
         autocast = self.options.autocast == "fp16"
 
         def run(batch: np.ndarray) -> np.ndarray:
+            """Run the model on a batch.
+
+            Args:
+                batch: Tiles as the transform expects them.
+
+            Returns:
+                The model's output, float32.
+            """
             tensors = prepare(batch).to(device)
             with (
                 torch.inference_mode(),
@@ -184,7 +192,14 @@ class Timm(Runtime):
         return options
 
     def _transform(self, model: Any) -> Any:
-        """The function turning a NumPy batch into the model's input tensor."""
+        """The function turning a NumPy batch into the model's input tensor.
+
+        Args:
+            model: The timm model, whose pretrained config gives the transform.
+
+        Returns:
+            A function from a NumPy batch to a tensor.
+        """
         import numpy as np
         import torch
 
@@ -200,6 +215,14 @@ class Timm(Runtime):
         )
 
         def pretrained(batch: np.ndarray) -> Any:
+            """Transform each uint8 tile as timm's pretrained config says.
+
+            Args:
+                batch: uint8 RGB tiles `(N, 3, H, W)`.
+
+            Returns:
+                The stacked transformed tiles.
+            """
             images = (
                 Image.fromarray(np.ascontiguousarray(tile.transpose(1, 2, 0)))
                 for tile in batch

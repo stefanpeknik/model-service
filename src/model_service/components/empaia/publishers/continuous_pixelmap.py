@@ -149,6 +149,7 @@ class ContinuousPixelmap(Publisher):
         )
 
         async def commit() -> None:
+            """Upload the prepared pixelmap pyramid."""
             await gateway.publish_pixelmap(item.name, slide.id, tile_sets)
 
         return commit

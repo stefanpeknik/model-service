@@ -56,6 +56,14 @@ class ScoresOutput(Block):
 
     @model_validator(mode="after")
     def _ordered_range(self) -> ScoresOutput:
+        """Refuse a range whose low end is above its high end.
+
+        Returns:
+            The output.
+
+        Raises:
+            ValueError: If `range` is not `[low, high]` with low <= high.
+        """
         if self.range is not None and self.range[0] > self.range[1]:
             raise ValueError("range must be [low, high] with low <= high")
         return self

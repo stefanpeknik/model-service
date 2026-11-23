@@ -144,7 +144,11 @@ class EmbeddingTableSink(Sink):
             self._writer.release()
 
     def _submit(self, work: Callable[[], None]) -> None:
-        """Queue work for the writer thread, behind everything queued before."""
+        """Queue work for the writer thread, behind everything queued before.
+
+        Args:
+            work: A write to run on the thread.
+        """
         self._pending.append(self._thread.submit(work))
 
     def _raise_failed(self) -> None:
@@ -159,7 +163,14 @@ class EmbeddingTableSink(Sink):
 
 
 def _result(future: Future[None]) -> None:
-    """A write's outcome, a row of the wrong shape as `invalid_model_output`."""
+    """A write's outcome, a row of the wrong shape as `invalid_model_output`.
+
+    Args:
+        future: The finished write.
+
+    Raises:
+        RunFailure: `invalid_model_output` for features whose shape changed.
+    """
     try:
         future.result()
     except embedding_table.RowShapeError as error:

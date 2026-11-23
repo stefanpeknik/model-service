@@ -146,7 +146,20 @@ class AnalysisReplica:
     async def _run(
         self, resolved: ResolvedAnalysis, request: AnalysisRunRequest
     ) -> RunResult:
-        """Verify the models, open the access, run, and close the access."""
+        """Verify the models, open the access, run, and close the access.
+
+        Args:
+            resolved: The analysis read back from the request's document.
+            request: The run request.
+
+        Returns:
+            Each output's file and media type.
+
+        Raises:
+            InvalidInvocation: For an unsupported access kind or inputs and
+                outputs that don't fit the analysis.
+            RunFailure: From the model checks and the run.
+        """
         analysis = resolved.analysis
         models = {
             model_id: await self._verified(
@@ -230,7 +243,14 @@ class AnalysisReplica:
         return handle
 
     async def _close(self, access: InputAccess) -> None:
-        """Close the access, logging a failure rather than hiding the run's outcome."""
+        """Close the access, logging a failure rather than hiding the run's outcome.
+
+        Args:
+            access: The run's input access.
+
+        Raises:
+            asyncio.CancelledError: If the close is cancelled.
+        """
         try:
             await close_resource(
                 access.aclose, timeout_seconds=self._cleanup_timeout_seconds
@@ -244,7 +264,14 @@ class AnalysisReplica:
 def _provider_access(
     settings: ReplicaSettings,
 ) -> dict[InputAccessKind, AccessFactory]:
-    """Every provider's input access, by the kind each serves."""
+    """Every provider's input access, by the kind each serves.
+
+    Args:
+        settings: The replica's settings, which the providers read.
+
+    Returns:
+        Access factory by input access kind.
+    """
     from model_service.providers.registry import PROVIDERS
 
     access: dict[InputAccessKind, AccessFactory] = {}
@@ -256,7 +283,19 @@ def _provider_access(
 def _inputs(
     analysis: Analysis, invocation: Invocation, access: InputAccess
 ) -> dict[str, Path]:
-    """Resolve each given input below the root; names the analysis doesn't read are refused."""
+    """Resolve each given input below the root; names the analysis doesn't read are refused.
+
+    Args:
+        analysis: The analysis.
+        invocation: The run's invocation.
+        access: The run's input access.
+
+    Returns:
+        Local path by input name.
+
+    Raises:
+        InvalidInvocation: For an input the analysis doesn't read.
+    """
     unknown = sorted(set(invocation.inputs) - set(analysis.inputs))
     if unknown:
         raise InvalidInvocation(
@@ -273,6 +312,17 @@ def _outputs(
 
     Without `output_path`, each output is `<output>.<format extension>` at
     the root.
+
+    Args:
+        analysis: The analysis.
+        invocation: The run's invocation.
+        access: The run's input access, which resolves the paths.
+
+    Returns:
+        Local path by output name.
+
+    Raises:
+        InvalidInvocation: For `output_path` with more than one output.
     """
     paths = {
         s.options.output: f"{s.options.output}.{get_format(s.format).extension}"

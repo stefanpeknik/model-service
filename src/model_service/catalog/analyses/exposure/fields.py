@@ -14,6 +14,8 @@ _TEXT = r"^[a-zA-Z0-9_\s\-]+$"
 
 
 class _Strict(BaseModel):
+    """A block of `expose:` keys: frozen, and unknown keys refused."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
@@ -45,7 +47,14 @@ class ModesFields(_Strict):
     @model_validator(mode="before")
     @classmethod
     def _present_keys_turn_modes_on(cls, data: object) -> object:
-        """Read a mode key without a value as the mode with no settings."""
+        """Read a mode key without a value as the mode with no settings.
+
+        Args:
+            data: The `modes:` value as written.
+
+        Returns:
+            The value, `None` modes replaced by empty mappings.
+        """
         if isinstance(data, dict):
             return {k: {} if v is None else v for k, v in data.items()}
         return data

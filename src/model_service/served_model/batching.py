@@ -71,7 +71,11 @@ class Batcher[T, R]:
             self._settle(batch)
 
     def _settle(self, batch: list[tuple[T, asyncio.Future[R]]]) -> None:
-        """Run one batch and hand each caller its result or the batch's error."""
+        """Run one batch and hand each caller its result or the batch's error.
+
+        Args:
+            batch: Each item with the future its caller awaits.
+        """
         try:
             results = self._run([item for item, _ in batch])
             if len(results) != len(batch):

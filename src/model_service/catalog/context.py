@@ -176,11 +176,26 @@ class ResolveContext:
         return None
 
     def _report(self, path: YamlPath, problem: Problem, hint: str) -> None:
+        """Record a component's failed check as an error.
+
+        Args:
+            path: Where in the file the component is.
+            problem: The failed check.
+            hint: How to fix it.
+        """
         self.error(path, problem.message, problem.fits, hint)
 
     def _not_a_component(
         self, slot: Slot, value: object, path: YamlPath, usable: list[str]
     ) -> None:
+        """Record a slot value that names no component: missing, or not a mapping.
+
+        Args:
+            slot: The slot.
+            value: What the file wrote there.
+            path: Where in the file.
+            usable: The names usable in the slot, for the example.
+        """
         if value is None:
             kind = next(k.kind for k in KINDS if slot in k.slots)
             example = usable[0] if usable else "<name>"
@@ -202,6 +217,17 @@ class ResolveContext:
     def _unknown(
         self, slot: Slot, name: str, path: YamlPath, usable: list[str]
     ) -> None:
+        """Record a component name the slot can't take, with a fix.
+
+        A name of another kind's component says where it belongs; any other name
+        gets the closest usable one.
+
+        Args:
+            slot: The slot.
+            name: The name the file wrote.
+            path: Where in the file.
+            usable: The names usable in the slot.
+        """
         fits = f"Usable under {slot}: {_names(usable)}"
         elsewhere = self.registry.named(name)
         if elsewhere:
@@ -223,8 +249,24 @@ class ResolveContext:
 
 
 def _names(names: list[str]) -> str:
+    """Names for a message, or a note that there are none.
+
+    Args:
+        names: Component names.
+
+    Returns:
+        The names, comma-separated, or `none yet`.
+    """
     return ", ".join(names) or "none yet"
 
 
 def _or(items: list[str]) -> str:
+    """Items joined as alternatives.
+
+    Args:
+        items: At least one item.
+
+    Returns:
+        `a`, `a or b`, or `a, b or c`.
+    """
     return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} or {items[-1]}"

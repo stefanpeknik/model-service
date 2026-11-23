@@ -32,6 +32,16 @@ def exposure_schema(registry: Registry) -> type[BaseModel]:
     )
 
     def entry(name: str, types: list[str], what: str) -> type[BaseModel]:
+        """A schema model of one `inputs:` or `outputs:` entry.
+
+        Args:
+            name: The model's name in the schema.
+            types: The EAD types components handle; any string if none.
+            what: What the type picks, for the description.
+
+        Returns:
+            The model: `type` and any other keys.
+        """
         kind: Any = Literal[tuple(types)] if types else str
         return create_model(
             name,
@@ -62,5 +72,13 @@ def exposure_schema(registry: Registry) -> type[BaseModel]:
 
 
 def _described(name: str, model: type[BaseModel] = EmpaiaFields) -> FieldInfo:
-    """A copy of `model`'s field `name`, for a schema that narrows its type."""
+    """A copy of `model`'s field `name`, for a schema that narrows its type.
+
+    Args:
+        name: The field.
+        model: The model it belongs to.
+
+    Returns:
+        The field's info, description and default kept.
+    """
     return FieldInfo.merge_field_infos(model.model_fields[name])

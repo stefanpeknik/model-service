@@ -55,7 +55,13 @@ class Staging:
         error: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
-        """Remove every staging directory and whatever is left in it."""
+        """Remove every staging directory and whatever is left in it.
+
+        Args:
+            kind: The exception type, if the block raised.
+            error: The exception, if the block raised.
+            traceback: Its traceback.
+        """
         for directory in self._dirs.values():
             shutil.rmtree(directory, ignore_errors=True)
 

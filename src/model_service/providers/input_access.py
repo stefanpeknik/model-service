@@ -136,12 +136,20 @@ _pending_cleanup: set[asyncio.Future[None]] = set()
 
 
 def _consume_exception(task: asyncio.Future[None]) -> None:
-    """Retrieve a finished cleanup task's exception unless the task was cancelled."""
+    """Retrieve a finished cleanup task's exception unless the task was cancelled.
+
+    Args:
+        task: The finished task.
+    """
     if not task.cancelled():
         task.exception()
 
 
 def _release_cleanup(task: asyncio.Future[None]) -> None:
-    """Drop a finished retained cleanup task and consume its exception."""
+    """Drop a finished retained cleanup task and consume its exception.
+
+    Args:
+        task: The finished task.
+    """
     _pending_cleanup.discard(task)
     _consume_exception(task)

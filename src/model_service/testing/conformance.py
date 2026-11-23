@@ -93,6 +93,14 @@ def check(component: type[Component], work_dir: Path) -> list[str]:
 
 
 def _declaration(component: type[Component]) -> list[str]:
+    """Check what every kind declares: docstring, options, dimensions, hint.
+
+    Args:
+        component: The component class.
+
+    Returns:
+        What failed.
+    """
     failures = []
     if not (component.__doc__ or "").strip() or "__doc__" not in component.__dict__:
         failures.append("needs a docstring; it becomes its reference page")
@@ -129,6 +137,14 @@ def _declaration(component: type[Component]) -> list[str]:
 
 
 def _step(step: Step) -> list[str]:
+    """Check a step keeps every row and adds its columns as declared.
+
+    Args:
+        step: The step, built from its example options.
+
+    Returns:
+        What failed.
+    """
     model = fake_model()
     reads, adds = step.columns(model)
     failures = []
@@ -143,6 +159,15 @@ def _step(step: Step) -> list[str]:
 
 
 def _sink(component: type[Component], work_dir: Path) -> list[str]:
+    """Check a sink reads slide frame fields and writes a file with or without items.
+
+    Args:
+        component: The sink class.
+        work_dir: An empty directory for its files.
+
+    Returns:
+        What failed with the first model output kind tried, or nothing.
+    """
     assert issubclass(component, Sink)
     unknown = sorted(component.frame_reads - fake_frame().keys())
     if unknown:
@@ -184,6 +209,15 @@ def _sink_with(component: type[Sink], work_dir: Path, model: Any) -> list[str]:
 
 
 def _source(source: Source, work_dir: Path) -> list[str]:
+    """Check a source gives its frame fields and loads its declared columns.
+
+    Args:
+        source: The source, built from its example options.
+        work_dir: An empty directory for its fake inputs.
+
+    Returns:
+        What failed.
+    """
     result = run_component(source, work_dir=work_dir)
     failures = [
         f"the frame lacks the declared field `{name}`"
@@ -196,6 +230,16 @@ def _source(source: Source, work_dir: Path) -> list[str]:
 
 
 def _columns_match(declared: Mapping[str, Col], batch: Batch, what: str) -> list[str]:
+    """Check a batch has each declared column, in a shape that fits.
+
+    Args:
+        declared: The declared columns.
+        batch: The batch.
+        what: How the component declares them, e.g. `adds`.
+
+    Returns:
+        What failed.
+    """
     failures = []
     for name, want in declared.items():
         if name not in batch:
@@ -371,6 +415,11 @@ def _publisher(publisher: Publisher, work_dir: Path) -> list[str]:
     gateway = FakeGateway(work_dir)
 
     async def publish() -> list[tuple[str, str]]:
+        """Prepare the publication, note the writes so far, then commit.
+
+        Returns:
+            The writes `prepare` made.
+        """
         commit = await publisher.prepare(gateway, item, artifact, media_type)
         prepared = list(gateway.writes)
         await commit()

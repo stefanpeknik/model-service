@@ -67,7 +67,11 @@ class Concurrency:
 
 
 def _ignore(_: float) -> None:
-    """Drop a progress report."""
+    """Drop a progress report.
+
+    Args:
+        _: The share of keys done.
+    """
 
 
 async def run_analysis(
@@ -125,7 +129,15 @@ async def run_analysis(
 
 
 def _check_inputs(analysis: Analysis, inputs: Mapping[str, Path]) -> None:
-    """Refuse missing required inputs and inputs the analysis doesn't read."""
+    """Refuse missing required inputs and inputs the analysis doesn't read.
+
+    Args:
+        analysis: The analysis.
+        inputs: Local path by input name.
+
+    Raises:
+        InvalidInvocation: Naming the missing and unknown inputs.
+    """
     declared = analysis.inputs
     missing = sorted(
         n for n, required in declared.items() if required and n not in inputs
@@ -148,7 +160,14 @@ class _Run:
         concurrency: Concurrency,
         report_progress: Callable[[float], None],
     ) -> None:
-        """Bind the model steps to their handles."""
+        """Bind the model steps to their handles.
+
+        Args:
+            analysis: The resolved analysis.
+            models: Each served model's handle, by ID.
+            concurrency: The read threads and keys in flight.
+            report_progress: Called with the share of keys done.
+        """
         self.analysis = analysis
         self.concurrency = concurrency
         self.report_progress = report_progress
@@ -160,12 +179,27 @@ class _Run:
     def _bind(
         self, step: Any, models: Mapping[str, ModelHandle]
     ) -> tuple[str, Callable[[Batch], Awaitable[Batch]]]:
-        """A stage label and batch function for one step."""
+        """A stage label and batch function for one step.
+
+        Args:
+            step: A model step or a component step.
+            models: Each served model's handle, by ID.
+
+        Returns:
+            The label timings use, and the async batch function.
+        """
         if isinstance(step, ModelStep):
             return f"model {step.model.id}", model_call(step, models[step.model.id])
 
         async def blocking(batch: Batch) -> Batch:
-            """Run a component step in the read pool."""
+            """Run a component step in the read pool.
+
+            Args:
+                batch: Rows the step reads.
+
+            Returns:
+                The step's output.
+            """
             return await asyncio.get_running_loop().run_in_executor(
                 self.pool, step, batch
             )
@@ -175,7 +209,15 @@ class _Run:
     async def run(
         self, inputs: Mapping[str, Path], outputs: Mapping[str, Path]
     ) -> dict[str, Path]:
-        """Open the source and sinks, process every key, commit the outputs."""
+        """Open the source and sinks, process every key, commit the outputs.
+
+        Args:
+            inputs: Local path by input name.
+            outputs: Destination by output name.
+
+        Returns:
+            The committed file by output name.
+        """
         analysis = self.analysis
         started = time.monotonic()
         with ExitStack() as stack:
@@ -219,14 +261,24 @@ class _Run:
     async def _process(
         self, keys: Sequence[Any], load: Callable[[Sequence[Any]], Batch]
     ) -> None:
-        """Process every key with at most `in_flight` keys at once."""
+        """Process every key with at most `in_flight` keys at once.
+
+        Args:
+            keys: The source's keys, in run order.
+            load: The source's loader of some keys' items.
+        """
         loop = asyncio.get_running_loop()
         name = self.analysis.source.name
         total = len(keys)
         last_log = time.monotonic()
 
         def deliver(count: int, batch: Batch) -> None:
-            """Hand a finished key's rows to the sinks and report progress."""
+            """Hand a finished key's rows to the sinks and report progress.
+
+            Args:
+                count: Keys the rows cover.
+                batch: The rows, possibly none.
+            """
             nonlocal last_log
             if rows(batch):
                 for sink in self.analysis.sinks:
@@ -244,7 +296,14 @@ class _Run:
                 )
 
         async def process(key: Any) -> tuple[int, Batch]:
-            """Load one key's item and run it through the steps."""
+            """Load one key's item and run it through the steps.
+
+            Args:
+                key: The source's key.
+
+            Returns:
+                One, the keys done, and the rows that reached the end.
+            """
             batch = await loop.run_in_executor(
                 self.pool, self.timings.time, name, load, [key]
             )
@@ -297,13 +356,26 @@ class _OpenSinks:
         self._open: list[Sink] = []
 
     def open(self, sink: Sink, frame: dict[str, Any], run: Run) -> None:
-        """Open a sink and remember it."""
+        """Open a sink and remember it.
+
+        Args:
+            sink: The sink.
+            frame: The source's frame row.
+            run: The sink's run context.
+        """
         sink.open(frame, run)
         self._open.append(sink)
 
     def close(self, timings: Timings) -> dict[str, Path]:
+        """Close every open sink, in order, and collect their artifacts.
+
+        Args:
+            timings: Where each close's duration is added.
+
+        Returns:
+            The artifact by output name.
+        """
         # A sink whose close fails cleans up after itself; the rest are aborted.
-        """Close every open sink, in order, and collect their artifacts."""
         artifacts = {}
         while self._open:
             sink = self._open.pop(0)

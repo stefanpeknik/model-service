@@ -75,7 +75,15 @@ def problems(
 
 
 def _fits(model: type[BaseModel], key: str) -> str:
-    """Describe what a key takes, from its field description or type."""
+    """Describe what a key takes, from its field description or type.
+
+    Args:
+        model: The model the key belongs to.
+        key: The key.
+
+    Returns:
+        `<key>: <description or type>`, or a pointer to the model's fields.
+    """
     field = model.model_fields.get(key)
     if field is None:
         return f"See the fields of {model.__name__}"

@@ -252,6 +252,12 @@ class EmpaiaProviderAdapter(ProviderAdapter):
     def _analysis(self, analysis_id: str) -> Analysis:
         """The deployed analysis a job runs, which must be offered in EMPAIA.
 
+        Args:
+            analysis_id: The analysis the job's app runs.
+
+        Returns:
+            The analysis.
+
         Raises:
             InvalidScheduleRequestError: It is not deployed or has no `expose.empaia`.
         """
@@ -336,6 +342,13 @@ class EmpaiaProviderAdapter(ProviderAdapter):
 
         The result must have the analysis's outputs, no more.
 
+        Args:
+            context: The job's context, with the publications admission recorded.
+            outcome: The successful processing outcome.
+
+        Returns:
+            The recorded publications.
+
         Raises:
             EmpaiaGatewayError: Not retryable if the result doesn't match the
                 analysis, or the job was admitted without publications.
@@ -379,6 +392,16 @@ async def _admit_analysis(
     The scheduler resolves the analysis with the settings, so a bad value
     refuses the job.
 
+    Args:
+        analysis: The analysis the app runs.
+        configuration: The job's provider configuration.
+        mode: How the job was started.
+        gateway: The job's gateway, for parameters and input presence.
+        job_id: The EMPAIA job.
+
+    Returns:
+        The settings, inputs with their EAD types, and publications.
+
     Raises:
         EmpaiaGatewayError: A parameter or input lookup failed.
     """
@@ -410,7 +433,14 @@ async def _admit_analysis(
 
 
 def _use(component: Any) -> ComponentUse:
-    """A converter as admission records it: its EAD type and options."""
+    """A converter as admission records it: its EAD type and options.
+
+    Args:
+        component: A converter or publisher.
+
+    Returns:
+        `type` and every option.
+    """
     return {"type": component.ead_type, **component.options.model_dump(mode="json")}
 
 
@@ -420,6 +450,13 @@ def _published(
     """Each output to publish with its recorded publisher and stored output.
 
     The result was checked to have every one.
+
+    Args:
+        publications: The publications admission recorded.
+        result: The run's result.
+
+    Returns:
+        `(name, publisher use, stored output)` per published output.
     """
     return [
         (name, use, result.outputs[name]) for name, use in publications.outputs.items()
@@ -434,6 +471,16 @@ async def _prepare(
     output: Any,
 ) -> Commit:
     """Pick an output's publisher by its stored format and prepare it.
+
+    Args:
+        gateway: The job's gateway.
+        name: The output's EAD io key.
+        use: The publisher's recorded EAD type and options.
+        slide: The app's slide input key.
+        output: The stored output.
+
+    Returns:
+        The commit that publishes it.
 
     Raises:
         EmpaiaGatewayError: Not retryable if the output is missing, not a file

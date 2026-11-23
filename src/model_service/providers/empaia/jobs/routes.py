@@ -92,7 +92,20 @@ def create_router(scheduler: Scheduler, access: Access | None = None) -> APIRout
         response: Response,
         idempotency_key: str | None,
     ) -> EmpaiaExecutionStatus:
-        """Admit a job, idempotently per job ID, and point `Location` at it."""
+        """Admit a job, idempotently per job ID, and point `Location` at it.
+
+        Args:
+            request: The schedule request built from the body.
+            body: The EMPAIA execution request.
+            response: The response, given `Location` and the status code.
+            idempotency_key: The `Idempotency-Key` header; must be the job ID if set.
+
+        Returns:
+            The execution's status.
+
+        Raises:
+            HTTPException: 422 if the idempotency key isn't the job ID.
+        """
         if idempotency_key is not None and idempotency_key != body.job_id:
             raise http_error(
                 422,

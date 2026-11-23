@@ -81,7 +81,15 @@ def components_page(registry: Registry, catalog: Catalog) -> str:
 
 
 def _component(component: type[Component], used: list[str]) -> str:
-    """One component's section."""
+    """One component's section.
+
+    Args:
+        component: The component class.
+        used: Links to the catalog files that name it.
+
+    Returns:
+        The section in Markdown.
+    """
     built = component.from_options(component.example_options)
     rows = [
         ["Usable in", _slots(component.slots)],
@@ -104,7 +112,14 @@ def _component(component: type[Component], used: list[str]) -> str:
 
 
 def _kind_facts(built: Component) -> list[list[str]]:
-    """The rows that depend on the kind: columns, formats, EAD types."""
+    """The rows that depend on the kind: columns, formats, EAD types.
+
+    Args:
+        built: The component, built from its example options.
+
+    Returns:
+        Table rows of label and value.
+    """
     reads, adds = type(built).reads, type(built).adds
     rows = []
     if isinstance(built, Source):
@@ -137,7 +152,14 @@ def _kind_facts(built: Component) -> list[list[str]]:
 
 
 def _example(component: type[Component]) -> str:
-    """The component as a catalog file names it, with its example options."""
+    """The component as a catalog file names it, with its example options.
+
+    Args:
+        component: The component class.
+
+    Returns:
+        The YAML flow mapping a file would write.
+    """
     options: dict[str, Any] = dict(component.example_options)
     if issubclass(component, InputConverter):
         return flow({"inputs": {"<name>": {"type": component.ead_type, **options}}})
@@ -147,10 +169,26 @@ def _example(component: type[Component]) -> str:
 
 
 def _columns(columns: dict[str, Col]) -> str:
+    """Columns as their names and declared dtype and shape.
+
+    Args:
+        columns: Column name to its declaration.
+
+    Returns:
+        The columns, comma-separated.
+    """
     return ", ".join(f"`{name}` {code(str(col))}" for name, col in columns.items())
 
 
 def _inputs(inputs: dict[str, bool]) -> str:
+    """A source's inputs and whether each is required.
+
+    Args:
+        inputs: Input name to whether it is required.
+
+    Returns:
+        The inputs, comma-separated.
+    """
     return ", ".join(
         f"`{name}` ({'required' if required else 'optional'})"
         for name, required in inputs.items()
@@ -158,28 +196,75 @@ def _inputs(inputs: dict[str, bool]) -> str:
 
 
 def _slots(slots: tuple[Slot, ...]) -> str:
+    """Where a component may be named.
+
+    Args:
+        slots: Its kind's slots.
+
+    Returns:
+        Each slot's document kind and key, comma-separated.
+    """
     return ", ".join(f"{slot.document} `{slot.key}:`" for slot in slots)
 
 
 def _folders_of(kind: type[Component]) -> list[str]:
+    """The registry folders a kind's components live in.
+
+    Args:
+        kind: The kind's base class.
+
+    Returns:
+        Folder names in dotted form.
+    """
     return [folder for folder, kinds in FOLDERS.items() if kind in kinds]
 
 
 def _folder(folder: str) -> str:
+    """A dotted folder name as a path.
+
+    Args:
+        folder: E.g. `served_model.loaders`.
+
+    Returns:
+        E.g. `served_model/loaders/`.
+    """
     return folder.replace(".", "/") + "/"
 
 
 def _plural(kind: str) -> str:
+    """A kind's name in the plural, for headings.
+
+    Args:
+        kind: E.g. `loader`.
+
+    Returns:
+        E.g. `loaders`.
+    """
     return f"{kind}s"
 
 
 def _source_link(component: type[Component]) -> str:
+    """A link to the file that defines a component.
+
+    Args:
+        component: The component class.
+
+    Returns:
+        The repository path as a Markdown link.
+    """
     path = Path(inspect.getfile(component)).resolve().relative_to(SRC.parent)
     return f"[`{path}`](../../{path})"
 
 
 def _used_in(catalog: Catalog) -> dict[tuple[str, str], list[str]]:
-    """Links to the catalog files naming each component, by (kind, name)."""
+    """Links to the catalog files naming each component, by (kind, name).
+
+    Args:
+        catalog: The repository's catalog.
+
+    Returns:
+        Each component's links, in file order, without repeats.
+    """
     used: dict[tuple[str, str], list[str]] = defaultdict(list)
     for folder in (SERVED_MODELS, ANALYSES):
         for entry in catalog.entries(folder).values():
@@ -193,7 +278,14 @@ def _used_in(catalog: Catalog) -> dict[tuple[str, str], list[str]]:
 
 
 def _components_of(value: Any) -> list[Component]:
-    """Every component a resolved served model or analysis names."""
+    """Every component a resolved served model or analysis names.
+
+    Args:
+        value: A resolved served model or analysis.
+
+    Returns:
+        Its components, model steps left out.
+    """
     if hasattr(value, "runtime"):
         return [value.weights, value.runtime, *value.pre, *value.post]
     steps = [s for s in value.steps if not isinstance(s, ModelStep)]

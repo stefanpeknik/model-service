@@ -45,6 +45,17 @@ def read_catalog(directory: Path) -> Catalog:
 
 
 def _read_json(path: Path) -> Any:
+    """Read one JSON file of the mounted catalog.
+
+    Args:
+        path: The file.
+
+    Returns:
+        The parsed JSON.
+
+    Raises:
+        CatalogError: If it can't be read or parsed.
+    """
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
@@ -57,6 +68,15 @@ def _resolve(data: object) -> Catalog:
     The loader reads a catalog directory, so the documents are written out
     as one under a temporary directory first; errors then name
     `catalog/served-models/<id>.yaml`, as in the repo.
+
+    Args:
+        data: The parsed `catalog.json`: folder to `{id: document}`.
+
+    Returns:
+        The resolved catalog.
+
+    Raises:
+        CatalogError: For a malformed file, an unsafe name or an invalid catalog.
     """
     if not isinstance(data, dict) or not all(
         isinstance(documents, dict) for documents in data.values()
@@ -81,6 +101,14 @@ def _resolve(data: object) -> Catalog:
 
 
 def _safe_name(name: object) -> bool:
+    """Whether a folder or document name is safe to write as a file name.
+
+    Args:
+        name: The name from `catalog.json`.
+
+    Returns:
+        True for a non-empty string without separators or a leading dot.
+    """
     return (
         isinstance(name, str)
         and bool(name)

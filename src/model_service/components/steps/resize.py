@@ -83,7 +83,15 @@ class Resize(Step):
         return batch | {"tile": np.stack(resized)}
 
     def _output_size(self, height: int, width: int) -> tuple[int, int]:
-        """The size torchvision gives for a shorter-edge resize."""
+        """The size torchvision gives for a shorter-edge resize.
+
+        Args:
+            height: The input's height.
+            width: The input's width.
+
+        Returns:
+            The output's `(height, width)`.
+        """
         short, long = sorted((height, width))
         new_long = int(self.options.size * long / short)
         if height <= width:

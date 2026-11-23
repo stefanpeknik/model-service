@@ -99,21 +99,49 @@ class _Loader:
     def __init__(
         self, root: Path, kinds: Sequence[DocumentKind], registry: Registry
     ) -> None:
+        """Start a load of one catalog root.
+
+        Args:
+            root: The catalog folder.
+            kinds: The document kinds, in resolution order.
+            registry: The components files may name.
+        """
         self.root = root
         self.kinds = {kind.folder: kind for kind in kinds}
         self.registry = registry
         self.errors: list[CatalogError] = []
 
     def show(self, path: Path) -> str:
-        """A path as errors show it: relative to the catalog's parent."""
+        """A path as errors show it: relative to the catalog's parent.
+
+        Args:
+            path: A file or folder in the catalog.
+
+        Returns:
+            The shown path.
+        """
         return str(path.relative_to(self.root.parent))
 
     def file_error(self, path: Path, what: str, fits: str, hint: str) -> None:
-        """Record a mistake about a whole file or folder."""
+        """Record a mistake about a whole file or folder.
+
+        Args:
+            path: The file or folder.
+            what: What is wrong.
+            fits: What would fit.
+            hint: How to fix it.
+        """
         self.errors.append(CatalogError(self.show(path), "", what, fits, hint))
 
     def load(self, environment: str | None) -> Catalog:
-        """Resolve every kind's documents in order."""
+        """Resolve every kind's documents in order.
+
+        Args:
+            environment: Whose patches to apply, or None for the base files.
+
+        Returns:
+            The catalog; `self.errors` holds what failed.
+        """
         bases, patches = self._files(environment)
         references = References(self.kinds)
         for folder, kind in self.kinds.items():
@@ -138,6 +166,12 @@ class _Loader:
         """Sort YAML files into base files and this environment's patches.
 
         Files in no catalog folder are reported.
+
+        Args:
+            environment: Whose patches to pick, or None for none.
+
+        Returns:
+            Base files by folder, and patches by (folder, file stem).
         """
         bases: dict[str, list[Path]] = {folder: [] for folder in self.kinds}
         patches: dict[tuple[str, str], Path] = {}
@@ -169,7 +203,14 @@ class _Loader:
         patch_path: Path | None,
         references: References,
     ) -> None:
-        """Read, patch and resolve one document, recording it or its errors."""
+        """Read, patch and resolve one document, recording it or its errors.
+
+        Args:
+            kind: The document kind of its folder.
+            path: The base file.
+            patch_path: The environment's patch of it, if any.
+            references: Where resolved documents and failed IDs are recorded.
+        """
         failed = references.failed[kind.folder]
         if not ID.match(path.stem):
             self.file_error(
@@ -188,6 +229,14 @@ class _Loader:
         merged, patched = deep_merge(document, patch)
 
         def file_of(at: YamlPath) -> str:
+            """The file an error at a YAML path belongs to: the patch if it set that path.
+
+            Args:
+                at: The YAML path.
+
+            Returns:
+                The shown path of the base file or the patch.
+            """
             hit = any(at[:n] in patched for n in range(1, len(at) + 1))
             return self.show(patch_path if hit and patch_path else path)
 
@@ -202,7 +251,14 @@ class _Loader:
         )
 
     def _read(self, path: Path) -> dict[str, Any] | None:
-        """Parse one YAML file into a mapping, or record why it isn't one."""
+        """Parse one YAML file into a mapping, or record why it isn't one.
+
+        Args:
+            path: The file.
+
+        Returns:
+            The mapping, empty for an empty file, or None after an error.
+        """
         try:
             document = yaml.safe_load(path.read_text())
         except yaml.YAMLError as error:
@@ -231,5 +287,13 @@ class _Loader:
 
 
 def _yaml_type(value: object) -> str:
+    """A YAML value's type, as an error names it.
+
+    Args:
+        value: A parsed YAML value.
+
+    Returns:
+        E.g. `list` or `string`.
+    """
     names: dict[type, str] = {list: "list", str: "string"}
     return names.get(type(value), type(value).__name__)

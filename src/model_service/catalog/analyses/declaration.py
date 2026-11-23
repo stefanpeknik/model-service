@@ -117,6 +117,14 @@ class Analysis:
             )
 
         def tuned[C: Component](component: C) -> C:
+            """The component with the settings meant for its per-run options.
+
+            Args:
+                component: A source, step or sink.
+
+            Returns:
+                A copy with the overrides, or the component itself if none apply.
+            """
             mine = {
                 k: v
                 for k, v in values.items()
@@ -136,6 +144,11 @@ class Analysis:
         )
 
     def _components(self) -> list[Component]:
+        """The source, the component steps and the sinks, in file order.
+
+        Returns:
+            The components whose per-run options become settings.
+        """
         steps = [
             cast("Component", s) for s in self.steps if not isinstance(s, ModelStep)
         ]

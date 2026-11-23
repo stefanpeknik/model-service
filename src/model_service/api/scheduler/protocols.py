@@ -32,7 +32,14 @@ class Scheduler(Protocol):
         ...
 
     async def schedule(self, request: AnalysisScheduleRequest) -> ScheduleResult:
-        """Admit a durable analysis execution, or return the one its idempotency key names."""
+        """Admit a durable analysis execution, or return the one its idempotency key names.
+
+        Args:
+            request: The schedule request.
+
+        Returns:
+            The execution and whether this request created it.
+        """
         ...
 
     async def get(self, execution_id: str) -> ExecutionView:
@@ -52,5 +59,12 @@ class AnalysisDispatch(Protocol):
     """How the API runs a resolved analysis on the analysis runner."""
 
     async def run_analysis(self, request: AnalysisRunRequest) -> RunResult:
-        """Run one resolved analysis and return its result."""
+        """Run one resolved analysis and return its result.
+
+        Args:
+            request: The resolved analysis, invocation and execution context.
+
+        Returns:
+            The run's result.
+        """
         ...

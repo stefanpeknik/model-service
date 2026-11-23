@@ -187,7 +187,20 @@ def _resolve_analysis(
     served: dict[str, Entry],
     registry: Registry,
 ) -> Analysis:
-    """Resolve an analysis document against the given served models alone."""
+    """Resolve an analysis document against the given served models alone.
+
+    Args:
+        analysis_id: The analysis ID.
+        document: The source, steps and sinks with every option.
+        served: The served models it calls, by ID.
+        registry: The components it may name.
+
+    Returns:
+        The analysis.
+
+    Raises:
+        ResolvedAnalysisInvalid: If the document doesn't resolve.
+    """
     kinds = {SERVED_MODELS: ServedModels(), FOLDER: Analyses()}
     references = References(kinds)
     references.entries[SERVED_MODELS] = served
@@ -201,11 +214,25 @@ def _resolve_analysis(
 
 
 def _component(component: Component) -> dict[str, Any]:
-    """A component with every option spelled out."""
+    """A component with every option spelled out.
+
+    Args:
+        component: The component.
+
+    Returns:
+        `use` and every option, defaults included.
+    """
     return {"use": component.name, **component.options.model_dump(mode="json")}
 
 
 def _digest(body: Mapping[str, Any]) -> str:
-    """SHA-256 of the canonical JSON of a document without its digest."""
+    """SHA-256 of the canonical JSON of a document without its digest.
+
+    Args:
+        body: The document, digest left out.
+
+    Returns:
+        The hex digest.
+    """
     text = json.dumps(body, sort_keys=True, separators=(",", ":"), allow_nan=False)
     return hashlib.sha256(text.encode()).hexdigest()

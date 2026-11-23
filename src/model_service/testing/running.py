@@ -143,7 +143,15 @@ def run_component(
 
 
 def _known(reads: Mapping[str, Col], batch: Mapping[str, np.ndarray]) -> dict[str, Col]:
-    """Fill unknown dimensions from a sample batch, or with 1 as `fake_batch` does."""
+    """Fill unknown dimensions from a sample batch, or with 1 as `fake_batch` does.
+
+    Args:
+        reads: The columns a sink reads.
+        batch: A sample batch, possibly empty.
+
+    Returns:
+        The columns with every dimension a number.
+    """
     known = {}
     for name, col in reads.items():
         sample = batch[name].shape[1:] if name in batch else None

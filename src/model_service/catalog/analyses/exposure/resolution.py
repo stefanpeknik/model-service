@@ -141,7 +141,16 @@ def resolve_exposure(
 def _inputs(
     ctx: ResolveContext, fields: EmpaiaFields, analysis: Analysis
 ) -> dict[str, InputConverter] | None:
-    """Pick each input's converter by its declared or default type."""
+    """Pick each input's converter by its declared or default type.
+
+    Args:
+        ctx: Collects errors.
+        fields: The checked `expose.empaia` keys.
+        analysis: The resolved analysis.
+
+    Returns:
+        The converter by input name, or None after an error.
+    """
     ok = True
     for name in sorted(set(fields.inputs) - set(analysis.inputs)):
         ctx.error(
@@ -186,7 +195,15 @@ def _inputs(
 def _slide(
     ctx: ResolveContext, inputs: Mapping[str, InputConverter] | None
 ) -> str | None:
-    """The one input that is the slide."""
+    """The one input that is the slide.
+
+    Args:
+        ctx: Collects errors.
+        inputs: The converter by input name, or None if they failed.
+
+    Returns:
+        The slide's input name, or None after an error.
+    """
     if inputs is None:
         return None
     slides = [n for n, c in inputs.items() if c.ead_type == WSI]
@@ -204,7 +221,16 @@ def _slide(
 def _parameters(
     ctx: ResolveContext, fields: EmpaiaFields, analysis: Analysis
 ) -> tuple[str, ...] | None:
-    """Check the standalone parameters are plain per-run settings."""
+    """Check the standalone parameters are plain per-run settings.
+
+    Args:
+        ctx: Collects errors.
+        fields: The checked `expose.empaia` keys.
+        analysis: The resolved analysis.
+
+    Returns:
+        The parameters, empty without standalone mode, or None after an error.
+    """
     standalone = fields.modes.standalone
     if standalone is None:
         return ()
@@ -243,7 +269,16 @@ def _parameters(
 def _outputs(
     ctx: ResolveContext, fields: EmpaiaFields, analysis: Analysis
 ) -> dict[str, Publisher] | None:
-    """Pick each listed output's publisher by its sink's format and declared type."""
+    """Pick each listed output's publisher by its sink's format and declared type.
+
+    Args:
+        ctx: Collects errors.
+        fields: The checked `expose.empaia` keys.
+        analysis: The resolved analysis.
+
+    Returns:
+        The publisher by output name, or None after an error.
+    """
     sinks = {s.options.output: s for s in analysis.sinks}
     publishers: dict[str, Publisher] = {}
     ok = True
@@ -295,6 +330,14 @@ def _outputs(
 
 
 def _input_types(ctx: ResolveContext) -> list[str]:
+    """The EAD input types the registry's converters take.
+
+    Args:
+        ctx: Holds the registry.
+
+    Returns:
+        The types, sorted.
+    """
     return sorted(
         {
             getattr(c, "ead_type", "")
@@ -306,7 +349,17 @@ def _input_types(ctx: ResolveContext) -> list[str]:
 def _build(
     ctx: ResolveContext, component: Any, options: dict[str, Any], path: YamlPath
 ) -> Any:
-    """Build a converter or publisher, reporting options that don't fit."""
+    """Build a converter or publisher, reporting options that don't fit.
+
+    Args:
+        ctx: Collects errors.
+        component: The converter or publisher class.
+        options: Its options from the file, `type` aside for converters.
+        path: Where the entry is in the file.
+
+    Returns:
+        The component, or None after an error.
+    """
     try:
         return component.from_options(options)
     except ValidationError as error:

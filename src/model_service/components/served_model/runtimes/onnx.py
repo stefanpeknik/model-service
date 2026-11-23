@@ -79,6 +79,18 @@ class OnnxOptions(Options):
     @field_validator("threads")
     @classmethod
     def _threads_need_session_options(cls, threads: int, info: ValidationInfo) -> int:
+        """Refuse `threads` when the session options aren't applied.
+
+        Args:
+            threads: The value given.
+            info: The options validated so far.
+
+        Returns:
+            The threads.
+
+        Raises:
+            ValueError: With `apply_session_options: false`.
+        """
         if not info.data.get("apply_session_options", True):
             raise ValueError(
                 "threads has no effect with apply_session_options: false; "
@@ -134,6 +146,14 @@ class Onnx(Runtime):
         dtype = self.options.output_dtype
 
         def run(batch: Any) -> Any:
+            """Run the graph's first output on a batch.
+
+            Args:
+                batch: The model's input batch.
+
+            Returns:
+                The first output, cast to `output_dtype` if set.
+            """
             output = session.run([output_name], {input_name: batch})[0]
             return output if dtype is None else output.astype(dtype)
 
@@ -203,7 +223,15 @@ class Onnx(Runtime):
         return sess_options
 
     def _tensorrt(self, path: Path, context: RuntimeContext) -> dict[str, Any]:
-        """TensorRT provider options with a shape profile for the graph's input."""
+        """TensorRT provider options with a shape profile for the graph's input.
+
+        Args:
+            path: The ONNX file, read for the input's name.
+            context: The engine cache directory and the batch geometry.
+
+        Returns:
+            The TensorRT execution provider's options.
+        """
         import onnxruntime as ort
 
         # The profile names the input, which only a session can read; a bare CPU

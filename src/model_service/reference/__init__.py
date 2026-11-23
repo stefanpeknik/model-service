@@ -89,6 +89,15 @@ def write(repo: Path) -> list[Path]:
 
 
 def _stale(repo: Path, files: dict[Path, str]) -> list[Path]:
+    """The generated files that differ from the repository, or that it holds but generation no longer writes.
+
+    Args:
+        repo: The repository root.
+        files: What generation writes, by path relative to the root.
+
+    Returns:
+        The stale paths, relative to the root, sorted.
+    """
     differ = {
         path
         for path, text in files.items()

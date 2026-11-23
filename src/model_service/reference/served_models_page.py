@@ -81,6 +81,14 @@ def served_models_page(catalog: Catalog, root: Path) -> str:
 
 
 def _output(model: ServedModel) -> str:
+    """What a served model returns per tile, in words.
+
+    Args:
+        model: The served model.
+
+    Returns:
+        The output's kind, dtype, shape or summaries, and range.
+    """
     output = model.output
     if isinstance(output, ScoresOutput):
         shape = f"{output.channels}, {output.size}, {output.size}"
@@ -92,6 +100,14 @@ def _output(model: ServedModel) -> str:
 
 
 def _reply(model: ServedModel) -> str:
+    """What the raw-inference route replies for a served model.
+
+    Args:
+        model: The served model.
+
+    Returns:
+        The reply format, in words.
+    """
     output = model.output
     if isinstance(output, ScoresOutput):
         if output.channels == 1 and output.size == 1:
@@ -101,7 +117,15 @@ def _reply(model: ServedModel) -> str:
 
 
 def _patches(root: Path, model_id: str) -> str:
-    """The environments that patch the file, with the keys each changes."""
+    """The environments that patch the file, with the keys each changes.
+
+    Args:
+        root: The catalog root.
+        model_id: The served model.
+
+    Returns:
+        `<environment> (<keys>)` per patch, semicolon-separated.
+    """
     found = []
     for path in sorted(root.glob(f"environments/*/{FOLDER}/{model_id}.yaml")):
         keys = ", ".join(code(k) for k in yaml.safe_load(path.read_text()) or {})

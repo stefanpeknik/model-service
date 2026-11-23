@@ -223,6 +223,14 @@ class SlideTiles(Source):
             )
 
             def load(chosen: Sequence[Any]) -> Batch:
+                """Read the chosen tiles, dropping the ones the reader skips.
+
+                Args:
+                    chosen: Tile corners `(x, y)` on the level read.
+
+                Returns:
+                    `tile_x`, `tile_y` and `tile` of the tiles kept.
+                """
                 read = [(x, y, reader.read(x, y, tile_size)) for x, y in chosen]
                 kept = [(x, y, tile) for x, y, tile in read if tile is not None]
                 tiles: np.ndarray = (

@@ -97,5 +97,10 @@ async def submit(
 
 
 def _log_refusal(request: AnalysisScheduleRequest, error: Exception) -> None:
-    """Log why a schedule request was refused; error messages are the safe public ones."""
+    """Log why a schedule request was refused; error messages are the safe public ones.
+
+    Args:
+        request: The refused request.
+        error: Why it was refused.
+    """
     logger.warning("Refused %s %s: %s", request.provider, request.analysis_id, error)

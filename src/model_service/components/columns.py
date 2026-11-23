@@ -116,5 +116,12 @@ def model_field(model: object, dim: str) -> Any:
 
 
 def rows(batch: Batch) -> int:
-    """The number of rows in a batch (0 for a batch with no columns)."""
+    """The number of rows in a batch (0 for a batch with no columns).
+
+    Args:
+        batch: Column name to array, every array the same length.
+
+    Returns:
+        The row count.
+    """
     return len(next(iter(batch.values()))) if batch else 0

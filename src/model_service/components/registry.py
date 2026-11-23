@@ -142,7 +142,17 @@ class Registry:
 
 
 def _components_in(package: str) -> Iterator[type[Component]]:
-    """Import the modules of `package` and yield the components they define."""
+    """Import the modules of `package` and yield the components they define.
+
+    Args:
+        package: A dotted package, e.g. `model_service.components.steps`.
+
+    Yields:
+        Each concrete component defined in its modules, not imported ones.
+
+    Raises:
+        ModuleNotFoundError: For a missing module other than the package itself.
+    """
     try:
         root = importlib.import_module(package)
     except ModuleNotFoundError as error:
