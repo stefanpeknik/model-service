@@ -100,6 +100,7 @@ def resolve_exposure(
     slide = _slide(ctx, inputs)
     parameters = _parameters(ctx, fields, analysis)
     outputs = _outputs(ctx, fields, analysis)
+    _viewer(ctx, fields, analysis)
     modes = fields.modes
     if (
         slide is not None
@@ -264,6 +265,32 @@ def _parameters(
             )
             ok = False
     return tuple(names) if ok else None
+
+
+def _viewer(ctx: ResolveContext, fields: EmpaiaFields, analysis: Analysis) -> None:
+    """Check the viewer settings name inputs and outputs the app has.
+
+    Args:
+        ctx: Collects errors.
+        fields: The checked `expose.empaia` keys.
+        analysis: The resolved analysis.
+    """
+    standalone = fields.modes.standalone
+    inputs = sorted({*analysis.inputs, *(standalone.parameters if standalone else ())})
+    for name in sorted(set(fields.viewer.inputs) - set(inputs)):
+        ctx.error(
+            (*PATH, "viewer", "inputs", name),
+            f"the viewer names input `{name}`, which the app does not take",
+            f"App inputs: {', '.join(inputs)}",
+            "use an input or a standalone parameter",
+        )
+    for name in sorted(set(fields.viewer.outputs) - set(fields.outputs)):
+        ctx.error(
+            (*PATH, "viewer", "outputs", name),
+            f"the viewer names output `{name}`, which the app does not publish",
+            f"Published outputs: {', '.join(sorted(fields.outputs))}",
+            "use an output listed under `outputs:`",
+        )
 
 
 def _outputs(

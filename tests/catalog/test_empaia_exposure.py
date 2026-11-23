@@ -157,6 +157,39 @@ PREFIX = "catalog/analyses/a1.yaml:expose.empaia"
             ],
             id="no slide",
         ),
+        pytest.param(
+            (
+                "outputs:\n",
+                "viewer: {outputs: {heatmp: {render: shader}}}\n        outputs:\n",
+            ),
+            [
+                f"{PREFIX}.viewer.outputs.heatmp: the viewer names output "
+                "`heatmp`, which the app does not publish. Published outputs: "
+                "heatmap. Hint: use an output listed under `outputs:`"
+            ],
+            id="a viewer entry for no output",
+        ),
+        pytest.param(
+            (
+                "outputs:\n",
+                "viewer: {inputs: {slid: {lossless: true}}}\n        outputs:\n",
+            ),
+            [
+                f"{PREFIX}.viewer.inputs.slid: the viewer names input `slid`, "
+                "which the app does not take. App inputs: region_of_interest, "
+                "slide. Hint: use an input or a standalone parameter"
+            ],
+            id="a viewer entry for no input",
+        ),
+        pytest.param(
+            (
+                "outputs:\n",
+                "viewer: {outputs: {heatmap: {shader: {type: heatmap, params: "
+                "{color: {r: 1}}}}}}\n        outputs:\n",
+            ),
+            [f"{PREFIX}.viewer.outputs.heatmap.shader.params: "],
+            id="a nested shader parameter",
+        ),
     ],
 )
 def test_a_mistake_is_reported_where_it_is(
@@ -164,7 +197,9 @@ def test_a_mistake_is_reported_where_it_is(
 ) -> None:
     write(root, "analyses/a1.yaml", APP.replace(*change))
 
-    assert errors(root) == expected
+    found = errors(root)
+
+    assert [e[: len(x)] for e, x in zip(found, expected, strict=True)] == expected
 
 
 def test_a_multi_channel_grid_is_no_continuous_pixelmap(root: Path) -> None:

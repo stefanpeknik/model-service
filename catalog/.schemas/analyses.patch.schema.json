@@ -359,6 +359,7 @@
       "description": "An xOpat shader for an output.",
       "properties": {
         "type": {
+          "minLength": 1,
           "title": "Type",
           "type": "string"
         },
@@ -375,6 +376,7 @@
             }
           ],
           "default": null,
+          "description": "The shader's parameters, e.g. `{threshold: 65, color: \"#ffff00\"}`: numbers, strings, booleans or lists of them.",
           "title": "Params"
         }
       },

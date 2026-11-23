@@ -7,6 +7,7 @@ models, and the EMPAIA provider builds EADs from them.
 from __future__ import annotations
 
 import json
+import math
 from enum import StrEnum
 from typing import TYPE_CHECKING, Literal
 
@@ -45,6 +46,20 @@ class _ViewerEntry(BaseModel):
     model_config = ConfigDict(frozen=True, extra="allow")
 
 
+def _plain(value: JsonValue) -> bool:
+    """Whether a JSON value is a finite number, a string or a boolean.
+
+    Args:
+        value: The value.
+
+    Returns:
+        True for a plain scalar.
+    """
+    if isinstance(value, float):
+        return math.isfinite(value)
+    return isinstance(value, (bool, int, str))
+
+
 class ViewerShader(_ViewerEntry):
     """An xOpat shader for an output.
 
@@ -54,8 +69,41 @@ class ViewerShader(_ViewerEntry):
     """
 
     # An xOpat shader, e.g. `heatmap` or `colormap`, with its parameters.
-    type: str
-    params: dict[str, JsonValue] | None = None
+    type: str = Field(min_length=1)
+    params: dict[str, JsonValue] | None = Field(
+        None,
+        description=(
+            'The shader\'s parameters, e.g. `{threshold: 65, color: "#ffff00"}`: '
+            "numbers, strings, booleans or lists of them."
+        ),
+    )
+
+    @field_validator("params")
+    @classmethod
+    def _flat(cls, params: dict[str, JsonValue] | None) -> dict[str, JsonValue] | None:
+        """Refuse nested or non-finite shader parameters.
+
+        xOpat shader parameters are a number, a colour string, a flag, or a
+        list of those.
+
+        Args:
+            params: The parameters as written.
+
+        Returns:
+            The parameters.
+
+        Raises:
+            ValueError: If a value is a mapping, a nested list, null, NaN or
+                infinity.
+        """
+        for name, value in (params or {}).items():
+            items = value if isinstance(value, list) else [value]
+            if not all(_plain(item) for item in items):
+                raise ValueError(
+                    f"shader parameter `{name}` must be a number, string, "
+                    "boolean or a list of them"
+                )
+        return params
 
 
 class ViewerInput(_ViewerEntry):

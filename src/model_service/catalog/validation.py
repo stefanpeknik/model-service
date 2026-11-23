@@ -103,15 +103,19 @@ def _walk(model: type[BaseModel], loc: YamlPath) -> tuple[YamlPath, type[BaseMod
     while parts:
         part = parts.pop(0)
         path.append(part)
-        if not isinstance(part, str) or owner is None:
-            owner = None
+        if owner is None:
             continue
-        field = owner.model_fields.get(part)
         parent = owner
+        field = owner.model_fields.get(str(part))
         if field is None:
             owner = None
             continue
-        variants = _models(field.annotation)
+        annotation = _unalias(field.annotation)
+        if typing.get_origin(annotation) is dict and parts:
+            # A mapping of blocks by name: the next part is a name, not a key.
+            path.append(parts.pop(0))
+            annotation = _unalias(typing.get_args(annotation)[-1])
+        variants = _models(annotation)
         tag = str(parts[0]) if parts else ""
         if len(variants) > 1 and tag in variants:
             parts.pop(0)
@@ -132,13 +136,27 @@ def _models(annotation: object) -> dict[str, type[BaseModel]]:
     Returns:
         Tag (the discriminator's literal, else the class name) to model.
     """
-    value = getattr(annotation, "__value__", annotation)
+    value = _unalias(annotation)
     if isinstance(value, type) and issubclass(value, BaseModel):
         return {_tag(value): value}
+    if typing.get_origin(value) is dict:
+        return {}
     found: dict[str, type[BaseModel]] = {}
     for arg in typing.get_args(value):
         found |= _models(arg)
     return found
+
+
+def _unalias(annotation: object) -> object:
+    """Unwrap a `type X = …` alias.
+
+    Args:
+        annotation: A type annotation.
+
+    Returns:
+        The aliased type, or the annotation itself.
+    """
+    return getattr(annotation, "__value__", annotation)
 
 
 def _tag(model: type[BaseModel]) -> str:
