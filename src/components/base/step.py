@@ -22,6 +22,7 @@ class Step(Component):
     """
 
     kind: ClassVar[str] = "step"
+    folder: ClassVar[str] = "steps"
     slots: ClassVar[tuple[Slot, ...]] = (PRE, POST, STEPS)
 
     @abstractmethod

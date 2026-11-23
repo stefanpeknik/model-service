@@ -13,15 +13,7 @@ import pkgutil
 from functools import cache
 from typing import TYPE_CHECKING
 
-from components.base import (
-    InputConverter,
-    Loader,
-    Publisher,
-    Runtime,
-    Sink,
-    Source,
-    Step,
-)
+from components.base import KINDS
 from components.base.component import Component
 
 
@@ -30,19 +22,6 @@ if TYPE_CHECKING:
 
     from components.base.slots import Slot
 
-
-# Folder (relative to the scanned package) -> the kinds it may hold. The folder
-# says where a component may be used; its kind's slots say the same in code.
-# Only these folders are scanned: `base/` and `_templates/` are not.
-FOLDERS: dict[str, tuple[type[Component], ...]] = {
-    "steps": (Step,),
-    "loaders": (Loader,),
-    "runtimes": (Runtime,),
-    "sources": (Source,),
-    "sinks": (Sink,),
-    "empaia.converters": (InputConverter,),
-    "empaia.publishers": (Publisher,),
-}
 
 DEFAULT_PACKAGE = "components"
 
@@ -67,7 +46,7 @@ class Registry:
         """Import every module in the component folders of `package`.
 
         Args:
-            package: The root package holding the folders in `FOLDERS`;
+            package: The root package holding each kind's `folder`;
                 folders it lacks are skipped.
 
         Returns:
@@ -79,18 +58,15 @@ class Registry:
         """
         found: dict[tuple[str, str], type[Component]] = {}
         errors: list[str] = []
-        for folder, kinds in FOLDERS.items():
-            for component in _components_in(f"{package}.{folder}"):
-                if not issubclass(component, kinds):
-                    home = " or ".join(
-                        _path(package, f)
-                        for f, ks in FOLDERS.items()
-                        if issubclass(component, ks)
-                    )
+        for kind in KINDS:
+            module = f"{package}.{kind.folder.replace('/', '.')}"
+            for component in _components_in(module):
+                if not issubclass(component, kind):
                     errors.append(
                         f"{component.name} is a {component.kind} and cannot live "
-                        f"in {_path(package, folder)}; move {component.__module__} "
-                        f"to {home or 'the folder of its kind'}"
+                        f"in {_path(package, kind.folder)}; move "
+                        f"{component.__module__} to "
+                        f"{_path(package, component.folder)}"
                     )
                     continue
                 key = (component.kind, component.name)
@@ -181,12 +157,12 @@ def _path(package: str, folder: str) -> str:
 
     Args:
         package: The scanned root package, e.g. `components`.
-        folder: A key of `FOLDERS`, e.g. `empaia.converters`.
+        folder: A kind's folder, e.g. `empaia/converters`.
 
     Returns:
         E.g. `components/empaia/converters/`.
     """
-    return f"{package}.{folder}".replace(".", "/") + "/"
+    return f"{package.replace('.', '/')}/{folder}/"
 
 
 @cache

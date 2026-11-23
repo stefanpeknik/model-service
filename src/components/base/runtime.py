@@ -43,6 +43,7 @@ class Runtime(Component):
     """Runs a model's weights (ONNX Runtime, timm, ...) inside a served model."""
 
     kind: ClassVar[str] = "runtime"
+    folder: ClassVar[str] = "runtimes"
     slots: ClassVar[tuple[Slot, ...]] = (RUNTIME,)
 
     @abstractmethod

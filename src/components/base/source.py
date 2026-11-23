@@ -82,6 +82,7 @@ class Source(Component):
     """
 
     kind: ClassVar[str] = "source"
+    folder: ClassVar[str] = "sources"
     slots: ClassVar[tuple[Slot, ...]] = (SOURCE,)
     frame: ClassVar[dict[str, Col]] = {}
 

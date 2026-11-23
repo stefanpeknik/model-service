@@ -23,6 +23,7 @@ class Loader(Component):
     """
 
     kind: ClassVar[str] = "loader"
+    folder: ClassVar[str] = "loaders"
     slots: ClassVar[tuple[Slot, ...]] = (WEIGHTS, STEP_WEIGHTS)
 
     @abstractmethod

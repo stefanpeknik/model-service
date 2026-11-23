@@ -65,6 +65,7 @@ class Publisher(Component):
     """
 
     kind: ClassVar[str] = "publisher"
+    folder: ClassVar[str] = "empaia/publishers"
     slots: ClassVar[tuple[Slot, ...]] = (EMPAIA_OUTPUTS,)
     Options: ClassVar[type[Options]] = PublisherOptions
     reads_format: ClassVar[str]

@@ -40,6 +40,7 @@ class Sink(Component):
     """
 
     kind: ClassVar[str] = "sink"
+    folder: ClassVar[str] = "sinks"
     slots: ClassVar[tuple[Slot, ...]] = (SINKS,)
     Options: ClassVar[type[Options]] = SinkOptions
     format: ClassVar[str]

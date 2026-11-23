@@ -27,7 +27,6 @@ from model_service.reference.markdown import (
     options_table,
     table,
 )
-from model_service.registry import FOLDERS
 
 
 if TYPE_CHECKING:
@@ -65,7 +64,7 @@ def components_page(registry: Registry, catalog: Catalog) -> str:
                 [
                     f"[{kind.kind}](#{_plural(kind.kind)})",
                     _slots(kind.slots),
-                    ", ".join(code(_folder(f)) for f in _folders_of(kind)),
+                    code(f"src/components/{kind.folder}/"),
                 ]
                 for kind in KINDS
             ],
@@ -205,30 +204,6 @@ def _slots(slots: tuple[Slot, ...]) -> str:
         Each slot's document kind and key, comma-separated.
     """
     return ", ".join(f"{slot.document} `{slot.key}:`" for slot in slots)
-
-
-def _folders_of(kind: type[Component]) -> list[str]:
-    """The registry folders a kind's components live in.
-
-    Args:
-        kind: The kind's base class.
-
-    Returns:
-        Folder names in dotted form.
-    """
-    return [folder for folder, kinds in FOLDERS.items() if kind in kinds]
-
-
-def _folder(folder: str) -> str:
-    """A dotted folder name as a path from the repository root.
-
-    Args:
-        folder: E.g. `empaia.converters`.
-
-    Returns:
-        E.g. `src/components/empaia/converters/`.
-    """
-    return "src/components/" + folder.replace(".", "/") + "/"
 
 
 def _plural(kind: str) -> str:

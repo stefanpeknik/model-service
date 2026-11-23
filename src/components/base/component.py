@@ -34,6 +34,9 @@ class Component(ABC):
     Attributes:
         kind: The kind's name, set by each kind base.
         slots: Where components of this kind may be named, set by each kind base.
+        folder: The folder under `components/` that holds this kind's
+            components, set by each kind base; the registry scans it and
+            refuses a component of another kind found there.
         name: The snake_case name catalog files use.
         Options: The pydantic model of the options a catalog file may give.
         example_options: Valid options used by the conformance suite and as the
@@ -45,6 +48,7 @@ class Component(ABC):
 
     kind: ClassVar[str]
     slots: ClassVar[tuple[Slot, ...]]
+    folder: ClassVar[str]
     name: ClassVar[str]
     Options: ClassVar[type[BaseOptions]] = BaseOptions
     example_options: ClassVar[dict[str, Any]] = {}

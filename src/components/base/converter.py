@@ -49,6 +49,7 @@ class InputConverter(Component):
     """
 
     kind: ClassVar[str] = "converter"
+    folder: ClassVar[str] = "empaia/converters"
     slots: ClassVar[tuple[Slot, ...]] = (EMPAIA_INPUTS,)
     ead_type: ClassVar[str]
     gives_file: ClassVar[bool] = True
