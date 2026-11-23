@@ -15,8 +15,15 @@ from pydantic import Field
 
 from model_service.components import (
     Col,
+    Commit,
+    EmpaiaInput,
+    EmpaiaOutput,
+    InputConverter,
+    Loader,
     Options,
+    Publisher,
     Registry,
+    Runtime,
     Sink,
     Step,
     default_registry,
@@ -27,7 +34,12 @@ from model_service.testing import conformance
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from model_service.components import Batch, Component
+    from model_service.components import (
+        Batch,
+        BatchFunction,
+        Component,
+        RuntimeContext,
+    )
 
 
 COMPONENTS = [*default_registry(), *Registry.scan("tests.support.components")]
@@ -98,9 +110,90 @@ class Undocumented(Step):
         return batch
 
 
+class _PathOptions(Options):
+    path: str = Field(description="The weights file.")
+
+
+class LosesItsWeights(Loader):
+    """Broken loader: fetches to a path that isn't there, and names no revision."""
+
+    name = "loses_its_weights"
+    Options = _PathOptions
+    example_options: ClassVar[dict[str, Any]] = {"path": "/weights.bin"}
+
+    @classmethod
+    def offline_options(cls, weights: Path) -> dict[str, Any]:
+        return {"path": str(weights)}
+
+    def fetch(self, cache_dir: Path) -> Path:
+        return cache_dir / "never-written.bin"
+
+    def revision(self) -> str:
+        return ""
+
+
+class LosesARow(Runtime):
+    """Broken runtime: its batch function drops the last tile."""
+
+    name = "loses_a_row"
+
+    def load(self, path: Path, context: RuntimeContext) -> BatchFunction:
+        return lambda batch: np.zeros((len(batch) - 1, 1), dtype=np.float32)
+
+
+class Untyped(InputConverter):
+    """Broken converter: its EAD entry has no type."""
+
+    name = "untyped"
+    ead_type = "string"
+    gives_file = False
+
+    def io_fragment(self, item: EmpaiaInput) -> dict[str, Any]:
+        return {"description": "no type"}
+
+    async def materialize(
+        self, gateway: Any, item: EmpaiaInput, directory: Path
+    ) -> Any:
+        return await gateway.get_input_data(item.name)
+
+
+class PostsTooEarly(Publisher):
+    """Broken publisher: posts during prepare, so a later failure can't undo it."""
+
+    name = "posts_too_early"
+    reads_format = "value"
+    emits = frozenset({"float"})
+    example_options: ClassVar[dict[str, Any]] = {"type": "float"}
+
+    def io_fragment(self, item: EmpaiaOutput) -> dict[str, Any]:
+        return {"type": "float"}
+
+    async def prepare(
+        self, gateway: Any, item: EmpaiaOutput, artifact: Path, media_type: str
+    ) -> Commit:
+        await gateway.post_output(item.name, {})
+
+        async def commit() -> None:
+            pass
+
+        return commit
+
+
 @pytest.mark.parametrize(
     ("component", "failure"),
     [
+        (
+            LosesItsWeights,
+            "loader `loses_its_weights`: revision() must return a non-empty string",
+        ),
+        (LosesItsWeights, "loader `loses_its_weights`: fetch returned "),
+        (LosesARow, "runtime `loses_a_row`: the loaded function returned 1 rows for 2"),
+        (Untyped, "converter `untyped`: io_fragment needs a string `type`"),
+        (
+            PostsTooEarly,
+            "publisher `posts_too_early`: prepare wrote to EMPAIA (post_output)",
+        ),
+        (PostsTooEarly, "publisher `posts_too_early`: commit wrote nothing to EMPAIA"),
         (DropsRows, "step `drops_rows`: returned 0 rows for 1; a step keeps every row"),
         (
             IgnoresItsOption,

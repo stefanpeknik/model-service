@@ -24,9 +24,9 @@ class Text(Publisher):
     async def prepare(
         self, gateway: Any, item: EmpaiaOutput, artifact: Path, media_type: str
     ) -> Commit:
-        """Nothing to prepare."""
+        """Nothing to check; the commit posts the output."""
 
         async def commit() -> None:
-            pass
+            await gateway.post_output(item.name, "text")
 
         return commit

@@ -109,9 +109,30 @@ What each part is for:
 
 `tests/components/test_conformance.py` runs your kind's conformance suite on
 every registered component, so yours is covered as soon as the file exists.
-It checks the docstring, the option descriptions, `example_options`, the
-declared dimensions and, for steps, that the output has the declared columns
-and the same number of rows.
+It checks the docstring, the option descriptions, `example_options` and the
+declared dimensions, then runs the component the way its kind is used:
+
+- a step keeps every row and adds the columns it declares;
+- a source gives its frame fields and loads its declared columns from a
+  fake slide; a sink writes a file with no items and with some;
+- a loader's `revision()` is a non-empty string. If it can fetch without a
+  network, return options that do from `offline_options(weights)`
+  (`local.py` and `mlflow.py` do), and the suite checks that `fetch`
+  returns a path that exists and that `revision()` matches
+  `expected_revision()`;
+- a runtime loads the weights its `stand_in(directory)` writes into a
+  function that keeps the batch length. The default stand-in is an empty
+  file and two uint8 tiles; a runtime of a weights format writes a tiny
+  model (`onnx.py` writes a two-node graph, `timm.py` timm's `test_vit`);
+- a converter's `io_fragment` has a string `type`, and `materialize` reads
+  a fake EMPAIA job (`model_service.testing.FakeGateway`) into a file in
+  its directory or a JSON value without writing to the job;
+- a publisher's `io_fragment` has a `type` it emits, `prepare` on a sample
+  file of its format writes nothing, and the commit it returns writes.
+
+A converter for a new EAD type adds example input data to
+`EXAMPLE_INPUTS`, and a publisher of a new format adds a sample writer to
+`SAMPLES`, both in `src/model_service/testing/empaia.py`.
 
 Add a test of what your component computes. `model_service.testing` runs a
 component the way the runner would, without Ray or a cluster:

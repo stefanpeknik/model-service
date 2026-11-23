@@ -32,6 +32,7 @@ from model_service.components.kinds import (
     Sink,
     SinkOptions,
     Source,
+    StandIn,
     Step,
 )
 from model_service.components.options import (
@@ -72,6 +73,7 @@ __all__ = [
     "SinkOptions",
     "Slot",
     "Source",
+    "StandIn",
     "Step",
     "default_registry",
     "per_run_fields",

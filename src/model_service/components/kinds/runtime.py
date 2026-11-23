@@ -39,6 +39,19 @@ class RuntimeContext:
     max_batch_size: int
 
 
+@dataclass(frozen=True)
+class StandIn:
+    """Tiny weights a runtime loads in the conformance suite, and a batch for them.
+
+    Attributes:
+        weights: The weights file or folder.
+        batch: A batch the loaded function takes.
+    """
+
+    weights: Path
+    batch: np.ndarray
+
+
 class Runtime(Component):
     """Runs a model's weights (ONNX Runtime, timm, ...) inside a served model."""
 
@@ -56,6 +69,26 @@ class Runtime(Component):
         Returns:
             A function from a batch of model inputs to a batch of outputs.
         """
+
+    @classmethod
+    def stand_in(cls, directory: Path) -> StandIn:
+        """Write tiny weights this runtime loads, for the conformance suite.
+
+        The default, an empty file and two black 8 px uint8 tiles, fits a
+        runtime that ignores its weights; a runtime of a weights format
+        writes a small model in it.
+
+        Args:
+            directory: An empty directory to write into.
+
+        Returns:
+            The weights and a batch for the function `load` returns.
+        """
+        import numpy as np
+
+        weights = directory / "weights.bin"
+        weights.write_bytes(b"")
+        return StandIn(weights, np.zeros((2, 3, 8, 8), dtype=np.uint8))
 
     def active_providers(self) -> list[str]:
         """The execution providers actually in use after `load`.

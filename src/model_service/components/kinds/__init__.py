@@ -12,6 +12,7 @@ from model_service.components.kinds.runtime import (
     BatchFunction,
     Runtime,
     RuntimeContext,
+    StandIn,
 )
 from model_service.components.kinds.sink import Sink, SinkOptions
 from model_service.components.kinds.source import Opened, Source
@@ -36,5 +37,6 @@ __all__ = [
     "Sink",
     "SinkOptions",
     "Source",
+    "StandIn",
     "Step",
 ]
