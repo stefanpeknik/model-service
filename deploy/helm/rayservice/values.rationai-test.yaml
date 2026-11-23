@@ -42,11 +42,11 @@ workers:
 
 rayImage:
   repository: cerit.io/stefanpeknik/model-service-ray-cpu
-  tag: unit-984bed7
+  tag: unit-aeed9eb
   pullPolicy: IfNotPresent
 rayGpuImage:
   repository: cerit.io/stefanpeknik/model-service-ray
-  tag: unit-984bed7
+  tag: unit-aeed9eb
   pullPolicy: IfNotPresent
 
 storage:
@@ -60,7 +60,7 @@ api:
   replicas: 2
   image:
     repository: cerit.io/stefanpeknik/model-service-api
-    tag: unit-984bed7
+    tag: unit-aeed9eb
     pullPolicy: IfNotPresent
   database:
     existingSecret: model-service-db
