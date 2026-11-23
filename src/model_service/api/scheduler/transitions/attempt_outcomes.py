@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
     from model_service.api.scheduler.internal_state import RetryPolicy, Settlement
     from model_service.api.scheduler.transitions.expiry import ExpiryTransitions
+    from model_service.contracts.result import RunResult
 
 
 from model_service.api.scheduler.transitions.common import (
@@ -211,7 +212,7 @@ class AttemptOutcomeTransitions:
                     if execution.work_kind is WorkKind.PROVIDER_FINISH
                     else execution.status
                 ),
-                result=settlement.result or execution.result,
+                result=_published(execution.result, settlement.result),
                 work_kind=None,
                 next_attempt_at=None,
                 lease_owner=None,
@@ -264,3 +265,23 @@ class AttemptOutcomeTransitions:
             ),
             now,
         )
+
+
+def _published(
+    stored: RunResult | None, published: RunResult | None
+) -> RunResult | None:
+    """The result after a provider's finish, which may have moved the outputs.
+
+    Args:
+        stored: The result processing returned.
+        published: The provider's replacement, or None if it kept the result.
+
+    Returns:
+        The replacement's outputs with what processing ran, which only
+        processing knows.
+    """
+    if published is None:
+        return stored
+    if stored is None:
+        return published
+    return replace(published, served_models=stored.served_models)

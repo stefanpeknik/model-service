@@ -44,7 +44,8 @@ class DescribedModel(ModelHandle, Protocol):
         """Report what the replica runs.
 
         Returns:
-            At least `digest`, the served model's declaration digest.
+            At least `digest` (the declaration digest), `weights_revision` and
+            `execution_providers`, which the run's result records.
         """
         ...
 

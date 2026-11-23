@@ -40,7 +40,12 @@ class Handle:
 
     async def describe(self) -> dict[str, Any]:
         logging.getLogger("model_service.tests.probe").info("halfway")
-        return {"id": "m1", "digest": self.digest}
+        return {
+            "id": "m1",
+            "digest": self.digest,
+            "weights_revision": "/weights/model.onnx",
+            "execution_providers": ["CPUExecutionProvider"],
+        }
 
     async def infer(self, tile: np.ndarray) -> np.ndarray:
         return await self.model.infer(tile)

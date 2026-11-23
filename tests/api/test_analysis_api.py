@@ -18,7 +18,7 @@ from model_service.api.scheduler.dispatch import (
 from model_service.api.synchronous_runs import SynchronousAnalysisService
 from model_service.catalog import load_catalog
 from model_service.catalog.analyses import load_resolved, resolve_run
-from model_service.contracts.result import RunResult, SharedArtifact
+from model_service.contracts.result import RunResult, ServedModelRun, SharedArtifact
 from model_service.formats import score_grid
 
 
@@ -33,7 +33,14 @@ pytestmark = pytest.mark.anyio
 CATALOG = load_catalog(Path(__file__).resolve().parents[2] / "catalog", "rationai-test")
 RUN = "/v1/analyses/prostate-heatmap/run"
 RESULT = RunResult(
-    {"heatmap": SharedArtifact("/mnt/shared/out.npz", score_grid.MEDIA_TYPE)}
+    {"heatmap": SharedArtifact("/mnt/shared/out.npz", score_grid.MEDIA_TYPE)},
+    served_models={
+        "prostate-classifier-1": ServedModelRun(
+            digest="d" * 64,
+            weights_revision="/weights/prostate.onnx",
+            execution_providers=["CPUExecutionProvider"],
+        )
+    },
 )
 
 
@@ -159,7 +166,14 @@ async def test_a_run_sends_the_analysis_resolved_with_its_settings() -> None:
                 "path": "/mnt/shared/out.npz",
                 "media_type": score_grid.MEDIA_TYPE,
             }
-        }
+        },
+        "served_models": {
+            "prostate-classifier-1": {
+                "digest": "d" * 64,
+                "weights_revision": "/weights/prostate.onnx",
+                "execution_providers": ["CPUExecutionProvider"],
+            }
+        },
     }
     (sent,) = runner.requests
     expected = resolve_run(CATALOG, "prostate-heatmap", {"stride_fraction": 1.0})

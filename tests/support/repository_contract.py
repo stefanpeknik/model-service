@@ -9,6 +9,7 @@ from model_service.api.scheduler.internal_state import (
     Admission,
     ProcessingRejected,
     ProcessingSucceeded,
+    ProviderFinishSucceeded,
     StaleWorkClaimError,
     WorkClaim,
     WorkKind,
@@ -18,7 +19,7 @@ from model_service.api.scheduler.public import (
     SubmissionIdentity,
 )
 from model_service.contracts.invocation import InputAccessContext, Invocation
-from model_service.contracts.result import RunResult
+from model_service.contracts.result import RunResult, ServedModelRun, SharedArtifact
 from tests.support.scheduling import stored_target
 
 
@@ -376,6 +377,41 @@ class ExecutionRepositoryContract:
         assert await self._failure_code(execution_id) == (
             "failed",
             "provider_finish_outcome_unknown",
+        )
+
+    async def test_what_the_served_models_ran_outlives_a_moved_result(self) -> None:
+        execution_id = await self._admit_execution("provenance")
+        ran = ServedModelRun(
+            digest="d" * 64,
+            weights_revision="paige-ai/Virchow2@abc123",
+            execution_providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+        )
+        processing = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert processing is not None
+        await self.repository.settle(
+            execution_id,
+            processing.fencing_token,
+            ProcessingSucceeded(
+                RunResult(
+                    {"heatmap": SharedArtifact("/shared/.attempts/1/heatmap.npz")},
+                    served_models={"model-a": ran},
+                )
+            ),
+        )
+        finish = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert finish is not None
+
+        # The provider moved the output and answers with its new path only.
+        moved = RunResult({"heatmap": SharedArtifact("/shared/heatmap.npz")})
+        await self.repository.settle(
+            execution_id, finish.fencing_token, ProviderFinishSucceeded(moved)
+        )
+
+        execution = await self.repository.get(execution_id)
+        assert execution.status == "succeeded"
+        assert execution.result == RunResult(
+            {"heatmap": SharedArtifact("/shared/heatmap.npz")},
+            served_models={"model-a": ran},
         )
 
     async def test_get_many_keeps_order_and_skips_unknown_ids(self) -> None:

@@ -54,7 +54,14 @@ class ContractTests(unittest.TestCase):
                     "path": "/mnt/data/heatmap.tiff",
                     "media_type": "image/tiff",
                 },
-            }
+            },
+            "served_models": {
+                "virchow2": {
+                    "digest": "d" * 64,
+                    "weights_revision": "paige-ai/Virchow2@abc123",
+                    "execution_providers": ["CPUExecutionProvider"],
+                }
+            },
         }
         result = RESULT.validate_python(body)
 

@@ -16,7 +16,7 @@ from model_service.api.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.api.scheduler.internal_state import RetryPolicy
 from model_service.catalog import Catalog, load_catalog
 from model_service.catalog.analyses import resolve_run
-from model_service.contracts.result import RunResult, SharedArtifact
+from model_service.contracts.result import RunResult, ServedModelRun, SharedArtifact
 from model_service.formats import score_grid
 from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
@@ -34,6 +34,11 @@ pytestmark = pytest.mark.anyio
 CATALOG = load_catalog(Path(__file__).resolve().parents[2] / "catalog", "rationai-test")
 SCHEDULE = "/v1/analyses/prostate-heatmap/schedule"
 SETTINGS = {"min_tissue_fraction": 0.0, "skip_background": True, "stride_fraction": 1.0}
+RAN = ServedModelRun(
+    digest="d" * 64,
+    weights_revision="file:///weights/prostate.onnx@sha256:" + "a" * 64,
+    execution_providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+)
 
 
 class FakeRunner:
@@ -55,7 +60,8 @@ class FakeRunner:
                 "heatmap": SharedArtifact(
                     str(self.root / "out.npz"), score_grid.MEDIA_TYPE
                 )
-            }
+            },
+            served_models={"prostate-classifier-1": RAN},
         )
 
 
@@ -163,6 +169,14 @@ async def test_every_attempt_sends_the_document_admitted(root: Path) -> None:
             view = await wait_for(client, created.json()["execution"]["id"])
 
     assert view["status"] == "succeeded", view
+    # What ran is kept through the provider's finish, which moves the outputs.
+    assert view["result"]["served_models"] == {
+        "prostate-classifier-1": {
+            "digest": "d" * 64,
+            "weights_revision": "file:///weights/prostate.onnx@sha256:" + "a" * 64,
+            "execution_providers": ["CUDAExecutionProvider", "CPUExecutionProvider"],
+        }
+    }
     expected = resolve_run(CATALOG, "prostate-heatmap", {"stride_fraction": 1.0})
     first, retry = deployment.runner.requests
     assert first.analysis == retry.analysis == expected.document
