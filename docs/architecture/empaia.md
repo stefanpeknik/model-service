@@ -36,7 +36,7 @@ sequenceDiagram
 
 | Module | Role |
 | --- | --- |
-| `catalog/analyses/exposure.py` | `expose.empaia`: picks converters and publishers, and the load-time checks (EMPAIA's name limit, preprocessing without required inputs, parameters, bound shapes) |
+| `catalog/analyses/exposure/` | `expose.empaia`: its keys (`fields.py`), its schema (`schema.py`), and picking converters and publishers with the load-time checks in `resolution.py`: EMPAIA's name limit, preprocessing without required inputs, parameters, bound shapes |
 | `components/empaia/` | Converters (`wsi`, `rectangle`, `primitive`) and publishers (`primitive`, `continuous_pixelmap`), one per EAD type |
 | `providers/empaia/provider.py` | The provider: what EMPAIA adds to the API and to replicas |
 | `providers/empaia/ead/` | `apps.py` merges the components' fragments into each app's EAD v3; `vocabulary.py` holds modes, triggers and viewer settings |
