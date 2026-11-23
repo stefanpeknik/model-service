@@ -17,7 +17,8 @@ files in `catalog/` built from **components** in `src/components/`.
   `src/model_service/formats/` or `catalog/`, run
   `PYTHONPATH=src uv run tools/generate.py` and commit what it writes
   (`tests/test_generated.py` fails until you do).
-- Checking catalog files: `uv run pytest tests/catalog`.
+- Checking catalog files: `uv run pytest tests/catalog`. Before deploying a
+  component or catalog change, run the whole suite: `uv run pytest`.
 
 `docs/history/` and the dated `docs/operations/` records describe earlier
 designs and the plans that replaced them. They are records, not instructions.

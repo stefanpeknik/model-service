@@ -51,7 +51,6 @@ flowchart LR
   subgraph sg_components["components (top-level package: what an author writes)"]
     base["components.base<br/>kinds · Options · Col · Run · Problem · slots"]
     pieces["steps · loaders · runtimes<br/>sources · sinks · empaia"]
-    testing["components.testing<br/>fakes, run_component, conformance"]
   end
 
   reference["reference<br/>tools/generate.py"]
@@ -78,7 +77,6 @@ flowchart LR
   catalog --> registry & base & pieces & contracts & ead
   registry --> base
   pieces --> base & formats & slides & app_service & contracts
-  testing --> base & formats & app_service
   reference --> catalog & registry & base & formats
 
   registry -.->|imports each folder by name| pieces

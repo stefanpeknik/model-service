@@ -101,7 +101,6 @@ src/components/           what you write
   empaia/                 converters/ and publishers/ for EMPAIA inputs and outputs
   base/                   the kind classes you subclass, Options, Col, Run, Problem
   _templates/             one file per kind to copy
-  testing/                fake slides and models, run_component, conformance suites
 src/model_service/        the plumbing
   catalog/                loading and checking catalog files
   registry/               the scan that finds components and checks their folders

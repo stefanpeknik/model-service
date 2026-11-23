@@ -3,7 +3,7 @@
 Copy to `src/components/empaia/converters/<name>.py` and
 replace `my_component`, `MyComponent` and the placeholders in <angle brackets>.
 Add example data for the EAD type to `EXAMPLE_INPUTS` in
-`src/components/testing/empaia.py`.
+`tests/components/helpers/empaia.py`.
 """
 
 from __future__ import annotations

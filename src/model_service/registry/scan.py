@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
 # Folder (relative to the scanned package) -> the kinds it may hold. The folder
 # says where a component may be used; its kind's slots say the same in code.
-# Only these folders are scanned: `base/`, `testing/` and `_templates/` are not.
+# Only these folders are scanned: `base/` and `_templates/` are not.
 FOLDERS: dict[str, tuple[type[Component], ...]] = {
     "steps": (Step,),
     "loaders": (Loader,),

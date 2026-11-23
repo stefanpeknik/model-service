@@ -3,7 +3,7 @@
 Copy to `src/components/empaia/publishers/<name>.py` and replace
 `my_component`, `MyComponent` and the placeholders in <angle brackets>. A
 format with no sample yet needs a writer in `SAMPLES` in
-`src/components/testing/empaia.py`.
+`tests/components/helpers/empaia.py`.
 """
 
 from __future__ import annotations

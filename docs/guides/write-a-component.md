@@ -132,33 +132,35 @@ declared dimensions, then runs the component the way its kind is used:
 - a step keeps every row and adds the columns it declares;
 - a source gives its frame fields and loads its declared columns from a
   fake slide; a sink writes a file with no items and with some;
-- a loader's `revision()` is a non-empty string. If it can fetch without a
-  network, return options that do from `offline_options(weights)`
-  (`local.py` and `mlflow.py` do), and the suite checks that `fetch`
-  returns a path that exists and that `revision()` matches
-  `expected_revision()`;
-- a runtime loads the weights its `stand_in(directory)` writes into a
-  function that keeps the batch length. The default stand-in is an empty
-  file and two uint8 tiles; a runtime of a weights format writes a tiny
-  model (`onnx.py` writes a two-node graph, `timm.py` timm's `test_vit`);
+- a loader fetches a local weights file to a path that exists, and its
+  `revision()` is a non-empty string that matches `expected_revision()`;
+- a runtime loads tiny weights into a function that keeps the batch length;
 - a converter's `io_fragment` has a string `type`, and `materialize` reads
-  a fake EMPAIA job (`components.testing.FakeGateway`) into a file in
-  its directory or a JSON value without writing to the job;
+  a fake EMPAIA job (`FakeGateway`) into a file in its directory or a JSON
+  value without writing to the job;
 - a publisher's `io_fragment` has a `type` it emits, `prepare` on a sample
   file of its format writes nothing, and the commit it returns writes.
 
+A loader or a runtime needs an entry, keyed by its name, in
+`tests/components/helpers/offline.py`: for a loader, options that fetch a
+given local file without a network (`local` points `path` at it, `mlflow`
+gives a `file://` URI); for a runtime, a function that writes tiny weights
+it loads and a batch for them (`onnx` gets a two-node graph, `timm` timm's
+`test_vit`, `constant` an empty file). Without one, the suite checks only
+the declaration and the test is skipped with the component's name.
+
 A converter for a new EAD type adds example input data to
 `EXAMPLE_INPUTS`, and a publisher of a new format adds a sample writer to
-`SAMPLES`, both in `src/components/testing/empaia.py`.
+`SAMPLES`, both in `tests/components/helpers/empaia.py`.
 
-Add a test of what your component computes. `components.testing` runs a
-component the way the runner would, without Ray or a cluster:
+Add a test of what your component computes. `tests.components.helpers` runs
+a component the way the runner would, without Ray or a cluster:
 
 ```python
 import numpy as np
 
 from components.steps.softmax import Softmax
-from components.testing import run_component
+from tests.components.helpers import run_component
 
 
 def test_softmax_gives_probabilities_that_sum_to_one() -> None:
@@ -179,13 +181,18 @@ The other helpers cover the rest of the kinds:
 - `fake_model(output={"kind": "embedding", "summaries": ["global"]})` stands
   in for a served model, for `model.` dimensions and model calls.
 
-Run the tests, then regenerate the reference docs so they list your
-component:
+Regenerate the reference docs so they list your component, then run the
+whole suite:
 
 ```sh
-uv run pytest tests/components
 PYTHONPATH=src uv run tools/generate.py
+uv run pytest
 ```
+
+Run `uv run pytest` before every deploy. The catalog check, the conformance
+suite and your own test are what keep a broken component or catalog file
+off the cluster; Helm refuses only a few cases when it renders, and nothing
+else checks the file before a replica imports it.
 
 ## Use it
 

@@ -11,8 +11,8 @@ the folder that says where it may be used:
 - `empaia/converters/`, `empaia/publishers/`: an analysis's EMPAIA exposure.
 
 Also here: `base/`, the kind base classes and the types they use;
-`_templates/`, one file per kind to copy into its folder; `testing/`, fakes and
-the conformance suite for testing a component without a cluster.
+`_templates/`, one file per kind to copy into its folder. The helpers for
+testing a component without a cluster are test code, in `tests/components/helpers/`.
 
 `model_service.registry` scans the folders above and nothing else lists
 components. Importing this package scans nothing.
