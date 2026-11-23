@@ -6,8 +6,8 @@ A served model is a file in `catalog/served-models/`; this package serves it.
   `ServedModel`. It fetches the weights, loads the runtime, and owns batching,
   `infer(tile)`, the raw-inference reply, the input and output guards and
   `describe()`. Tests and tools use it without Serve.
-- `serve.py`: the thin Ray Serve wrapper, `app`, with the HTTP route and the
-  handle methods.
+- `serve.py`: the thin Ray Serve wrapper, `app`, with the HTTP routes
+  (`POST /`, `GET /describe`) and the handle methods.
 - `deployment.py`: the Serve application a served model deploys as.
 
 Deployment contract (what Helm renders for each served model, one application

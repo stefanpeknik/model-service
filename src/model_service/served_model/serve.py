@@ -8,6 +8,7 @@ wrapper only adapts Serve to `ServedModelHost`:
 - `reconfigure(user_config)` builds a new host, on start and on every
   `user_config` change;
 - handle methods: `infer(tile)` and `describe()`;
+- `GET /describe`: the same `describe()` reply, for people and scripts;
 - `POST /`: the raw-inference route, replying in the output kind's format.
 """
 
@@ -56,8 +57,12 @@ class ServedModelDeployment:
         """
         return await self.host.infer(tile)
 
+    @fastapi.get("/describe")
     def describe(self) -> dict[str, Any]:
         """What is running; see `ServedModelHost.describe`.
+
+        It is a handle method for the analysis runner and `GET /describe` on
+        the model's route, so the execution providers are visible without Ray.
 
         Returns:
             `id`, `digest`, `weights_revision` and `execution_providers`.

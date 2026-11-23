@@ -433,7 +433,7 @@
         },
         "apply_session_options": {
           "default": true,
-          "description": "Give the session `threads`, all graph optimisations and sequential execution. `false` leaves ONNX Runtime's defaults (intra-op threads for every core), as EPISeg's original class did by passing its options under a keyword ONNX Runtime ignores.",
+          "description": "Give the session `threads`, all graph optimisations and sequential execution. `false` leaves ONNX Runtime's defaults (intra-op threads for every core).",
           "title": "Apply Session Options",
           "type": "boolean"
         },

@@ -35,6 +35,24 @@ A tile of the wrong size, or an output that breaks the declaration (wrong
 shape, NaN, a score outside the declared `range`), fails the request with the
 reason.
 
+## What a replica runs
+
+`GET /<model-id>/describe` on the same origin answers what a replica loaded:
+
+```json
+{
+  "id": "prostate-classifier-1",
+  "digest": "5f0c…",
+  "weights_revision": "mlflow-artifacts:/65/…/artifacts/model.onnx@sha256:9a1e…",
+  "execution_providers": ["CUDAExecutionProvider", "CPUExecutionProvider"]
+}
+```
+
+`execution_providers` lists the providers ONNX Runtime actually uses, so a
+model declared with `tensorrt: true` that lost TensorRT shows it here (and
+the replica logs a warning when it starts). Replicas also log this line when
+they are built. The call wakes a model scaled to zero, like any request.
+
 ## Example
 
 ```python

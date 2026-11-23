@@ -19,6 +19,7 @@ it arrived in.
 
 from __future__ import annotations
 
+import logging
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -37,6 +38,8 @@ if TYPE_CHECKING:
     from model_service.catalog.served_models import ServedModel
     from model_service.components import Step
     from model_service.served_model.replies import RawReply
+
+logger = logging.getLogger(__name__)
 
 
 class ServedModelHost:
@@ -71,6 +74,14 @@ class ServedModelHost:
             self._run_batch,
             max_size=model.batching.max_size,
             wait_s=model.batching.wait_s,
+        )
+        described = self.describe()
+        logger.info(
+            "served model %s built: digest %s, weights %s, execution providers %s",
+            model.id,
+            described["digest"],
+            described["weights_revision"],
+            described["execution_providers"] or "not reported",
         )
 
     async def infer(self, tile: np.ndarray) -> np.ndarray:

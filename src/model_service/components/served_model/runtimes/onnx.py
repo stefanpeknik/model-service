@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field, ValidationInfo, field_validator
@@ -14,6 +15,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from model_service.components.kinds import BatchFunction, RuntimeContext
+
+logger = logging.getLogger(__name__)
+TENSORRT = "TensorrtExecutionProvider"
 
 
 class OnnxOptions(Options):
@@ -60,8 +64,7 @@ class OnnxOptions(Options):
         description=(
             "Give the session `threads`, all graph optimisations and sequential "
             "execution. `false` leaves ONNX Runtime's defaults (intra-op threads "
-            "for every core), as EPISeg's original class did by passing its "
-            "options under a keyword ONNX Runtime ignores."
+            "for every core)."
         ),
     )
     threads: int = Field(1, ge=1, description="ONNX Runtime's intra-op threads.")
@@ -113,13 +116,18 @@ class Onnx(Runtime):
 
         providers: list[Any] = ["CUDAExecutionProvider", "CPUExecutionProvider"]
         if self.options.tensorrt:
-            providers.insert(
-                0, ("TensorrtExecutionProvider", self._tensorrt(path, context))
-            )
+            providers.insert(0, (TENSORRT, self._tensorrt(path, context)))
         session = ort.InferenceSession(
             str(path), providers=providers, sess_options=self._session_options()
         )
         self._session = session
+        if self.options.tensorrt and TENSORRT not in session.get_providers():
+            logger.warning(
+                "tensorrt: true, but ONNX Runtime runs %s on %s without %s",
+                path.name,
+                session.get_providers(),
+                TENSORRT,
+            )
         input_name = session.get_inputs()[0].name
         output_name = session.get_outputs()[0].name
 

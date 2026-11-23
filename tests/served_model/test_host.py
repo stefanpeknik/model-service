@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import math
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -135,6 +136,35 @@ def test_describe_names_the_digest_weights_and_active_providers(
         "execution_providers": ["CPUExecutionProvider"],
     }
     assert (tmp_path / "cache" / "m1" / digest[:12]).is_dir()
+
+
+def test_building_logs_what_runs_and_warns_when_tensorrt_fell_back(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    graph = onnx_graphs.scores(tmp_path / "m.onnx")
+    document = declaration(graph, runtime={"use": "onnx", "tensorrt": True})
+
+    with caplog.at_level(logging.INFO, logger="model_service"):
+        host(document, tmp_path / "cache")
+
+    digest = resolve_served_model("m1", document).digest
+    built = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert any(
+        digest in m and str(graph) in m and "CPUExecutionProvider" in m for m in built
+    ), built
+    assert any("TensorrtExecutionProvider" in m for m in warnings), warnings
+
+
+def test_a_runtime_without_tensorrt_builds_without_a_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    graph = onnx_graphs.scores(tmp_path / "m.onnx")
+
+    with caplog.at_level(logging.INFO, logger="model_service"):
+        host(declaration(graph), tmp_path / "cache")
+
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
 
 
 def raw(served: ServedModelHost, tile: np.ndarray, **headers: str) -> Any:
