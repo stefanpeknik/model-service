@@ -128,6 +128,7 @@ def create_app(
     lifespan: Lifespan[FastAPI] | None = None,
     deployment_health: DeploymentHealth | None = None,
     catalog_status: Callable[[], CatalogStatus] | None = None,
+    catalog_watcher_stopped: Callable[[], bool] | None = None,
     access: Access | None = None,
     provider_routes: Sequence[RouteFactory] = (),
 ) -> FastAPI:
@@ -143,6 +144,8 @@ def create_app(
         deployment_health: Checks Ray Serve routes; None reports `not_configured`.
         catalog_status: Whether the mounted catalog is the one in use; None
             for a catalog that never reloads, always `loaded`.
+        catalog_watcher_stopped: Whether the catalog watcher has stopped; liveness
+            fails once it stopped. None for a catalog that never reloads.
         access: Guards the public API; the default lets everyone in. Providers
             guard their own routes.
         provider_routes: Router factories contributed by providers.
@@ -183,14 +186,17 @@ def create_app(
 
     @app.get("/healthz")
     async def health() -> JSONResponse:
-        """Report liveness: unhealthy once the scheduler's worker has stopped.
+        """Report liveness: unhealthy once the scheduler's worker or the catalog watcher stopped.
 
         Returns:
-            200 while the worker runs, 503 after it stopped.
+            200 while both run, 503 after one stopped.
         """
         # Liveness: an API process whose worker stopped would hold jobs forever.
         if not scheduler.alive:
             return JSONResponse({"status": "worker stopped"}, status_code=503)
+        # One whose watcher stopped would never pick up a catalog change.
+        if catalog_watcher_stopped is not None and catalog_watcher_stopped():
+            return JSONResponse({"status": "catalog watcher stopped"}, status_code=503)
         return JSONResponse({"status": "ok"})
 
     @app.get("/readyz")
@@ -366,4 +372,5 @@ def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
             ),
         ),
         catalog_status=mounted.status,
+        catalog_watcher_stopped=lambda: mounted.watcher_stopped,
     )

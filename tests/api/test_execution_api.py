@@ -410,6 +410,22 @@ class HealthAndAvailabilityTests(ApiTestCase):
         self.assertEqual(stopped.status_code, 503)
         self.assertEqual(live.status_code, 200)
 
+    async def test_an_api_whose_catalog_watcher_stopped_is_not_live(self) -> None:
+        watching = True
+        async with (
+            self.client(
+                self.app(catalog_watcher_stopped=lambda: not watching)
+            ) as client,
+            self.scheduler.running(),
+        ):
+            live = await client.get("/healthz")
+            watching = False
+            stopped = await client.get("/healthz")
+
+        self.assertEqual(live.status_code, 200)
+        self.assertEqual(stopped.status_code, 503)
+        self.assertEqual(stopped.json(), {"status": "catalog watcher stopped"})
+
     async def test_missing_routes_are_separate_from_readiness(self) -> None:
         routes = {"/analyses/": "analysis-runner"}
         async with (
