@@ -49,6 +49,7 @@ from model_service.formats.known import format_of
 from model_service.providers.empaia.app_service.gateway import (
     INPUT_ACCESS_KIND,
     PROVIDER_NAME,
+    AdmittedEmpaiaJobContext,
     EmpaiaGatewayError,
     EmpaiaGatewayFactory,
     EmpaiaInputState,
@@ -101,7 +102,7 @@ class _Admitted:
 
     configuration: dict[str, JsonValue]
     inputs: dict[str, ComponentUse]
-    publications: Publications | None
+    publications: Publications
 
 
 class EmpaiaProviderAdapter(ProviderAdapter):
@@ -231,7 +232,7 @@ class EmpaiaProviderAdapter(ProviderAdapter):
             ),
             deadline_at=effective_deadline,
         )
-        protected = EmpaiaJobContext(
+        protected = AdmittedEmpaiaJobContext(
             api_url=context.api_url,
             job_id=context.job_id,
             credential=context.credential,
@@ -336,7 +337,7 @@ class EmpaiaProviderAdapter(ProviderAdapter):
             await self._remove_workspace(context)
 
     def _publications(
-        self, context: EmpaiaJobContext, outcome: ProviderSuccess
+        self, context: AdmittedEmpaiaJobContext, outcome: ProviderSuccess
     ) -> Publications:
         """How a result is published, as admitted.
 
@@ -351,16 +352,11 @@ class EmpaiaProviderAdapter(ProviderAdapter):
 
         Raises:
             EmpaiaGatewayError: Not retryable if the result doesn't match the
-                analysis, or the job was admitted without publications.
+                analysis.
         """
-        target = outcome.target
-        if target.analysis is None or context.publications is None:
-            raise EmpaiaGatewayError.invalid(
-                f"{target.analysis_id!r} was admitted without publications"
-            )
         sinks = {
             sink["output"]
-            for sink in cast("list[dict[str, Any]]", target.analysis["sinks"])
+            for sink in cast("list[dict[str, Any]]", outcome.target.analysis["sinks"])
         }
         if set(outcome.result.outputs) != sinks:
             raise EmpaiaGatewayError.invalid(

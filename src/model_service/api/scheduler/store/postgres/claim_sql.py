@@ -18,7 +18,7 @@ from model_service.api.scheduler.store.rows import ExecutionRow
 from model_service.api.scheduler.targets import (
     CapacityKey,
     CapacityKind,
-    ExecutionTarget,
+    capacity_keys,
 )
 
 
@@ -198,8 +198,7 @@ class ClaimOperations:
         )
         unavailable: set[CapacityKey] = set()
         for models, analysis_id in groups.all():
-            target = ExecutionTarget(analysis_id or "", tuple(models))
-            keys = target.capacity_keys
+            keys = capacity_keys(analysis_id or "", tuple(models))
             if unavailable.intersection(keys) or not await self._reserve(
                 session, keys, now, unavailable
             ):

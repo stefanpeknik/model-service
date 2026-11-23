@@ -291,25 +291,6 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
         assert not raised.exception.outcome_unknown
         gateway.finalize.assert_not_awaited()
 
-    async def test_a_job_admitted_without_publications_is_never_published(
-        self,
-    ) -> None:
-        gateway = AsyncMock()
-        # A builder-era job: no document, no publications.
-        old = ProviderSuccess(
-            RunResult(
-                outputs={"heatmap": SharedArtifact("/x.npz", score_grid.MEDIA_TYPE)}
-            ),
-            ExecutionTarget("prostate-heatmap", ("prostate-classifier-1",)),
-        )
-
-        with self.assertRaises(ProviderFinishFailureError) as raised:
-            await self.provider(gateway).finish(CONTEXT, old)
-
-        assert not raised.exception.retryable
-        assert not raised.exception.outcome_unknown
-        gateway.finalize.assert_not_awaited()
-
     async def test_an_unreadable_artifact_is_invalid_not_retried(self) -> None:
         gateway = AsyncMock()
         with TemporaryDirectory() as directory:

@@ -1,4 +1,6 @@
--- Create the durable workflow execution queue.
+-- Executions: one durable run of an analysis per provider submission, with the
+-- resolved analysis document every attempt sends, its pending work, lease and
+-- outcome.
 -- depends:
 
 CREATE TABLE executions (
@@ -6,7 +8,10 @@ CREATE TABLE executions (
     provider TEXT NOT NULL,
     submission_key TEXT NOT NULL,
     request_fingerprint TEXT NOT NULL,
-    workflow_id TEXT NOT NULL,
+    analysis_id TEXT NOT NULL,
+    models TEXT[] NOT NULL,
+    analysis_digest TEXT NOT NULL,
+    analysis JSONB NOT NULL,
     status TEXT NOT NULL CHECK (
         status IN ('queued', 'running', 'succeeded', 'failed', 'cancelled')
     ),
@@ -31,6 +36,8 @@ CREATE TABLE executions (
     result JSONB,
     error_code TEXT,
     error_message TEXT,
+    -- LOW 0, NORMAL 1, HIGH 2; due work is claimed by priority first.
+    priority INTEGER NOT NULL DEFAULT 1,
     created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
     UNIQUE (provider, submission_key),
@@ -49,5 +56,13 @@ CREATE TABLE executions (
 
 CREATE INDEX executions_due_idx ON executions (next_attempt_at, created_at)
     WHERE work_kind IS NOT NULL;
-CREATE INDEX executions_active_processing_idx ON executions (workflow_id, lease_expires_at)
+CREATE INDEX executions_active_processing_idx ON executions (lease_expires_at)
     WHERE work_kind = 'processing' AND fencing_token IS NOT NULL;
+CREATE INDEX executions_deadline_idx ON executions (deadline_at)
+    WHERE work_kind IS NOT NULL;
+CREATE INDEX executions_report_deadline_idx ON executions (terminal_report_deadline_at)
+    WHERE work_kind IS NOT NULL;
+CREATE INDEX executions_lease_idx ON executions (lease_expires_at)
+    WHERE fencing_token IS NOT NULL;
+CREATE INDEX executions_finished_idx ON executions (updated_at)
+    WHERE work_kind IS NULL;

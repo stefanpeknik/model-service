@@ -14,12 +14,12 @@ from model_service.api.scheduler.internal_state import (
 )
 from model_service.api.scheduler.public import SubmissionIdentity
 from model_service.api.scheduler.status import ExecutionErrorCode, ExecutionStatus
-from model_service.api.scheduler.targets import ExecutionTarget
 from model_service.api.scheduler.transitions.execution_transitions import (
     ExecutionTransitions,
 )
 from model_service.contracts.invocation import InputAccessContext, Invocation
 from model_service.contracts.result import RunResult
+from tests.support.scheduling import stored_target
 
 
 NOW = datetime(2026, 11, 2, tzinfo=UTC)
@@ -36,7 +36,7 @@ def publishing() -> ExecutionRecord:
     admitted = TRANSITIONS.admission.admit(
         Admission(
             identity=SubmissionIdentity("external", "job", "job"),
-            target=ExecutionTarget("a1", ("model",)),
+            target=stored_target("a1", ("model",)),
             invocation=Invocation(
                 inputs={},
                 configuration=None,

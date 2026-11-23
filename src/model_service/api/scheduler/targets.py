@@ -1,10 +1,7 @@
 """What an execution runs: an analysis, its digest and the served models it calls.
 
 An execution stores the analysis document resolved at admission; every
-attempt sends that document to the analysis runner. Executions admitted
-before analyses replaced the builders have none: migration 0009 named them
-after the matching analysis, or `<builder>:<model>`, and they can no longer
-run.
+attempt sends that document to the analysis runner.
 
 Capacity is counted per served model; an analysis calling none is counted
 under its own ID.
@@ -54,17 +51,17 @@ class ExecutionTarget:
     """An execution's identity: which analysis runs, as admitted.
 
     Attributes:
-        analysis_id: The analysis ID, or a legacy `<builder>:<model>` ID.
+        analysis_id: The analysis ID.
         models: The served models it calls, in step order; empty for none.
-        analysis_digest: The resolved document's digest; None without one.
+        analysis_digest: The resolved document's digest.
         analysis: The resolved document every attempt sends to the analysis
-            runner; None for an execution admitted before analyses.
+            runner.
     """
 
     analysis_id: str
-    models: tuple[str, ...] = ()
-    analysis_digest: str | None = None
-    analysis: JsonObject | None = None
+    models: tuple[str, ...]
+    analysis_digest: str
+    analysis: JsonObject
 
     @classmethod
     def of(cls, resolved: ResolvedAnalysis) -> ExecutionTarget:
@@ -86,11 +83,22 @@ class ExecutionTarget:
     @property
     def capacity_keys(self) -> tuple[CapacityKey, ...]:
         """The pools an attempt takes a slot in, sorted (the lock order)."""
-        if not self.models:
-            return (CapacityKey(CapacityKind.ANALYSIS, self.analysis_id),)
-        return tuple(
-            sorted({CapacityKey(CapacityKind.MODEL, model) for model in self.models})
-        )
+        return capacity_keys(self.analysis_id, self.models)
+
+
+def capacity_keys(analysis_id: str, models: tuple[str, ...]) -> tuple[CapacityKey, ...]:
+    """The pools a run of an analysis takes a slot in, sorted (the lock order).
+
+    Args:
+        analysis_id: The analysis, which counts as its own pool without models.
+        models: The served models it calls.
+
+    Returns:
+        One key per served model, or the analysis's key when it calls none.
+    """
+    if not models:
+        return (CapacityKey(CapacityKind.ANALYSIS, analysis_id),)
+    return tuple(sorted({CapacityKey(CapacityKind.MODEL, model) for model in models}))
 
 
 type CapacityLimits = Callable[[CapacityKey], int]

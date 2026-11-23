@@ -10,7 +10,10 @@ import jwt
 from pydantic import Field, ValidationError
 
 from model_service.api.scheduler.public import InvalidScheduleRequestError
-from model_service.providers.empaia.app_service.gateway import EmpaiaJobContext
+from model_service.providers.empaia.app_service.gateway import (
+    AdmittedEmpaiaJobContext,
+    EmpaiaJobContext,
+)
 
 
 if TYPE_CHECKING:
@@ -59,7 +62,7 @@ def schedule_payload(values: dict[str, JsonValue]) -> EmpaiaSchedulePayload:
         ) from error
 
 
-def job_context(values: dict[str, JsonValue]) -> EmpaiaJobContext:
+def job_context(values: dict[str, JsonValue]) -> AdmittedEmpaiaJobContext:
     """Validate a stored protected job context.
 
     Args:
@@ -73,7 +76,7 @@ def job_context(values: dict[str, JsonValue]) -> EmpaiaJobContext:
             holds no context values.
     """
     try:
-        return EmpaiaJobContext.model_validate(values)
+        return AdmittedEmpaiaJobContext.model_validate(values)
     except ValidationError as error:
         raise InvalidScheduleRequestError(
             "EMPAIA protected job context is invalid"

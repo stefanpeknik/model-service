@@ -16,9 +16,9 @@ from model_service.api.scheduler.public import (
     Priority,
     SubmissionIdentity,
 )
-from model_service.api.scheduler.targets import ExecutionTarget
 from model_service.contracts.invocation import InputAccessContext, Invocation
 from model_service.contracts.result import RunResult
+from tests.support.scheduling import stored_target
 
 
 if TYPE_CHECKING:
@@ -44,7 +44,7 @@ class ExecutionRepositoryContract:
         admitted = await self.repository.admit(
             Admission(
                 identity=SubmissionIdentity("standalone", key, key),
-                target=ExecutionTarget(
+                target=stored_target(
                     analysis_id, (model_id,) if models is None else models
                 ),
                 invocation=Invocation(

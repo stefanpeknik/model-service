@@ -25,9 +25,9 @@ from model_service.contracts.failures import (
 from model_service.contracts.invocation import ExecutionContext, ProviderInput
 from model_service.directories import make_shared_directory, remove_directory
 from model_service.providers.empaia.app_service.gateway import (
+    AdmittedEmpaiaJobContext,
     EmpaiaGatewayError,
     EmpaiaInputState,
-    EmpaiaJobContext,
 )
 from model_service.providers.input_access import (
     InputAccess,
@@ -187,7 +187,7 @@ class EmpaiaInputAccessFactory(InputAccessFactory):
         """
         try:
             state = EmpaiaInputState.model_validate(invocation.input_access.state)
-            context = EmpaiaJobContext.model_validate(
+            context = AdmittedEmpaiaJobContext.model_validate(
                 execution_context.protected_context
             )
         except ValidationError as error:
@@ -203,8 +203,7 @@ class EmpaiaInputAccessFactory(InputAccessFactory):
             / hashlib.sha256(processing_attempt_id.encode()).hexdigest()
         )
         paths: dict[str, Path] = {}
-        # Builder-era jobs recorded no input types; nothing runs them now.
-        uses = state.inputs or {}
+        uses = state.inputs
         slide = next((n for n, u in uses.items() if u.get("type") == "wsi"), None)
         try:
             make_shared_directory(root)

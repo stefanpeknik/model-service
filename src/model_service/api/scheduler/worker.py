@@ -379,24 +379,13 @@ class ExecutionWorker:
 
         Returns:
             Success with the result; a rejection for confirmed backpressure; or
-            a failure, permanent for an execution without a document,
-            retryable for an unknown dispatch outcome.
+            a failure, retryable for an unknown dispatch outcome.
         """
         context = ExecutionContext(
             processing_attempt_id=claim.fencing_token,
             execution_id=claim.execution_id,
             protected_context=claim.protected_context,
         )
-        if claim.target.analysis is None:
-            # Admitted by a builder route before analyses; nothing runs it now.
-            return ProcessingFailed(
-                error=ExecutionError(
-                    code=ExecutionErrorCode.UNKNOWN_ANALYSIS,
-                    message=f"{claim.target.analysis_id} was admitted without an "
-                    "analysis document and can no longer run",
-                ),
-                retryable=False,
-            )
         try:
             # Every attempt runs the document admitted, not today's catalog.
             result = await self._dispatch.run_analysis(

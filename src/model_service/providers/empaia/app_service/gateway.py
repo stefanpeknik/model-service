@@ -102,27 +102,32 @@ type ComponentUse = dict[str, JsonValue]
 """A converter or publisher as recorded at admission: `{"type": ..., **options}`."""
 
 
-class EmpaiaInputState(BaseModel):
-    """Carry the non-secret API origin and job ID used to select provider input access.
+class EmpaiaJob(BaseModel):
+    """Name one EMPAIA job: the App Service it belongs to and its ID.
 
     Attributes:
         api_url: The job's App Service URL.
         job_id: The EMPAIA job ID.
-        mode: How the job was started; None for executions admitted before
-            it was recorded.
-        inputs: Each file input's EAD type and converter options, by input
-            name, as admitted; None for builder-era jobs, which no longer
-            run.
     """
 
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 
     api_url: Annotated[str, Field(min_length=1)]
     job_id: Annotated[str, Field(min_length=1)]
-    # Recorded at admission; nothing depends on it yet. Executions admitted
-    # before it was recorded have none.
-    mode: Annotated[EmpaiaJobMode | None, Field(strict=False)] = None
-    inputs: dict[str, ComponentUse] | None = None
+
+
+class EmpaiaInputState(EmpaiaJob):
+    """The non-secret job state input access reads, as admitted.
+
+    Attributes:
+        mode: How the job was started.
+        inputs: Each file input's EAD type and converter options, by input
+            name.
+    """
+
+    # Recorded at admission; nothing depends on it yet.
+    mode: Annotated[EmpaiaJobMode, Field(strict=False)]
+    inputs: dict[str, ComponentUse]
 
 
 class Publications(BaseModel):
@@ -140,34 +145,37 @@ class Publications(BaseModel):
     outputs: dict[str, ComponentUse]
 
 
-class EmpaiaJobContext(EmpaiaInputState):
-    """Add a private job credential to the public job identity; the credential is hidden from repr.
+class EmpaiaJobContext(EmpaiaJob):
+    """Add a private job credential to the job; the credential is hidden from repr.
 
     Attributes:
         credential: The job's App Service token.
-        publications: How the analysis's outputs are published, as
-            admitted; None for a builder-era job, which is never
-            published now.
     """
 
     credential: Annotated[str, Field(min_length=1, repr=False)]
-    publications: Publications | None = None
+
+
+class AdmittedEmpaiaJobContext(EmpaiaJobContext):
+    """The protected context stored with an admitted job's execution.
+
+    Attributes:
+        publications: How the analysis's outputs are published, as admitted.
+    """
+
+    publications: Publications
 
     def protected_values(self) -> dict[str, JsonValue]:
         """Extract API origin, job ID, credential and publications for encrypted durable context.
 
         Returns:
-            The values by field name, credential included; publications only
-            when set.
+            The values by field name, credential included.
         """
-        values: dict[str, JsonValue] = {
+        return {
             "api_url": self.api_url,
             "job_id": self.job_id,
             "credential": self.credential,
+            "publications": self.publications.model_dump(mode="json"),
         }
-        if self.publications is not None:
-            values["publications"] = self.publications.model_dump(mode="json")
-        return values
 
 
 class EmpaiaGateway(ABC):

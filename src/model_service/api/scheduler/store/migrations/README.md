@@ -56,17 +56,14 @@ rollback files are optional; this queue does not perform automatic downgrade or
 data-deleting rollback. Coordinate incompatible changes with application
 deployment rather than running old and new schedulers against incompatible DDL.
 
-## WIP baseline and interrupted migrations
+## Baseline and interrupted migrations
 
-`0001-create-executions.sql` is the frozen baseline for this WIP codebase. The
-old metadata-based initializer and its historical missing-column repairs are
-removed. An existing execution table without Yoyo history makes initialization
-fail; nothing automatically deletes records or marks the baseline as applied.
-
-Before deploying this change, choose fresh disposable storage, explicitly reset
-storage whose data can be discarded, or verify the retained schema against the
-baseline before a controlled Yoyo adoption. Do not mark an arbitrary schema as
-current. No deployed database was reset as part of this change.
+`0001-create-executions.sql` is the baseline: the whole schema as of November
+2026, when the earlier migrations were folded into it and the only database
+using them was recreated. An existing execution table without Yoyo history
+makes initialization fail; nothing automatically deletes records or marks the
+baseline as applied. A database migrated by the earlier files has a different
+`0001` in its Yoyo history and must be recreated, not upgraded.
 
 If a migration process is killed, Yoyo can retain its lock row. Confirm that no
 migration process is still active before using Yoyo's `break-lock` command.

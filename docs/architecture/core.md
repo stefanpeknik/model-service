@@ -123,10 +123,7 @@ retries included, sends that stored document to the analysis runner, so a
 catalog change after admission doesn't change what runs; the runner's
 `describe()` check turns a changed served model into `model_contract_mismatch`.
 An execution's identity is its analysis ID, the analysis digest and the
-served models it calls (migration `0009`). Executions admitted by the retired
-builder routes have no document: migration `0009` named them after the
-matching analysis or `<builder>:<model>`, and one that was still pending fails
-with `unknown_analysis` without running. `GET /v1/models` lists each served
+served models it calls. `GET /v1/models` lists each served
 model's declaration, digest and the analyses calling it.
 
 Raw tiles don't pass through the API: callers post them straight to the

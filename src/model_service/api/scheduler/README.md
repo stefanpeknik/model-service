@@ -35,8 +35,7 @@ cancel ────────────────────────�
 ```
 
 - An attempt sends the document stored at admission, whatever the catalog
-  holds now. An execution admitted by the retired builder routes has no
-  document and fails without retry.
+  holds now.
 - A processing attempt is claimed only when each of its capacity keys has a
   free slot: every served model it calls (`serving.max_concurrent_runs`,
   default `PER_MODEL_LIMIT`), or its analysis ID when it calls none.

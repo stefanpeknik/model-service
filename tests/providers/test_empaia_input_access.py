@@ -50,12 +50,14 @@ SLIDE = fake_slide(Path(mkdtemp()) / "slide.tiff")
 PUBLIC: dict[str, JsonValue] = {
     "api_url": "https://empaia.invalid",
     "job_id": "job",
+    "mode": "STANDALONE",
     "inputs": {"slide": {"type": "wsi"}},
 }
 PROTECTED: dict[str, JsonValue] = {
     "api_url": "https://empaia.invalid",
     "job_id": "job",
     "credential": "secret",
+    "publications": {"slide": "slide", "outputs": {}},
 }
 
 

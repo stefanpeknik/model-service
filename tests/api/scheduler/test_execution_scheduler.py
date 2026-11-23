@@ -40,7 +40,6 @@ from model_service.api.scheduler.status import ExecutionStatus
 from model_service.api.scheduler.store.repository import (
     ExecutionRepositoryUnavailableError,
 )
-from model_service.api.scheduler.targets import ExecutionTarget
 from model_service.api.scheduler.worker import ExecutionWorker
 from model_service.contracts.failures import UnknownAnalysisError
 from model_service.contracts.invocation import (
@@ -56,6 +55,7 @@ from tests.support.scheduling import (
     MutableClock,
     StandaloneProvider,
     resolve_test_analysis,
+    stored_target,
 )
 
 
@@ -375,41 +375,6 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual({r.analysis["id"] for r in fake.analyses}, {"a1", "a2"})
 
-    async def test_an_execution_without_an_analysis_document_fails_without_retry(
-        self,
-    ) -> None:
-        clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
-        repository = InMemoryExecutionRepository(clock=clock)
-        deadline = clock() + timedelta(hours=1)
-        # Admitted by a builder route before analyses; migration 0009 named it.
-        admitted = await repository.admit(
-            Admission(
-                identity=SubmissionIdentity("standalone", "old-1", "fingerprint"),
-                target=ExecutionTarget("prostate-heatmap", ("prostate-classifier-1",)),
-                invocation=Invocation(
-                    inputs={},
-                    configuration={},
-                    input_access=InputAccessContext(kind="shared_storage", state={}),
-                    deadline_at=deadline,
-                ),
-                protected_context={},
-                deadline_at=deadline,
-            )
-        )
-        dispatch = FakeDispatch({})
-        _, worker = self._scheduler_and_worker(
-            repository, StandaloneProvider(), dispatch, clock=clock
-        )
-
-        self.assertTrue(await worker.run_once())
-
-        failed = await repository.get(admitted.execution.id)
-        self.assertEqual(failed.status, "failed")
-        self.assertEqual(failed.processing_attempts, 1)
-        assert failed.error is not None
-        self.assertEqual(failed.error.code, "unknown_analysis")
-        self.assertEqual(dispatch.analyses, [])
-
     async def test_admission_rejects_an_analysis_that_is_not_deployed(self) -> None:
         repository = InMemoryExecutionRepository()
         scheduler, _ = self._scheduler_and_worker(
@@ -431,7 +396,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         report_deadline = clock() + timedelta(hours=1)
         admission = Admission(
             identity=SubmissionIdentity("external", "job-1", "fingerprint"),
-            target=ExecutionTarget("prostate-heatmap", ("prostate-classifier-1",)),
+            target=stored_target("prostate-heatmap", ("prostate-classifier-1",)),
             invocation=Invocation(
                 inputs={},
                 configuration={},

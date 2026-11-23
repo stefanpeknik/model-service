@@ -15,7 +15,6 @@ from model_service.api.scheduler.public import (
     ProviderFailure,
     ProviderSuccess,
 )
-from model_service.api.scheduler.targets import ExecutionTarget
 from model_service.contracts.failures import InvalidInvocation
 from model_service.contracts.invocation import (
     ExecutionContext,
@@ -26,6 +25,7 @@ from model_service.contracts.invocation import (
 from model_service.contracts.result import RunResult, SharedArtifact
 from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
+from tests.support.scheduling import stored_target
 
 
 if TYPE_CHECKING:
@@ -188,7 +188,7 @@ class SharedStorageTests(unittest.TestCase):
         write("failed")
         success = ProviderSuccess(
             RunResult({"heatmap": SharedArtifact(str(write("accepted")))}),
-            ExecutionTarget("prostate-heatmap", ("prostate-classifier-1",)),
+            stored_target("prostate-heatmap", ("prostate-classifier-1",)),
         )
         finish = StandaloneProviderAdapter(self.adapter).finish
 

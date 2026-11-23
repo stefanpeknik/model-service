@@ -32,5 +32,4 @@ class ExecutionErrorCode(StrEnum):
     PROCESSING_ATTEMPTS_EXHAUSTED = "processing_attempts_exhausted"
     PROVIDER_FINISH_ATTEMPTS_EXHAUSTED = "provider_finish_attempts_exhausted"
     DEADLINE_EXCEEDED = "execution_deadline_exceeded"
-    UNKNOWN_ANALYSIS = "unknown_analysis"
     PROTECTED_CONTEXT_UNREADABLE = "protected_context_unreadable"

@@ -75,11 +75,10 @@ class ExecutionView:
 
     Attributes:
         id: The execution's id.
-        analysis_id: The analysis it runs; a `<builder>:<model>` ID for a
-            builder-era run that matches no analysis.
+        analysis_id: The analysis it runs.
         models: The served models the analysis calls.
         analysis_digest: The digest of the analysis as resolved at
-            admission; None for a builder-era run.
+            admission.
         status: Its status.
         configuration: Every setting it runs with, fixed at admission.
         result: Its result, once succeeded.
@@ -91,7 +90,7 @@ class ExecutionView:
     id: str
     analysis_id: str
     models: list[str]
-    analysis_digest: str | None
+    analysis_digest: str
     status: ExecutionStatus
     configuration: dict[str, JsonValue] | None = None
     result: RunResult | None = None

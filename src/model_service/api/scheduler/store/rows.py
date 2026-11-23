@@ -136,10 +136,8 @@ class ExecutionRow(Base):
     request_fingerprint: Mapped[str] = mapped_column(Text)
     analysis_id: Mapped[str] = mapped_column(Text)
     models: Mapped[list[str]] = mapped_column(ARRAY(Text))
-    analysis_digest: Mapped[str | None] = mapped_column(Text)
-    analysis: Mapped[dict[str, JsonValue] | None] = mapped_column(
-        JSONB(none_as_null=True)
-    )
+    analysis_digest: Mapped[str] = mapped_column(Text)
+    analysis: Mapped[dict[str, JsonValue]] = mapped_column(JSONB)
     status: Mapped[ExecutionStatus] = mapped_column(
         Enum(
             ExecutionStatus,
@@ -193,9 +191,6 @@ for counter in (
 
 CheckConstraint(
     ExecutionRow.error_code.is_(None) == ExecutionRow.error_message.is_(None)
-)
-CheckConstraint(
-    ExecutionRow.analysis.is_(None) == ExecutionRow.analysis_digest.is_(None)
 )
 CheckConstraint(
     or_(

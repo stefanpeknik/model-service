@@ -18,6 +18,7 @@ from model_service.api.scheduler.public import (
     ProviderSuccess,
 )
 from model_service.api.scheduler.targets import ExecutionTarget
+from model_service.contracts.json_values import JsonValue
 from model_service.contracts.result import RunResult, SharedArtifact
 from model_service.formats import score_grid
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
@@ -31,7 +32,7 @@ def unused_gateway_factory(_context: object) -> object:
 
 
 # A prostate-heatmap job as admission recorded it, publications included.
-JOB = {
+JOB: dict[str, JsonValue] = {
     "api_url": "https://empaia.invalid",
     "job_id": "j",
     "credential": "c",
@@ -158,12 +159,7 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
 
             with self.assertRaises(ProviderFinishFailureError):
                 await provider.finish(
-                    {
-                        "api_url": "https://empaia.invalid",
-                        "job_id": "j",
-                        "credential": "c",
-                    },
-                    ProviderFailure(ExecutionError("builder_failed", "it failed")),
+                    JOB, ProviderFailure(ExecutionError("model_failed", "it failed"))
                 )
 
             self.assertFalse(job.exists())

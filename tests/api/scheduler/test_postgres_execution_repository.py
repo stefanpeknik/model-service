@@ -1,4 +1,4 @@
-"""Check real PostgreSQL admission races, locking, leases, schema compatibility, and encrypted context.
+"""Check real PostgreSQL admission races, locking, leases, migrations, and encrypted context.
 
 Requires TEST_POSTGRES_DSN. Each case creates and later drops its own randomly named
 schema; no deployed scheduler or Ray service is used.
@@ -21,7 +21,6 @@ from uuid import uuid4
 from psycopg import AsyncConnection, sql
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from psycopg.errors import CheckViolation
-from psycopg.types.json import Jsonb
 
 from model_service.api.scheduler.internal_state import (
     Admission,
@@ -55,19 +54,16 @@ from model_service.api.scheduler.targets import (
     ExecutionTarget,
 )
 from model_service.contracts.invocation import (
-    INVOCATION,
     InputAccessContext,
     Invocation,
-    SharedPathInput,
 )
 from model_service.contracts.json_values import JsonValue
 from model_service.contracts.result import (
-    RESULT,
     InlineOutput,
     RunResult,
-    SharedArtifact,
 )
 from tests.support.repository_contract import ExecutionRepositoryContract
+from tests.support.scheduling import stored_target
 
 
 ALL_MIGRATIONS = {path.stem for path in MIGRATIONS_DIRECTORY.glob("*.sql")}
@@ -122,10 +118,10 @@ class PostgresExecutionRepositoryTests(
         self.assertEqual({first.created, second.created}, {False, True})
         self.assertEqual(first.execution.id, second.execution.id)
 
-    async def test_untracked_legacy_database_is_rejected_without_losing_data(
+    async def test_untracked_database_is_rejected_without_losing_data(
         self,
     ) -> None:
-        execution_id, _, _ = await self._install_pre_orm_record()
+        execution_id = await self._install_untracked_table()
         before = await self._stored_record(execution_id)
 
         with self.assertRaises(ExecutionRepositoryUnavailableError):
@@ -248,193 +244,6 @@ class PostgresExecutionRepositoryTests(
         self.assertEqual(
             await self.repository.get(admitted.execution.id), admitted.execution
         )
-
-    async def test_builder_migration_maps_legacy_workflows(self) -> None:
-        await self._drop_schema(self.schema)
-        with TemporaryDirectory() as temporary_directory:
-            directory = Path(temporary_directory)
-            shutil.copy(MIGRATIONS_DIRECTORY / "0001-create-executions.sql", directory)
-            with patch(
-                "model_service.api.scheduler.store.migrate.MIGRATIONS_DIRECTORY",
-                directory,
-            ):
-                await self.repository.initialize()
-        deadline = datetime.now(UTC) + timedelta(minutes=5)
-        legacy = {
-            "prostate-heatmap": {"stride_fraction": 0.5, "output_path": "a.tiff"},
-            "episeg-segmentation": None,
-            "virchow2-embeddings": None,
-            "gigapath-embeddings": None,
-        }
-        identifiers = {}
-        async with await AsyncConnection.connect(self.dsn) as connection:
-            for workflow_id, configuration in legacy.items():
-                identifiers[workflow_id] = str(uuid4())
-                invocation = {
-                    "inputs": {"slide": {"kind": "shared_path", "path": "slide.mrxs"}},
-                    "resolved_configuration": configuration,
-                    "input_access": {"kind": "shared_storage", "state": {"root": "/s"}},
-                    "deadline_at": deadline.isoformat(),
-                    "output_path": None,
-                }
-                await connection.execute(
-                    sql.SQL(
-                        "INSERT INTO {} (id, provider, submission_key, "
-                        "request_fingerprint, workflow_id, status, invocation, "
-                        "protected_context, deadline_at, work_kind, next_attempt_at) "
-                        "VALUES (%s, 'standalone', %s, 'f', %s, 'queued', %s, %s, %s, "
-                        "'processing', clock_timestamp())"
-                    ).format(sql.Identifier(self.schema, "executions")),
-                    (
-                        identifiers[workflow_id],
-                        workflow_id,
-                        workflow_id,
-                        Jsonb(invocation),
-                        self.cipher.encrypt({}),
-                        deadline,
-                    ),
-                )
-
-        await self.repository.initialize()
-
-        expected = {
-            "prostate-heatmap": ("prostate-heatmap", "prostate-classifier-1"),
-            "episeg-segmentation": ("episeg-heatmap", "episeg-1"),
-            "virchow2-embeddings": ("virchow2-embeddings", "virchow2"),
-            "gigapath-embeddings": ("prov-gigapath-embeddings", "prov-gigapath"),
-        }
-        for workflow_id, (analysis_id, model_id) in expected.items():
-            record = await self.repository.get(identifiers[workflow_id])
-            self.assertEqual(record.target, ExecutionTarget(analysis_id, (model_id,)))
-        prostate = await self.repository.get(identifiers["prostate-heatmap"])
-        self.assertEqual(prostate.invocation.configuration, {"stride_fraction": 0.5})
-        self.assertEqual(await self._applied_migrations(), ALL_MIGRATIONS)
-
-    async def test_identity_migration_maps_builder_runs_to_analyses(self) -> None:
-        await self._drop_schema(self.schema)
-        with TemporaryDirectory() as temporary_directory:
-            directory = Path(temporary_directory)
-            for path in MIGRATIONS_DIRECTORY.glob("000[1-8]-*.sql"):
-                shutil.copy(path, directory)
-            with patch(
-                "model_service.api.scheduler.store.migrate.MIGRATIONS_DIRECTORY",
-                directory,
-            ):
-                await self.repository.initialize()
-        deadline = datetime.now(UTC) + timedelta(minutes=5)
-        invocation = {
-            "inputs": {"slide": {"kind": "shared_path", "path": "slide.mrxs"}},
-            "configuration": {"stride_fraction": 0.5},
-            "input_access": {"kind": "shared_storage", "state": {"root": "/s"}},
-            "deadline_at": deadline.isoformat(),
-            "output_path": None,
-        }
-        pairs = {
-            ("heatmap", "prostate-classifier-1"): "prostate-heatmap",
-            ("heatmap", "episeg-1"): "episeg-heatmap",
-            ("tile-embeddings", "virchow2"): "virchow2-embeddings",
-            ("tile-embeddings", "prov-gigapath"): "prov-gigapath-embeddings",
-            ("heatmap", "virchow2"): "heatmap:virchow2",
-        }
-        identifiers = {}
-        async with await AsyncConnection.connect(self.dsn) as connection:
-            for builder_id, model_id in pairs:
-                execution_id = str(uuid4())
-                identifiers[builder_id, model_id] = execution_id
-                await connection.execute(
-                    sql.SQL(
-                        "INSERT INTO {} (id, provider, submission_key, "
-                        "request_fingerprint, builder_id, model_id, status, "
-                        "invocation, protected_context, deadline_at, work_kind, "
-                        "next_attempt_at) VALUES (%s, 'empaia', %s, %s, %s, %s, "
-                        "'queued', %s, %s, %s, 'processing', clock_timestamp())"
-                    ).format(sql.Identifier(self.schema, "executions")),
-                    (
-                        execution_id,
-                        f"key-{execution_id}",
-                        f"fingerprint-{execution_id}",
-                        builder_id,
-                        model_id,
-                        Jsonb(invocation),
-                        self.cipher.encrypt({}),
-                        deadline,
-                    ),
-                )
-
-        await self.repository.initialize()
-
-        for (builder_id, model_id), analysis_id in pairs.items():
-            execution_id = identifiers[builder_id, model_id]
-            record = await self.repository.get(execution_id)
-            self.assertEqual(
-                record.target, ExecutionTarget(analysis_id, (model_id,)), analysis_id
-            )
-            self.assertEqual(
-                record.identity,
-                SubmissionIdentity(
-                    "empaia", f"key-{execution_id}", f"fingerprint-{execution_id}"
-                ),
-            )
-        self.assertEqual(await self._applied_migrations(), ALL_MIGRATIONS)
-
-    async def test_raw_inference_removal_keeps_builders(self) -> None:
-        await self._drop_schema(self.schema)
-        with TemporaryDirectory() as temporary_directory:
-            directory = Path(temporary_directory)
-            for path in MIGRATIONS_DIRECTORY.glob("000[1-6]-*.sql"):
-                shutil.copy(path, directory)
-            with patch(
-                "model_service.api.scheduler.store.migrate.MIGRATIONS_DIRECTORY",
-                directory,
-            ):
-                await self.repository.initialize()
-        deadline = datetime.now(UTC) + timedelta(minutes=5)
-        builder_id, inference_id = str(uuid4()), str(uuid4())
-        builder_invocation = {
-            "inputs": {"slide": {"kind": "shared_path", "path": "slide.mrxs"}},
-            "resolved_configuration": None,
-            "input_access": {"kind": "shared_storage", "state": {"root": "/s"}},
-            "deadline_at": deadline.isoformat(),
-            "output_path": None,
-        }
-        inference_invocation = {"headers": {}, "deadline_at": deadline.isoformat()}
-        async with await AsyncConnection.connect(self.dsn) as connection:
-            for execution_id, operation, builder, invocation in (
-                (builder_id, "builder", "heatmap", builder_invocation),
-                (inference_id, "inference", None, inference_invocation),
-            ):
-                await connection.execute(
-                    sql.SQL(
-                        "INSERT INTO {} (id, provider, submission_key, "
-                        "request_fingerprint, operation, builder_id, model_id, "
-                        "status, invocation, protected_context, deadline_at, "
-                        "work_kind, next_attempt_at, request_path, request_size) "
-                        "VALUES (%s, %s, %s, 'f', %s, %s, 'model', 'queued', %s, "
-                        "%s, %s, 'processing', clock_timestamp(), %s, %s)"
-                    ).format(sql.Identifier(self.schema, "executions")),
-                    (
-                        execution_id,
-                        "standalone" if builder else "inference",
-                        execution_id,
-                        operation,
-                        builder,
-                        Jsonb(invocation),
-                        self.cipher.encrypt({}),
-                        deadline,
-                        None if builder else "ab/request",
-                        None if builder else 4,
-                    ),
-                )
-
-        await self.repository.initialize()
-
-        self.assertEqual(
-            (await self.repository.get(builder_id)).target,
-            ExecutionTarget("heatmap:model", ("model",)),
-        )
-        with self.assertRaises(UnknownExecutionError):
-            await self.repository.get(inference_id)
-        self.assertEqual(await self._applied_migrations(), ALL_MIGRATIONS)
 
     async def test_empty_migration_directory_fails_initialization(self) -> None:
         admitted = await self.repository.admit(self._admission("missing-migrations"))
@@ -670,65 +479,24 @@ class PostgresExecutionRepositoryTests(
                 sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema))
             )
 
-    async def _install_pre_orm_record(self) -> tuple[str, Admission, RunResult]:
-        admission = self._admission("pre-orm")
-        admission = replace(
-            admission,
-            invocation=replace(
-                admission.invocation,
-                inputs={
-                    "slide": SharedPathInput(path="/shared/input.tiff"),
-                },
-                configuration={"level": 2, "optional": None},
-            ),
-            protected_context={"credential": "historical-test-token"},
-        )
-        result = RunResult(
-            outputs={
-                "score": InlineOutput(value=0.9),
-                "empty": InlineOutput(value={}),
-                "artifact": SharedArtifact(
-                    path="/shared/result.tiff", media_type="image/tiff"
-                ),
-            }
-        )
+    async def _install_untracked_table(self) -> str:
+        """An executions table and row in the schema that no migration created."""
         execution_id = str(uuid4())
-        table = sql.Identifier(self.schema, "executions")
-        fixture = (
-            Path(__file__).parents[2]
-            / "support"
-            / "fixtures"
-            / "executions_pre_orm.sql"
-        )
+        schema = sql.Identifier(self.schema)
         async with await AsyncConnection.connect(self.dsn) as connection:
+            await connection.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(schema))
+            await connection.execute(sql.SQL("CREATE SCHEMA {}").format(schema))
+            table = sql.Identifier(self.schema, "executions")
             await connection.execute(
-                sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(self.schema))
+                sql.SQL("CREATE TABLE {} (id UUID PRIMARY KEY, note TEXT)").format(
+                    table
+                )
             )
             await connection.execute(
-                sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(self.schema))
+                sql.SQL("INSERT INTO {} VALUES (%s, 'kept')").format(table),
+                (execution_id,),
             )
-            await connection.execute(sql.SQL(fixture.read_text()).format(table=table))
-            await connection.execute(
-                sql.SQL(
-                    "INSERT INTO {} (id, provider, submission_key, request_fingerprint, "
-                    "workflow_id, status, invocation, protected_context, deadline_at, "
-                    "work_kind, next_attempt_at, processing_attempts, result) "
-                    "VALUES (%s, %s, %s, %s, %s, 'running', %s, %s, %s, "
-                    "'provider_finish', clock_timestamp(), 1, %s)"
-                ).format(table),
-                (
-                    execution_id,
-                    admission.identity.provider,
-                    admission.identity.key,
-                    admission.identity.fingerprint,
-                    "prostate-heatmap",
-                    Jsonb(INVOCATION.dump_python(admission.invocation, mode="json")),
-                    self.cipher.encrypt(admission.protected_context),
-                    admission.deadline_at,
-                    Jsonb(RESULT.dump_python(result, mode="json")),
-                ),
-            )
-        return execution_id, admission, result
+        return execution_id
 
     async def test_malformed_execution_id_is_unknown(self) -> None:
         with self.assertRaises(UnknownExecutionError):
@@ -1160,7 +928,7 @@ class PostgresExecutionRepositoryTests(
                 key=submission_key,
                 fingerprint=f"fingerprint-{submission_key}",
             ),
-            target=ExecutionTarget("prostate-heatmap", ("prostate-classifier-1",)),
+            target=stored_target("prostate-heatmap", ("prostate-classifier-1",)),
             invocation=Invocation(
                 inputs={},
                 configuration={},

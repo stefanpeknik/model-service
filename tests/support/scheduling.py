@@ -8,6 +8,7 @@ from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
 from model_service.api.scheduler.public import PreparedInvocation, SubmissionIdentity
+from model_service.api.scheduler.targets import ExecutionTarget
 from model_service.catalog import load_catalog
 from model_service.catalog.analyses import resolve_run
 from model_service.contracts.invocation import (
@@ -34,6 +35,16 @@ if TYPE_CHECKING:
 
 # Two analyses on two served models: `a1` calls `m1`, `a2` calls `m2`.
 ANALYSES = {"a1": "m1", "a2": "m2"}
+
+
+def stored_target(analysis_id: str, models: tuple[str, ...] = ()) -> ExecutionTarget:
+    """A target as admission stores it, with a stand-in document and digest."""
+    document: JsonObject = {
+        "id": analysis_id,
+        "steps": [{"model": model} for model in models],
+        "sinks": [],
+    }
+    return ExecutionTarget(analysis_id, models, f"digest-{analysis_id}", document)
 
 
 @functools.cache
