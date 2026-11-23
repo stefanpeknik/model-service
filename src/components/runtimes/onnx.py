@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field, ValidationInfo, field_validator
 
-from components.base import Runtime, StandIn
+from components.base import Runtime
 from components.base.options import Options
 
 
@@ -158,45 +158,6 @@ class Onnx(Runtime):
             return output if dtype is None else output.astype(dtype)
 
         return run
-
-    @classmethod
-    def stand_in(cls, directory: Path) -> StandIn:
-        """Write an ONNX graph that scores each tile by its mean brightness.
-
-        It needs the `onnx` package, which the dev dependency group has.
-
-        Args:
-            directory: Where to write `stand_in.onnx`.
-
-        Returns:
-            The graph and two uint8 8 px tiles.
-        """
-        import numpy as np
-        import onnx
-        from onnx import TensorProto, helper
-
-        tiles = helper.make_tensor_value_info(
-            "tiles", TensorProto.UINT8, ["n", 3, "t", "t"]
-        )
-        scores = helper.make_tensor_value_info(
-            "scores", TensorProto.FLOAT, ["n", 1, 1, 1]
-        )
-        graph = helper.make_graph(
-            [
-                helper.make_node("Cast", ["tiles"], ["pixels"], to=TensorProto.FLOAT),
-                helper.make_node(
-                    "ReduceMean", ["pixels"], ["scores"], axes=[1, 2, 3], keepdims=1
-                ),
-            ],
-            "stand_in",
-            [tiles],
-            [scores],
-        )
-        model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)])
-        model.ir_version = 8
-        path = directory / "stand_in.onnx"
-        onnx.save(model, str(path))
-        return StandIn(path, np.zeros((2, 3, 8, 8), dtype=np.uint8))
 
     def active_providers(self) -> list[str]:
         """The providers ONNX Runtime actually uses, e.g. after a fallback.

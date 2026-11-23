@@ -11,7 +11,7 @@ import numpy as np
 from components.base import Sink, Source, Step
 from components.base.columns import Col
 from components.base.run import Run
-from components.testing.slides import fake_frame, fake_slide
+from tests.components.helpers.slides import fake_frame, fake_slide
 
 
 if TYPE_CHECKING:

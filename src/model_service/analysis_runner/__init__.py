@@ -4,8 +4,8 @@
 with no Ray: it owns concurrency, cancellation, progress (the share of the
 source's keys done), per-step timing, failure codes, ordered delivery when a
 sink needs it, and all-or-nothing writes across sinks. Model steps call each
-served model's handle through the host's `infer(tile)`; tests pass
-`components.testing.fake_model()`.
+served model's handle through the host's `infer(tile)`; tests pass a fake
+model with the same `infer`.
 """
 
 from model_service.analysis_runner.models import ModelHandle

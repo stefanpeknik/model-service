@@ -12,10 +12,12 @@ Steps: keep the batch length and add the declared columns as declared.
 Sinks: read only frame fields a slide source gives, and write an artifact
 with zero items and with some.
 Sources: give the declared frame fields and load the declared columns.
-Loaders: name a revision; with `offline_options`, fetch a stand-in file to a
-path that exists and report the revision they promise.
-Runtimes: load their `stand_in()` weights into a function that keeps the
-batch length, and report providers as strings.
+Loaders: name a revision, fetch a local weights file through their entry in
+`offline.LOADERS` to a path that exists, and report the revision they promise.
+Runtimes: load the tiny weights of their entry in `offline.RUNTIMES` into a
+function that keeps the batch length, and report providers as strings.
+A loader or runtime with no entry gets only its declaration checked;
+`declaration_only` tells a test so it can say which.
 Converters: give an EAD entry with a `type`, and materialise a fake job's
 input as a file in their directory or as a JSON value, writing nothing.
 Publishers: give an EAD entry of a type they emit; `prepare` on a sample file
@@ -46,10 +48,11 @@ from components.base import (
 )
 from components.base.columns import MODEL_PREFIX, Col, rows
 from components.base.problems import Problem
-from components.testing.empaia import FakeGateway, sample_artifact
-from components.testing.models import fake_model
-from components.testing.running import fake_batch, run_component
-from components.testing.slides import fake_frame
+from tests.components.helpers import offline
+from tests.components.helpers.empaia import FakeGateway, sample_artifact
+from tests.components.helpers.models import fake_model
+from tests.components.helpers.running import fake_batch, run_component
+from tests.components.helpers.slides import fake_frame
 
 
 if TYPE_CHECKING:
@@ -70,7 +73,7 @@ def check(component: type[Component], work_dir: Path) -> list[str]:
         One sentence per failed check; empty when the component conforms.
     """
     failures = _declaration(component)
-    if not failures:
+    if not failures and not declaration_only(component):
         built = component.from_options(component.example_options)
         try:
             if isinstance(built, Step):
@@ -90,6 +93,24 @@ def check(component: type[Component], work_dir: Path) -> list[str]:
         except Exception as error:
             failures.append(f"raised {type(error).__name__}: {error}")
     return [f"{component.kind} `{component.name}`: {f}" for f in failures]
+
+
+def declaration_only(component: type[Component]) -> bool:
+    """Whether the suite checks only a component's declaration.
+
+    True for a loader or runtime with no entry in `offline`.
+
+    Args:
+        component: A component class.
+
+    Returns:
+        True when `check` can't exercise the component.
+    """
+    if issubclass(component, Loader):
+        return component.name not in offline.LOADERS
+    if issubclass(component, Runtime):
+        return component.name not in offline.RUNTIMES
+    return False
 
 
 def _declaration(component: type[Component]) -> list[str]:
@@ -189,7 +210,7 @@ def _sink_with(component: type[Sink], work_dir: Path, model: Any) -> list[str]:
     Args:
         component: The sink class.
         work_dir: A directory to create the runs' directories in.
-        model: The stand-in served model the run gets.
+        model: The fake served model the run gets.
 
     Returns:
         What failed.
@@ -264,11 +285,11 @@ def _text(value: object) -> bool:
 
 
 def _loader(loader: Loader, work_dir: Path) -> list[str]:
-    """Check a loader names its weights and, offline, fetches them.
+    """Check a loader names its weights and fetches a local file.
 
     Args:
         loader: The loader, built from its example options.
-        work_dir: An empty directory for the stand-in weights.
+        work_dir: An empty directory for the weights file.
 
     Returns:
         What failed.
@@ -277,21 +298,18 @@ def _loader(loader: Loader, work_dir: Path) -> list[str]:
     if not _text(loader.revision()):
         failures.append("revision() must return a non-empty string naming the weights")
     weights = work_dir / "weights.bin"
-    weights.write_bytes(b"stand-in weights")
-    options = type(loader).offline_options(weights)
-    if options is None:
-        return failures
-    offline = type(loader).from_options(options)
-    assert isinstance(offline, Loader)
+    weights.write_bytes(b"tiny weights")
+    local = type(loader).from_options(offline.LOADERS[loader.name](weights))
+    assert isinstance(local, Loader)
     cache = work_dir / "cache"
     cache.mkdir()
-    fetched = offline.fetch(cache)
+    fetched = local.fetch(cache)
     if not isinstance(fetched, Path) or not fetched.exists():
         failures.append(f"fetch returned {fetched!r}, which does not exist")
-    revision = offline.revision()
+    revision = local.revision()
     if not _text(revision):
         failures.append("revision() must return a non-empty string after fetch")
-    expected = offline.expected_revision()
+    expected = local.expected_revision()
     if expected is not None and expected != revision:
         failures.append(
             f"expected_revision() is {expected!r}, but revision() after fetch "
@@ -301,21 +319,21 @@ def _loader(loader: Loader, work_dir: Path) -> list[str]:
 
 
 def _runtime(runtime: Runtime, work_dir: Path) -> list[str]:
-    """Check a runtime loads its stand-in weights into a batch function.
+    """Check a runtime loads tiny weights into a batch function.
 
     Args:
         runtime: The runtime, built from its example options.
-        work_dir: An empty directory for the stand-in and its cache.
+        work_dir: An empty directory for the weights and its cache.
 
     Returns:
         What failed.
     """
-    directory = work_dir / "stand-in"
+    directory = work_dir / "weights"
     directory.mkdir()
-    stand_in = type(runtime).stand_in(directory)
-    batch = stand_in.batch
+    tiny = offline.RUNTIMES[runtime.name](directory)
+    batch = tiny.batch
     run = runtime.load(
-        stand_in.weights,
+        tiny.weights,
         RuntimeContext(
             cache_dir=work_dir / "cache",
             tile_size=int(batch.shape[-1]),
@@ -408,7 +426,7 @@ def _publisher(publisher: Publisher, work_dir: Path) -> list[str]:
     if sample is None:
         return [
             *failures,
-            f"components.testing.empaia.SAMPLES has no `{publisher.reads_format}` "
+            f"tests.components.helpers.empaia.SAMPLES has no `{publisher.reads_format}` "
             "file to publish; add a writer for the format",
         ]
     artifact, media_type = sample

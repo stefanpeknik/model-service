@@ -77,7 +77,7 @@ class ProcessBoundaryTests(unittest.TestCase):
     ) -> None:
         """The API validates catalogs, so component declarations must stay light."""
         modules = loaded_modules(
-            "model_service.catalog, model_service.registry, components.testing",
+            "model_service.catalog, model_service.registry",
             then=(
                 "model_service.registry.default_registry(); "
                 f"model_service.catalog.load_catalog(__import__('pathlib').Path({str(CATALOG)!r}))"

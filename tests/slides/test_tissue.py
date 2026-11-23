@@ -10,10 +10,10 @@ from unittest import mock
 import numpy as np
 from ratiopath.openslide import OpenSlide
 
-from components.testing import fake_slide
 from model_service.contracts.failures import InvalidInvocation
 from model_service.slides import tissue
 from model_service.slides.tile_reader import TileReader
+from tests.components.helpers import fake_slide
 
 
 def slide_pixels() -> np.ndarray:

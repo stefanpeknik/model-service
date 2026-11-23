@@ -55,15 +55,3 @@ class MyComponent(Loader):
             A pinned reference, e.g. a URI with a commit or checksum.
         """
         return self.options.path
-
-    @classmethod
-    def offline_options(cls, weights: Path) -> dict[str, Any] | None:
-        """Options that fetch `weights` without a network, for conformance.
-
-        Args:
-            weights: A stand-in weights file.
-
-        Returns:
-            The options, or None if the loader only fetches over a network.
-        """
-        return {"path": str(weights)}

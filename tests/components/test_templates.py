@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 
 from components.base import KINDS, Component
-from components.testing import conformance
 from model_service.registry import default_registry
+from tests.components.helpers import conformance
 
 
 TEMPLATES = Path(__file__).resolve().parents[2] / "src" / "components" / "_templates"

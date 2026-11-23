@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field
 
-from components.base import Runtime, StandIn
+from components.base import Runtime
 from components.base.options import Options
 
 
@@ -133,39 +133,6 @@ class Timm(Runtime):
             return output.float().cpu().numpy()
 
         return run
-
-    @classmethod
-    def stand_in(cls, directory: Path) -> StandIn:
-        """Write timm's tiny `test_vit` as a Hub-style folder with random weights.
-
-        Args:
-            directory: Where to write the folder.
-
-        Returns:
-            The folder and two float32 160 px tiles, the input `transform:
-            none` passes through.
-        """
-        import json
-
-        import numpy as np
-        import timm
-        from safetensors.torch import save_file
-
-        folder = directory / "test_vit"
-        folder.mkdir()
-        model = timm.create_model("test_vit", num_classes=0)
-        save_file(model.state_dict(), str(folder / "model.safetensors"))
-        size = tuple(model.pretrained_cfg["input_size"])  # type: ignore[index]
-        (folder / "config.json").write_text(
-            json.dumps(
-                {
-                    "architecture": "test_vit",
-                    "num_classes": 0,
-                    "pretrained_cfg": {"input_size": list(size)},
-                }
-            )
-        )
-        return StandIn(folder, np.zeros((2, *size), dtype=np.float32))
 
     def active_providers(self) -> list[str]:
         """The device the model runs on, so a missing GPU shows.

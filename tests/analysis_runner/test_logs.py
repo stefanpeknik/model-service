@@ -10,7 +10,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any
 
-from components.testing import fake_model, fake_slide
 from model_service.analysis_runner.logs import configure_replica_logging
 from model_service.analysis_runner.replica import AnalysisReplica
 from model_service.analysis_runner.settings import ReplicaSettings
@@ -23,6 +22,7 @@ from model_service.contracts.invocation import (
     Invocation,
     SharedPathInput,
 )
+from tests.components.helpers import fake_model, fake_slide
 from tests.support.analysis_catalog import REGISTRY, served_model, write
 from tests.support.log_capture import capture_logs
 

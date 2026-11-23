@@ -47,18 +47,6 @@ class Local(Loader):
         """
         return Path(self.options.path)
 
-    @classmethod
-    def offline_options(cls, weights: Path) -> dict[str, Any]:
-        """Point the loader at the stand-in weights.
-
-        Args:
-            weights: A weights file on this machine.
-
-        Returns:
-            `{"path": <weights>}`.
-        """
-        return {"path": str(weights)}
-
     def revision(self) -> str:
         """Name the weights by their path.
 

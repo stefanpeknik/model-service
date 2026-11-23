@@ -33,7 +33,6 @@ from components.base.runtime import (
     BatchFunction,
     Runtime,
     RuntimeContext,
-    StandIn,
 )
 from components.base.sink import Sink, SinkOptions
 from components.base.slots import Slot
@@ -68,7 +67,6 @@ __all__ = [
     "SinkOptions",
     "Slot",
     "Source",
-    "StandIn",
     "Step",
     "per_run_fields",
     "rows",

@@ -104,18 +104,6 @@ class Mlflow(Loader):
         self._fetched_sha256 = digest
         return path
 
-    @classmethod
-    def offline_options(cls, weights: Path) -> dict[str, Any]:
-        """Download the stand-in weights through MLflow's local file store.
-
-        Args:
-            weights: A weights file on this machine.
-
-        Returns:
-            `{"uri": "file://<weights>"}`.
-        """
-        return {"uri": weights.as_uri()}
-
     def revision(self) -> str:
         """Name the weights by URI and, once known, their SHA-256.
 

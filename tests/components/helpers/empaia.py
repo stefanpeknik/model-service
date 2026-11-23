@@ -15,11 +15,11 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from components.testing.slides import fake_slide
 from model_service.providers.empaia.app_service.gateway import (
     EmpaiaGateway,
     EmpaiaJobMode,
 )
+from tests.components.helpers.slides import fake_slide
 
 
 if TYPE_CHECKING:

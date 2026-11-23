@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from components.base.component import Component
 from components.base.slots import STEP_WEIGHTS, WEIGHTS
@@ -46,19 +46,6 @@ class Loader(Component):
         Returns:
             A pinned reference: an artifact URI, a repo revision, a path.
         """
-
-    @classmethod
-    def offline_options(cls, weights: Path) -> dict[str, Any] | None:
-        """Options that fetch `weights` without a network, for the conformance suite.
-
-        Args:
-            weights: A stand-in weights file on this machine.
-
-        Returns:
-            The options, or None if the loader only fetches over a network;
-            the suite then checks `revision()` but not `fetch`.
-        """
-        return None
 
     def expected_revision(self) -> str | None:
         """The revision `revision()` must give after `fetch`, if the options pin it.

@@ -2,7 +2,8 @@
 
 The repo's registry is checked as it grows; the test-only components prove the
 suites pass on components that behave, and the broken ones below prove they
-catch the mistakes they exist for.
+catch the mistakes they exist for. A loader or runtime without an entry in
+`helpers/offline.py` is skipped by name after its declaration passes.
 """
 
 from __future__ import annotations
@@ -26,8 +27,8 @@ from components.base import (
     Sink,
     Step,
 )
-from components.testing import conformance
 from model_service.registry import Registry, default_registry
+from tests.components.helpers import conformance
 
 
 if TYPE_CHECKING:
@@ -44,6 +45,11 @@ COMPONENTS = [*default_registry(), *Registry.scan("tests.support.components")]
 )
 def test_the_component_conforms(component: type[Component], tmp_path: Path) -> None:
     assert conformance.check(component, tmp_path) == []
+    if conformance.declaration_only(component):
+        pytest.skip(
+            f"{component.kind} `{component.name}` has no entry in "
+            "tests/components/helpers/offline.py; only its declaration was checked"
+        )
 
 
 class _ChannelsOptions(Options):
@@ -114,10 +120,6 @@ class LosesItsWeights(Loader):
     name = "loses_its_weights"
     Options = _PathOptions
     example_options: ClassVar[dict[str, Any]] = {"path": "/weights.bin"}
-
-    @classmethod
-    def offline_options(cls, weights: Path) -> dict[str, Any]:
-        return {"path": str(weights)}
 
     def fetch(self, cache_dir: Path) -> Path:
         return cache_dir / "never-written.bin"
