@@ -20,10 +20,18 @@ under `src/model_service/components/` must match it:
 | A new kind of output file | sink | `analysis/sinks/`, plus a module in `src/model_service/formats/` if the format is new |
 | A new EMPAIA input or output type | converter, publisher | `empaia/input_converters/`, `empaia/publishers/` |
 
+Start from your kind's template in [templates/](templates/):
+[loader](templates/loader.py), [runtime](templates/runtime.py),
+[step](templates/step.py), [source](templates/source.py),
+[sink](templates/sink.py), [converter](templates/converter.py) or
+[publisher](templates/publisher.py). Copy it into the folder, then replace
+`my_component`, `MyComponent` and the `<placeholders>`. Each template passes
+its kind's conformance suite as copied (`tests/components/test_templates.py`
+checks that), so the suite's first failure points at your change.
+
 Each kind's base class in `src/model_service/components/kinds/` documents
-the methods to write. The closest existing component of the same kind is
-the best template; [Components](../reference/components.md) links each one's
-code.
+the methods to write, and [Components](../reference/components.md) links
+the code of every existing component, often the closest example.
 
 ## Write it
 
