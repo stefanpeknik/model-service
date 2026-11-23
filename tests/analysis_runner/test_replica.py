@@ -25,7 +25,7 @@ from model_service.contracts.invocation import (
     Invocation,
     SharedPathInput,
 )
-from model_service.contracts.result import RunResult, SharedArtifact
+from model_service.contracts.result import RunResult, ServedModelRun, SharedArtifact
 from model_service.formats import score_grid
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from tests.components.helpers import fake_model, fake_slide
@@ -58,6 +58,7 @@ class Handle:
             "id": "m1",
             "digest": self.digest,
             "weights_revision": self.weights_revision,
+            "execution_providers": ["CUDAExecutionProvider", "CPUExecutionProvider"],
         }
 
     async def infer(self, tile: np.ndarray) -> np.ndarray:
@@ -133,7 +134,14 @@ def test_a_run_writes_its_output_where_the_request_says(
 
     path = storage / "out" / "heatmap.npz"
     assert result == RunResult(
-        {"heatmap": SharedArtifact(str(path), score_grid.MEDIA_TYPE)}
+        {"heatmap": SharedArtifact(str(path), score_grid.MEDIA_TYPE)},
+        served_models={
+            "m1": ServedModelRun(
+                digest=resolved.model_digests["m1"],
+                weights_revision="/weights/model.onnx",
+                execution_providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+            )
+        },
     )
     assert score_grid.check(path) == []
     assert score_grid.read(path).values.shape == (1, 8, 8)
@@ -150,7 +158,7 @@ def test_without_an_output_path_the_output_is_named_after_itself(
     assert result.outputs["heatmap"].path == str(storage / "heatmap.npz")  # type: ignore[union-attr]
 
 
-def test_a_served_model_running_another_declaration_is_a_contract_mismatch(
+def test_a_served_model_running_another_declaration_is_a_retryable_contract_mismatch(
     resolved: ResolvedAnalysis, storage: Path
 ) -> None:
     handle = Handle("0" * 64)
@@ -160,11 +168,30 @@ def test_a_served_model_running_another_declaration_is_a_contract_mismatch(
 
     assert (raised.value.code, raised.value.retryable) == (
         "model_contract_mismatch",
-        False,
+        True,
     )
     assert "m1" in raised.value.safe_message
     assert handle.calls == 0
     assert not (storage / "out").exists()
+
+
+def test_a_served_model_that_does_not_say_what_it_runs_is_a_contract_mismatch(
+    resolved: ResolvedAnalysis, storage: Path
+) -> None:
+    class Silent(Handle):
+        async def describe(self) -> dict[str, Any]:
+            return {"id": "m1", "digest": self.digest}
+
+    handle = Silent(resolved.model_digests["m1"])
+
+    with pytest.raises(RunFailure) as raised:
+        run(request(resolved, storage), handle, storage)
+
+    assert (raised.value.code, raised.value.retryable) == (
+        "model_contract_mismatch",
+        True,
+    )
+    assert handle.calls == 0
 
 
 URI = "file:///weights/model.onnx"
@@ -202,7 +229,10 @@ def test_a_served_model_must_run_the_weights_its_file_pins(
         return
     with pytest.raises(RunFailure) as raised:
         run(request(resolved, storage), handle, storage)
-    assert raised.value.code == "model_contract_mismatch"
+    assert (raised.value.code, raised.value.retryable) == (
+        "model_contract_mismatch",
+        True,
+    )
     assert "weights" in raised.value.safe_message
     assert handle.calls == 0
 

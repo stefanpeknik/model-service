@@ -117,7 +117,12 @@ class Handle:
         self.on_infer = on_infer
 
     async def describe(self) -> dict[str, Any]:
-        return {"id": "m1", "digest": self.digest}
+        return {
+            "id": "m1",
+            "digest": self.digest,
+            "weights_revision": "/weights/model.onnx",
+            "execution_providers": ["CPUExecutionProvider"],
+        }
 
     async def infer(self, tile: np.ndarray) -> np.ndarray:
         if self.on_infer is not None:

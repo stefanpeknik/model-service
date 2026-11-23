@@ -69,6 +69,7 @@ class MountedCatalog:
         self._fingerprint = _fingerprint(directory)
         self._current: Catalog = read_catalog(directory)
         self._error: str | None = None
+        self._watcher_stopped = False
 
     def refresh(self) -> bool:
         """Load the mounted files if they changed since the last look.
@@ -103,12 +104,41 @@ class MountedCatalog:
     async def watch(self, interval: float) -> None:
         """Refresh every `interval` seconds, until cancelled.
 
+        A refresh that fails unexpectedly (say the temporary catalog can't be
+        written) keeps the old catalog, is reported like an invalid one, and
+        is tried again at the next look.
+
         Args:
             interval: Seconds between looks.
         """
-        while True:
-            await asyncio.sleep(interval)
-            await asyncio.to_thread(self.refresh)
+        try:
+            while True:
+                await asyncio.sleep(interval)
+                try:
+                    await asyncio.to_thread(self.refresh)
+                except Exception as error:
+                    self._report_unexpected(error)
+        finally:
+            self._watcher_stopped = True
+
+    def _report_unexpected(self, error: Exception) -> None:
+        """Keep the old catalog after a refresh that raised, and report why.
+
+        The fingerprint is not remembered, so the files are read again at the
+        next look; the error is logged only when it changes.
+
+        Args:
+            error: What the refresh raised.
+        """
+        message = f"model catalog reload failed: {type(error).__name__}: {error}"
+        if message != self._error:
+            logger.error("%s; the previous catalog stays", message, exc_info=error)
+        self._error = message
+
+    @property
+    def watcher_stopped(self) -> bool:
+        """Whether `watch` ran and stopped; liveness fails then."""
+        return self._watcher_stopped
 
     def status(self) -> CatalogStatus:
         """Report whether the mounted files are the catalog in use.

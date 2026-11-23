@@ -5,13 +5,15 @@ Per request, in order, before the deadline:
 1. the resolved document is read back and its digest checked;
 2. each served model it names is asked for `describe()`, and a digest that
    differs from the document's, or weights other than the ones its file pins
-   (a Hugging Face commit, an MLflow `sha256`), is `model_contract_mismatch`;
+   (a Hugging Face commit, an MLflow `sha256`), is `model_contract_mismatch`,
+   retryable since Ray may not have caught up with a catalog change yet;
 3. the provider's input access opens the inputs and says where outputs
    go: below the request's shared-storage root, which must lie within the
    replica's allowed roots, or in an EMPAIA job's workspace, with each input
    converted by its recorded EAD type;
 4. `run_analysis` runs it, with progress passed to the access;
-5. the result names each output's file and its format's media type.
+5. the result names each output's file and its format's media type, and
+   what each served model ran (digest, weights, execution providers).
 
 No Ray here: the Serve wrapper (`serve.py`) gives it Ray handles, tests give
 it fakes.
@@ -25,6 +27,8 @@ import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Protocol
 
+from pydantic import TypeAdapter, ValidationError
+
 from model_service.analysis_runner.models import RayServedModel
 from model_service.analysis_runner.progress import reporting_progress
 from model_service.analysis_runner.run import Concurrency, run_analysis
@@ -36,7 +40,7 @@ from model_service.contracts.failures import (
 )
 from model_service.contracts.invocation import ExecutionContext
 from model_service.contracts.log_context import logging_execution
-from model_service.contracts.result import RunResult, SharedArtifact
+from model_service.contracts.result import RunResult, ServedModelRun, SharedArtifact
 from model_service.formats.known import get_format
 from model_service.providers.input_access import close_resource
 
@@ -54,6 +58,10 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+_SERVED_MODEL_RUN: TypeAdapter[ServedModelRun] = TypeAdapter(ServedModelRun)
+# The `describe()` keys a run's result records, beside `id`.
+_DESCRIBED = ("digest", "weights_revision", "execution_providers")
 
 
 class AccessFactory(Protocol):
@@ -161,12 +169,13 @@ class AnalysisReplica:
             RunFailure: From the model checks and the run.
         """
         analysis = resolved.analysis
-        models = {
+        verified = {
             model_id: await self._verified(
                 model_id, digest, analysis.models[model_id].weights.expected_revision()
             )
             for model_id, digest in resolved.model_digests.items()
         }
+        models = {model_id: handle for model_id, (handle, _) in verified.items()}
         invocation = request.invocation
         factory = self._access.get(invocation.input_access.kind)
         if factory is None:
@@ -194,12 +203,13 @@ class AnalysisReplica:
             outputs={
                 name: SharedArtifact(str(path), formats[name].media_type)
                 for name, path in written.items()
-            }
+            },
+            served_models={model_id: ran for model_id, (_, ran) in verified.items()},
         )
 
     async def _verified(
         self, model_id: str, digest: str, weights: str | None
-    ) -> DescribedModel:
+    ) -> tuple[DescribedModel, ServedModelRun]:
         """A served model's handle, after its `describe()` matched the document.
 
         Args:
@@ -208,11 +218,13 @@ class AnalysisReplica:
             weights: The weights revision its file pins, or None if it pins none.
 
         Returns:
-            The handle.
+            The handle, and what it runs for the run's result.
 
         Raises:
             RunFailure: `model_failed` (retryable) if `describe()` fails;
-                `model_contract_mismatch` if the digest or pinned weights differ.
+                `model_contract_mismatch` (retryable: Ray may still be rolling out
+                the catalog the analysis was admitted with) if the digest or pinned
+                weights differ.
         """
         handle = self._models(model_id)
         try:
@@ -230,7 +242,7 @@ class AnalysisReplica:
                     f"model {model_id!r} is running a declaration that differs "
                     "from the one the analysis was admitted with"
                 ),
-                retryable=False,
+                retryable=True,
             )
         if weights is not None and running.get("weights_revision") != weights:
             raise RunFailure(
@@ -238,9 +250,19 @@ class AnalysisReplica:
                 safe_message=(
                     f"model {model_id!r} is running other weights than its file pins"
                 ),
-                retryable=False,
+                retryable=True,
             )
-        return handle
+        try:
+            ran = _SERVED_MODEL_RUN.validate_python(
+                {key: running.get(key) for key in _DESCRIBED}
+            )
+        except ValidationError as error:
+            raise RunFailure(
+                code=FailureCode.MODEL_CONTRACT_MISMATCH,
+                safe_message=f"model {model_id!r} does not report what it runs",
+                retryable=True,
+            ) from error
+        return handle, ran
 
     async def _close(self, access: InputAccess) -> None:
         """Close the access, logging a failure rather than hiding the run's outcome.

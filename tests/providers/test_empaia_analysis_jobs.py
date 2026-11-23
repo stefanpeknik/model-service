@@ -153,7 +153,12 @@ class Handle:
         self.model = fake_model(tile_size=64, mpp=0.5)
 
     async def describe(self) -> dict[str, Any]:
-        return {"id": "m1", "digest": self.digest}
+        return {
+            "id": "m1",
+            "digest": self.digest,
+            "weights_revision": "/weights/model.onnx",
+            "execution_providers": ["CPUExecutionProvider"],
+        }
 
     async def infer(self, tile: np.ndarray) -> np.ndarray:
         return await self.model.infer(tile)
