@@ -15,7 +15,7 @@ files in `catalog/` built from **components** in
 - Looking up a component's options, a served model, an analysis or a format:
   read `docs/reference/`. It is generated; after changing components,
   `src/model_service/formats/` or `catalog/`, run
-  `PYTHONPATH=src uv run scripts/generate.py` and commit what it writes
+  `PYTHONPATH=src uv run tools/generate.py` and commit what it writes
   (`tests/test_generated.py` fails until you do).
 - Checking catalog files: `uv run pytest tests/catalog`.
 

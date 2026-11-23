@@ -31,7 +31,7 @@ EMPAIA app.
 
 ## Reference
 
-Generated from the code and the catalog by `scripts/generate.py`, so they
+Generated from the code and the catalog by `tools/generate.py`, so they
 match what deploys:
 
 - [Components](docs/reference/components.md): every loader, runtime, step,
@@ -96,7 +96,7 @@ src/model_service/
   providers/              where runs read input and publish output: standalone, empaia/
   slides/                 slide reading and tissue detection for sources
   contracts/              data shapes processes hand each other
-  reference/              what scripts/generate.py writes
+  reference/              what tools/generate.py writes
 deploy/helm/rayservice/   the chart; reads catalog/ through a symlink
 docs/                     guides, generated reference, architecture, dated operations records
 tests/                    unit, catalog, chart and PostgreSQL tests; tests/live/ for the cluster
@@ -116,7 +116,7 @@ podman run -d --name ms-test-pg -p 127.0.0.1:55432:5432 \
 TEST_POSTGRES_DSN=postgresql://postgres:test@127.0.0.1:55432/postgres uv run pytest
 uv run ruff check
 uv run mypy src
-PYTHONPATH=src uv run scripts/generate.py   # after changing components, formats or catalog/
+PYTHONPATH=src uv run tools/generate.py   # after changing components, formats or catalog/
 ```
 
 Each process has its extra: `api`, `analysis-runner` and `served-models`,

@@ -175,7 +175,7 @@ component:
 
 ```sh
 uv run pytest tests/components
-PYTHONPATH=src uv run scripts/generate.py
+PYTHONPATH=src uv run tools/generate.py
 ```
 
 ## Use it

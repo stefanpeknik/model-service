@@ -110,8 +110,8 @@ worker. To warm a served model with one blank tile, or start a job of the
 prostate app from EMPAIA, run these scripts in an API pod:
 
 ```sh
-oc exec -i deploy/model-service-api -- python - virchow2 224 < scripts/warm_model.py
-oc exec -i deploy/model-service-api -- python - SLIDE_ID 120 < scripts/request_preprocessing.py
+oc exec -i deploy/model-service-api -- python - virchow2 224 < tools/warm_model.py
+oc exec -i deploy/model-service-api -- python - SLIDE_ID 120 < tools/request_preprocessing.py
 ```
 
 ## Logs

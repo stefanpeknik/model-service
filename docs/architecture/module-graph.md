@@ -49,7 +49,7 @@ flowchart LR
   end
 
   testing["testing<br/>fakes, run_component, conformance"]
-  reference["reference<br/>scripts/generate.py"]
+  reference["reference<br/>tools/generate.py"]
   pg[("PostgreSQL")]:::ext
   jes["EMPAIA JES / App Service"]:::ext
 

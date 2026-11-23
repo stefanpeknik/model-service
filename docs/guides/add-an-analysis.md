@@ -58,7 +58,7 @@ A misspelt model ID gets the list of served models that exist. Once the
 check passes, regenerate the reference docs and commit them with the file:
 
 ```sh
-PYTHONPATH=src uv run scripts/generate.py
+PYTHONPATH=src uv run tools/generate.py
 ```
 
 ## 3. Deploy and run it

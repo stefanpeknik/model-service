@@ -1,7 +1,7 @@
 """Generated files: catalog JSON Schemas and the reference docs.
 
 `generated(repo)` computes every generated file from the component classes,
-the format modules and `catalog/`; `scripts/generate.py` writes them and a
+the format modules and `catalog/`; `tools/generate.py` writes them and a
 test fails when the committed copies differ. The generated files are:
 
 - `catalog/.schemas/<folder>.schema.json` and `<folder>.patch.schema.json`

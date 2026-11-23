@@ -1,6 +1,6 @@
 """Write the catalog JSON Schemas and the reference docs from the code.
 
-Usage: PYTHONPATH=src uv run scripts/generate.py [--check]
+Usage: PYTHONPATH=src uv run tools/generate.py [--check]
 
 Writes `catalog/.schemas/`, the schema line at the top of each catalog file
 and `docs/reference/`. With `--check` it writes nothing and exits 1 if any of
@@ -24,4 +24,4 @@ except CatalogInvalid as error:
 for path in paths:
     print(path)
 if check and paths:
-    sys.exit("Stale; run: PYTHONPATH=src uv run scripts/generate.py")
+    sys.exit("Stale; run: PYTHONPATH=src uv run tools/generate.py")

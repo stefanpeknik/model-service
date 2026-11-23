@@ -12,7 +12,7 @@ the prostate-heatmap analysis's (portal app
 the MDS URL and client credentials in its environment:
 
     oc exec -i deploy/model-service-api -- python - SLIDE_ID 120 \
-        < scripts/request_preprocessing.py
+        < tools/request_preprocessing.py
 
 Prints the request's ID. With WAIT_SECONDS it then polls
 `GET /v3/preprocessing-requests/<id>` (the daemon looks every 30 s) and prints

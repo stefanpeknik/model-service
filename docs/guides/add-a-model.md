@@ -73,7 +73,7 @@ Then regenerate the reference docs, which list your model, and commit them
 with the file. `tests/test_generated.py` fails until you do.
 
 ```sh
-PYTHONPATH=src uv run scripts/generate.py
+PYTHONPATH=src uv run tools/generate.py
 ```
 
 ## 4. Deploy it
@@ -96,7 +96,7 @@ and its digest. To send one blank tile straight to the model's Ray Serve
 route from an API pod:
 
 ```sh
-oc exec -i deploy/model-service-api -- python - my-classifier 512 < scripts/warm_model.py
+oc exec -i deploy/model-service-api -- python - my-classifier 512 < tools/warm_model.py
 ```
 
 The first request to a cold model waits for a GPU worker, which can take a

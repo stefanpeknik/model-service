@@ -18,6 +18,6 @@ def test_generated_files_are_current() -> None:
         listed = "\n".join(f"  {p}" for p in paths)
         pytest.fail(
             f"stale generated files:\n{listed}\n"
-            "Run: PYTHONPATH=src uv run scripts/generate.py",
+            "Run: PYTHONPATH=src uv run tools/generate.py",
             pytrace=False,
         )

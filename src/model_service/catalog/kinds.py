@@ -4,7 +4,7 @@ A kind owns one folder (`served-models/`, `analyses/`) and turns each merged
 document into its resolved form through a `ResolveContext`, which reports
 mistakes in the standard format. Kinds resolve in order, so a later kind can
 refer to documents of an earlier one. A kind also describes its files as a
-pydantic model, from which `scripts/generate.py` writes their JSON Schema.
+pydantic model, from which `tools/generate.py` writes their JSON Schema.
 """
 
 from __future__ import annotations

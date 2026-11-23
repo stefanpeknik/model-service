@@ -76,7 +76,7 @@ print(features.shape)  # (2, 1280): the class token and the patch mean
 ```
 
 The first request to a model scaled to zero waits for a GPU worker, which
-can take a few minutes. `scripts/warm_model.py` sends one blank tile to warm
+can take a few minutes. `tools/warm_model.py` sends one blank tile to warm
 a model. Concurrent requests to a batching model can differ slightly from a
 request run alone (Virchow2: up to about 0.1%), because Ray batches them
 together.
