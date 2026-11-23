@@ -10,6 +10,7 @@ from model_service.api.scheduler.internal_state import (
     ProcessingRejected,
     ProcessingSucceeded,
     StaleWorkClaimError,
+    WorkClaim,
     WorkKind,
 )
 from model_service.api.scheduler.public import (
@@ -298,18 +299,84 @@ class ExecutionRepositoryContract:
             execution_id, finish.fencing_token
         )
         await self.repository.request_cancel(execution_id)
-        report = await self.repository.claim_due("worker", timedelta(seconds=30))
+        report = await self.repository.claim_due("worker", timedelta(milliseconds=30))
         assert report is not None
         assert report.kind is WorkKind.PROVIDER_CANCELLATION_REPORT
 
         # The report's worker dies before it writes anything.
-        await self._advance_time(timedelta(seconds=31))
+        await self._advance_time(timedelta(milliseconds=80))
         await self.repository.maintain()
         retried = await self.repository.claim_due("worker", timedelta(seconds=30))
 
         assert retried is not None, "the cancellation report was dropped"
         assert retried.execution_id == execution_id
         assert retried.kind is WorkKind.PROVIDER_CANCELLATION_REPORT
+
+    async def _lose_the_lease(self, kind: WorkKind) -> WorkClaim:
+        """Claim due work with a short lease, then let the worker die."""
+        claim = await self.repository.claim_due("worker", timedelta(milliseconds=30))
+        assert claim is not None
+        assert claim.kind is kind, claim
+        await self._advance_time(timedelta(milliseconds=80))
+        await self.repository.maintain()
+        return claim
+
+    async def _succeed_processing(self, execution_id: str) -> None:
+        processing = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert processing is not None
+        await self.repository.settle(
+            execution_id, processing.fencing_token, ProcessingSucceeded(RunResult({}))
+        )
+
+    async def _failure_code(self, execution_id: str) -> tuple[str, str | None]:
+        execution = await self.repository.get(execution_id)
+        return execution.status, execution.error.code if execution.error else None
+
+    async def test_processing_that_keeps_losing_its_lease_exhausts_its_attempts(
+        self,
+    ) -> None:
+        execution_id = await self._admit_execution("lost-processing")
+
+        for _ in range(3):
+            await self._lose_the_lease(WorkKind.PROCESSING)
+
+        assert await self._failure_code(execution_id) == (
+            "failed",
+            "processing_attempts_exhausted",
+        )
+
+    async def test_a_finish_that_keeps_losing_its_lease_exhausts_its_attempts(
+        self,
+    ) -> None:
+        execution_id = await self._admit_execution("lost-finish")
+        await self._succeed_processing(execution_id)
+
+        for _ in range(3):
+            await self._lose_the_lease(WorkKind.PROVIDER_FINISH)
+
+        assert await self._failure_code(execution_id) == (
+            "failed",
+            "provider_finish_attempts_exhausted",
+        )
+
+    async def test_a_publication_interrupted_midway_has_an_unknown_outcome(
+        self,
+    ) -> None:
+        execution_id = await self._admit_execution("interrupted-finish")
+        await self._succeed_processing(execution_id)
+        finish = await self.repository.claim_due("worker", timedelta(milliseconds=30))
+        assert finish is not None
+        await self.repository.mark_finish_mutation_started(
+            execution_id, finish.fencing_token
+        )
+
+        await self._advance_time(timedelta(milliseconds=80))
+        await self.repository.maintain()
+
+        assert await self._failure_code(execution_id) == (
+            "failed",
+            "provider_finish_outcome_unknown",
+        )
 
     async def test_get_many_keeps_order_and_skips_unknown_ids(self) -> None:
         first = await self._admit_execution("first", "model-b")
