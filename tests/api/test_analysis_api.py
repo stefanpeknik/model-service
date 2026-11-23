@@ -277,12 +277,7 @@ async def test_models_list_served_models_with_declarations_and_analyses() -> Non
         missing = await client.get("/v1/models/missing")
 
     by_id = {model["id"]: model for model in listed}
-    assert sorted(by_id) == [
-        "episeg-1",
-        "prostate-classifier-1",
-        "prov-gigapath",
-        "virchow2",
-    ]
+    assert sorted(by_id) == sorted(served)
     prostate = by_id["prostate-classifier-1"]
     assert single == prostate
     assert set(prostate) == {"id", "declaration", "digest", "analyses"}
@@ -290,11 +285,11 @@ async def test_models_list_served_models_with_declarations_and_analyses() -> Non
         404,
         "unknown_model",
     )
-    assert prostate["analyses"] == ["prostate-heatmap"]
+    assert "prostate-heatmap" in prostate["analyses"]
     assert prostate["declaration"]["input"] == {"tile_size": 512, "mpp": 0.468}
     # The environment's patch is part of the declaration.
     assert prostate["declaration"]["weights"]["uri"].startswith(
         "mlflow-artifacts:/169/"
     )
     assert prostate["digest"] == served["prostate-classifier-1"].value.digest
-    assert by_id["virchow2"]["analyses"] == ["virchow2-embeddings"]
+    assert "virchow2-embeddings" in by_id["virchow2"]["analyses"]

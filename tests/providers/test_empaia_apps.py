@@ -98,9 +98,12 @@ def test_the_prostate_app_matches_its_recording_apart_from_its_namespace(
 
 def test_every_exposed_analysis_yields_a_valid_app_in_every_environment() -> None:
     for environment in (None, "rationai-test"):
-        apps = analysis_apps(load_catalog(CATALOG, environment))
+        catalog = load_catalog(CATALOG, environment)
+        apps = analysis_apps(catalog)
 
-        assert [app.analysis_id for app in apps] == ["prostate-heatmap"]
+        exposed = [i for i, e in catalog.entries("analyses").items() if e.value.empaia]
+        assert [app.analysis_id for app in apps] == exposed
+        assert "prostate-heatmap" in exposed
 
 
 def test_a_preprocessing_only_app_leaves_out_the_region_of_interest(

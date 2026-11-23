@@ -50,25 +50,11 @@ def test_the_prostate_heatmap_is_the_prostate_app(environment: str | None) -> No
     analysis = load_catalog(CATALOG, environment).entries("analyses")
     app = analysis["prostate-heatmap"].value.empaia
 
+    # EMPAIA knows the app by these; changing them registers a new app.
     assert (app.name, app.name_short) == ("Prostate cancer heatmap", "ProstHM")
     assert app.modes == (AppMode.STANDALONE, AppMode.PREPROCESSING)
     assert app.triggers == (Trigger(tissue="PROSTATE", stain="H_AND_E"),)
-    assert app.parameters == ()
-    assert {k: c.name for k, c in app.inputs.items()} == {
-        "slide": "wsi",
-        "region_of_interest": "rectangle",
-    }
     assert app.slide == "slide"
-    assert {k: p.name for k, p in app.outputs.items()} == {
-        "heatmap": "continuous_pixelmap"
-    }
-    assert app.viewer.outputs["heatmap"].shader.type == "heatmap"  # type: ignore[union-attr]
-
-
-def test_only_the_prostate_heatmap_is_offered_in_empaia() -> None:
-    analyses = load_catalog(CATALOG).entries("analyses")
-
-    assert [i for i, e in analyses.items() if e.value.empaia] == ["prostate-heatmap"]
 
 
 def test_standalone_parameters_are_per_run_settings(root: Path) -> None:

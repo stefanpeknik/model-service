@@ -43,23 +43,45 @@ def errors(root: Path) -> list[str]:
     return [str(error) for error in raised.value.errors]
 
 
+def heatmap_ids() -> list[str]:
+    analyses = load_catalog(CATALOG).entries("analyses")
+    return sorted(
+        i
+        for i, e in analyses.items()
+        if any(s.name == "score_grid" for s in e.value.sinks)
+    )
+
+
 @pytest.mark.parametrize("environment", [None, "rationai-test"])
-@pytest.mark.parametrize(
-    ("analysis_id", "model_id", "score_map"),
-    [
-        ("prostate-heatmap", "prostate-classifier-1", (1, 1, 1)),
-        ("episeg-heatmap", "episeg-1", (1, 1024, 1024)),
-    ],
-)
-def test_heatmap_analyses_tile_at_their_models_geometry_half_a_tile_apart(
-    environment: str | None,
-    analysis_id: str,
-    model_id: str,
-    score_map: tuple[int, int, int],
+@pytest.mark.parametrize("analysis_id", heatmap_ids())
+def test_heatmap_analyses_tile_at_their_models_geometry(
+    environment: str | None, analysis_id: str
 ) -> None:
     catalog = load_catalog(CATALOG, environment)
-    served = catalog.entries("served-models")[model_id].value
     heatmap = catalog.entries("analyses")[analysis_id].value
+    (model_id,) = heatmap.models
+    served = catalog.entries("served-models")[model_id].value
+
+    assert heatmap.source.name == "slide_tiles"
+    assert (heatmap.source.options.tile_size, heatmap.source.options.mpp) == (
+        served.input.tile_size,
+        served.input.mpp,
+    )
+    output = served.output
+    assert heatmap.columns["scores"] == Col(
+        "float32", (output.channels, output.size, output.size)
+    )
+
+
+@pytest.mark.parametrize("environment", [None, "rationai-test"])
+@pytest.mark.parametrize(
+    ("analysis_id", "score_map"),
+    [("prostate-heatmap", (1, 1, 1)), ("episeg-heatmap", (1, 1024, 1024))],
+)
+def test_the_prostate_and_episeg_heatmaps_tile_half_a_tile_apart(
+    environment: str | None, analysis_id: str, score_map: tuple[int, int, int]
+) -> None:
+    heatmap = load_catalog(CATALOG, environment).entries("analyses")[analysis_id].value
 
     assert heatmap.settings() == {
         "stride_fraction": 0.5,
@@ -67,11 +89,6 @@ def test_heatmap_analyses_tile_at_their_models_geometry_half_a_tile_apart(
         "min_tissue_fraction": 0.0,
     }
     assert heatmap.inputs == {"slide": True, "region_of_interest": False}
-    assert list(heatmap.models) == [model_id]
-    assert (heatmap.source.options.tile_size, heatmap.source.options.mpp) == (
-        served.input.tile_size,
-        served.input.mpp,
-    )
     assert heatmap.columns["scores"] == Col("float32", score_map)
     assert [(s.name, s.options.output) for s in heatmap.sinks] == [
         ("score_grid", "heatmap")
