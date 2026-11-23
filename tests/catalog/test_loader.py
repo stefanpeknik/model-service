@@ -254,3 +254,28 @@ def test_a_later_kind_sees_the_documents_resolved_before_it(root: Path) -> None:
         "catalog/chains/unknown.yaml:model: no test model `m9`. "
         "Test models: m1. Hint: add catalog/models/m9.yaml or fix the name",
     ]
+
+
+def test_an_id_ending_in_a_newline_is_refused(root: Path) -> None:
+    write(root, "models/m1\n.yaml", MODEL)
+
+    (error,) = errors(root)
+    assert "is not a valid ID" in error
+
+
+def test_a_file_that_is_not_utf8_is_an_error(root: Path) -> None:
+    (root / "models" / "m1.yaml").write_bytes(b"tile_size: 8\nname: caf\xe9\n")
+
+    assert errors(root) == [
+        "catalog/models/m1.yaml: not UTF-8 text: byte 0xe9 on line 2. A mapping "
+        "of keys to values. Hint: save the file as UTF-8"
+    ]
+
+
+def test_a_folder_named_like_a_document_is_an_error(root: Path) -> None:
+    (root / "models" / "m1.yaml").mkdir()
+
+    assert errors(root) == [
+        "catalog/models/m1.yaml: a folder, not a file. A mapping of keys to "
+        "values. Hint: rename or remove the folder"
+    ]

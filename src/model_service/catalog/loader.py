@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 
 ENVIRONMENTS = "environments"
-ID = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+ID = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 MAPPING = "A mapping of keys to values"
 
 
@@ -212,7 +212,7 @@ class _Loader:
             references: Where resolved documents and failed IDs are recorded.
         """
         failed = references.failed[kind.folder]
-        if not ID.match(path.stem):
+        if not ID.fullmatch(path.stem):
             self.file_error(
                 path,
                 f"`{path.stem}` is not a valid ID",
@@ -259,8 +259,25 @@ class _Loader:
         Returns:
             The mapping, empty for an empty file, or None after an error.
         """
+        if path.is_dir():
+            self.file_error(
+                path, "a folder, not a file", MAPPING, "rename or remove the folder"
+            )
+            return None
+        data = path.read_bytes()
         try:
-            document = yaml.safe_load(path.read_text())
+            text = data.decode("utf-8")
+        except UnicodeDecodeError as error:
+            line = data[: error.start].count(b"\n") + 1
+            self.file_error(
+                path,
+                f"not UTF-8 text: byte 0x{data[error.start]:02x} on line {line}",
+                MAPPING,
+                "save the file as UTF-8",
+            )
+            return None
+        try:
+            document = yaml.safe_load(text)
         except yaml.YAMLError as error:
             mark = getattr(error, "problem_mark", None)
             problem = getattr(error, "problem", None) or "unreadable"
