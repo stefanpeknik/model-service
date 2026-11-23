@@ -179,6 +179,7 @@ async def test_a_run_sends_the_analysis_resolved_with_its_settings() -> None:
         ("/v1/analyses/missing/run", {}, 404, "unknown_analysis"),
         (RUN, {"configuration": {"model_id": "x"}}, 422, "invalid_request"),
         (RUN, {"configuration": {"stride_fraction": -1}}, 422, "invalid_request"),
+        (RUN, {"configuration": {"stride_fraction": 0.01}}, 422, "invalid_request"),
         (RUN, {"inputs": {}}, 422, "invalid_request"),
         (
             RUN,
@@ -192,6 +193,7 @@ async def test_a_run_sends_the_analysis_resolved_with_its_settings() -> None:
             "invalid_request",
         ),
         (RUN, {"deadline_at": "2000-01-01T00:00:00+00:00"}, 422, "invalid_request"),
+        (RUN, {"deadline_at": "2100-01-01T00:00:00"}, 422, "invalid_request"),
     ],
 )
 async def test_a_run_the_analysis_cannot_take_is_refused_before_dispatch(
@@ -203,6 +205,12 @@ async def test_a_run_the_analysis_cannot_take_is_refused_before_dispatch(
 
     assert (answered, body["detail"]["code"]) == (status, code)  # type: ignore[index]
     assert runner.requests == []
+
+
+async def test_an_invalid_body_names_the_field() -> None:
+    _, body = await post(FakeRunner(), deadline_at="2100-01-01T00:00:00")
+
+    assert "deadline_at" in body["detail"]["message"]  # type: ignore[index]
 
 
 async def test_an_unknown_setting_is_named() -> None:

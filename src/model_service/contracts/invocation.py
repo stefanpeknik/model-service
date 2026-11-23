@@ -90,13 +90,18 @@ def _iso_datetime(value: object) -> datetime:
         The parsed datetime.
 
     Raises:
-        ValueError: The value is neither a datetime nor a valid ISO 8601 string.
+        ValueError: The value is neither a datetime nor a valid ISO 8601
+            string, or has no time zone.
     """
     if isinstance(value, datetime):
-        return value
-    if not isinstance(value, str):
+        parsed = value
+    elif isinstance(value, str):
+        parsed = datetime.fromisoformat(value)
+    else:
         raise ValueError("deadline_at must be an ISO 8601 string")
-    return datetime.fromisoformat(value)
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError("deadline_at needs a time zone, e.g. +00:00 or Z")
+    return parsed
 
 
 type Deadline = Annotated[

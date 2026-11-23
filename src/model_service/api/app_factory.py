@@ -158,13 +158,13 @@ def create_app(
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(
-        _request: Request, _error: RequestValidationError
+        _request: Request, error: RequestValidationError
     ) -> JSONResponse:
         """Answer a request that fails validation without echoing its body.
 
         Args:
             _request: The rejected request.
-            _error: The validation error.
+            error: The validation error.
 
         Returns:
             A 422 response with the `invalid_request` error envelope.
@@ -175,7 +175,7 @@ def create_app(
             content={
                 "detail": {
                     "code": ApiErrorCode.INVALID_REQUEST,
-                    "message": "request body is invalid",
+                    "message": _invalid_body_message(error),
                     "retryable": False,
                 }
             },
@@ -367,3 +367,22 @@ def build_api_process(settings: SchedulerSettings | None = None) -> FastAPI:
         ),
         catalog_status=mounted.status,
     )
+
+
+def _invalid_body_message(error: RequestValidationError) -> str:
+    """Name the failing fields and why, without the values sent.
+
+    Args:
+        error: The validation error.
+
+    Returns:
+        The message, e.g. `request body is invalid: deadline_at: ...`.
+    """
+    # Pydantic's `msg` describes the rule; the rejected value is only in `input`.
+    problems = [
+        f"{'.'.join(str(part) for part in item['loc'][1:]) or 'body'}: {item['msg']}"
+        for item in error.errors()[:5]
+    ]
+    if not problems:
+        return "request body is invalid"
+    return f"request body is invalid: {'; '.join(problems)}"
