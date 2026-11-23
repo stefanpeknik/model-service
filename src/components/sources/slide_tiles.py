@@ -31,16 +31,19 @@ REGION_OF_INTEREST = "region_of_interest"
 
 # The per-run settings. Their descriptions are what users read: in the public
 # API's settings schema, and in EMPAIA's job form when an app offers them.
+# The run time grows with 1 / stride_fraction**2: 0.05 already reads 400 times
+# the tiles of a side-by-side grid, and anything finer is a typo, not a request.
+MIN_STRIDE_FRACTION = 0.05
 StrideFraction = Annotated[
     float,
     Field(
-        gt=0,
+        ge=MIN_STRIDE_FRACTION,
         le=1,
         allow_inf_nan=False,
         description=(
-            "How far apart tiles are, as a share of the tile size: above 0, up "
-            "to 1. 1 places tiles side by side; 0.5 overlaps them by half, for "
-            "a finer result that takes about four times as long."
+            "How far apart tiles are, as a share of the tile size: from 0.05 "
+            "up to 1. 1 places tiles side by side; 0.5 overlaps them by half, "
+            "for a finer result that takes about four times as long."
         ),
     ),
 ]

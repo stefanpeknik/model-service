@@ -257,7 +257,7 @@ than a tile.
 | `tile_size` | integer > 0 | not set | Tile edge in pixels; the first model step's when left out. |
 | `mpp` | number > 0 | not set | Microns per pixel to read at (the closest slide level); the first model step's when left out. |
 | `region_of_interest` | `required` or `optional` or `ignored` | `optional` | Whether a run must give a region-of-interest mask (`required`), may (`optional`) or may not (`ignored`); only tiles the mask covers are read. |
-| `stride_fraction` | number > 0, ≤ 1 | `0.5` | **Per run.** How far apart tiles are, as a share of the tile size: above 0, up to 1. 1 places tiles side by side; 0.5 overlaps them by half, for a finer result that takes about four times as long. |
+| `stride_fraction` | number ≥ 0.05, ≤ 1 | `0.5` | **Per run.** How far apart tiles are, as a share of the tile size: from 0.05 up to 1. 1 places tiles side by side; 0.5 overlaps them by half, for a finer result that takes about four times as long. |
 | `skip_background` | boolean | `true` | **Per run.** Whether tiles without tissue are skipped; they get no result. Skipping is faster and leaves empty glass out. On by default. |
 | `min_tissue_fraction` | number ≥ 0, < 1 | `0.0` | **Per run.** How much of a tile must be tissue for it to be analysed, when background is skipped: from 0 up to but not including 1. 0 analyses every tile with any tissue; 0.5 needs at least half. |
 

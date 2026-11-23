@@ -32,7 +32,7 @@ Per-run settings:
 | --- | --- | --- | --- |
 | `min_tissue_fraction` | number ≥ 0, < 1 | `0.0` | How much of a tile must be tissue for it to be analysed, when background is skipped: from 0 up to but not including 1. 0 analyses every tile with any tissue; 0.5 needs at least half. |
 | `skip_background` | boolean | `true` | Whether tiles without tissue are skipped; they get no result. Skipping is faster and leaves empty glass out. On by default. |
-| `stride_fraction` | number > 0, ≤ 1 | `0.5` | How far apart tiles are, as a share of the tile size: above 0, up to 1. 1 places tiles side by side; 0.5 overlaps them by half, for a finer result that takes about four times as long. |
+| `stride_fraction` | number ≥ 0.05, ≤ 1 | `0.5` | How far apart tiles are, as a share of the tile size: from 0.05 up to 1. 1 places tiles side by side; 0.5 overlaps them by half, for a finer result that takes about four times as long. |
 
 ## `prostate-heatmap`
 
@@ -52,7 +52,7 @@ Per-run settings:
 | --- | --- | --- | --- |
 | `min_tissue_fraction` | number ≥ 0, < 1 | `0.0` | How much of a tile must be tissue for it to be analysed, when background is skipped: from 0 up to but not including 1. 0 analyses every tile with any tissue; 0.5 needs at least half. |
 | `skip_background` | boolean | `true` | Whether tiles without tissue are skipped; they get no result. Skipping is faster and leaves empty glass out. On by default. |
-| `stride_fraction` | number > 0, ≤ 1 | `0.5` | How far apart tiles are, as a share of the tile size: above 0, up to 1. 1 places tiles side by side; 0.5 overlaps them by half, for a finer result that takes about four times as long. |
+| `stride_fraction` | number ≥ 0.05, ≤ 1 | `0.5` | How far apart tiles are, as a share of the tile size: from 0.05 up to 1. 1 places tiles side by side; 0.5 overlaps them by half, for a finer result that takes about four times as long. |
 
 ## `prov-gigapath-embeddings`
 
@@ -72,7 +72,7 @@ Per-run settings:
 | --- | --- | --- | --- |
 | `min_tissue_fraction` | number ≥ 0, < 1 | `0.0` | How much of a tile must be tissue for it to be analysed, when background is skipped: from 0 up to but not including 1. 0 analyses every tile with any tissue; 0.5 needs at least half. |
 | `skip_background` | boolean | `true` | Whether tiles without tissue are skipped; they get no result. Skipping is faster and leaves empty glass out. On by default. |
-| `stride_fraction` | number > 0, ≤ 1 | `1.0` | How far apart tiles are, as a share of the tile size: above 0, up to 1. 1 places tiles side by side; 0.5 overlaps them by half, for a finer result that takes about four times as long. |
+| `stride_fraction` | number ≥ 0.05, ≤ 1 | `1.0` | How far apart tiles are, as a share of the tile size: from 0.05 up to 1. 1 places tiles side by side; 0.5 overlaps them by half, for a finer result that takes about four times as long. |
 
 ## `virchow2-embeddings`
 
@@ -92,4 +92,4 @@ Per-run settings:
 | --- | --- | --- | --- |
 | `min_tissue_fraction` | number ≥ 0, < 1 | `0.0` | How much of a tile must be tissue for it to be analysed, when background is skipped: from 0 up to but not including 1. 0 analyses every tile with any tissue; 0.5 needs at least half. |
 | `skip_background` | boolean | `true` | Whether tiles without tissue are skipped; they get no result. Skipping is faster and leaves empty glass out. On by default. |
-| `stride_fraction` | number > 0, ≤ 1 | `1.0` | How far apart tiles are, as a share of the tile size: above 0, up to 1. 1 places tiles side by side; 0.5 overlaps them by half, for a finer result that takes about four times as long. |
+| `stride_fraction` | number ≥ 0.05, ≤ 1 | `1.0` | How far apart tiles are, as a share of the tile size: from 0.05 up to 1. 1 places tiles side by side; 0.5 overlaps them by half, for a finer result that takes about four times as long. |
