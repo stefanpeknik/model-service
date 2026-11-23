@@ -805,7 +805,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         failed = await scheduler.get(admitted.execution.id)
         self.assertEqual(failed.status, "failed")
         assert failed.error is not None
-        self.assertEqual(failed.error.code, "builder_outcome_unknown")
+        self.assertEqual(failed.error.code, "run_outcome_unknown")
 
     async def test_cancel_fences_then_stops_locally_owned_dispatch(self) -> None:
         clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))

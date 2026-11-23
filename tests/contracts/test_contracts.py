@@ -96,23 +96,21 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(
             {code.name: code.value for code in FailureCode},
             {
-                "DEADLINE_EXCEEDED": "builder_deadline_exceeded",
-                "INTERNAL_ERROR": "builder_internal_error",
+                "DEADLINE_EXCEEDED": "run_deadline_exceeded",
+                "INTERNAL_ERROR": "run_internal_error",
                 "INPUT_UNAVAILABLE": "input_unavailable",
                 "MODEL_FAILED": "model_failed",
                 "MODEL_CONTRACT_MISMATCH": "model_contract_mismatch",
                 "INVALID_MODEL_OUTPUT": "invalid_model_output",
             },
         )
-        self.assertEqual(ApiErrorCode.RUNNER_BACKPRESSURE, "builder_backpressure")
-        self.assertEqual(ApiErrorCode.RUNNER_UNAVAILABLE, "builder_unavailable")
         self.assertEqual(
-            ExecutionErrorCode.RUN_OUTCOME_UNKNOWN, "builder_outcome_unknown"
+            ApiErrorCode.RUNNER_BACKPRESSURE, "analysis_runner_backpressure"
         )
-        self.assertEqual(
-            RunnerErrorCode.INVALID_INVOCATION, "invalid_builder_invocation"
-        )
-        self.assertEqual(RunnerErrorCode.UNAVAILABLE, "builder_unavailable")
+        self.assertEqual(ApiErrorCode.RUNNER_UNAVAILABLE, "analysis_runner_unavailable")
+        self.assertEqual(ExecutionErrorCode.RUN_OUTCOME_UNKNOWN, "run_outcome_unknown")
+        self.assertEqual(RunnerErrorCode.INVALID_INVOCATION, "invalid_run_request")
+        self.assertEqual(RunnerErrorCode.UNAVAILABLE, "analysis_runner_unavailable")
         self.assertEqual(
             score_grid.MEDIA_TYPE, "application/vnd.rationai.score-grid+npz; version=1"
         )

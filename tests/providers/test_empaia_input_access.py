@@ -286,7 +286,7 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(seen_credentials, ["secret"])
         self.assertEqual(closed, [True])
-        self.assertEqual(raised.exception.code, "invalid_builder_invocation")
+        self.assertEqual(raised.exception.code, "invalid_run_request")
         self.assertFalse(raised.exception.retryable)
         self.assertNotIn("secret", str(raised.exception))
 

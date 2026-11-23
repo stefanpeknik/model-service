@@ -250,7 +250,7 @@ def test_a_run_past_its_deadline_fails_without_output(
     with pytest.raises(RunFailure) as raised:
         run(run_request, Handle(resolved.model_digests["m1"]), storage)
 
-    assert raised.value.code == "builder_deadline_exceeded"
+    assert raised.value.code == "run_deadline_exceeded"
     assert [p for p in storage.rglob("*") if p.is_file()] == [storage / "slide.tiff"]
 
 
@@ -323,7 +323,7 @@ def test_the_deadline_covers_opening_the_inputs(
         )
 
     assert (raised.value.code, raised.value.retryable) == (
-        "builder_deadline_exceeded",
+        "run_deadline_exceeded",
         False,
     )
     assert cancelled.is_set()

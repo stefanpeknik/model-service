@@ -35,9 +35,8 @@ ANALYSIS_RUN_REQUEST: TypeAdapter[AnalysisRunRequest] = TypeAdapter(AnalysisRunR
 class ErrorCode(StrEnum):
     """Error codes the analysis runner answers with over HTTP."""
 
-    # Builder-era names: callers and stored executions read these codes.
-    INVALID_INVOCATION = "invalid_builder_invocation"
-    UNAVAILABLE = "builder_unavailable"
+    INVALID_INVOCATION = "invalid_run_request"
+    UNAVAILABLE = "analysis_runner_unavailable"
 
 
 @dataclass(frozen=True, slots=True)

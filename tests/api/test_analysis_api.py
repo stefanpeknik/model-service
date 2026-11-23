@@ -235,10 +235,10 @@ async def test_an_unknown_setting_is_named() -> None:
         (
             ConfirmedRejectionError(timedelta(seconds=7)),
             429,
-            "builder_backpressure",
+            "analysis_runner_backpressure",
             True,
         ),
-        (UnknownOutcomeError("lost"), 503, "builder_unavailable", True),
+        (UnknownOutcomeError("lost"), 503, "analysis_runner_unavailable", True),
     ],
 )
 async def test_the_runners_failures_reach_the_caller_safely(
@@ -255,7 +255,7 @@ async def test_the_runners_failures_reach_the_caller_safely(
 async def test_runs_are_unavailable_without_a_runner() -> None:
     status, body = await post(None)
 
-    assert (status, body["detail"]["code"]) == (503, "builder_unavailable")  # type: ignore[index]
+    assert (status, body["detail"]["code"]) == (503, "analysis_runner_unavailable")  # type: ignore[index]
 
 
 async def test_models_list_served_models_with_declarations_and_analyses() -> None:

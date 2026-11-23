@@ -6,10 +6,10 @@ from enum import StrEnum
 
 
 class FailureCode(StrEnum):
-    """Why a run failed; the `builder_` codes keep their names for callers."""
+    """Why a run failed."""
 
-    DEADLINE_EXCEEDED = "builder_deadline_exceeded"
-    INTERNAL_ERROR = "builder_internal_error"
+    DEADLINE_EXCEEDED = "run_deadline_exceeded"
+    INTERNAL_ERROR = "run_internal_error"
     INPUT_UNAVAILABLE = "input_unavailable"
     MODEL_FAILED = "model_failed"
     MODEL_CONTRACT_MISMATCH = "model_contract_mismatch"

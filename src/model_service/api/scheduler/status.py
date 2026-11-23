@@ -27,7 +27,7 @@ class ExecutionStatus(StrEnum):
 class ExecutionErrorCode(StrEnum):
     """Why the scheduler failed an execution, beside the runner's failures."""
 
-    RUN_OUTCOME_UNKNOWN = "builder_outcome_unknown"
+    RUN_OUTCOME_UNKNOWN = "run_outcome_unknown"
     PROVIDER_FINISH_OUTCOME_UNKNOWN = "provider_finish_outcome_unknown"
     PROCESSING_ATTEMPTS_EXHAUSTED = "processing_attempts_exhausted"
     PROVIDER_FINISH_ATTEMPTS_EXHAUSTED = "provider_finish_attempts_exhausted"

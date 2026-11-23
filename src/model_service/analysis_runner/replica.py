@@ -118,9 +118,9 @@ class AnalysisReplica:
             InvalidInvocation: The document was changed or doesn't resolve,
                 or the inputs, root or output path are invalid.
             RunFailure: `model_contract_mismatch` (a served model runs
-                another declaration), `builder_deadline_exceeded`, or what
+                another declaration), `run_deadline_exceeded`, or what
                 the run raised (`model_failed`, `invalid_model_output`,
-                `builder_internal_error`).
+                `run_internal_error`).
         """
         with logging_execution(request.execution_context.execution_id):
             try:

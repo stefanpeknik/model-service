@@ -104,7 +104,7 @@ async def run_analysis(
         InvalidInvocation: For missing, unknown or unreadable inputs, or
             outputs that don't match the sinks or replace an input.
         RunFailure: `model_failed`, `invalid_model_output`, or
-            `builder_internal_error` for anything else that went wrong.
+            `run_internal_error` for anything else that went wrong.
     """
     _check_inputs(analysis, inputs)
     check_destinations(

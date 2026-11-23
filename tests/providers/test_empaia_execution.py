@@ -200,7 +200,7 @@ class Failing:
 
     async def run_analysis(self, request: AnalysisRunRequest) -> RunResult:
         raise RemoteFailureError(
-            code="invalid_builder_invocation",
+            code="invalid_run_request",
             safe_message=self.message,
             retryable=False,
         )
