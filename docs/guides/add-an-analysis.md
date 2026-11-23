@@ -61,7 +61,24 @@ check passes, regenerate the reference docs and commit them with the file:
 PYTHONPATH=src uv run tools/generate.py
 ```
 
-## 3. Deploy and run it
+## 3. Test it
+
+`uv run pytest tests/catalog` is the quick check while you edit. Before you
+deploy, run the whole suite once:
+
+```sh
+uv run pytest
+```
+
+It needs the development environment from the README's
+[Develop](../../README.md#develop) section: `uv sync` with the process
+extras, and a PostgreSQL container if you want the scheduler tests to run
+rather than skip. With `helm` installed, the suite renders the chart with
+your analysis, and it checks the generated docs, so it catches mistakes the
+catalog check can't see. Nothing else checks the file before the cluster
+loads it.
+
+## 4. Deploy and run it
 
 Add the ID to `analyses` in the environment's values file if it names IDs,
 as `values.rationai-test.yaml` does, and `helm upgrade`. The chart refuses to
@@ -93,7 +110,7 @@ run. The settings are the source's and steps' per-run options, and
 [Analyses](../reference/analyses.md) lists each analysis's settings with
 their defaults.
 
-## 4. Offer it in EMPAIA
+## 5. Offer it in EMPAIA
 
 An `expose.empaia` section turns the analysis into an EMPAIA app, which
 model-service registers when the API starts:

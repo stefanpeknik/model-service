@@ -76,7 +76,24 @@ with the file. `tests/test_generated.py` fails until you do.
 PYTHONPATH=src uv run tools/generate.py
 ```
 
-## 4. Deploy it
+## 4. Test it
+
+`uv run pytest tests/catalog` is the quick check while you edit. Before you
+deploy, run the whole suite once:
+
+```sh
+uv run pytest
+```
+
+It needs the development environment from the README's
+[Develop](../../README.md#develop) section: `uv sync` with the process
+extras, and a PostgreSQL container if you want the scheduler tests to run
+rather than skip. With `helm` installed, the suite renders the chart with
+your model, and it checks the generated docs, so it catches mistakes the
+catalog check can't see. Nothing else checks the file before the cluster
+loads it.
+
+## 5. Deploy it
 
 A values file deploys every served model, or the IDs it names in
 `servedModels`. `values.rationai-test.yaml` names them, so add yours there. If
@@ -89,7 +106,7 @@ the new catalog without restarting. Running `helm upgrade` against a shared
 cluster needs authorization for your task, as
 [AGENTS.md](../../AGENTS.md) says.
 
-## 5. Try it
+## 6. Try it
 
 `GET /v1/models/my-classifier` on the API returns the declaration as deployed
 and its digest. To send one blank tile straight to the model's Ray Serve
