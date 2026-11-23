@@ -16,6 +16,18 @@ class FailureCode(StrEnum):
     INVALID_MODEL_OUTPUT = "invalid_model_output"
 
 
+def failure_status(retryable: bool) -> int:
+    """The HTTP status a caller-safe run failure is answered with.
+
+    Args:
+        retryable: Whether a retry may succeed.
+
+    Returns:
+        503 for a retryable failure, 422 for one that will fail again.
+    """
+    return 503 if retryable else 422
+
+
 class InvalidInvocation(ValueError):
     """Inputs, access, settings or deadline don't fit what is run."""
 

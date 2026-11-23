@@ -15,7 +15,11 @@ from model_service.api.scheduler.dispatch import (
     RemoteFailureError,
     UnknownOutcomeError,
 )
-from model_service.contracts.failures import InvalidInvocation, UnknownAnalysisError
+from model_service.contracts.failures import (
+    InvalidInvocation,
+    UnknownAnalysisError,
+    failure_status,
+)
 
 
 if TYPE_CHECKING:
@@ -77,7 +81,7 @@ async def run_synchronously(
         ) from error
     except RemoteFailureError as error:
         raise http_error(
-            503 if error.retryable else 422,
+            failure_status(error.retryable),
             error.code,
             error.safe_message,
             retryable=error.retryable,

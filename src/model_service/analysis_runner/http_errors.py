@@ -12,7 +12,11 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from model_service.contracts.analysis_http import ErrorCode
-from model_service.contracts.failures import InvalidInvocation, RunFailure
+from model_service.contracts.failures import (
+    InvalidInvocation,
+    RunFailure,
+    failure_status,
+)
 
 
 if TYPE_CHECKING:
@@ -65,9 +69,7 @@ async def answer_http(run: Awaitable[RunResult]) -> RunResult:
         ) from exc
     except RunFailure as exc:
         raise error(
-            status.HTTP_503_SERVICE_UNAVAILABLE
-            if exc.retryable
-            else status.HTTP_422_UNPROCESSABLE_CONTENT,
+            failure_status(exc.retryable),
             exc.code,
             exc.safe_message,
             retryable=exc.retryable,
