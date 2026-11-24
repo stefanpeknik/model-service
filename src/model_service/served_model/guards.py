@@ -124,8 +124,8 @@ def check_output(model: ServedModel, output: np.ndarray) -> np.ndarray:
             raise _error(
                 model,
                 f"{value}, outside the declared range [{low}, {high}]",
-                "a model that returns logits needs `post: [{use: sigmoid}]` "
-                "or `post: [{use: softmax}]`; otherwise fix `output.range`",
+                "a graph that returns logits needs a sigmoid or softmax; "
+                "otherwise fix `output.range`",
             )
     return output
 

@@ -143,7 +143,6 @@ def test_a_run_writes_its_output_where_the_request_says(
             )
         },
     )
-    assert score_grid.check(path) == []
     assert score_grid.read(path).values.shape == (1, 8, 8)
     assert handle.calls == 49
 

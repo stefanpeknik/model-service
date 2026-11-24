@@ -144,7 +144,6 @@ def test_a_model_free_analysis_runs_without_handles(
     written = run(resolved, slide, {"heatmap": out / "heatmap.npz"})
 
     grid = score_grid.read(written["heatmap"])
-    assert score_grid.check(written["heatmap"]) == []
     assert grid.values.shape == (1, 8, 8)
     assert grid.scored.all()
 

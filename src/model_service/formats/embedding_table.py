@@ -71,9 +71,7 @@ __all__ = [
     "RowShapeError",
     "TableWriter",
     "UnsupportedFormat",
-    "check",
     "read",
-    "write",
 ]
 
 
@@ -258,22 +256,6 @@ class TableWriter:
         self._file.close()
 
 
-def write(path: Path, table: EmbeddingTable) -> None:
-    """Write a whole embedding table.
-
-    Args:
-        path: File to write.
-        table: The header and rows.
-
-    Raises:
-        RowShapeError: If the features don't fit the header's summaries.
-    """
-    with TableWriter(path, table.header) as writer:
-        if len(table.coordinates):
-            writer.append(table.coordinates, table.features)
-        writer.close()
-
-
 def read(path: Path, media_type: str = MEDIA_TYPE) -> EmbeddingTable:
     """Read an embedding table.
 
@@ -312,98 +294,6 @@ def read(path: Path, media_type: str = MEDIA_TYPE) -> EmbeddingTable:
             stride=int(attrs["stride"]),
         )
         return EmbeddingTable(header, file["coordinates"][()], file["features"][()])
-
-
-_ATTRIBUTES = (
-    "schema_version",
-    "model_id",
-    "summary_names",
-    "coordinate_space",
-    "slide_level",
-    "level_downsample",
-    "slide_width",
-    "slide_height",
-    "mpp_x",
-    "mpp_y",
-    "model_mpp",
-    "tile_size",
-    "stride",
-    "tile_count",
-)
-
-
-def check(path: Path) -> list[str]:
-    """Check a file against the v2 layout.
-
-    Args:
-        path: The file.
-
-    Returns:
-        One sentence per problem; empty when the file is a valid table.
-    """
-    import h5py
-
-    try:
-        file = h5py.File(path, "r")
-    except OSError as error:
-        return [f"not an HDF5 file: {error}"]
-    with file:
-        attrs = dict(file.attrs)
-        problems = [f"missing attribute `{k}`" for k in _ATTRIBUTES if k not in attrs]
-        if attrs.get("schema_version", VERSION) != VERSION:
-            problems.append(
-                f"`schema_version` is {attrs['schema_version']}, not {VERSION}"
-            )
-        space = attrs.get("coordinate_space", COORDINATE_SPACE)
-        if _text(space) != COORDINATE_SPACE:
-            problems.append(f"`coordinate_space` is {space}, not {COORDINATE_SPACE}")
-        missing = [
-            f"missing `{k}`" for k in ("coordinates", "features") if k not in file
-        ]
-        if missing:
-            return problems + missing
-        problems += _check_rows(file, attrs)
-    return problems
-
-
-def _check_rows(file: h5py.File, attrs: dict[str, Any]) -> list[str]:
-    """Check `coordinates` and `features` against each other and the header.
-
-    Args:
-        file: The open table.
-        attrs: Its attributes.
-
-    Returns:
-        One sentence per problem.
-    """
-    problems = []
-    coordinates, features = file["coordinates"], file["features"]
-    if coordinates.dtype != np.int64 or coordinates.shape[1:] != (2,):
-        problems.append(
-            f"`coordinates` is {coordinates.dtype} {coordinates.shape}, "
-            "not int64 (tiles, 2)"
-        )
-    if features.dtype != np.float32:
-        problems.append(f"`features` is {features.dtype}, not float32")
-    summaries = len(attrs.get("summary_names", ()))
-    rank = 2 if summaries == 1 else 3
-    if features.ndim != rank or (rank == 3 and features.shape[1] != summaries):
-        want = "(tiles, dim)" if rank == 2 else f"(tiles, {summaries}, dim)"
-        problems.append(
-            f"`features` is {features.shape}, not {want}: one row per summary"
-        )
-    if len(features) != len(coordinates):
-        problems.append(
-            f"{len(features)} rows of features for {len(coordinates)} coordinates"
-        )
-    if "tile_count" in attrs and attrs["tile_count"] != len(coordinates):
-        problems.append(
-            f"`tile_count` is {attrs['tile_count']}, but there are "
-            f"{len(coordinates)} coordinates"
-        )
-    if features.size and not np.isfinite(features[()]).all():
-        problems.append("`features` has values that are not finite")
-    return problems
 
 
 def _text(value: Any) -> str:

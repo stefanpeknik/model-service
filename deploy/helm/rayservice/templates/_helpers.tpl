@@ -191,9 +191,8 @@ deploy fails the render, naming both.
 {{- end }}
 
 {{/*
-One served model's Serve application, as
-model_service.served_model.deployment.serve_application builds it, plus the
-environment's env vars (servedModelSettings.env) as the replica's runtime_env.
+One served model's Serve application (the contract in
+model_service/served_model/__init__.py), plus the environment's env vars (servedModelSettings.env) as the replica's runtime_env.
 servedModelSettings.setupTimeoutSeconds, when set, goes to the application's
 runtime_env.config. Takes dict "id", "document" and "settings".
 */}}

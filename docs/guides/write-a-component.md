@@ -100,8 +100,8 @@ class Threshold(Step):
 ```
 
 The shared steps in `src/components/steps/` are real examples of the same
-shape: `sigmoid.py` and `softmax.py` turn logits into probabilities, and
-`normalize.py`, `resize.py` and `center_crop.py` prepare tiles.
+shape: `normalize.py`, `resize.py` and `center_crop.py` prepare tiles, and
+`cls_mean_pool.py` reduces a transformer's tokens to embeddings.
 
 What each part is for:
 

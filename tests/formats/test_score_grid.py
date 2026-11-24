@@ -29,12 +29,11 @@ def write_layout(path: Path, **changes: object) -> Path:
     return path
 
 
-def test_a_file_in_the_layout_reads_and_checks(tmp_path: Path) -> None:
+def test_a_file_in_the_layout_reads(tmp_path: Path) -> None:
     path = write_layout(tmp_path / "grid.npz")
 
     grid = score_grid.read(path)
 
-    assert score_grid.check(path) == []
     assert grid.values.dtype == np.float32
     assert grid.values.shape == (1, 2, 2)
     assert grid.scored.tolist() == [[True, True], [False, True]]
@@ -60,25 +59,6 @@ def test_what_write_writes_reads_back_unchanged(tmp_path: Path) -> None:
         original.cell_size,
         original.mpp,
     )
-
-
-@pytest.mark.parametrize(
-    ("changes", "problem"),
-    [
-        ({"scored": None}, "missing `scored`"),
-        ({"values": np.full((1, 2, 2), 1.5, np.float32)}, "outside 0..1"),
-        ({"values": np.zeros((1, 2, 2), np.float64)}, "`values` is float64"),
-        ({"scored": np.ones((3, 2), bool)}, "`scored` is (3, 2)"),
-    ],
-)
-def test_check_names_what_breaks_the_layout(
-    tmp_path: Path, changes: dict[str, object], problem: str
-) -> None:
-    path = write_layout(tmp_path / "grid.npz", **changes)
-
-    problems = score_grid.check(path)
-
-    assert any(problem in p for p in problems), problems
 
 
 def test_a_reader_refuses_a_version_it_does_not_know(tmp_path: Path) -> None:

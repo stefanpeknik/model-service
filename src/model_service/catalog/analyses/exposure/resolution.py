@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, cast
-
-from pydantic import ValidationError
+from typing import TYPE_CHECKING, cast
 
 from components.base import EmpaiaInput, slots
 from model_service.catalog.analyses.exposure.fields import EmpaiaFields, ExposeFields
-from model_service.catalog.validation import problems
 from model_service.providers.empaia.ead.vocabulary import AppMode, Trigger, ViewerConfig
 from model_service.registry.empaia import TYPE, converters_for, publishers_for
 
@@ -197,11 +194,11 @@ def _inputs(
             )
             ok = False
             continue
-        built = _build(ctx, found[0], declared, path)
+        built = ctx.build(found[0], declared, path, slots.EMPAIA_INPUTS)
         if built is None:
             ok = False
             continue
-        converters[name] = cast("InputConverter", built)
+        converters[name] = built
     return converters if ok else None
 
 
@@ -366,11 +363,10 @@ def _outputs(
             )
             ok = False
             continue
-        built = _build(ctx, found[0], declared, path)
-        if built is None:
+        publisher = ctx.build(found[0], declared, path, slots.EMPAIA_OUTPUTS)
+        if publisher is None:
             ok = False
             continue
-        publisher = cast("Publisher", built)
         if (problem := publisher.check(analysis.columns)) is not None:
             ctx.error(
                 (*path, TYPE),
@@ -399,27 +395,3 @@ def _input_types(ctx: ResolveContext) -> list[str]:
             for c in ctx.registry.usable_in(slots.EMPAIA_INPUTS)
         }
     )
-
-
-def _build(
-    ctx: ResolveContext, component: Any, options: dict[str, Any], path: YamlPath
-) -> Any:
-    """Build a converter or publisher, reporting options that don't fit.
-
-    Args:
-        ctx: Collects errors.
-        component: The converter or publisher class.
-        options: Its options from the file, `type` aside for converters.
-        path: Where the entry is in the file.
-
-    Returns:
-        The component, or None after an error.
-    """
-    try:
-        return component.from_options(options)
-    except ValidationError as error:
-        for loc, problem, hint in problems(
-            error, component.Options, noun="option", owner=f"`{component.name}`"
-        ):
-            ctx.error((*path, *loc), problem.message, problem.fits, hint)
-        return None

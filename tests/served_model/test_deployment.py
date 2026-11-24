@@ -1,79 +1,23 @@
-"""The Serve application a served-model file deploys as, which Helm renders."""
+"""The host reads back the served model Helm hands it in `user_config`."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 from model_service.catalog import load_catalog
-from model_service.served_model.deployment import (
-    DEFAULT_CACHE_ROOT,
-    host_config,
-    serve_application,
-)
+from model_service.served_model.deployment import DEFAULT_CACHE_ROOT, host_config
 
 
 REPO = Path(__file__).resolve().parents[2]
 CATALOG = REPO / "catalog"
 
 
-def test_a_served_model_deploys_on_the_generic_host_with_its_declaration() -> None:
-    model_id = "episeg-1"
-    entry = load_catalog(CATALOG).served_models[model_id]
-
-    app = serve_application(entry, cache_root="/mnt/cache/trt_cache")
-    (deployment,) = app.pop("deployments")
-    user_config = deployment.pop("user_config")
-
-    assert app == {
-        "name": model_id,
-        "route_prefix": f"/{model_id}",
-        "import_path": "model_service.served_model.serve:app",
-    }
-    assert deployment["name"] == "ServedModel"
-    assert user_config == {
-        "id": model_id,
-        "declaration": entry.declaration,
-        "cache_root": "/mnt/cache/trt_cache",
-    }
-
-
 def test_the_host_reads_back_the_model_the_catalog_resolved() -> None:
     entry = load_catalog(CATALOG).served_models["prostate-classifier-1"]
-    (deployment,) = serve_application(entry, cache_root="/cache")["deployments"]
+    user_config = {"id": entry.id, "declaration": entry.declaration}
 
-    model, cache_root = host_config(deployment["user_config"])
-    _, default_root = host_config(
-        {k: v for k, v in deployment["user_config"].items() if k != "cache_root"}
-    )
+    model, cache_root = host_config(user_config | {"cache_root": "/cache"})
+    _, default_root = host_config(user_config)
 
     assert (model.id, model.digest) == ("prostate-classifier-1", entry.digest)
     assert (cache_root, default_root) == (Path("/cache"), Path(DEFAULT_CACHE_ROOT))
-
-
-def test_serving_limits_follow_the_batch_size_unless_given(tmp_path: Path) -> None:
-    root = tmp_path / "catalog"
-    (root / "served-models").mkdir(parents=True)
-    (root / "served-models" / "m1.yaml").write_text(
-        "weights: {use: local, path: /m.onnx}\n"
-        "runtime: {use: onnx}\n"
-        "input: {tile_size: 64, mpp: 0.5}\n"
-        "output: {kind: scores}\n"
-        "batching: {max_size: 8, wait_s: 0}\n"
-        "resources: {gpus: 0.5, memory_gib: 1.5}\n"
-        "serving: {max_replicas: 1, max_queued_requests: 10}\n"
-    )
-    entry = load_catalog(root).served_models["m1"]
-
-    (deployment,) = serve_application(entry, cache_root="/c")["deployments"]
-
-    assert {k: v for k, v in deployment.items() if k != "user_config"} == {
-        "name": "ServedModel",
-        "max_ongoing_requests": 16,
-        "max_queued_requests": 10,
-        "autoscaling_config": {
-            "min_replicas": 0,
-            "max_replicas": 1,
-            "target_ongoing_requests": 4,
-        },
-        "ray_actor_options": {"num_cpus": 1, "num_gpus": 0.5, "memory": 1610612736},
-    }

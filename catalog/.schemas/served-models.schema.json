@@ -698,47 +698,6 @@
       ],
       "title": "resize (step)",
       "type": "object"
-    },
-    "step_sigmoid": {
-      "additionalProperties": false,
-      "description": "Turns logits into independent probabilities, `1 / (1 + exp(-x))` per value.",
-      "properties": {
-        "use": {
-          "const": "sigmoid",
-          "description": "The step `sigmoid`.",
-          "title": "Use",
-          "type": "string"
-        }
-      },
-      "required": [
-        "use"
-      ],
-      "title": "sigmoid (step)",
-      "type": "object"
-    },
-    "step_softmax": {
-      "additionalProperties": false,
-      "description": "Turns per-channel logits into probabilities that sum to 1.",
-      "properties": {
-        "temperature": {
-          "default": 1.0,
-          "description": "Divides the logits first; above 1 flattens the scores.",
-          "exclusiveMinimum": 0,
-          "title": "Temperature",
-          "type": "number"
-        },
-        "use": {
-          "const": "softmax",
-          "description": "The step `softmax`.",
-          "title": "Use",
-          "type": "string"
-        }
-      },
-      "required": [
-        "use"
-      ],
-      "title": "softmax (step)",
-      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -795,9 +754,7 @@
             "center_crop": "#/$defs/step_center_crop",
             "cls_mean_pool": "#/$defs/step_cls_mean_pool",
             "normalize": "#/$defs/step_normalize",
-            "resize": "#/$defs/step_resize",
-            "sigmoid": "#/$defs/step_sigmoid",
-            "softmax": "#/$defs/step_softmax"
+            "resize": "#/$defs/step_resize"
           },
           "propertyName": "use"
         },
@@ -813,12 +770,6 @@
           },
           {
             "$ref": "#/$defs/step_resize"
-          },
-          {
-            "$ref": "#/$defs/step_sigmoid"
-          },
-          {
-            "$ref": "#/$defs/step_softmax"
           }
         ]
       },
@@ -834,9 +785,7 @@
             "center_crop": "#/$defs/step_center_crop",
             "cls_mean_pool": "#/$defs/step_cls_mean_pool",
             "normalize": "#/$defs/step_normalize",
-            "resize": "#/$defs/step_resize",
-            "sigmoid": "#/$defs/step_sigmoid",
-            "softmax": "#/$defs/step_softmax"
+            "resize": "#/$defs/step_resize"
           },
           "propertyName": "use"
         },
@@ -852,12 +801,6 @@
           },
           {
             "$ref": "#/$defs/step_resize"
-          },
-          {
-            "$ref": "#/$defs/step_sigmoid"
-          },
-          {
-            "$ref": "#/$defs/step_softmax"
           }
         ]
       },

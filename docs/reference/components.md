@@ -227,42 +227,6 @@ for bit; Pillow must be installed where the step runs.
 | `size` | integer > 0 | required | The shorter edge after resizing, in pixels; the longer edge keeps the aspect ratio, so a square tile becomes `size` x `size`. |
 | `interpolation` | `bilinear` or `bicubic` or `nearest` | `bilinear` | The resampling filter: `bilinear`, `bicubic` or `nearest`. |
 
-### `sigmoid` (step)
-
-Turns logits into independent probabilities, `1 / (1 + exp(-x))` per value.
-
-`post: [{use: sigmoid}]` fixes a model that returns logits for one class,
-or for several classes that may all be present, so its file can declare
-`output: {range: [0, 1]}`. For classes that exclude each other, use
-`softmax`.
-
-- **Usable in:** served model `pre:`, served model `post:`, analysis `steps:`
-- **Example:** `{use: sigmoid}`
-- **Reads:** `output` `float32[...]`
-- **Adds:** `output` `float32[...]`
-- **Used in:** no catalog file yet
-- **Code:** [`src/components/steps/sigmoid.py`](../../src/components/steps/sigmoid.py)
-
-### `softmax` (step)
-
-Turns per-channel logits into probabilities that sum to 1.
-
-`post: [{use: softmax}]` fixes a model that returns logits for classes
-that exclude each other, so its file can declare `output: {range: [0, 1]}`.
-The channels are the first axis of a score map `(channels, size, size)`;
-each pixel gets its own distribution.
-
-- **Usable in:** served model `pre:`, served model `post:`, analysis `steps:`
-- **Example:** `{use: softmax, temperature: 1.0}`
-- **Reads:** `output` `float32[?,?,?]`
-- **Adds:** `output` `float32[?,?,?]`
-- **Used in:** no catalog file yet
-- **Code:** [`src/components/steps/softmax.py`](../../src/components/steps/softmax.py)
-
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `temperature` | number > 0 | `1.0` | Divides the logits first; above 1 flattens the scores. |
-
 ## Sources
 
 Produces an analysis's items from its inputs, e.g. tiles of a slide.

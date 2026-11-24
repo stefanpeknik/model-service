@@ -38,9 +38,8 @@ Each served-model file's blocks map onto Ray Serve's options:
 - `serving.max_concurrent_runs` is not a Serve option. It caps the scheduled
   analysis runs using the model at once, and the control plane reads it.
 
-`model_service.served_model.deployment.serve_application` builds the
-application from a resolved file, and `tests/deploy/test_chart.py` checks the
-chart renders the same thing. The test cluster's patch for Virchow2, for
+The chart's `_helpers.tpl` renders the application; the contract is written
+out in `src/model_service/served_model/__init__.py`. The test cluster's patch for Virchow2, for
 example, gives it half a GPU, smaller batches and one replica:
 
 ```yaml

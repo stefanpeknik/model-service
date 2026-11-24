@@ -13,7 +13,6 @@ import yaml
 
 from model_service.catalog import load_catalog
 from model_service.control_plane.catalog_mount import MountedCatalog
-from model_service.served_model.deployment import serve_application
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -22,8 +21,6 @@ CATALOG = REPO / "catalog"
 TEST_VALUES = CHART / "values.rationai-test.yaml"
 TEST_ANALYSES = ("prostate-heatmap", "virchow2-embeddings", "prov-gigapath-embeddings")
 BASE_VALUES = CHART / "values.yaml"
-TEST_MLFLOW = "https://mlflow.rationai.cloud.e-infra.cz"
-BASE_MLFLOW = "http://mlflow.rationai-mlflow:5000"
 
 pytestmark = pytest.mark.skipif(shutil.which("helm") is None, reason="needs helm")
 
@@ -64,30 +61,6 @@ def catalog_data(objects: dict[tuple[str, str], Any]) -> dict[str, Any]:
     """The control plane's catalog ConfigMap, each key decoded from JSON."""
     data = objects[("ConfigMap", "model-service-model-catalog")]["data"]
     return {key: json.loads(text) for key, text in data.items()}
-
-
-@pytest.mark.parametrize(
-    ("values", "environment", "model_id", "mlflow"),
-    [
-        ((TEST_VALUES,), "rationai-test", "prostate-classifier-1", TEST_MLFLOW),
-        ((TEST_VALUES,), "rationai-test", "virchow2", TEST_MLFLOW),
-        ((), None, "prostate-classifier-1", BASE_MLFLOW),
-        ((), None, "episeg-1", BASE_MLFLOW),
-        ((), None, "virchow2", BASE_MLFLOW),
-    ],
-)
-def test_a_served_model_deploys_as_serve_application_builds_it(
-    values: tuple[Path, ...], environment: str | None, model_id: str, mlflow: str
-) -> None:
-    entry = load_catalog(CATALOG, environment).served_models[model_id]
-    expected = serve_application(
-        entry, cache_root="/mnt/cache/trt_cache", setup_timeout_seconds=1800
-    )
-    expected["deployments"][0]["ray_actor_options"]["runtime_env"] = {
-        "env_vars": {"MLFLOW_TRACKING_URI": mlflow, "HF_HOME": "/mnt/huggingface_cache"}
-    }
-
-    assert applications(render(*values))[model_id] == expected
 
 
 def test_an_environment_deploys_its_served_models_and_one_runner() -> None:

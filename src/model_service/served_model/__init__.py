@@ -8,10 +8,10 @@ A served model is a file in `catalog/served-models/`; this package serves it.
   `describe()`. Tests and tools use it without Serve.
 - `serve.py`: the thin Ray Serve wrapper, `app`, with the HTTP routes
   (`POST /`, `GET /describe`) and the handle methods.
-- `deployment.py`: the Serve application a served model deploys as.
+- `deployment.py`: `host_config`, which reads the `user_config` Helm renders.
 
 Deployment contract (what Helm renders for each served model, one application
-each; `deployment.serve_application` is the reference):
+each, in `deploy/helm/rayservice/templates/_helpers.tpl`):
 
 ```yaml
 - name: <id>                     # the file name

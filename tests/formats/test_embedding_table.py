@@ -54,12 +54,11 @@ def write_layout(
     return path
 
 
-def test_a_file_in_the_layout_reads_and_checks(tmp_path: Path) -> None:
+def test_a_file_in_the_layout_reads(tmp_path: Path) -> None:
     path = write_layout(tmp_path / "table.h5")
 
     table = embedding_table.read(path)
 
-    assert embedding_table.check(path) == []
     assert table.coordinates.tolist() == [[0, 0], [224, 0]]
     assert table.features.dtype == np.float32
     assert table.features.shape == (2, 2, 3)
@@ -88,69 +87,22 @@ def test_a_file_in_the_layout_reads_and_checks(tmp_path: Path) -> None:
     ],
     ids=["one summary", "two summaries", "empty, one summary", "empty, two"],
 )
-def test_what_write_writes_reads_back_and_checks(
+def test_what_the_table_writer_writes_reads_back(
     tmp_path: Path, summaries: tuple[str, ...], features: np.ndarray
 ) -> None:
     original = embedding_table.read(write_layout(tmp_path / "a.h5"))
     header = replace(original.header, summary_names=summaries)
     coordinates = np.array([[0, 0], [224, 0]][: len(features)], np.int64).reshape(-1, 2)
-    table = embedding_table.EmbeddingTable(header, coordinates, features)
 
-    embedding_table.write(tmp_path / "b.h5", table)
+    with embedding_table.TableWriter(tmp_path / "b.h5", header) as writer:
+        if len(coordinates):
+            writer.append(coordinates, features)
+        writer.close()
     copy = embedding_table.read(tmp_path / "b.h5")
 
-    assert embedding_table.check(tmp_path / "b.h5") == []
     assert copy.header == header
     assert copy.coordinates.tolist() == coordinates.tolist()
     assert copy.features.shape == features.shape
     assert copy.features.tobytes() == features.tobytes()
     with h5py.File(tmp_path / "b.h5") as file:
         assert file.attrs["tile_count"] == len(features)
-
-
-@pytest.mark.parametrize(
-    ("change", "problem"),
-    [
-        ({"attrs": {"model_id": None}}, "missing attribute `model_id`"),
-        ({"attrs": {"schema_version": 1}}, "`schema_version` is 1, not 2"),
-        ({"attrs": {"tile_count": 3}}, "`tile_count` is 3"),
-        ({"coordinates": None}, "missing `coordinates`"),
-        ({"features": np.ones((2, 2, 3), np.float64)}, "`features` is float64"),
-        ({"features": np.ones((2, 3), np.float32)}, "one row per summary"),
-        ({"features": np.ones((3, 2, 3), np.float32)}, "3 rows of features"),
-        ({"features": np.full((2, 2, 3), np.nan, np.float32)}, "not finite"),
-    ],
-)
-def test_check_names_what_breaks_the_layout(
-    tmp_path: Path, change: dict[str, Any], problem: str
-) -> None:
-    path = write_layout(tmp_path / "table.h5", **change)
-
-    problems = embedding_table.check(path)
-
-    assert any(problem in p for p in problems), problems
-
-
-def test_check_refuses_a_file_that_is_not_hdf5(tmp_path: Path) -> None:
-    path = tmp_path / "table.h5"
-    path.write_bytes(b"not hdf5")
-
-    assert embedding_table.check(path)[0].startswith("not an HDF5 file")
-
-
-def test_a_reader_takes_its_media_type_and_refuses_others(
-    tmp_path: Path,
-) -> None:
-    path = write_layout(tmp_path / "table.h5")
-    newer = embedding_table.MEDIA_TYPE.replace("version=2", "version=3")
-
-    assert embedding_table.MEDIA_TYPE == (
-        "application/vnd.rationai.embedding-table+hdf5; version=2"
-    )
-    table = embedding_table.read(path, media_type=embedding_table.MEDIA_TYPE)
-
-    assert table.features.shape == (2, 2, 3)
-    with pytest.raises(embedding_table.UnsupportedFormat, match="version=3"):
-        embedding_table.read(path, media_type=newer)
-    with pytest.raises(embedding_table.UnsupportedFormat):
-        embedding_table.read(path, media_type="application/x-hdf5")

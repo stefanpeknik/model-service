@@ -10,7 +10,7 @@ environment's patch).
 from __future__ import annotations
 
 import difflib
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
 
@@ -101,8 +101,24 @@ class ResolveContext:
             self._unknown(slot, name, (*path, "use"), usable)
             return None
         options = {k: v for k, v in value.items() if k != "use"}
+        return self.build(component, options, path, slot)
+
+    def build[C: Component](
+        self, component: type[C], options: dict[str, Any], path: YamlPath, slot: Slot
+    ) -> C | None:
+        """Build a component from its options, reporting the ones that don't fit.
+
+        Args:
+            component: The component class.
+            options: Its options from the file.
+            path: Where the component sits in the file.
+            slot: The slot it is used in.
+
+        Returns:
+            The component, or None after recording what's wrong.
+        """
         try:
-            return component.from_options(options)
+            return component(component.Options.model_validate(options))
         except ValidationError as error:
             owner = f"`{component.name}`"
             for loc, problem, hint in problems(

@@ -51,7 +51,6 @@ __all__ = [
     "VERSION",
     "ScoreGrid",
     "UnsupportedFormat",
-    "check",
     "read",
     "write",
 ]
@@ -123,54 +122,3 @@ def read(path: Path, media_type: str = MEDIA_TYPE) -> ScoreGrid:
             cell_size=float(stored["cell_size"]),
             mpp=(mpp_x, mpp_y),
         )
-
-
-_LAYOUT: dict[str, tuple[str, tuple[int, ...] | None]] = {
-    "values": ("float32", None),
-    "scored": ("bool", None),
-    "level": ("int64", ()),
-    "level_size": ("int64", (2,)),
-    "cell_size": ("float64", ()),
-    "mpp": ("float64", (2,)),
-}
-
-
-def check(path: Path) -> list[str]:
-    """Check a file against the v1 layout.
-
-    Args:
-        path: The file.
-
-    Returns:
-        One sentence per problem; empty when the file is a valid score grid.
-    """
-    try:
-        stored = np.load(path, allow_pickle=False)
-    except (OSError, ValueError) as error:
-        return [f"not an npz archive: {error}"]
-    with stored:
-        arrays = {key: stored[key] for key in stored.files}
-    problems = [f"missing `{key}`" for key in _LAYOUT if key not in arrays]
-    for key, (dtype, shape) in _LAYOUT.items():
-        if key not in arrays:
-            continue
-        array = arrays[key]
-        if array.dtype != np.dtype(dtype):
-            problems.append(f"`{key}` is {array.dtype}, not {dtype}")
-        if shape is not None and array.shape != shape:
-            problems.append(f"`{key}` is {array.shape}, not {shape}")
-    values, scored = arrays.get("values"), arrays.get("scored")
-    if values is not None:
-        if values.ndim != 3:
-            problems.append(
-                f"`values` is {values.shape}, not (channels, rows, columns)"
-            )
-        elif scored is not None and scored.shape != values.shape[1:]:
-            problems.append(
-                f"`scored` is {scored.shape}, not the grid's {values.shape[1:]}"
-            )
-        if values.size and not (
-            np.isfinite(values).all() and values.min() >= 0 and values.max() <= 1
-        ):
-            problems.append("`values` has scores outside 0..1")
-    return problems

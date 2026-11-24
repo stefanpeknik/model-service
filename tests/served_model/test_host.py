@@ -263,8 +263,7 @@ def test_an_embedding_replies_pooled_or_as_tokens_without_registers(
             {"sigmoid": False, "shift": 2},
             {},
             r"returned \d+\.\d+, outside the declared range \[0\.0, 1\.0\]. "
-            r"Hint: a model that returns logits needs `post: \[{use: sigmoid}\]` "
-            r"or `post: \[{use: softmax}\]`",
+            r"Hint: a graph that returns logits needs a sigmoid or softmax",
         ),
         (
             {"sigmoid": False, "shift": math.inf},
