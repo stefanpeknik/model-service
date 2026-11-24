@@ -15,6 +15,8 @@ expose:
     description: Classifies prostate tissue and shows the scores as a heatmap over the slide.
     modes:
       standalone:
+        # Fields in the Workbench form, filled in per job; preprocessing keeps the file's values.
+        parameters: [stride_fraction, skip_background, min_tissue_fraction]
       preprocessing:
         # EMPAIA preprocesses slides with these EMPAIA tags (or ANY) with the app.
         triggers:

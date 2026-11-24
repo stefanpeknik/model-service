@@ -43,7 +43,7 @@ Scores each tile of a prostate slide into a heatmap.
 - **Steps:** model [`prostate-classifier-1`](served-models.md#prostate-classifier-1)
 - **Inputs:** `slide` (required), `region_of_interest` (optional)
 - **Outputs:** `heatmap`: [`score_grid`](formats.md#score_grid) (`.npz`)
-- **EMPAIA:** app “Prostate cancer heatmap” (ProstHM), modes: standalone, preprocessing; publishes `heatmap` as `continuous_pixelmap`; preprocesses PROSTATE/H_AND_E slides
+- **EMPAIA:** app “Prostate cancer heatmap” (ProstHM), modes: standalone, preprocessing; publishes `heatmap` as `continuous_pixelmap`; job parameters: `stride_fraction`, `skip_background`, `min_tissue_fraction`; preprocesses PROSTATE/H_AND_E slides
 - **File:** [`catalog/analyses/prostate-heatmap.yaml`](../../catalog/analyses/prostate-heatmap.yaml)
 
 Per-run settings:
