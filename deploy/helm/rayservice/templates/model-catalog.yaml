@@ -1,7 +1,7 @@
 {{- /*
-The API's catalog, rendered from the same files as the Serve config. The API
+The control plane's catalog, rendered from the same files as the Serve config. The control plane
 mounts it as a directory and reloads it when kubelet updates the files, so a
-catalog change does not restart the API.
+catalog change does not restart the control plane.
 
 - catalog.json: the deployed served models and analyses after the
   environment's patches.

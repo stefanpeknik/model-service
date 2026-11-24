@@ -42,7 +42,7 @@ are stale.
 | [Golden references, 2026-11-22](operations/golden-references-2026-11-22.md) | Outputs recorded before the rebuild, which live tests compare against |
 | [EMPAIA app reconcile, 2026-11-22](operations/empaia-app-reconcile-2026-11-22.md) | Apps registered from analyses; apps without one retired |
 | [Core acceptance, 2026-10-14](operations/core-acceptance-2026-10-14.md) | Live evidence for the scheduler and API core |
-| [Image empaia-30, 2026-11-11](operations/empaia-30-deploy-2026-11-11.md) | The process-split package layout deployed; raw inference leaves the API |
+| [Image empaia-30, 2026-11-11](operations/empaia-30-deploy-2026-11-11.md) | The process-split package layout deployed; raw inference leaves the control plane |
 | [Standalone EMPAIA runs, 2026-11-06](operations/empaia-standalone-runs-2026-11-06.md) | Region-of-interest jobs from the case browser |
 | [Composed providers, 2026-11-01](operations/empaia-provider-composition-2026-11-01.md), [score-grid heatmaps, 2026-10-31](operations/empaia-score-grid-2026-10-31.md) | ProstHM runs on the test instance: 102 s cold, 49 s warm |
 | [operations/](operations/) | Every dated record, from the first EMPAIA job (2026-10-21) on |

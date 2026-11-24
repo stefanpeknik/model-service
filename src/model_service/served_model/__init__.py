@@ -43,5 +43,5 @@ The host resolves `declaration` with the same loader code as the catalog, so
 reconfigures the replica in place. Runtime caches (TensorRT engines) go to
 `<cache_root>/<id>/<first 12 hex digits of the digest>`.
 
-Only `serve.py` imports Ray; the other modules load in the API process.
+Only `serve.py` imports Ray; the other modules load in the control plane.
 """

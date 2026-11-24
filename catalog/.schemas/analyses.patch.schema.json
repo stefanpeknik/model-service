@@ -90,7 +90,7 @@
     },
     "Expose": {
       "additionalProperties": false,
-      "description": "How the analysis is offered beyond the API.",
+      "description": "How the analysis is offered beyond the public API.",
       "properties": {
         "empaia": {
           "anyOf": [

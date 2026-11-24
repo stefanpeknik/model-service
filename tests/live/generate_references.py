@@ -1,7 +1,7 @@
 """Record golden references from a running deployment.
 
 Raw routes get tiles read locally from copies of the reference slides; runs go
-through the API with the slides on the deployment's shared storage, and their
+through the control plane with the slides on the deployment's shared storage, and their
 outputs stay there (copy them next to the raw references, then `--manifest`):
 
     uv run python -m tests.live.generate_references raw \

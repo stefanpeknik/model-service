@@ -119,7 +119,7 @@ What each part is for:
   column `output`; in an analysis, a model step adds `scores` or `features`.
 - The class docstring is the component's reference page.
 - Import heavy libraries (torch, ONNX Runtime, OpenSlide) inside methods,
-  never at the top of the module. The API imports every component to check
+  never at the top of the module. The control plane imports every component to check
   catalog files and must stay free of them.
 - Override `hint()` if you can tell a file author which value to change when
   a check fails; `huggingface.py` does it for a bad `revision`.

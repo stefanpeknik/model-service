@@ -54,12 +54,12 @@ storage:
   outputSize: 32Gi
   scratchSize: 32Gi
 
-api:
+controlPlane:
   enabled: true
-  # Two, so a restart (e.g. for a new model) never takes the API down.
+  # Two, so a restart (e.g. for a new model) never takes the control plane down.
   replicas: 2
   image:
-    repository: cerit.io/stefanpeknik/model-service-api
+    repository: cerit.io/stefanpeknik/model-service-control-plane
     tag: unit-9037eb7
     pullPolicy: IfNotPresent
   database:

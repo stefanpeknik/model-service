@@ -1,4 +1,4 @@
-"""The runner answers failures in the envelope the API's dispatch reads."""
+"""The runner answers failures in the envelope the control plane's dispatch reads."""
 
 from __future__ import annotations
 

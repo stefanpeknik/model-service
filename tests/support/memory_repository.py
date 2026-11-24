@@ -13,7 +13,9 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from model_service.api.scheduler.internal_state import (
+from model_service.contracts.invocation import ExecutionContext, Invocation
+from model_service.contracts.result import RunResult
+from model_service.control_plane.scheduler.internal_state import (
     Admission,
     AdmissionResult,
     ExecutionRecord,
@@ -23,27 +25,28 @@ from model_service.api.scheduler.internal_state import (
     WorkClaim,
     WorkKind,
 )
-from model_service.api.scheduler.public import (
+from model_service.control_plane.scheduler.public import (
     ScheduleConflictError,
     UnknownExecutionError,
 )
-from model_service.api.scheduler.status import ExecutionStatus
-from model_service.api.scheduler.store.repository import ExecutionRepository
-from model_service.api.scheduler.targets import fixed_limit
-from model_service.api.scheduler.transitions.common import work_deadline_at
-from model_service.api.scheduler.transitions.execution_transitions import (
+from model_service.control_plane.scheduler.status import ExecutionStatus
+from model_service.control_plane.scheduler.store.repository import ExecutionRepository
+from model_service.control_plane.scheduler.targets import fixed_limit
+from model_service.control_plane.scheduler.transitions.common import work_deadline_at
+from model_service.control_plane.scheduler.transitions.execution_transitions import (
     ExecutionTransitions,
 )
-from model_service.contracts.invocation import ExecutionContext, Invocation
-from model_service.contracts.result import RunResult
 
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Mapping
 
-    from model_service.api.scheduler.public import SubmissionIdentity
-    from model_service.api.scheduler.targets import CapacityKey, CapacityLimits
     from model_service.contracts.analysis_http import AnalysisRunRequest
+    from model_service.control_plane.scheduler.public import SubmissionIdentity
+    from model_service.control_plane.scheduler.targets import (
+        CapacityKey,
+        CapacityLimits,
+    )
 
 
 def utc_now() -> datetime:

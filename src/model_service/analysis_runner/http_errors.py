@@ -1,6 +1,7 @@
 """Answer a run request and map exceptions to the runner's HTTP error envelope.
 
-The format is in contracts/analysis_http.py; the public API's is api/http/errors.py.
+The format is in contracts/analysis_http.py; the control plane's is
+control_plane/http/errors.py.
 """
 
 from __future__ import annotations

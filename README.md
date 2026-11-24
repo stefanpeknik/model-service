@@ -83,7 +83,7 @@ grid = formats.read(heatmap.path, heatmap.media_type)
 `embedding_table` needs the SDK's `hdf5` extra. Without the SDK,
 `numpy.load("heatmap.npz")` reads a score grid too.
 
-For one tile, skip the API and post it to the served model's Ray Serve route;
+For one tile, skip the control plane and post it to the served model's Ray Serve route;
 [raw inference](docs/available-models.md) shows the request and reply.
 
 ## Layout
@@ -107,7 +107,7 @@ src/model_service/        the plumbing
   served_model/           the generic host that serves every served model
   analysis_runner/        the Ray Serve app that runs every analysis
   formats/                data formats sinks write and readers open
-  api/                    the public API process, with the durable scheduler in api/scheduler/
+  control_plane/          the control plane: public routes, catalog, the durable scheduler in control_plane/scheduler/
   providers/              where runs read input and publish output: standalone, empaia/
   slides/                 slide reading and tissue detection for sources
   contracts/              data shapes processes hand each other
@@ -126,7 +126,7 @@ export GIT_CONFIG_COUNT=1 \
   GIT_CONFIG_KEY_0=url.git@gitlab.ics.muni.cz:rationai/digital-pathology/production/services/models.git.insteadOf \
   GIT_CONFIG_VALUE_0=https://github.com/AigoPath/EMPAIA-Models.git
 export UV_CACHE_DIR=.cache/uv
-uv sync --extra api --extra analysis-runner --extra served-models --extra cpu
+uv sync --extra control-plane --extra analysis-runner --extra served-models --extra cpu
 podman run -d --name ms-test-pg -p 127.0.0.1:55432:5432 \
   -e POSTGRES_PASSWORD=test docker.io/library/postgres:17-alpine
 TEST_POSTGRES_DSN=postgresql://postgres:test@127.0.0.1:55432/postgres uv run pytest
@@ -135,7 +135,7 @@ uv run mypy src
 PYTHONPATH=src uv run tools/generate.py   # after changing components, formats or catalog/
 ```
 
-Each process has its extra: `api`, `analysis-runner` and `served-models`,
+Each process has its extra: `control-plane`, `analysis-runner` and `served-models`,
 with `cpu` or `gpu` for the runtimes. Without `TEST_POSTGRES_DSN`
 the PostgreSQL tests are skipped. Tests marked `live` call the deployed
 cluster and run only with `uv run pytest -m live`.

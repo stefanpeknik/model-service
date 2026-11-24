@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from model_service.api.scheduler.internal_state import (
+from model_service.contracts.invocation import InputAccessContext, Invocation
+from model_service.contracts.result import RunResult, ServedModelRun, SharedArtifact
+from model_service.control_plane.scheduler.internal_state import (
     Admission,
     ProcessingRejected,
     ProcessingSucceeded,
@@ -14,17 +16,17 @@ from model_service.api.scheduler.internal_state import (
     WorkClaim,
     WorkKind,
 )
-from model_service.api.scheduler.public import (
+from model_service.control_plane.scheduler.public import (
     Priority,
     SubmissionIdentity,
 )
-from model_service.contracts.invocation import InputAccessContext, Invocation
-from model_service.contracts.result import RunResult, ServedModelRun, SharedArtifact
 from tests.support.scheduling import stored_target
 
 
 if TYPE_CHECKING:
-    from model_service.api.scheduler.store.repository import ExecutionRepository
+    from model_service.control_plane.scheduler.store.repository import (
+        ExecutionRepository,
+    )
 
 
 class ExecutionRepositoryContract:

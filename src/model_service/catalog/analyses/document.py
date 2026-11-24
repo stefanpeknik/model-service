@@ -51,7 +51,7 @@ class Fields(BaseModel):
         source: The source.
         steps: Steps, in order.
         sinks: Sinks.
-        expose: How the analysis is offered beyond the API, e.g. in EMPAIA.
+        expose: How the analysis is offered beyond the public API, e.g. in EMPAIA.
     """
 
     model_config = ConfigDict(extra="forbid")

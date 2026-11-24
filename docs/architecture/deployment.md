@@ -1,8 +1,8 @@
 # How the chart deploys the catalog
 
 The Helm chart in `deploy/helm/rayservice/` reads the repo's `catalog/`
-through its `catalog` symlink and renders one RayService, the API Deployment
-and the API's catalog ConfigMap. Nothing in the chart lists models or
+through its `catalog` symlink and renders one RayService, the control-plane Deployment
+and the control plane's catalog ConfigMap. Nothing in the chart lists models or
 analyses: it globs the catalog folders and the values pick from them.
 
 ## Values
@@ -17,7 +17,7 @@ analyses: it globs the catalog folders and the values pick from them.
 | `cpuWorkerResource` | A Ray custom resource only CPU worker groups advertise. The analysis runner requests it, so Ray never places it on a GPU worker's free CPUs. |
 | `sharedStorageRoots` | The roots callers may name in shared-storage requests. |
 | `workers`, `rayImage`, `rayGpuImage` | The worker groups, from `deploy/helm/rayservice/workers/<name>.yaml`, and their images. |
-| `api`, `empaia` | The API Deployment and the EMPAIA provider's settings. |
+| `controlPlane`, `empaia` | The control-plane Deployment and the EMPAIA provider's settings. |
 
 `values.yaml` holds the defaults for the cluster the base files target;
 `values.rationai-test.yaml` overrides them for the test namespace
@@ -36,7 +36,7 @@ Each served-model file's blocks map onto Ray Serve's options:
   `max_ongoing_requests` above `batching.max_size`, or batches never fill
   ([queues and backpressure](queues-and-backpressure.md)).
 - `serving.max_concurrent_runs` is not a Serve option. It caps the scheduled
-  analysis runs using the model at once, and the API reads it.
+  analysis runs using the model at once, and the control plane reads it.
 
 `model_service.served_model.deployment.serve_application` builds the
 application from a resolved file, and `tests/deploy/test_chart.py` checks the
@@ -50,15 +50,15 @@ resources: {gpus: 0.5, cpus: 1}
 serving: {max_replicas: 1, target_ongoing_requests: 128, max_ongoing_requests: 256, max_queued_requests: 2048, downscale_delay_s: 300}
 ```
 
-## The API's catalog
+## The control plane's catalog
 
 The catalog ConfigMap carries the deployed served models and analyses after
-the environment's patches, as JSON. The API mounts it and resolves it through
+the environment's patches, as JSON. The control plane mounts it and resolves it through
 the same `load_catalog` the catalog test uses. When kubelet updates the
-mounted files (within about a minute of `helm upgrade`), the API reloads
+mounted files (within about a minute of `helm upgrade`), the control plane reloads
 them. A catalog that doesn't load leaves the previous one serving, and
 `/healthz/catalog` answers 503 with the errors. A catalog change therefore
-needs neither an image rebuild nor an API restart; only components (code)
+needs neither an image rebuild nor a control-plane restart; only components (code)
 need a new image.
 
 ## Worker groups

@@ -1,4 +1,4 @@
-"""Served-model documents as the chart puts them in the API's `catalog.json`."""
+"""Served-model documents as the chart puts them in the control plane's `catalog.json`."""
 
 from __future__ import annotations
 

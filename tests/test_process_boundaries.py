@@ -1,6 +1,6 @@
-"""Each process imports only its own packages: the API never loads Ray, replicas never load the API.
+"""Each process imports only its own packages: the control plane never loads Ray, replicas never load it.
 
-The processes: the API (`api/`), the generic served-model host
+The processes: the control plane (`control_plane/`), the generic served-model host
 (`served_model/`) and the analysis runner (`analysis_runner/`); `catalog/`,
 `registry/`, `formats/` and `contracts/` are shared and stay light, and so
 does the top-level `components` package every process scans.
@@ -51,8 +51,8 @@ def under(modules: set[str], *packages: str) -> list[str]:
 
 
 class ProcessBoundaryTests(unittest.TestCase):
-    def test_the_api_process_loads_no_ray_and_no_replica_code(self) -> None:
-        modules = loaded_modules("model_service.api.app_factory")
+    def test_the_control_plane_loads_no_ray_and_no_replica_code(self) -> None:
+        modules = loaded_modules("model_service.control_plane.app_factory")
 
         self.assertEqual(
             under(
@@ -75,7 +75,7 @@ class ProcessBoundaryTests(unittest.TestCase):
     def test_every_component_and_the_catalog_load_without_heavy_libraries(
         self,
     ) -> None:
-        """The API validates catalogs, so component declarations must stay light."""
+        """The control plane validates catalogs, so component declarations must stay light."""
         modules = loaded_modules(
             "model_service.catalog, model_service.registry",
             then=(
@@ -106,11 +106,11 @@ class ProcessBoundaryTests(unittest.TestCase):
 
         self.assertEqual(under(modules, "model_service"), [])
 
-    def test_the_replicas_load_no_api_code(self) -> None:
+    def test_the_replicas_load_no_control_plane_code(self) -> None:
         for serve in ("analysis_runner", "served_model"):
             with self.subTest(serve):
                 modules = loaded_modules(f"model_service.{serve}.serve")
-                self.assertEqual(under(modules, "model_service.api"), [])
+                self.assertEqual(under(modules, "model_service.control_plane"), [])
 
     def test_the_served_model_replica_loads_no_runner_or_slide_code(self) -> None:
         modules = loaded_modules("model_service.served_model.serve")
@@ -134,7 +134,12 @@ class ProcessBoundaryTests(unittest.TestCase):
 
         self.assertEqual(
             under(
-                modules, "ray", "onnxruntime", "torch", "mlflow", "model_service.api"
+                modules,
+                "ray",
+                "onnxruntime",
+                "torch",
+                "mlflow",
+                "model_service.control_plane",
             ),
             [],
         )
@@ -152,7 +157,7 @@ class ProcessBoundaryTests(unittest.TestCase):
                 "openslide",
                 "pyvips",
                 "ratiopath",
-                "model_service.api",
+                "model_service.control_plane",
             ),
             [],
         )

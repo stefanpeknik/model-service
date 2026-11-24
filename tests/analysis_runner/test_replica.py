@@ -1,6 +1,6 @@
 """The analysis-runner replica core: a run request in, outputs on shared storage out.
 
-Each test resolves a small analysis over `fake_slide()` the way the API does,
+Each test resolves a small analysis over `fake_slide()` the way the control plane does,
 and runs it with fake served-model handles below a shared-storage root.
 """
 

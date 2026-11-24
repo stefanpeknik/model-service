@@ -10,11 +10,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
-from model_service.api.scheduler.public import (
-    ExecutionError,
-    ProviderFailure,
-    ProviderSuccess,
-)
 from model_service.contracts.failures import InvalidInvocation
 from model_service.contracts.invocation import (
     ExecutionContext,
@@ -23,6 +18,11 @@ from model_service.contracts.invocation import (
     SharedPathInput,
 )
 from model_service.contracts.result import RunResult, SharedArtifact
+from model_service.control_plane.scheduler.public import (
+    ExecutionError,
+    ProviderFailure,
+    ProviderSuccess,
+)
 from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from tests.support.scheduling import stored_target

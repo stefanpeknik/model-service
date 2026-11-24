@@ -3,6 +3,21 @@
 This context names the work model-service runs and how callers track it,
 independently of the system that supplies the data.
 
+## Processes
+
+**Control plane**:
+The model-service process outside Ray that manages work: it serves the
+catalog, admits and resolves runs, keeps scheduled executions in PostgreSQL
+and integrates the providers. It never handles tiles, so raw inference skips
+it.
+_Avoid_: API (for the process), gateway
+
+**Data plane**:
+The Ray Serve applications that do the compute: one per served model, and the
+analysis runner. Callers reach it directly only for raw inference; analyses
+come through the control plane.
+_Avoid_: Execution plane, workers
+
 ## Building blocks
 
 **Component**:
@@ -69,7 +84,7 @@ such as the stride between tiles. EMPAIA offers settings as job parameters.
 _Avoid_: Builder configuration, parameter (outside EMPAIA)
 
 **Exposure**:
-How an analysis is offered beyond the API. Exposing an analysis to EMPAIA
+How an analysis is offered beyond the public API. Exposing an analysis to EMPAIA
 makes it one EMPAIA app.
 _Avoid_: Registration, publishing (for the app itself)
 
@@ -134,7 +149,7 @@ _Avoid_: Provider delivery, generic publication
 **Execution scheduler**:
 The part of model-service that owns schedule requests and advances scheduled
 executions through processing and provider finish.
-_Avoid_: Demand controller, control plane, job scheduler
+_Avoid_: Demand controller, control plane (the scheduler is one part of it), job scheduler
 
 **Model capacity**:
 How many scheduled runs may use one served model at once. A run is claimed

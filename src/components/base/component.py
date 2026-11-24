@@ -2,7 +2,7 @@
 
 A component is a small class with a `name`, a nested `Options` model and the
 method set of its kind. Its module imports only light dependencies (pydantic,
-NumPy typing) at top level and heavy ones inside methods, so the API can load
+NumPy typing) at top level and heavy ones inside methods, so the control plane can load
 and check every component without Ray, ONNX Runtime, torch or OpenSlide.
 """
 

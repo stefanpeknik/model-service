@@ -1,6 +1,6 @@
 """An invocation: what is run, on which inputs, with which access, by when.
 
-It crosses every process boundary (API, scheduler database, the analysis
+It crosses every process boundary (control plane, scheduler database, the analysis
 runner on Ray), so the types are strict and JSON-serializable.
 """
 

@@ -24,7 +24,14 @@ from typing import TYPE_CHECKING, Any, cast
 from pydantic import ValidationError
 
 from components.base import EmpaiaInput, EmpaiaOutput
-from model_service.api.scheduler.public import (
+from model_service.contracts.invocation import (
+    InputAccessContext,
+    Invocation,
+    ProviderInput,
+)
+from model_service.contracts.json_values import is_json_value
+from model_service.contracts.result import SharedArtifact
+from model_service.control_plane.scheduler.public import (
     AnalysisScheduleRequest,
     InvalidScheduleRequestError,
     PreparedInvocation,
@@ -36,13 +43,6 @@ from model_service.api.scheduler.public import (
     ProviderSuccess,
     SubmissionIdentity,
 )
-from model_service.contracts.invocation import (
-    InputAccessContext,
-    Invocation,
-    ProviderInput,
-)
-from model_service.contracts.json_values import is_json_value
-from model_service.contracts.result import SharedArtifact
 from model_service.directories import remove_directory
 from model_service.formats.known import format_of
 from model_service.providers.empaia.app_service.gateway import (
@@ -82,11 +82,11 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from components.base import Commit
-    from model_service.api.scheduler.public import BeforeMutation
     from model_service.catalog import Catalog
     from model_service.catalog.analyses import Analysis
     from model_service.contracts.json_values import JsonValue
     from model_service.contracts.result import RunResult
+    from model_service.control_plane.scheduler.public import BeforeMutation
     from model_service.providers.empaia.app_service.gateway import (
         ComponentUse,
         EmpaiaGateway,

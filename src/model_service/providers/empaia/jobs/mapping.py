@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Never
 
-from model_service.api.scheduler.public import (
+from model_service.control_plane.scheduler.public import (
     InvalidScheduleRequestError,
     SchedulingUnavailableError,
 )

@@ -1,6 +1,6 @@
-"""An analysis resolved for one run: the document the API admits and the runner executes.
+"""An analysis resolved for one run: the document the control plane admits and the runner executes.
 
-At admission the API resolves the analysis with the caller's settings into one
+At admission the control plane resolves the analysis with the caller's settings into one
 JSON document. Every component appears with all of its options (defaults,
 filled-in geometry and the caller's overrides included), each served model it
 calls with its declaration and digest, and a digest over all of it:
@@ -18,7 +18,7 @@ calls with its declaration and digest, and a digest over all of it:
 ```
 
 The runner reads it back with `load_resolved`, so it runs exactly what the
-API validated even if the catalog changed in between, and compares each
+control plane validated even if the catalog changed in between, and compares each
 served model's `describe()` digest with the one recorded here. The document
 doubles as the run's provenance record.
 """
@@ -77,7 +77,7 @@ class ResolvedAnalysis:
 
     @property
     def model_digests(self) -> dict[str, str]:
-        """Each served model's digest as the API resolved it, by ID."""
+        """Each served model's digest as the control plane resolved it, by ID."""
         return {
             model_id: served[DIGEST]
             for model_id, served in self.document["served_models"].items()

@@ -66,7 +66,7 @@ def exposure_schema(registry: Registry) -> type[BaseModel]:
     return create_model(
         "Expose",
         __base__=ExposeFields,
-        __doc__="How the analysis is offered beyond the API.",
+        __doc__="How the analysis is offered beyond the public API.",
         empaia=(empaia | None, _described("empaia", ExposeFields)),
     )
 

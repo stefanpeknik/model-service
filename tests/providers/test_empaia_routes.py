@@ -7,23 +7,23 @@ import unittest
 from fastapi import Request
 from httpx import ASGITransport, AsyncClient
 
-from model_service.api.app_factory import create_app
-from model_service.api.http.auth import (
+from model_service.catalog import Catalog
+from model_service.contracts.failures import UnknownAnalysisError
+from model_service.control_plane.app_factory import create_app
+from model_service.control_plane.http.auth import (
     Access,
     AuthenticationError,
     Authenticator,
     Principal,
 )
-from model_service.api.scheduler.public import (
+from model_service.control_plane.scheduler.public import (
     AnalysisScheduleRequest,
     ExecutionError,
     ExecutionView,
     ScheduleResult,
     UnknownExecutionError,
 )
-from model_service.api.scheduler.status import ExecutionStatus
-from model_service.catalog import Catalog
-from model_service.contracts.failures import UnknownAnalysisError
+from model_service.control_plane.scheduler.status import ExecutionStatus
 from model_service.providers.empaia.jobs.routes import create_router
 
 

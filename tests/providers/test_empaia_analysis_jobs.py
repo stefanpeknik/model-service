@@ -19,12 +19,12 @@ from httpx import ASGITransport, AsyncClient
 
 from model_service.analysis_runner.replica import AnalysisReplica
 from model_service.analysis_runner.settings import ReplicaSettings
-from model_service.api.scheduler.execution_scheduler import ExecutionScheduler
-from model_service.api.scheduler.public import Priority
-from model_service.api.scheduler.running_work import ActiveWorkRegistry
-from model_service.api.scheduler.worker import ExecutionWorker
 from model_service.catalog import load_catalog
 from model_service.catalog.analyses import resolve_run
+from model_service.control_plane.scheduler.execution_scheduler import ExecutionScheduler
+from model_service.control_plane.scheduler.public import Priority
+from model_service.control_plane.scheduler.running_work import ActiveWorkRegistry
+from model_service.control_plane.scheduler.worker import ExecutionWorker
 from model_service.providers.empaia.app_service.gateway import (
     EmpaiaInputState,
     EmpaiaJobContext,

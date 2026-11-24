@@ -41,7 +41,7 @@ def served_models_page(catalog: Catalog, root: Path) -> str:
         "# Served models",
         "Each file in `catalog/served-models/` is one trained model behind the "
         "generic host. The file name is the model ID and its raw route, "
-        "`POST /<id>/` on Ray Serve; `GET /v1/models/<id>` on the API returns "
+        "`POST /<id>/` on Ray Serve; `GET /v1/models/<id>` on the control plane returns "
         "its declaration and digest. To add one, see "
         "[Add a model](../guides/add-a-model.md); the components named below "
         "are in [Components](components.md).",

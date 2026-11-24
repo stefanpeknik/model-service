@@ -15,10 +15,10 @@ writing Python or rebuilding an image.
 
 | Area | What it gives | Where |
 | --- | --- | --- |
-| Public API | One HTTP entry point for analyses, executions and the catalog, with auth hooks, capacity checks and health | `src/model_service/api/` (incl. `api/http/`) |
-| Durable scheduler | Executions stored in PostgreSQL: queueing until every served model a run calls has capacity, leases, retries, deadlines, cancellation, priorities | `src/model_service/api/scheduler/` |
+| Public API | One HTTP entry point for analyses, executions and the catalog, with auth hooks, capacity checks and health | `src/model_service/control_plane/` (incl. `http/`) |
+| Durable scheduler | Executions stored in PostgreSQL: queueing until every served model a run calls has capacity, leases, retries, deadlines, cancellation, priorities | `src/model_service/control_plane/scheduler/` |
 | Components | Small reusable classes of seven kinds (loader, runtime, step, source, sink, EMPAIA converter and publisher) that catalog files name, found by a folder scan, each with a conformance suite | `src/components/`, `src/model_service/registry/` |
-| Catalog | Served-model and analysis files with per-cluster patches, checked before deployment with errors naming the file, the YAML path and a fix; the API reloads it without restarting | `catalog/`, `src/model_service/catalog/` |
+| Catalog | Served-model and analysis files with per-cluster patches, checked before deployment with errors naming the file, the YAML path and a fix; the control plane reloads it without restarting | `catalog/`, `src/model_service/catalog/` |
 | Served models | One generic Ray Serve host for every trained model, checking each batch against the file's declaration and reporting a digest of what it computes | `src/model_service/served_model/` |
 | Analyses | One generic runner for every whole-slide job: heatmaps (score grids) and tile embeddings (HDF5) today, in versioned data formats | `src/model_service/analysis_runner/`, `src/model_service/formats/` |
 | EMPAIA provider | Self-registration of each exposed analysis as an EMPAIA app, JES job execution in STANDALONE and PREPROCESSING modes, publication of continuous pixelmaps through the EMPAIA SDK | `providers/empaia/`, [EMPAIA integration](architecture/empaia.md) |
@@ -47,26 +47,26 @@ in `slides/` and the `slide_tiles` source.
 
 ## How traffic flows
 
-Raw per-tile inference does not go through model-service's API: a caller
+Raw per-tile inference does not go through model-service's control plane: a caller
 posts a tile straight to the served model's Ray Serve route
 (`POST /<model-id>/`), as in the baseline.
 
 Analysis run (immediate or scheduled):
 
 ```text
-client ─HTTP─▶ API ──(scheduled: PostgreSQL row, worker claims it)
+client ─HTTP─▶ control plane ──(scheduled: PostgreSQL row, worker claims it)
                 │ HTTP, the resolved analysis and control data only
                 ▼
          analysis runner ─Ray handle per tile─▶ served model (batched)
                 │ reads the slide and writes the outputs on shared storage
                 ▼
-         paths of the outputs ─▶ API ─▶ client / EMPAIA publication
+         paths of the outputs ─▶ control plane ─▶ client / EMPAIA publication
 ```
 
 Slides, tiles, heatmaps and embeddings never cross HTTP on this path: the
 runner reads the slide from shared storage, sends tiles to the model as Ray
 objects inside the cluster, and writes the result next to the slide. Only
-the request and the outputs' paths travel over HTTP. The API reaches the
+the request and the outputs' paths travel over HTTP. The control plane reaches the
 runner over HTTP rather than a Ray handle because the scheduler runs outside
 Ray Serve ([ADR 0001](adr/0001-run-scheduler-outside-ray-serve.md)).
 

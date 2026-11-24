@@ -55,7 +55,7 @@ cpuWorkerResource:
   perWorker: 100
   perReplica: 1
 
-# Roots callers may name in shared-storage requests (API and analysis runner).
+# Roots callers may name in shared-storage requests (control plane and analysis runner).
 sharedStorageRoots: [/mnt/data, /mnt/projects]
 
 workers:
@@ -74,11 +74,11 @@ rayGpuImage:
   tag: 2.58.0-py312-gpu
   pullPolicy: Always
 
-api:
+controlPlane:
   enabled: false
   replicas: 2
   image:
-    repository: cerit.io/rationai/model-service-api
+    repository: cerit.io/rationai/model-service-control-plane
     tag: ""
     pullPolicy: IfNotPresent
   database:
@@ -116,20 +116,20 @@ empaia:
   # AppService URLs that may receive EMPAIA job credentials.
   apiUrls: []
   workspaceRoot: /mnt/model-service-executions
-  # Shared by the API and the analysis runner: the runner writes job outputs
-  # there and the API publishes them. Required by the API with apiUrls.
+  # Shared by the control plane and the analysis runner: the runner writes job outputs
+  # there and the control plane publishes them. Required by the control plane with apiUrls.
   workspaceClaim: ""
   # Slide inputs are linked from the file named by the RationAI direct-access
   # route. The claim holding the installation's slides, mounted
   # read-only where its CDS mounts it, since model-service links the absolute
-  # path CDS answers. The API mounts it; worker files include it too.
+  # path CDS answers. The control plane mounts it; worker files include it too.
   slideVolume:
     existingClaim: ""
     mountPath: ""
   # Extra DNS search domains for pods that call AppService, when the
   # installation hands out short host names from another namespace.
   dnsSearches: []
-  # The API registers an app, with its modes, for every deployed analysis with
+  # The control plane registers an app, with its modes, for every deployed analysis with
   # `expose.empaia`, at startup, in this marketplace (the marketplace mock that
   # EMPAIA test installations run), and deletes the apps it registered there
   # that no deployed analysis has any more. Empty url: no registration.
@@ -140,7 +140,7 @@ empaia:
     # installation: it also marks the apps and preprocessing triggers this
     # deployment owns.
     jesTarget: model-service
-    # The installation's Medical Data Service: the API keeps the preprocessing
+    # The installation's Medical Data Service: the control plane keeps the preprocessing
     # triggers the analyses list there, with these client credentials.
     # Empty: triggers are left alone.
     mdsUrl: ""

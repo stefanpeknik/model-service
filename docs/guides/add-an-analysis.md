@@ -113,7 +113,7 @@ their defaults.
 ## 5. Offer it in EMPAIA
 
 An `expose.empaia` section turns the analysis into an EMPAIA app, which
-model-service registers when the API starts:
+model-service registers when the control plane starts:
 
 ```yaml
 expose:

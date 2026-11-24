@@ -17,10 +17,6 @@ from fastapi import FastAPI
 from model_service.analysis_runner.http_errors import answer_http
 from model_service.analysis_runner.replica import AnalysisReplica
 from model_service.analysis_runner.settings import ReplicaSettings
-from model_service.api.scheduler.dispatch import (
-    HTTPAnalysisDispatch,
-    RemoteFailureError,
-)
 from model_service.catalog import load_catalog
 from model_service.catalog.analyses import resolve_run
 from model_service.contracts.analysis_http import AnalysisRunRequest
@@ -35,6 +31,10 @@ from model_service.contracts.invocation import (
     InputAccessContext,
     Invocation,
     ProviderInput,
+)
+from model_service.control_plane.scheduler.dispatch import (
+    HTTPAnalysisDispatch,
+    RemoteFailureError,
 )
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.app_service.types import DirectAccess
@@ -298,7 +298,7 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
     async def test_workspace_directories_let_any_user_remove_their_entries(
         self,
     ) -> None:
-        # Ray creates the workspace, the API removes it, and they may run as
+        # Ray creates the workspace, the control plane removes it, and they may run as
         # different users: whatever the umask, every directory is 0777.
         modes: dict[str, int] = {}
 

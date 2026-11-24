@@ -3,8 +3,8 @@
 Drawn from the runtime imports in `src/model_service` and `src/components` on
 2026-11-23 (imports under `TYPE_CHECKING` are left out). Solid arrows mean "imports"; dashed
 arrows are calls across a process or network boundary that no import shows.
-`tests/test_process_boundaries.py` checks the part that matters most: the API
-process loads no Ray, ONNX Runtime, torch, OpenSlide or replica code, and
+`tests/test_process_boundaries.py` checks the part that matters most: the control
+plane loads no Ray, ONNX Runtime, torch, OpenSlide or replica code, and
 the shared packages stay light.
 
 ## Packages and processes
@@ -13,11 +13,11 @@ the shared packages stay light.
 flowchart LR
   classDef ext fill:#f4f4f4,stroke:#999,stroke-dasharray:3
 
-  subgraph sg_api["API process (uvicorn: api.main)"]
-    api["api<br/>app_factory, catalog_mount,<br/>synchronous_runs, analysis_requests"]
-    routes["api.routes.v1<br/>analyses · executions · models"]
-    http["api.http<br/>auth · errors · scheduling"]
-    subgraph sg_sched["api.scheduler"]
+  subgraph sg_cp["control plane (uvicorn: control_plane.main)"]
+    cp["control_plane<br/>app_factory, catalog_mount,<br/>synchronous_runs, analysis_requests"]
+    routes["control_plane.routes.v1<br/>analyses · executions · models"]
+    http["control_plane.http<br/>auth · errors · scheduling"]
+    subgraph sg_sched["control_plane.scheduler"]
       scheduler["scheduler<br/>execution_scheduler, worker, dispatch"]
       transitions["scheduler.transitions"]
       store["scheduler.store<br/>repository · postgres · migrate"]
@@ -57,10 +57,10 @@ flowchart LR
   pg[("PostgreSQL")]:::ext
   jes["EMPAIA JES / App Service"]:::ext
 
-  api --> routes & http & scheduler & store & catalog & providers & contracts
+  cp --> routes & http & scheduler & store & catalog & providers & contracts
   routes --> http & scheduler & catalog & formats & contracts
   http --> scheduler & contracts
-  scheduler --> api & store & contracts
+  scheduler --> cp & store & contracts
   store --> scheduler & transitions & contracts
   transitions --> scheduler
 
@@ -93,7 +93,7 @@ A few arrows cross into packages of another process at module level only:
   triggers, viewer settings) that `expose.empaia` is checked against;
 - the EMPAIA converters and publishers in `components.empaia` import the
   gateway errors and types of `providers.empaia.app_service`, and
-  `slide_tiles` imports `slides` inside its methods only, so the API never
+  `slide_tiles` imports `slides` inside its methods only, so the control plane never
   loads OpenSlide;
 - `analysis_runner` imports `served_model.guards` to check each model's
   output against its declaration;
@@ -106,7 +106,7 @@ The component folders import `model_service.formats`, `contracts` and the
 EMPAIA gateway; none of those import `components`, and the registry finds
 the folders by name, so no import cycle crosses the two packages.
 
-`scheduler ⇄ store`, `empaia ⇄ ead` and `scheduler → api` exist at package
+`scheduler ⇄ store`, `empaia ⇄ ead` and `scheduler → control_plane` exist at package
 level only; the modules on each side import different files, so no import
 cycle runs.
 
@@ -115,8 +115,8 @@ cycle runs.
 ```mermaid
 sequenceDiagram
   participant C as Caller / EMPAIA JES
-  participant R as api.routes.v1 / empaia.jobs.routes
-  participant H as api.http.scheduling
+  participant R as control_plane.routes.v1 / empaia.jobs.routes
+  participant H as control_plane.http.scheduling
   participant S as scheduler (execution_scheduler)
   participant P as provider adapter
   participant DB as scheduler.store → PostgreSQL

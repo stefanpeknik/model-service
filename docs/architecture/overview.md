@@ -1,7 +1,7 @@
 # Architecture Overview
 
 This page describes the Ray Serve layer that served models and the analysis
-runner run on. For analyses, the API and the durable scheduler, see
+runner run on. For analyses, the control plane and the durable scheduler, see
 [How model-service is put together](core.md).
 
 This section provides a structured overview of Model Service's architecture.
@@ -12,7 +12,7 @@ If you are new to the project, start here and then follow the links to the deepe
 
 Problem solved: route HTTP inference requests to multiple Ray Serve applications while preserving clean service boundaries and independent scaling.
 
-The diagram below summarizes the head-node control plane and worker-node execution plane used in this project.
+The diagram below summarizes Ray's head node (controller and HTTP proxy) and the worker nodes that run the data plane. The control plane (`model_service/control_plane/`) runs outside Ray; see [How model-service is put together](core.md).
 
 ## System Architecture
 
@@ -67,7 +67,7 @@ The main components are:
 1. **Ray Service (The Platform)**: The Kubernetes Custom Resource (CR) that defines the entire Ray cluster and the Serve application(s) running on top of it.
 2. **Ray Cluster**: The physical set of Kubernetes pods, consisting of a **Head Node** and multiple **Worker Nodes**.
 3. **Infrastructure Actors**:
-   - **Controller**: Manages the control plane, API calls, and autoscaling (does not handle requests).
+   - **Controller**: Ray Serve's own management actor: applications, deployments and autoscaling (does not handle requests).
    - **HTTP Proxy**: Ingress point that routes requests to applications.
 4. **Serve Application (The Service Boundary)**: A standalone version of your code, including all its deployments and logic. Defined by an import path (e.g., `model_service.served_model.serve:app`, which every served model uses).
 5. **Serve Deployment (The Functional Unit)**: A managed group of replicas. It defines scaling rules (`num_replicas`, `num_cpus`) and versioning.

@@ -11,8 +11,8 @@ from typing import Any
 import pytest
 import yaml
 
-from model_service.api.catalog_mount import MountedCatalog
 from model_service.catalog import load_catalog
+from model_service.control_plane.catalog_mount import MountedCatalog
 from model_service.served_model.deployment import serve_application
 
 
@@ -61,7 +61,7 @@ def cpu_worker_resource() -> dict[str, Any]:
 
 
 def catalog_data(objects: dict[tuple[str, str], Any]) -> dict[str, Any]:
-    """The API's catalog ConfigMap, each key decoded from JSON."""
+    """The control plane's catalog ConfigMap, each key decoded from JSON."""
     data = objects[("ConfigMap", "model-service-model-catalog")]["data"]
     return {key: json.loads(text) for key, text in data.items()}
 
@@ -117,7 +117,7 @@ def test_the_base_values_serve_every_model_on_the_generic_host() -> None:
     } == {"model_service.served_model.serve:app"}
 
 
-def test_the_api_catalog_carries_the_deployed_served_models() -> None:
+def test_the_control_plane_catalog_carries_the_deployed_served_models() -> None:
     data = catalog_data(render(TEST_VALUES))
     catalog = load_catalog(CATALOG, "rationai-test")
     entries = catalog.served_models
@@ -133,12 +133,12 @@ def test_the_api_catalog_carries_the_deployed_served_models() -> None:
             for analysis_id in TEST_ANALYSES
         },
     }
-    # The catalog is all the API reads.
+    # The catalog is all the control plane reads.
     assert set(data) == {"catalog.json"}
     assert "empaia" in data["catalog.json"]["analyses"]["prostate-heatmap"]["expose"]
 
 
-def test_the_api_reads_the_rendered_catalog(tmp_path: Path) -> None:
+def test_the_control_plane_reads_the_rendered_catalog(tmp_path: Path) -> None:
     data = render(TEST_VALUES)[("ConfigMap", "model-service-model-catalog")]["data"]
     for name, text in data.items():
         (tmp_path / name).write_text(text, encoding="utf-8")
@@ -173,8 +173,8 @@ def test_a_named_served_model_without_a_file_fails_the_render() -> None:
     assert "no-such-model" in failed.value.stderr
 
 
-def test_catalog_changes_reach_the_api_without_rolling_it() -> None:
-    api = render(TEST_VALUES)[("Deployment", "model-service-api")]
+def test_catalog_changes_reach_the_control_plane_without_rolling_it() -> None:
+    api = render(TEST_VALUES)[("Deployment", "model-service-control-plane")]
     pod = api["spec"]["template"]
     container = pod["spec"]["containers"][0]
     (mount,) = [m for m in container["volumeMounts"] if m["name"] == "model-catalog"]

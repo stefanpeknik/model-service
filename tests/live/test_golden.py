@@ -4,7 +4,7 @@ Environment:
 
 - `MODEL_SERVICE_SERVE_URL`: Ray Serve base URL (raw routes), e.g. a
   port-forward of `model-service-serve-svc` to `http://localhost:18000`;
-- `MODEL_SERVICE_API_URL`: the API, e.g. `http://localhost:18080`;
+- `MODEL_SERVICE_CONTROL_PLANE_URL`: the control plane, e.g. `http://localhost:18080`;
 - `MODEL_SERVICE_GOLDEN_DIR`: the local reference set (default `.cache/golden/refs`);
 - `MODEL_SERVICE_LIVE_NAMESPACE`: where run outputs are fetched from with
   `oc exec` (default `rationai-infra-test-ns`);
@@ -130,7 +130,7 @@ def test_run_matches_references(analysis: str) -> None:
     prefix = f"live/{uuid.uuid4().hex[:8]}"
     problems = []
     with httpx.Client(
-        base_url=require("MODEL_SERVICE_API_URL"), timeout=7300
+        base_url=require("MODEL_SERVICE_CONTROL_PLANE_URL"), timeout=7300
     ) as client:
         for reference in sorted((GOLDEN / "runs" / analysis).iterdir()):
             output = f"{prefix}/{analysis}/{reference.name}"
@@ -161,7 +161,7 @@ def test_run_matches_references(analysis: str) -> None:
                         "-n",
                         namespace,
                         "exec",
-                        "deploy/model-service-api",
+                        "deploy/model-service-control-plane",
                         "--",
                         "cat",
                         f"{SHARED_ROOT}/{output}",

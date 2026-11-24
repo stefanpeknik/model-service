@@ -7,7 +7,7 @@ steps:
   - {model: prostate-classifier-1}
 sinks:
   - {use: score_grid, output: heatmap}
-# The prostate cancer app pathologists use; the API registers it at startup.
+# The prostate cancer app pathologists use; the control plane registers it at startup.
 expose:
   empaia:
     name: Prostate cancer heatmap

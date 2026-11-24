@@ -8,7 +8,7 @@ Release `model-service`, values `deploy/helm/rayservice/values.rationai-test.yam
 
 ## Layout
 
-- API Deployment `model-service-api` with PostgreSQL
+- control-plane Deployment `model-service-control-plane` with PostgreSQL
   `model-service-postgres`.
 - RayService with one CPU worker group (the analysis runner) and
   one MIG GPU worker group (served models) that scales to zero. The runner
@@ -17,7 +17,7 @@ Release `model-service`, values `deploy/helm/rayservice/values.rationai-test.yam
   `prostate-classifier-1` needs (`cpuWorkerResource` in the chart's
   `values.yaml`). GPUs are scarce on the cluster: after testing, check that no
   `gpu-workers` pod remains (it goes about six minutes after the last request).
-- Slides: linked through the direct-access route. The API and both worker groups mount
+- Slides: linked through the direct-access route. The control plane and both worker groups mount
   the instance's `test-data-storage-pvc` read-only at `/data/Projects`, where
   its CDS plugins mount it, because model-service links the absolute path CDS
   answers. The claim is read-only on the volume itself, not only the mount,
@@ -55,15 +55,15 @@ named in `servedModels` (`prostate-classifier-1`, `virchow2` and
 `prov-gigapath`; EPISeg's weights sit on an MLflow this cluster can't reach)
 and in `analyses` (`prostate-heatmap`, `virchow2-embeddings` and
 `prov-gigapath-embeddings`), with the `catalog/environments/rationai-test/`
-patches. A catalog-only change needs no image rebuild and doesn't restart the API: kubelet
-updates the mounted catalog ConfigMap (within about a minute) and the API
-reloads it. If the new catalog doesn't load, the API keeps the old one and
-`/healthz/catalog` answers 503 with the reason; the API log says the same.
+patches. A catalog-only change needs no image rebuild and doesn't restart the control plane: kubelet
+updates the mounted catalog ConfigMap (within about a minute) and the control plane
+reloads it. If the new catalog doesn't load, the control plane keeps the old one and
+`/healthz/catalog` answers 503 with the reason; the control plane log says the same.
 
 ## Ship code
 
 Dependencies rarely change, so images are a thin code layer over the October
-GPU and API images (the API base is still named `model-service-scheduler`). Pushing into the same Harbor repository reuses their
+GPU and control-plane images (the control-plane base is still named `model-service-scheduler`). Pushing into the same Harbor repository reuses their
 large base layers. Until a release of the EMPAIA SDK carries model-service's
 additions, its wheel goes in `deploy/images/wheels/`.
 
@@ -79,9 +79,9 @@ podman build -f deploy/images/Dockerfile.code-refresh \
   --build-arg BASE=cerit.io/stefanpeknik/model-service-scheduler:checkpoint-20261008-a91b519 \
   --build-arg RUN_USER=10001 --build-arg 'EXTRA_PACKAGES=lz4>=4.4.5 jsonschema>=4.23.0,<5 numpy imageio h5py pyyaml>=6.0.2' \
   --build-arg SOURCE_REVISION=$REV \
-  -t cerit.io/stefanpeknik/model-service-api:core-$REV .
+  -t cerit.io/stefanpeknik/model-service-control-plane:core-$REV .
 podman push cerit.io/stefanpeknik/model-service-ray:core-$REV
-podman push cerit.io/stefanpeknik/model-service-api:core-$REV
+podman push cerit.io/stefanpeknik/model-service-control-plane:core-$REV
 ```
 
 Set both tags in `values.rationai-test.yaml`, then `helm upgrade`.
@@ -90,16 +90,16 @@ Set both tags in `values.rationai-test.yaml`, then `helm upgrade`.
 
 The instance's JES reaches model-service through its `JES_HTTP_TARGETS`
 entry `model-service`, set by hand on the `test-jobs-jes` Deployment to
-`http://model-service-api.rationai-infra-test-ns.svc.cluster.local:8080/v1/empaia`.
+`http://model-service-control-plane.rationai-infra-test-ns.svc.cluster.local:8080/v1/empaia`.
 A `helm upgrade` of the `test-jobs` release reverts it. Changing it touches a
 shared service and needs authorization for the task. Releases before the
-rename served it as `model-service-execution-scheduler`; the first upgrade
+control-plane rename served it as `model-service-api`; the first upgrade
 with the renamed chart needs this entry changed too.
 
 ## Try it
 
 ```sh
-oc -n rationai-infra-test-ns port-forward svc/model-service-api 18080:8080
+oc -n rationai-infra-test-ns port-forward svc/model-service-control-plane 18080:8080
 curl localhost:18080/v1/models
 curl localhost:18080/healthz/deployments
 curl localhost:18080/healthz/catalog
@@ -107,16 +107,16 @@ curl localhost:18080/healthz/catalog
 
 `prostate-classifier-1`, `virchow2` and `prov-gigapath` start the GPU
 worker. To warm a served model with one blank tile, or start a job of the
-prostate app from EMPAIA, run these scripts in an API pod:
+prostate app from EMPAIA, run these scripts in a control-plane pod:
 
 ```sh
-oc exec -i deploy/model-service-api -- python - virchow2 224 < tools/warm_model.py
-oc exec -i deploy/model-service-api -- python - SLIDE_ID 120 < tools/request_preprocessing.py
+oc exec -i deploy/model-service-control-plane -- python - virchow2 224 < tools/warm_model.py
+oc exec -i deploy/model-service-control-plane -- python - SLIDE_ID 120 < tools/request_preprocessing.py
 ```
 
 ## Logs
 
-- API: refused submissions and ignored EMPAIA configuration keys, with
+- Control plane: refused submissions and ignored EMPAIA configuration keys, with
   reasons.
 - Analysis progress and errors: the analysis runner's JSON lines on the CPU
   worker pod's stdout (`oc logs`), each naming its execution, and the Ray

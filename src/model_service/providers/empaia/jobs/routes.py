@@ -18,28 +18,28 @@ from typing import TYPE_CHECKING, Annotated
 from fastapi import APIRouter, Header, Response, status
 from pydantic import Field
 
-from model_service.api.http.auth import Access, Action
-from model_service.api.http.errors import (
+from model_service.control_plane.http.auth import Access, Action
+from model_service.control_plane.http.errors import (
     ERRORS,
     ApiErrorCode,
     http_error,
     unavailable,
 )
-from model_service.api.http.scheduling import submit
-from model_service.api.scheduler.public import (
+from model_service.control_plane.http.scheduling import submit
+from model_service.control_plane.scheduler.public import (
     AnalysisScheduleRequest,
     SchedulingUnavailableError,
     UnknownExecutionError,
 )
-from model_service.api.scheduler.status import ExecutionStatus
+from model_service.control_plane.scheduler.status import ExecutionStatus
 from model_service.providers.empaia.app_service.gateway import PROVIDER_NAME
 from model_service.providers.empaia.jobs.payload import EmpaiaSchedulePayload
 
 
 if TYPE_CHECKING:
-    from model_service.api.scheduler.protocols import Scheduler
-    from model_service.api.scheduler.public import ExecutionView
     from model_service.contracts.json_values import JsonValue
+    from model_service.control_plane.scheduler.protocols import Scheduler
+    from model_service.control_plane.scheduler.public import ExecutionView
 
 
 @dataclass(frozen=True, slots=True)

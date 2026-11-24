@@ -4,7 +4,7 @@
 environment's patches over the base files and resolves every served model,
 then every analysis, or raises `CatalogInvalid` listing every mistake as
 `<file>:<yaml path>: <what's wrong>. <what would fit>. Hint: <how to fix>`.
-The API, the catalog test and tools all load through it. It imports no Ray,
+The control plane, the catalog test and tools all load through it. It imports no Ray,
 ONNX Runtime, torch or OpenSlide.
 """
 

@@ -3,7 +3,7 @@
 Model Service runs RationAI's pathology models on Ray Serve. A trained model
 is a **served model**, a whole-slide job that calls models is an
 **analysis**, and both are YAML files in the repo's `catalog/`, assembled
-from reusable **components**. The API runs analyses synchronously or as
+from reusable **components**. The control plane runs analyses synchronously or as
 durable executions, and offers them to EMPAIA as apps.
 
 ## Start here

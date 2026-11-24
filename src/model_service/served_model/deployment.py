@@ -2,7 +2,7 @@
 
 `serve_application` is the reference for what Helm renders per served model;
 `host_config` is how the host reads its `user_config` back. Neither imports
-Ray, so the chart's tests and the API can use them.
+Ray, so the chart's tests and the control plane can use them.
 """
 
 from __future__ import annotations

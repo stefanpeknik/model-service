@@ -1,13 +1,13 @@
 """The provider contract: what a provider is and every method it writes.
 
-A provider is a `Provider` (here) listed in `providers/registry.py`. The API
+A provider is a `Provider` (here) listed in `providers/registry.py`. The control plane
 process and the analysis runner compose the providers there and name none
 of them. A provider writes:
 
-- `Provider.api` and `Provider.input_access`: what it adds to each process;
+- `Provider.control_plane` and `Provider.input_access`: what it adds to each process;
 - a `ProviderAdapter` (here): `identify`, `prepare` and `finish`, admitting a
   job and finishing it, with the types they take and return in
-  api/scheduler/public.py;
+  control_plane/scheduler/public.py;
 - an `InputAccessFactory` (providers/input_access.py) whose `create` returns an
   `InputAccess`: `input_path`, `output_path`, `aclose`.
 
@@ -29,8 +29,12 @@ if TYPE_CHECKING:
     from fastapi import APIRouter
 
     from model_service.analysis_runner.settings import ReplicaSettings
-    from model_service.api.scheduler.protocols import Scheduler
-    from model_service.api.scheduler.public import (
+    from model_service.catalog import Catalog
+    from model_service.contracts.invocation import InputAccessKind
+    from model_service.contracts.json_values import JsonValue
+    from model_service.contracts.result import RunResult
+    from model_service.control_plane.scheduler.protocols import Scheduler
+    from model_service.control_plane.scheduler.public import (
         AnalysisScheduleRequest,
         BeforeMutation,
         PreparedInvocation,
@@ -38,11 +42,7 @@ if TYPE_CHECKING:
         ProviderName,
         SubmissionIdentity,
     )
-    from model_service.api.scheduler.settings import SchedulerSettings
-    from model_service.catalog import Catalog
-    from model_service.contracts.invocation import InputAccessKind
-    from model_service.contracts.json_values import JsonValue
-    from model_service.contracts.result import RunResult
+    from model_service.control_plane.scheduler.settings import SchedulerSettings
     from model_service.providers.input_access import InputAccessFactory
 
 
@@ -112,19 +112,19 @@ type RouteFactory = Callable[[Scheduler], APIRouter]
 
 
 @dataclass(frozen=True, slots=True)
-class ApiContribution:
-    """What a provider adds to the API.
+class ControlPlaneContribution:
+    """What a provider adds to the control plane.
 
     Attributes:
         adapter: Its scheduler adapter.
         routes: Its routes, if any.
-        background: Work that runs while the API serves, cancelled when it
+        background: Work that runs while the control plane serves, cancelled when it
             stops.
     """
 
     adapter: ProviderAdapter
     routes: RouteFactory | None = None
-    # Runs while the API serves and is cancelled when it stops.
+    # Runs while the control plane serves and is cancelled when it stops.
     background: Callable[[], Coroutine[None, None, None]] | None = None
 
 
@@ -132,14 +132,14 @@ class Provider(ABC):
     """A source of jobs: how they are admitted, read and finished."""
 
     @abstractmethod
-    def api(
+    def control_plane(
         self, catalog: Callable[[], Catalog], settings: SchedulerSettings
-    ) -> ApiContribution:
-        """Build what this provider adds to the API.
+    ) -> ControlPlaneContribution:
+        """Build what this provider adds to the control plane.
 
         Args:
             catalog: Gives the deployed served models and analyses in use.
-            settings: the API's scheduler settings.
+            settings: the control plane's scheduler settings.
 
         Returns:
             The provider's scheduler adapter, and its routes and background work if any.

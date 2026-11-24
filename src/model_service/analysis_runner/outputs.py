@@ -45,7 +45,7 @@ class Staging:
             The staging.
         """
         for directory in self._dirs.values():
-            # Open to all users, like every directory the API may have to remove.
+            # Open to all users, like every directory the control plane may have to remove.
             make_shared_directory(directory)
         return self
 

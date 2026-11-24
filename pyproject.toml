@@ -10,7 +10,7 @@ license = { file = "LICENSE" }
 requires-python = ">=3.12"
 # What every process shares (components/, contracts/, catalog/). Each process
 # adds its own extra.
-# The images install from uv.lock: Dockerfile.api the `api` extra,
+# The images install from uv.lock: Dockerfile.control-plane the `control-plane` extra,
 # Dockerfile.ray-cpu `analysis-runner`, `served-models` and `cpu`,
 # Dockerfile.ray-gpu `analysis-runner`, `served-models` and `gpu`.
 dependencies = [
@@ -20,8 +20,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# The API process: HTTP, the scheduler's database, model catalog, EMPAIA.
-api = [
+# The control plane: HTTP, the scheduler's database, model catalog, EMPAIA.
+control-plane = [
     "asgi-correlation-id>=4.3,<5",
     "cryptography>=45.0.0",
     "fastapi>=0.115.0",

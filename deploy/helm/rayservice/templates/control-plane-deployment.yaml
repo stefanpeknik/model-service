@@ -1,0 +1,173 @@
+{{- if .Values.controlPlane.enabled }}
+{{- $imageTag := required "controlPlane.image.tag is required" .Values.controlPlane.image.tag }}
+{{- $databaseSecret := required "controlPlane.database.existingSecret is required" .Values.controlPlane.database.existingSecret }}
+{{- $encryptionSecret := required "controlPlane.encryption.existingSecret is required" .Values.controlPlane.encryption.existingSecret }}
+{{- $empaia := .Values.empaia.apiUrls }}
+{{- $workspaceClaim := "" }}
+{{- if $empaia }}
+{{- $workspaceClaim = required "empaia.workspaceClaim is required with apiUrls: the control plane publishes EMPAIA results the analysis runner wrote there" .Values.empaia.workspaceClaim }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-control-plane
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: model-service-control-plane
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.controlPlane.replicas }}
+  # A config or image change restarts the control plane; replace it one pod at a time,
+  # never dropping below the set replicas, so the control plane stays up. Catalog
+  # changes don't: the control plane reloads the mounted ConfigMap in place.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: model-service-control-plane
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: model-service-control-plane
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+{{- include "model-service.empaiaDns" . | nindent 6 }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: control-plane
+          image: "{{ .Values.controlPlane.image.repository }}:{{ $imageTag }}"
+          imagePullPolicy: {{ .Values.controlPlane.image.pullPolicy }}
+          # Explicit, so code-refresh images built on older bases start the current module.
+          command: ["uvicorn", "model_service.control_plane.main:app", "--host", "0.0.0.0", "--port", "8080", "--log-config", "/app/model_service/control_plane/log-config.json"]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $databaseSecret }}
+                  key: {{ .Values.controlPlane.database.urlKey }}
+            - name: PROVIDER_CONTEXT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $encryptionSecret }}
+                  key: {{ .Values.controlPlane.encryption.keyKey }}
+            - name: RAY_SERVE_ORIGIN
+              value: {{ default (printf "http://%s-serve-svc.%s.svc.cluster.local:8000" .Release.Name (.Release.Namespace | default "rationai-jobs-ns")) .Values.controlPlane.rayServeOrigin | quote }}
+            - name: MODEL_CATALOG_DIR
+              value: /etc/model-service
+            - name: SHARED_STORAGE_ROOTS
+              value: {{ .Values.sharedStorageRoots | toJson | quote }}
+            - name: LEASE_SECONDS
+              value: {{ .Values.controlPlane.leaseSeconds | quote }}
+            - name: WORKER_POLL_SECONDS
+              value: {{ .Values.controlPlane.workerPollSeconds | quote }}
+            - name: PROCESSING_ATTEMPTS
+              value: {{ .Values.controlPlane.processingAttempts | quote }}
+            - name: PROVIDER_FINISH_ATTEMPTS
+              value: {{ .Values.controlPlane.providerFinishAttempts | quote }}
+            - name: INITIAL_BACKOFF_SECONDS
+              value: {{ .Values.controlPlane.initialBackoffSeconds | quote }}
+            - name: MAXIMUM_BACKOFF_SECONDS
+              value: {{ .Values.controlPlane.maximumBackoffSeconds | quote }}
+            - name: DEFAULT_DEADLINE_SECONDS
+              value: {{ .Values.controlPlane.defaultDeadlineSeconds | quote }}
+            - name: MAXIMUM_DEADLINE_SECONDS
+              value: {{ .Values.controlPlane.maximumDeadlineSeconds | quote }}
+            - name: PER_MODEL_LIMIT
+              value: {{ .Values.controlPlane.perModelLimit | quote }}
+            - name: MAX_CONCURRENT_EXECUTIONS
+              value: {{ .Values.controlPlane.maxConcurrentExecutions | quote }}
+{{- include "model-service.empaiaEnv" . | nindent 12 }}
+            {{- with .Values.empaia.marketplace }}
+            {{- if and $empaia .url }}
+            - name: EMPAIA_MARKETPLACE_URL
+              value: {{ .url | quote }}
+            - name: EMPAIA_ORGANIZATION_ID
+              value: {{ required "empaia.marketplace.organizationId is required with a marketplace url" .organizationId | quote }}
+            - name: EMPAIA_JES_TARGET
+              value: {{ .jesTarget | quote }}
+            {{- if .mdsUrl }}
+            - name: EMPAIA_MDS_URL
+              value: {{ .mdsUrl | quote }}
+            {{- end }}
+            {{- if .idpUrl }}
+            - name: EMPAIA_IDP_URL
+              value: {{ .idpUrl | quote }}
+            - name: EMPAIA_CLIENT_ID
+              value: {{ required "empaia.marketplace.clientId is required with an idpUrl" .clientId | quote }}
+            - name: EMPAIA_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "empaia.marketplace.existingSecret is required with an idpUrl" .existingSecret }}
+                  key: {{ .clientSecretKey }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.controlPlane.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsUser: 10001
+            runAsGroup: 10001
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            # The whole ConfigMap, never a subPath or items: kubelet then
+            # updates the files in place and the control plane reloads them.
+            - name: model-catalog
+              mountPath: /etc/model-service
+              readOnly: true
+            {{- if .Values.controlPlane.sharedStorage.existingClaim }}
+            - name: shared-storage
+              mountPath: {{ .Values.controlPlane.sharedStorage.mountPath | quote }}
+            {{- end }}
+            {{- if $empaia }}
+            - name: empaia-workspace
+              mountPath: {{ .Values.empaia.workspaceRoot | quote }}
+            {{- end }}
+{{- include "model-service.slideVolumeMount" . | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: model-catalog
+          configMap:
+            name: {{ .Release.Name }}-model-catalog
+        {{- if .Values.controlPlane.sharedStorage.existingClaim }}
+        - name: shared-storage
+          persistentVolumeClaim:
+            claimName: {{ .Values.controlPlane.sharedStorage.existingClaim | quote }}
+        {{- end }}
+        {{- if $empaia }}
+        - name: empaia-workspace
+          persistentVolumeClaim:
+            claimName: {{ $workspaceClaim | quote }}
+        {{- end }}
+{{- include "model-service.slideVolume" . | nindent 8 }}
+{{- end }}

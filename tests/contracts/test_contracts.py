@@ -5,14 +5,14 @@ from datetime import UTC, datetime
 
 from pydantic import TypeAdapter, ValidationError
 
-from model_service.api.http.errors import ApiErrorCode
-from model_service.api.scheduler.status import ExecutionErrorCode
 from model_service.contracts.analysis_http import ANALYSIS_RUN_REQUEST
 from model_service.contracts.analysis_http import ErrorCode as RunnerErrorCode
 from model_service.contracts.caller_request import RunRequest
 from model_service.contracts.failures import FailureCode
 from model_service.contracts.invocation import INVOCATION, ExecutionContext, InputKind
 from model_service.contracts.result import RESULT, OutputKind
+from model_service.control_plane.http.errors import ApiErrorCode
+from model_service.control_plane.scheduler.status import ExecutionErrorCode
 from model_service.formats import embedding_table, score_grid
 
 

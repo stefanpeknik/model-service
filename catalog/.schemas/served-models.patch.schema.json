@@ -256,7 +256,7 @@
             }
           ],
           "default": null,
-          "description": "Scheduled analysis runs using this model at once; the API's PER_MODEL_LIMIT when left out.",
+          "description": "Scheduled analysis runs using this model at once; the control plane's PER_MODEL_LIMIT when left out.",
           "title": "Max Concurrent Runs"
         }
       },

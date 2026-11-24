@@ -1,29 +1,29 @@
 # How model-service is put together
 
 Model-service runs trained models (**served models**) and whole-slide
-**analyses** on Ray Serve, behind one public API that can also run analyses
-durably. Both are YAML files in `catalog/` that name **components**, small
-classes under `src/components/`. Those two folders are what a newcomer
-writes; `src/model_service/` is the plumbing that loads, checks and runs
-them. The
-[guides](../guides/add-a-model.md) show how to add each, and the
+**analyses** on Ray Serve, the **data plane**. A **control plane** outside Ray
+serves the public HTTP API, admits runs and can run analyses durably.
+Served models and analyses are YAML files in `catalog/` that name
+**components**, small classes under `src/components/`. Those two folders are
+what a newcomer writes; `src/model_service/` is the plumbing that loads,
+checks and runs them. The [guides](../guides/add-a-model.md) show how to add each, and the
 [reference](../reference/components.md) lists what exists.
 
 ```text
              callers: RationAI SDK, EMPAIA (via JES), notebooks
                                   │ HTTP                           │ raw tiles
 ┌─────────────────────────────────▼────────────────────────────┐   │
-│ API process (model_service/api/, one Deployment, outside Ray)│   │
+│ control plane (model_service/control_plane/, outside Ray)    │   │
 │  /v1/models[/{m}]   (served-model catalog)                   │   │
 │  /v1/analyses   /v1/analyses/{a}/run|schedule                │   │
 │  /v1/executions/{id}[/cancel]   /v1/executions/lookup        │   │
 │  /v1/empaia/analyses/{a}  (JES HTTP execution backend)       │   │
 │  catalog ◄── ConfigMap rendered from catalog/                │   │
-│  execution scheduler (api/scheduler/) ◄──► PostgreSQL        │   │
+│  execution scheduler (scheduler/) ◄──► PostgreSQL            │   │
 └───────────────┬──────────────────────────────────────────────┘   │
       run call  │ POST /analyses/                                  │ POST /{m}/
 ┌───────────────▼──────────────────────────────────────────────────▼─┐
-│ Ray Serve (RayService)                                             │
+│ data plane: Ray Serve (RayService)                                 │
 │  analysis-runner (analysis_runner/serve.py), POST /analyses/       │
 │        │ Ray handle: infer(tile), describe()                       │
 │  served models (served_model/serve.py): prostate-classifier-1, …   │
@@ -35,11 +35,11 @@ them. The
 | Package | Owns |
 | --- | --- |
 | `deploy/helm/rayservice/` (catalog wiring) | The chart reads the repo's `catalog/` through its `catalog` symlink (`helm template` and `helm package` follow it). Every `catalog/served-models/<id>.yaml` that the values' `servedModels` selects (`["*"]` or named IDs) becomes one generic-host Serve application, with `catalog/environments/<environment>/` patches deep-merged in and environment-wide settings from `servedModelSettings` (the cache root, the replicas' env vars and the applications' `runtime_env` setup timeout); `deployment.serve_application` is the reference, and `tests/deploy/test_chart.py` compares the rendered applications with it. `catalog/analyses/` is selected the same way by `analyses`; an analysis calling a served model the release doesn't deploy fails the render, and with any analysis deployed the chart renders one `analysis-runner` application sized by `analysisRunner`. The analysis runner requests a `cpuWorkerResource` Ray custom resource (`cpu_worker`) that only the CPU worker groups advertise in `rayStartParams`, so Ray never places it on a GPU worker's free CPUs; served models don't request it. The catalog ConfigMap's `catalog.json` carries both folders; the prostate app is `prostate-heatmap`'s `expose.empaia`. |
-| `src/model_service/api/` | The API process: public routes, synchronous runs, process wiring. The catalog ConfigMap is mounted whole at `MODEL_CATALOG_DIR`; `catalog_files.py` resolves its `catalog.json` through `load_catalog`, and `catalog_mount.py` reloads it when kubelet updates the files, keeping the old catalog when the new one fails and reporting why under `/healthz/catalog`. A catalog change no longer restarts the API. |
-| `src/model_service/api/http/` | Auth, HTTP error mapping and scheduling calls shared by the API routes and provider routes. |
+| `src/model_service/control_plane/` | The control plane: public routes, synchronous runs, process wiring. The catalog ConfigMap is mounted whole at `MODEL_CATALOG_DIR`; `catalog_files.py` resolves its `catalog.json` through `load_catalog`, and `catalog_mount.py` reloads it when kubelet updates the files, keeping the old catalog when the new one fails and reporting why under `/healthz/catalog`. A catalog change no longer restarts the control plane. |
+| `src/model_service/control_plane/http/` | Auth, HTTP error mapping and scheduling calls shared by the API routes and provider routes. |
 | `src/model_service/contracts/` | Data shapes processes hand each other: invocation, result, failures, the analysis runner's HTTP request and error envelope. |
-| `src/model_service/api/scheduler/` | Durable executions: admission, leases with fencing, retries, deadlines, cancellation, provider finish. PostgreSQL with Yoyo migrations. |
-| `src/model_service/providers/` | Providers: standalone (shared storage) and EMPAIA (AppService input and publication). `providers/registry.py` lists them; the API and the analysis runner compose what each contributes and name none of them. `providers/input_access.py` is the interface their input access implements. |
+| `src/model_service/control_plane/scheduler/` | Durable executions: admission, leases with fencing, retries, deadlines, cancellation, provider finish. PostgreSQL with Yoyo migrations. |
+| `src/model_service/providers/` | Providers: standalone (shared storage) and EMPAIA (AppService input and publication). `providers/registry.py` lists them; the control plane and the analysis runner compose what each contributes and name none of them. `providers/input_access.py` is the interface their input access implements. |
 | `src/components/` | A top-level package beside `model_service`, holding what an author writes. `base/` has the seven kind base classes (loader, runtime, step, source, sink, input converter, publisher), options with the `PerRun` marker, column declarations, `Run`, `Problem` and the slots; it imports nothing from `model_service` at run time. The components sit in one folder per place of use: `steps/` (served model `pre:`/`post:` and analysis steps), `loaders/` and `runtimes/` (served models; a loader also fills an analysis step's `weights:`), `sources/` and `sinks/` (analyses), `empaia/converters/` and `empaia/publishers/` (EMPAIA exposure). `_templates/` has one file per kind to copy; the scan skips it. The helpers for testing a component (`fake_slide`, `fake_model`, `run_component`, `FakeGateway`, the per-kind conformance suites and `offline.py`, the table of local weights that lets conformance run a loader or runtime by name) are test code in `tests/components/helpers/`, so images don't ship them. Analysis components so far: the `slide_tiles` source (`slides/`'s `TileReader` and ratiopath's grid) the `score_grid` sink (ratiopath's `MaskBuilder`) and the `embedding_table` sink (rows in grid order, written on a thread of its own). |
 | `src/model_service/registry/` | Finds and checks the components. Each kind's base class names its `folder` beside its `slots`, so the kind alone says where its components live and where catalog files may name them. `Registry.scan()` imports each kind's folder and fails when a component sits in another kind's folder (the error names the folder it belongs in) or two of one kind share a name; `default_registry()` is the scan of `components`, once per process. `registry/empaia.py` picks the converter or publisher of a declared EAD type. The rules sit here rather than in `components/` so that package holds only the pieces and what they subclass. |
 | `src/model_service/catalog/` and `catalog/` | `load_catalog(root, environment)` deep-merges `catalog/environments/<env>/` patches over the base files and resolves the served models, then the analyses, into a typed `Catalog` (`served_models` and `analyses` by ID, each keeping its patched `declaration`), reporting every mistake as `<file>:<yaml path>: <what's wrong>. <what fits>. Hint: <fix>`. `tests/catalog/` loads the repo's `catalog/` for every environment. Served-model files (`catalog/served-models/`) resolve to a loader, a runtime, `pre`/`post` steps and the `input`, `output`, `batching`, `resources` and `serving` blocks, with a digest of what the model computes. Analysis files (`catalog/analyses/`) resolve to a source, steps (`{model: <id>}` calls a served model) and sinks; loading fills the source's tile geometry from the first model step (a source opts in by deriving its options from `TileGeometryOptions`), folds the columns from source to sinks with the models' dimensions, checks the frame fields sinks read and collects the `PerRun` options as flat settings. `prostate-heatmap.yaml` and `episeg-heatmap.yaml` score tiles into a heatmap (EPISeg's 1024 px float16 score map per tile is averaged into a grid at the read level's resolution; the test cluster doesn't deploy it); `virchow2-embeddings.yaml` and `prov-gigapath-embeddings.yaml` write one embedding row per tissue tile. |
@@ -56,17 +56,17 @@ Interfaces between parts are abstract base classes (`ABC` with
 `InputAccess`, `InputAccessFactory`, `ProviderAdapter`,
 `ExecutionRepository`, `EmpaiaGateway` and the rest. A class missing a method
 then fails when it is created, not when the method is first called. Test fakes
-need not inherit them. Two are `Protocol`s instead: the API's `Scheduler`,
-because the core scheduler must not import the API, and
+need not inherit them. Two are `Protocol`s instead: the control plane's `Scheduler`,
+because the core scheduler must not import the control plane, and
 `EmpaiaGatewayFactory`, which a plain function implements.
 
 ### Providers
 
-A provider is a package that plugs into the API and the analysis runner
+A provider is a package that plugs into the control plane and the analysis runner
 through one object (`Provider` in `providers/provider.py`, listed in
 `providers/registry.py`):
 
-- `api(catalog, settings)` gives the scheduler adapter that admits and
+- `control_plane(catalog, settings)` gives the scheduler adapter that admits and
   finishes its jobs, any routes of its own (EMPAIA's `/v1/empaia`), and work
   to run in the background (EMPAIA's app registration);
 - `input_access(settings)` gives the analysis runner the access adapters for
@@ -75,7 +75,7 @@ through one object (`Provider` in `providers/provider.py`, listed in
 Providers name themselves and their input access kinds; the runner, the
 catalog and the scheduler know none of them. How an analysis appears in EMPAIA
 is its `expose.empaia` section, made into an app from the converters' and
-publishers' fragments (`providers/empaia/ead/apps.py`). The API's public
+publishers' fragments (`providers/empaia/ead/apps.py`). The control plane's public
 analysis routes are the standalone provider's front door and build on its
 request body. Adding a provider means a package and one entry in `PROVIDERS`
 (`providers/registry.py`).
@@ -84,7 +84,7 @@ request body. Adding a provider means a package and one entry in `PROVIDERS`
 
 1. The caller names an analysis in the URL; the body gives inputs, their
    access, settings (`configuration`) and an output path.
-2. The API resolves the analysis with the settings and checks the inputs.
+2. The control plane resolves the analysis with the settings and checks the inputs.
 3. Synchronous: it sends the resolved document and the invocation to the
    analysis runner (`/analyses/`). Scheduled: it stores both on the execution,
    and every attempt sends that document.
@@ -128,16 +128,16 @@ An execution's identity is its analysis ID, the analysis digest and the
 served models it calls. `GET /v1/models` lists each served
 model's declaration, digest and the analyses calling it.
 
-Raw tiles don't pass through the API: callers post them straight to the
+Raw tiles don't pass through the control plane: callers post them straight to the
 served model's Ray Serve route, `POST /{m}/`
 ([raw inference](../available-models.md)). `POST /v1/executions/lookup` polls
 many executions at once.
 
 ## Capacity and failure behaviour
 
-- One API process runs up to `MAX_CONCURRENT_EXECUTIONS` claims. A scheduled
+- One control plane runs up to `MAX_CONCURRENT_EXECUTIONS` claims. A scheduled
   attempt takes a slot in every served model its analysis calls, and is
-  claimable only while each has one free, across all API replicas. A model's
+  claimable only while each has one free, across all control-plane replicas. A model's
   slots are its file's `serving.max_concurrent_runs`, or `PER_MODEL_LIMIT`
   (default 1) when left out. An analysis calling no model has its own pool,
   keyed by its ID, with `PER_MODEL_LIMIT` slots. Claims take one PostgreSQL
@@ -153,7 +153,7 @@ many executions at once.
 - An EMPAIA 429 on a write is a refusal, so it may be retried; a 5xx may have
   applied, so its outcome is unknown. The deadline applies to publication too:
   one that ends past it is recorded as outcome unknown.
-- Delivery is at least once. A lost API lets its lease expire and another
+- Delivery is at least once. A lost control-plane replica lets its lease expire and another
   attempt runs. Lease renewal survives short database outages.
 - A failed or uncertain EMPAIA publication reports failure to EMPAIA, so the
   job does not stay open.

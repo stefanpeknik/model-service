@@ -170,7 +170,7 @@ class Serving(Block):
         None,
         gt=0,
         description=(
-            "Scheduled analysis runs using this model at once; the API's "
+            "Scheduled analysis runs using this model at once; the control plane's "
             "PER_MODEL_LIMIT when left out."
         ),
         strict=True,

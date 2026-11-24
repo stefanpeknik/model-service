@@ -1,9 +1,9 @@
-"""Standalone provider, API side: admission and finish of shared-storage jobs.
+"""Standalone provider, control-plane side: admission and finish of shared-storage jobs.
 
 The caller's idempotency key identifies a submission. Scheduled attempts write
 below `.attempts/<execution>/` in the shared-storage root; finish moves the
 accepted attempt's artifacts to their requested paths and removes that
-directory, including failed and superseded attempts. Only the API process
+directory, including failed and superseded attempts. Only the control plane
 imports this module; the analysis runner loads provider.py alone.
 """
 
@@ -21,14 +21,6 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
-from model_service.api.scheduler.public import (
-    AnalysisScheduleRequest,
-    InvalidScheduleRequestError,
-    PreparedInvocation,
-    ProviderFinishFailureError,
-    ProviderSuccess,
-    SubmissionIdentity,
-)
 from model_service.contracts.caller_request import RunRequest
 from model_service.contracts.failures import InvalidInvocation
 from model_service.contracts.invocation import (
@@ -37,6 +29,14 @@ from model_service.contracts.invocation import (
     SharedPathInput,
 )
 from model_service.contracts.result import RunResult, SharedArtifact
+from model_service.control_plane.scheduler.public import (
+    AnalysisScheduleRequest,
+    InvalidScheduleRequestError,
+    PreparedInvocation,
+    ProviderFinishFailureError,
+    ProviderSuccess,
+    SubmissionIdentity,
+)
 from model_service.directories import make_shared_directory, remove_directory
 from model_service.providers.provider import ProviderAdapter
 from model_service.providers.standalone.provider import STANDALONE_PROVIDER
@@ -51,12 +51,12 @@ from model_service.providers.standalone.shared_storage import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from model_service.api.scheduler.public import (
+    from model_service.contracts.json_values import JsonValue
+    from model_service.contracts.result import RunOutput
+    from model_service.control_plane.scheduler.public import (
         BeforeMutation,
         ProviderFinishOutcome,
     )
-    from model_service.contracts.json_values import JsonValue
-    from model_service.contracts.result import RunOutput
 
 
 class StandaloneProviderAdapter(ProviderAdapter):

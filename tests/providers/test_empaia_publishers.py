@@ -17,12 +17,12 @@ import numpy as np
 from rationai.empaia.typing import SlideInfo
 
 from components.base import EmpaiaOutput
-from model_service.api.scheduler.public import (
+from model_service.contracts.result import RunResult, SharedArtifact
+from model_service.control_plane.scheduler.public import (
     ProviderFinishFailureError,
     ProviderSuccess,
 )
-from model_service.api.scheduler.targets import ExecutionTarget
-from model_service.contracts.result import RunResult, SharedArtifact
+from model_service.control_plane.scheduler.targets import ExecutionTarget
 from model_service.formats import score_grid
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter

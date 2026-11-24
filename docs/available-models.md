@@ -2,9 +2,9 @@
 
 Every served model answers single tiles on its own Ray Serve route,
 `POST /<model-id>/` on the Ray Serve origin (`http://<release>-serve-svc:8000`
-inside the cluster). The API doesn't proxy these calls; use an
+inside the cluster). The control plane doesn't proxy these calls; use an
 [analysis](reference/analyses.md) to run a model over a whole slide. Which
-models a deployment serves is in `GET /v1/models` on the API, and
+models a deployment serves is in `GET /v1/models` on the control plane, and
 [Served models](reference/served-models.md) lists the ones in `catalog/`.
 
 ## Request

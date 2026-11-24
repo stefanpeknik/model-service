@@ -1,6 +1,6 @@
 """The repo's `catalog/` loads for the base files and every environment.
 
-This runs every load-time check the API runs, through the same loader and
+This runs every load-time check the control plane runs, through the same loader and
 component registry, and lists every mistake in the standard format:
 `uv run pytest tests/catalog`.
 """

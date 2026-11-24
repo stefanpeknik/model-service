@@ -7,8 +7,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
-from model_service.api.scheduler.public import PreparedInvocation, SubmissionIdentity
-from model_service.api.scheduler.targets import ExecutionTarget
 from model_service.catalog import load_catalog
 from model_service.catalog.analyses import resolve_run
 from model_service.contracts.invocation import (
@@ -16,6 +14,11 @@ from model_service.contracts.invocation import (
     Invocation,
     SharedPathInput,
 )
+from model_service.control_plane.scheduler.public import (
+    PreparedInvocation,
+    SubmissionIdentity,
+)
+from model_service.control_plane.scheduler.targets import ExecutionTarget
 from model_service.providers.provider import ProviderAdapter
 from tests.support.analysis_catalog import REGISTRY, served_model, write
 
@@ -23,14 +26,14 @@ from tests.support.analysis_catalog import REGISTRY, served_model, write
 if TYPE_CHECKING:
     from datetime import datetime, timedelta
 
-    from model_service.api.scheduler.public import (
+    from model_service.catalog import Catalog
+    from model_service.catalog.analyses import ResolvedAnalysis
+    from model_service.contracts.json_values import JsonObject, JsonValue
+    from model_service.control_plane.scheduler.public import (
         AnalysisScheduleRequest,
         BeforeMutation,
         ProviderFinishOutcome,
     )
-    from model_service.catalog import Catalog
-    from model_service.catalog.analyses import ResolvedAnalysis
-    from model_service.contracts.json_values import JsonObject, JsonValue
 
 
 # Two analyses on two served models: `a1` calls `m1`, `a2` calls `m2`.
@@ -69,7 +72,7 @@ def scheduling_catalog() -> Catalog:
 def resolve_test_analysis(
     analysis_id: str, settings: JsonObject | None
 ) -> ResolvedAnalysis:
-    """Resolve one of `ANALYSES` as the API's resolver would."""
+    """Resolve one of `ANALYSES` as the control plane's resolver would."""
     return resolve_run(scheduling_catalog(), analysis_id, settings)
 
 

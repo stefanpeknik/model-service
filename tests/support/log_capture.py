@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
-# The loggers the API and replica configurations touch.
+# The loggers the control plane and replica configurations touch.
 _CONFIGURED = ("", "model_service", "uvicorn", "uvicorn.access")
 
 

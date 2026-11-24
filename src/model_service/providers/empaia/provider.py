@@ -1,4 +1,4 @@
-"""The EMPAIA provider, composed for the API and for the analysis runner.
+"""The EMPAIA provider, composed for the control plane and for the analysis runner.
 
 It serves JES's remote execution routes, runs App Service jobs, and registers
 apps, with their preprocessing triggers, for the analyses with an
@@ -13,15 +13,15 @@ from typing import TYPE_CHECKING
 from model_service.providers.empaia.app_service.gateway import INPUT_ACCESS_KIND
 from model_service.providers.empaia.app_service.http import http_gateway_factory
 from model_service.providers.empaia.settings import EmpaiaSettings
-from model_service.providers.provider import ApiContribution, Provider
+from model_service.providers.provider import ControlPlaneContribution, Provider
 
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
     from model_service.analysis_runner.settings import ReplicaSettings
-    from model_service.api.scheduler.settings import SchedulerSettings
     from model_service.catalog import Catalog
+    from model_service.control_plane.scheduler.settings import SchedulerSettings
     from model_service.providers.empaia.credentials import OutgoingCredentials
     from model_service.providers.empaia.registration import Marketplace
     from model_service.providers.empaia.triggers import PreprocessingTriggers
@@ -34,15 +34,15 @@ logger = logging.getLogger(__name__)
 class EmpaiaProvider(Provider):
     """Runs EMPAIA jobs and registers the deployed analyses' EMPAIA apps."""
 
-    def api(
+    def control_plane(
         self, catalog: Callable[[], Catalog], settings: SchedulerSettings
-    ) -> ApiContribution:
+    ) -> ControlPlaneContribution:
         """Contribute the EMPAIA scheduler adapter, JES routes and app registration.
 
         Apps come from the deployed analyses with `expose.empaia`, as the
-        catalog is when the API starts; admission reads the catalog in use.
+        catalog is when the control plane starts; admission reads the catalog in use.
         Registration runs in the background, and only when a marketplace is
-        configured, so the API serves while the marketplace is down; it
+        configured, so the control plane serves while the marketplace is down; it
         aligns the preprocessing triggers too when a Medical Data Service is
         configured, then deletes the apps it owns that no analysis has.
 
@@ -51,7 +51,7 @@ class EmpaiaProvider(Provider):
             settings: Unused; EMPAIA reads its own `EMPAIA_*` settings.
 
         Returns:
-            the API contribution.
+            the control plane contribution.
 
         Raises:
             pydantic.ValidationError: If the `EMPAIA_*` settings are invalid.
@@ -77,7 +77,7 @@ class EmpaiaProvider(Provider):
             if marketplace is not None:
                 await register_until_done(marketplace, apps, triggers)
 
-        return ApiContribution(
+        return ControlPlaneContribution(
             adapter=EmpaiaProviderAdapter(
                 http_gateway_factory(empaia),
                 allowed_api_urls=empaia.api_urls,
@@ -85,7 +85,7 @@ class EmpaiaProvider(Provider):
                 catalog=catalog,
             ),
             routes=create_router,
-            # In the background: the API serves while the marketplace is down.
+            # In the background: the control plane serves while the marketplace is down.
             background=register,
         )
 

@@ -10,7 +10,7 @@ on:
         options:
           - cpu
           - gpu
-          - api
+          - control-plane
           - ray-cpu
           - ray-gpu
       tag:
@@ -49,9 +49,9 @@ jobs:
       - name: Determine image name and exact tag
         id: set_tag
         run: |
-          # The API and Ray images have repositories of their own.
+          # The control plane and Ray images have repositories of their own.
           case "${{ inputs.image }}" in
-            api) echo "repository=cerit.io/rationai/model-service-api" >> $GITHUB_OUTPUT ;;
+            control-plane) echo "repository=cerit.io/rationai/model-service-control-plane" >> $GITHUB_OUTPUT ;;
             ray-cpu) echo "repository=cerit.io/rationai/model-service-ray-cpu" >> $GITHUB_OUTPUT ;;
             ray-gpu) echo "repository=cerit.io/rationai/model-service-ray" >> $GITHUB_OUTPUT ;;
             *) echo "repository=cerit.io/rationai/model-service" >> $GITHUB_OUTPUT ;;

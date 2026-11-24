@@ -62,7 +62,7 @@ class PreprocessingTriggers:
         A listed pair counts as present when someone else's trigger already
         names it, so the same pair never starts two jobs per slide. Of owned
         duplicates, the lowest ID stays. After creating triggers it looks once
-        more, so API replicas that create the same trigger at once end with one.
+        more, so control-plane replicas that create the same trigger at once end with one.
 
         Args:
             apps: Every registered app; those without triggers want none.

@@ -1,6 +1,6 @@
-"""Directories that the API and Ray replicas share, whatever users they run as.
+"""Directories that the control plane and Ray replicas share, whatever users they run as.
 
-A replica creates an attempt's workspace and outputs; the API later moves the
+A replica creates an attempt's workspace and outputs; the control plane later moves the
 outputs or removes the workspace. The two may run as different users without a
 shared group, so every directory either creates is open to all users (0777),
 whatever the umask. Files keep their usual mode: removing or moving one needs

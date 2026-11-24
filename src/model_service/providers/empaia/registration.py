@@ -1,10 +1,10 @@
-"""Make a marketplace's apps match the deployed analyses when the API starts.
+"""Make a marketplace's apps match the deployed analyses when the control plane starts.
 
 It posts to the routes of the marketplace mock EMPAIA test installations run
 (`/v1/custom-mock/portal-apps`, then the app's global configuration, such as
 the case browser's viewer settings); a production marketplace lists apps through its
 portal's review instead. App IDs derive from the EAD namespace, so registering
-again replaces an app and every API replica may do it. With a Medical Data
+again replaces an app and every control-plane replica may do it. With a Medical Data
 Service configured, the apps' preprocessing triggers follow (triggers.py).
 Last, it deletes the apps it owns that no deployed analysis has any more, such
 as one whose analysis was renamed: those with a `NAMESPACE_PREFIX` namespace

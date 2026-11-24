@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Annotated
 import jwt
 from pydantic import Field, ValidationError
 
-from model_service.api.scheduler.public import InvalidScheduleRequestError
+from model_service.control_plane.scheduler.public import InvalidScheduleRequestError
 from model_service.providers.empaia.app_service.gateway import (
     AdmittedEmpaiaJobContext,
     EmpaiaJobContext,

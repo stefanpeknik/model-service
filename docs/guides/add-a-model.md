@@ -61,7 +61,7 @@ resources: {gpus: 1, cpus: 4, memory_gib: 12}
 uv run pytest tests/catalog
 ```
 
-This loads every catalog file for every environment, exactly as the API will,
+This loads every catalog file for every environment, exactly as the control plane will,
 and lists every mistake in one run. Each error names the file, the YAML path,
 what's wrong, what would fit and how to fix it:
 
@@ -101,19 +101,19 @@ the model differs on one cluster, say a smaller batch or another MLflow
 server, put only the difference in
 `catalog/environments/<environment>/served-models/my-classifier.yaml`. The
 test cluster's `prostate-classifier-1.yaml` patch is one line. Then run
-`helm upgrade`. A catalog change needs no image rebuild, and the API picks up
+`helm upgrade`. A catalog change needs no image rebuild, and the control plane picks up
 the new catalog without restarting. Running `helm upgrade` against a shared
 cluster needs authorization for your task, as
 [AGENTS.md](../../AGENTS.md) says.
 
 ## 6. Try it
 
-`GET /v1/models/my-classifier` on the API returns the declaration as deployed
+`GET /v1/models/my-classifier` on the control plane returns the declaration as deployed
 and its digest. To send one blank tile straight to the model's Ray Serve
-route from an API pod:
+route from a control-plane pod:
 
 ```sh
-oc exec -i deploy/model-service-api -- python - my-classifier 512 < tools/warm_model.py
+oc exec -i deploy/model-service-control-plane -- python - my-classifier 512 < tools/warm_model.py
 ```
 
 The first request to a cold model waits for a GPU worker, which can take a

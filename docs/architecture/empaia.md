@@ -17,7 +17,7 @@ sequenceDiagram
   participant N as analysis runner
   participant AS as EMPAIA App Service
 
-  Note over R,AS: at API start, empaia.registration posts one app per exposed<br/>analysis, carrying all its modes, to the marketplace (idempotent),<br/>aligns triggers, and deletes its own apps no analysis has
+  Note over R,AS: at control-plane start, empaia.registration posts one app per exposed<br/>analysis, carrying all its modes, to the marketplace (idempotent),<br/>aligns triggers, and deletes its own apps no analysis has
   WD->>JES: start job for app (STANDALONE or PREPROCESSING)
   JES->>R: POST /v1/empaia/analyses/{id} (job token)
   R->>A: identify + prepare
@@ -39,7 +39,7 @@ sequenceDiagram
 | `catalog/analyses/exposure/` | `expose.empaia`: its keys (`fields.py`), its schema (`schema.py`), and picking converters and publishers with the load-time checks in `resolution.py`: EMPAIA's name limit, preprocessing without required inputs, parameters, bound shapes |
 | `src/components/empaia/` | Converters (`wsi`, `rectangle`) and publishers (`continuous_pixelmap`), one per EAD type |
 | `registry/empaia.py` | Picks the one converter or publisher that takes a declared EAD type, for the catalog at load time and for the provider from what admission recorded |
-| `providers/empaia/provider.py` | The provider: what EMPAIA adds to the API and to replicas |
+| `providers/empaia/provider.py` | The provider: what EMPAIA adds to the control plane and to replicas |
 | `providers/empaia/ead/` | `apps.py` merges the components' fragments into each app's EAD v3; `vocabulary.py` holds modes, triggers and viewer settings |
 | `providers/empaia/registration.py`, `triggers.py` | At startup, retried: register the apps, align the preprocessing triggers, delete owned apps no analysis has (namespace `org.empaia.rationai.…` and image on this JES target) |
 | `providers/empaia/jobs/` | The JES-facing routes, payload parsing, the scheduler adapter (`adapter.py`, which also runs the publication loop), input access |
