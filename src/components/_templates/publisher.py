@@ -28,7 +28,7 @@ class MyComponent(Publisher):
     """
 
     name = "my_component"
-    reads_format = value.NAME
+    reads_format = value.FORMAT.name
     emits = frozenset({"string"})
     example_options: ClassVar[dict[str, Any]] = {"type": "string"}
 

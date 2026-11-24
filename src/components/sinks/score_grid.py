@@ -28,7 +28,7 @@ class ScoreGridSink(Sink):
     """
 
     name = "score_grid"
-    format = score_grid.NAME
+    format = score_grid.FORMAT.name
     example_options: ClassVar[dict[str, Any]] = {"output": "heatmap"}
     reads: ClassVar[dict[str, Col]] = {
         "tile_x": Col("int64"),
@@ -67,7 +67,7 @@ class ScoreGridSink(Sink):
         channels, height, width = shape
         self._frame = frame
         self._path: Path = (
-            run.work_dir / f"{self.options.output}.{score_grid.EXTENSION}"
+            run.work_dir / f"{self.options.output}.{score_grid.FORMAT.extension}"
         )
         self._mask = MaskBuilder(
             source_extents=(frame["extent_y"], frame["extent_x"]),

@@ -45,7 +45,7 @@ class ContinuousPixelmap(Publisher):
 
     name = "continuous_pixelmap"
     Options = ContinuousPixelmapOptions
-    reads_format = score_grid.NAME
+    reads_format = score_grid.FORMAT.name
     emits = frozenset({"continuous_pixelmap"})
     example_options: ClassVar[dict[str, Any]] = {"type": "continuous_pixelmap"}
     options: ContinuousPixelmapOptions

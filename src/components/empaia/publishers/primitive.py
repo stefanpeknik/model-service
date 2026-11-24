@@ -28,7 +28,7 @@ class Primitive(Publisher):
     """
 
     name = "primitive"
-    reads_format = value.NAME
+    reads_format = value.FORMAT.name
     emits = frozenset(str(t) for t in PrimitiveType)
     example_options: ClassVar[dict[str, Any]] = {"type": "float"}
 

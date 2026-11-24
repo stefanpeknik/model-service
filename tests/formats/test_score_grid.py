@@ -63,9 +63,9 @@ def test_what_write_writes_reads_back_unchanged(tmp_path: Path) -> None:
 
 def test_a_reader_refuses_a_version_it_does_not_know(tmp_path: Path) -> None:
     path = write_layout(tmp_path / "grid.npz")
-    newer = score_grid.MEDIA_TYPE.replace("version=1", "version=2")
+    newer = score_grid.FORMAT.media_type.replace("version=1", "version=2")
 
-    assert score_grid.MEDIA_TYPE == (
+    assert score_grid.FORMAT.media_type == (
         "application/vnd.rationai.score-grid+npz; version=1"
     )
     with pytest.raises(score_grid.UnsupportedFormat, match="version=2"):

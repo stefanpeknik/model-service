@@ -33,7 +33,7 @@ pytestmark = pytest.mark.anyio
 CATALOG = load_catalog(Path(__file__).resolve().parents[2] / "catalog", "rationai-test")
 RUN = "/v1/analyses/prostate-heatmap/run"
 RESULT = RunResult(
-    {"heatmap": SharedArtifact("/mnt/shared/out.npz", score_grid.MEDIA_TYPE)},
+    {"heatmap": SharedArtifact("/mnt/shared/out.npz", score_grid.FORMAT.media_type)},
     served_models={
         "prostate-classifier-1": ServedModelRun(
             digest="d" * 64,
@@ -164,7 +164,7 @@ async def test_a_run_sends_the_analysis_resolved_with_its_settings() -> None:
             "heatmap": {
                 "kind": "shared_artifact",
                 "path": "/mnt/shared/out.npz",
-                "media_type": score_grid.MEDIA_TYPE,
+                "media_type": score_grid.FORMAT.media_type,
             }
         },
         "served_models": {

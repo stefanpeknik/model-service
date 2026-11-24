@@ -134,7 +134,7 @@ def test_a_run_writes_its_output_where_the_request_says(
 
     path = storage / "out" / "heatmap.npz"
     assert result == RunResult(
-        {"heatmap": SharedArtifact(str(path), score_grid.MEDIA_TYPE)},
+        {"heatmap": SharedArtifact(str(path), score_grid.FORMAT.media_type)},
         served_models={
             "m1": ServedModelRun(
                 digest=resolved.model_digests["m1"],

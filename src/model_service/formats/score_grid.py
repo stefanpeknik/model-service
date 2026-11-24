@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from model_service.formats.media_type import UnsupportedFormat, media_type, require
+from model_service.formats.media_type import Format, UnsupportedFormat, require
 
 
 if TYPE_CHECKING:
@@ -35,20 +35,16 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
-NAME = "score_grid"
-VERSION = 1
-EXTENSION = "npz"
-"""The file name suffix, without the dot."""
-MEDIA_TYPE = media_type("score-grid", EXTENSION, VERSION)
-
-KNOWN = (MEDIA_TYPE,)
+FORMAT = Format(
+    name="score_grid",
+    version=1,
+    extension="npz",
+    type_name="score-grid",
+    container="npz",
+)
 
 __all__ = [
-    "EXTENSION",
-    "KNOWN",
-    "MEDIA_TYPE",
-    "NAME",
-    "VERSION",
+    "FORMAT",
     "ScoreGrid",
     "UnsupportedFormat",
     "read",
@@ -97,7 +93,7 @@ def write(path: Path, grid: ScoreGrid) -> None:
         )
 
 
-def read(path: Path, media_type: str = MEDIA_TYPE) -> ScoreGrid:
+def read(path: Path, media_type: str = FORMAT.media_type) -> ScoreGrid:
     """Read a score grid.
 
     Args:
@@ -110,7 +106,7 @@ def read(path: Path, media_type: str = MEDIA_TYPE) -> ScoreGrid:
     Raises:
         UnsupportedFormat: For a media type or version this reader doesn't know.
     """
-    require(media_type, KNOWN)
+    require(media_type, FORMAT.known)
     with np.load(path, allow_pickle=False) as stored:
         width, height = (int(value) for value in stored["level_size"])
         mpp_x, mpp_y = (float(value) for value in stored["mpp"])

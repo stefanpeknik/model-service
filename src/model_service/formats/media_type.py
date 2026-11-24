@@ -1,6 +1,12 @@
-"""Versioned vendor media types: `application/vnd.rationai.<name>+<ext>; version=N`."""
+"""What a data format declares, and its versioned vendor media type.
+
+Each format module declares one `FORMAT`; its media type is
+`application/vnd.rationai.<type name>+<container>; version=N`.
+"""
 
 from __future__ import annotations
+
+from dataclasses import dataclass, field
 
 
 class UnsupportedFormat(ValueError):
@@ -36,3 +42,35 @@ def require(given: str, known: tuple[str, ...]) -> None:
         raise UnsupportedFormat(
             f"cannot read `{given}`; this reader knows {', '.join(known)}"
         )
+
+
+@dataclass(frozen=True)
+class Format:
+    """A data format's declaration: what callers learn without opening its module.
+
+    Attributes:
+        name: The name sinks declare in `format`, e.g. `score_grid`.
+        version: The layout version; a layout change bumps it.
+        extension: The file name suffix, without the dot.
+        type_name: Its name in the media type, e.g. `score-grid`.
+        container: The media type's suffix, e.g. `npz` or `hdf5`.
+        module: The module that declares it, filled in by the scan in
+            `known.py`; its docstring is the format's reference page.
+    """
+
+    name: str
+    version: int
+    extension: str
+    type_name: str
+    container: str
+    module: str = field(default="", compare=False)
+
+    @property
+    def media_type(self) -> str:
+        """The versioned vendor media type outputs of this format are stored with."""
+        return media_type(self.type_name, self.container, self.version)
+
+    @property
+    def known(self) -> tuple[str, ...]:
+        """Every media type the format's reader takes: its own version."""
+        return (self.media_type,)

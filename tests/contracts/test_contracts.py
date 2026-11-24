@@ -119,10 +119,11 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(RunnerErrorCode.INVALID_INVOCATION, "invalid_run_request")
         self.assertEqual(RunnerErrorCode.UNAVAILABLE, "analysis_runner_unavailable")
         self.assertEqual(
-            score_grid.MEDIA_TYPE, "application/vnd.rationai.score-grid+npz; version=1"
+            score_grid.FORMAT.media_type,
+            "application/vnd.rationai.score-grid+npz; version=1",
         )
         self.assertEqual(
-            embedding_table.MEDIA_TYPE,
+            embedding_table.FORMAT.media_type,
             "application/vnd.rationai.embedding-table+hdf5; version=2",
         )
 

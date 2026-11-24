@@ -20,7 +20,7 @@ from components.empaia.publishers.continuous_pixelmap import (
     ContinuousPixelmap,
 )
 from components.empaia.publishers.primitive import primitive_body
-from model_service.formats.score_grid import MEDIA_TYPE, ScoreGrid
+from model_service.formats.score_grid import FORMAT, ScoreGrid
 from model_service.formats.score_grid import write as write_score_grid
 from model_service.providers.empaia.app_service.gateway import (
     EmpaiaGatewayError,
@@ -408,7 +408,9 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             )
             commit = await ContinuousPixelmap.from_options(
                 {"type": "continuous_pixelmap"}
-            ).prepare(gateway, EmpaiaOutput("heatmap", "slide"), path, MEDIA_TYPE)  # type: ignore[attr-defined]
+            ).prepare(
+                gateway, EmpaiaOutput("heatmap", "slide"), path, FORMAT.media_type
+            )  # type: ignore[attr-defined]
             await commit()
             await gateway.close()
 

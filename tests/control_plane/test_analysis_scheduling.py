@@ -58,7 +58,7 @@ class FakeRunner:
         return RunResult(
             {
                 "heatmap": SharedArtifact(
-                    str(self.root / "out.npz"), score_grid.MEDIA_TYPE
+                    str(self.root / "out.npz"), score_grid.FORMAT.media_type
                 )
             },
             served_models={"prostate-classifier-1": RAN},

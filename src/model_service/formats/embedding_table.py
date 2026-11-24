@@ -40,7 +40,7 @@ from typing import TYPE_CHECKING, Any, Self
 
 import numpy as np
 
-from model_service.formats.media_type import UnsupportedFormat, media_type, require
+from model_service.formats.media_type import Format, UnsupportedFormat, require
 
 
 if TYPE_CHECKING:
@@ -51,21 +51,18 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
-NAME = "embedding_table"
-VERSION = 2
-EXTENSION = "h5"
-"""The file name suffix, without the dot."""
-MEDIA_TYPE = media_type("embedding-table", "hdf5", VERSION)
-COORDINATE_SPACE = "slide_level"
-
-KNOWN = (MEDIA_TYPE,)
+FORMAT = Format(
+    name="embedding_table",
+    version=2,
+    extension="h5",
+    type_name="embedding-table",
+    container="hdf5",
+)
+# `coordinates` are pixels of the slide level the tiles were read at.
+_COORDINATE_SPACE = "slide_level"
 
 __all__ = [
-    "EXTENSION",
-    "KNOWN",
-    "MEDIA_TYPE",
-    "NAME",
-    "VERSION",
+    "FORMAT",
     "EmbeddingTable",
     "Header",
     "RowShapeError",
@@ -119,10 +116,10 @@ class Header:
             Attribute name to value, `tile_count` aside.
         """
         return {
-            "schema_version": VERSION,
+            "schema_version": FORMAT.version,
             "model_id": self.model_id,
             "summary_names": self.summary_names,
-            "coordinate_space": COORDINATE_SPACE,
+            "coordinate_space": _COORDINATE_SPACE,
             "slide_level": self.slide_level,
             "level_downsample": self.level_downsample,
             "slide_width": self.slide_width,
@@ -256,7 +253,7 @@ class TableWriter:
         self._file.close()
 
 
-def read(path: Path, media_type: str = MEDIA_TYPE) -> EmbeddingTable:
+def read(path: Path, media_type: str = FORMAT.media_type) -> EmbeddingTable:
     """Read an embedding table.
 
     Args:
@@ -272,13 +269,13 @@ def read(path: Path, media_type: str = MEDIA_TYPE) -> EmbeddingTable:
     """
     import h5py
 
-    require(media_type, KNOWN)
+    require(media_type, FORMAT.known)
     with h5py.File(path, "r") as file:
         attrs = file.attrs
-        if attrs.get("schema_version") != VERSION:
+        if attrs.get("schema_version") != FORMAT.version:
             raise UnsupportedFormat(
                 f"{path} has schema_version {attrs.get('schema_version')}; "
-                f"this reader knows {VERSION}"
+                f"this reader knows {FORMAT.version}"
             )
         header = Header(
             model_id=_text(attrs["model_id"]),

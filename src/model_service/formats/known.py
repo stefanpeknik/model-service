@@ -1,35 +1,17 @@
 """The data formats this repo knows, by the name sinks declare in `format`.
 
-Every module of this package that defines `NAME` and `MEDIA_TYPE` is a
-format; nothing lists them by hand.
+Every module of this package that declares a `FORMAT` is a format; nothing
+lists them by hand.
 """
 
 from __future__ import annotations
 
 import importlib
 import pkgutil
-from dataclasses import dataclass
+from dataclasses import replace
 
 import model_service.formats
-
-
-@dataclass(frozen=True)
-class Format:
-    """What callers learn about a format without opening its module.
-
-    Attributes:
-        name: The name sinks declare, e.g. `score_grid`.
-        media_type: The versioned vendor media type.
-        extension: The file name suffix, without the dot.
-        known: Every media type its reader takes.
-        module: The module that declares it; its docstring is its reference page.
-    """
-
-    name: str
-    media_type: str
-    extension: str
-    known: tuple[str, ...] = ()
-    module: str = ""
+from model_service.formats.media_type import Format
 
 
 def _scan() -> dict[str, Format]:
@@ -38,15 +20,9 @@ def _scan() -> dict[str, Format]:
     package = model_service.formats
     for info in sorted(pkgutil.iter_modules(package.__path__), key=lambda m: m.name):
         module = importlib.import_module(f"{package.__name__}.{info.name}")
-        if not hasattr(module, "NAME") or not hasattr(module, "MEDIA_TYPE"):
-            continue
-        found[module.NAME] = Format(
-            module.NAME,
-            module.MEDIA_TYPE,
-            module.EXTENSION,
-            module.KNOWN,
-            module.__name__,
-        )
+        declared = getattr(module, "FORMAT", None)
+        if isinstance(declared, Format):
+            found[declared.name] = replace(declared, module=module.__name__)
     return found
 
 

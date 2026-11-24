@@ -11,28 +11,21 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from model_service.formats.media_type import UnsupportedFormat, media_type, require
+from model_service.formats.media_type import Format, UnsupportedFormat, require
 
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 
-NAME = "value"
-VERSION = 1
-EXTENSION = "json"
-"""The file name suffix, without the dot."""
-MEDIA_TYPE = media_type("value", EXTENSION, VERSION)
-KNOWN = (MEDIA_TYPE,)
+FORMAT = Format(
+    name="value", version=1, extension="json", type_name="value", container="json"
+)
 
 type Scalar = bool | int | float | str
 
 __all__ = [
-    "EXTENSION",
-    "KNOWN",
-    "MEDIA_TYPE",
-    "NAME",
-    "VERSION",
+    "FORMAT",
     "Scalar",
     "UnsupportedFormat",
     "read",
@@ -50,7 +43,7 @@ def write(path: Path, scalar: Scalar) -> None:
     path.write_text(json.dumps({"value": scalar}, allow_nan=False), encoding="utf-8")
 
 
-def read(path: Path, media_type: str = MEDIA_TYPE) -> Scalar:
+def read(path: Path, media_type: str = FORMAT.media_type) -> Scalar:
     """Read the scalar.
 
     Args:
@@ -64,7 +57,7 @@ def read(path: Path, media_type: str = MEDIA_TYPE) -> Scalar:
         UnsupportedFormat: For a media type or version this reader doesn't know.
         ValueError: If the file is not JSON or holds no scalar.
     """
-    require(media_type, KNOWN)
+    require(media_type, FORMAT.known)
     stored = json.loads(path.read_text(encoding="utf-8"))
     scalar = stored.get("value") if isinstance(stored, dict) else None
     if not isinstance(scalar, bool | int | float | str):

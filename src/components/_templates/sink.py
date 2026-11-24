@@ -29,7 +29,7 @@ class MyComponent(Sink):
     """
 
     name = "my_component"
-    format = value.NAME
+    format = value.FORMAT.name
     example_options: ClassVar[dict[str, Any]] = {"output": "mean_score"}
     reads: ClassVar[dict[str, Col]] = {"scores": Col("float32", None)}
 
@@ -40,7 +40,7 @@ class MyComponent(Sink):
             frame: The source's frame row.
             run: The run; write into `run.work_dir`.
         """
-        self._path = run.work_dir / f"{self.options.output}.{value.EXTENSION}"
+        self._path = run.work_dir / f"{self.options.output}.{value.FORMAT.extension}"
         self._total = 0.0
         self._count = 0
 

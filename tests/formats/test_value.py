@@ -41,7 +41,7 @@ def test_an_unknown_version_is_refused(tmp_path: Path) -> None:
 
 
 def test_a_stored_media_type_names_its_format() -> None:
-    assert format_of(value.MEDIA_TYPE) is get_format("value")
-    assert format_of(score_grid.MEDIA_TYPE) is get_format("score_grid")
+    assert format_of(value.FORMAT.media_type) is get_format("value")
+    assert format_of(score_grid.FORMAT.media_type) is get_format("score_grid")
     assert format_of("application/x-npz") is None
     assert format_of("image/tiff") is None

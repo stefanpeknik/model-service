@@ -74,7 +74,7 @@ def grid(values: np.ndarray, scored: np.ndarray) -> score_grid.ScoreGrid:
 async def publish_grid(
     path: Path,
     gateway: PyramidGateway,
-    media_type: str = score_grid.MEDIA_TYPE,
+    media_type: str = score_grid.FORMAT.media_type,
     tile_size: int = 256,
 ) -> None:
     pixelmap = publisher(
@@ -148,9 +148,9 @@ class ContinuousPixelmapTests(unittest.IsolatedAsyncioTestCase):
             score_grid.write(root / "two.npz", two_channels)
             (root / "unreadable.npz").write_bytes(b"not an npz")
             cases = {
-                "nothing scored": (root / "nothing.npz", score_grid.MEDIA_TYPE),
-                "two channels": (root / "two.npz", score_grid.MEDIA_TYPE),
-                "unreadable": (root / "unreadable.npz", score_grid.MEDIA_TYPE),
+                "nothing scored": (root / "nothing.npz", score_grid.FORMAT.media_type),
+                "two channels": (root / "two.npz", score_grid.FORMAT.media_type),
+                "unreadable": (root / "unreadable.npz", score_grid.FORMAT.media_type),
                 "a version it doesn't know": (
                     root / "two.npz",
                     "application/vnd.rationai.score-grid+npz; version=9",
@@ -178,7 +178,7 @@ class PrimitiveTests(unittest.IsolatedAsyncioTestCase):
             value.write(path, 1)
             primitive = publisher({"type": "float"}, "value")
             commit = await primitive.prepare(
-                gateway, EmpaiaOutput("score"), path, value.MEDIA_TYPE
+                gateway, EmpaiaOutput("score"), path, value.FORMAT.media_type
             )
             assert gateway.posted == []
             await commit()
@@ -210,7 +210,7 @@ class PrimitiveTests(unittest.IsolatedAsyncioTestCase):
                 value.write(path, scalar)
                 with self.assertRaises(EmpaiaGatewayError) as raised:
                     await publisher({"type": output_type}, "value").prepare(
-                        gateway, EmpaiaOutput("score"), path, value.MEDIA_TYPE
+                        gateway, EmpaiaOutput("score"), path, value.FORMAT.media_type
                     )
                 assert not raised.exception.retryable
                 assert gateway.posted == []
@@ -260,12 +260,12 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
                 analysis_success(
                     {
                         "heatmap": SharedArtifact(
-                            str(heatmap_file(directory)), score_grid.MEDIA_TYPE
+                            str(heatmap_file(directory)), score_grid.FORMAT.media_type
                         ),
                         # Not listed under `outputs`, so not published.
                         "other": SharedArtifact(
                             str(heatmap_file(directory, "other.npz")),
-                            score_grid.MEDIA_TYPE,
+                            score_grid.FORMAT.media_type,
                         ),
                     },
                     ["heatmap", "other"],
@@ -284,7 +284,11 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
             await self.provider(gateway).finish(
                 admitted(heatmap={"type": "continuous_pixelmap"}),
                 analysis_success(
-                    {"extra": SharedArtifact("/shared/x.npz", score_grid.MEDIA_TYPE)},
+                    {
+                        "extra": SharedArtifact(
+                            "/shared/x.npz", score_grid.FORMAT.media_type
+                        )
+                    },
                     ["heatmap"],
                 ),
             )
@@ -303,7 +307,11 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
                 await self.provider(gateway).finish(
                     admitted(heatmap={"type": "continuous_pixelmap"}),
                     analysis_success(
-                        {"heatmap": SharedArtifact(str(path), score_grid.MEDIA_TYPE)},
+                        {
+                            "heatmap": SharedArtifact(
+                                str(path), score_grid.FORMAT.media_type
+                            )
+                        },
                         ["heatmap"],
                     ),
                 )
@@ -327,9 +335,12 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
                     analysis_success(
                         {
                             "heatmap": SharedArtifact(
-                                str(heatmap_file(directory)), score_grid.MEDIA_TYPE
+                                str(heatmap_file(directory)),
+                                score_grid.FORMAT.media_type,
                             ),
-                            "score": SharedArtifact(str(score), value.MEDIA_TYPE),
+                            "score": SharedArtifact(
+                                str(score), value.FORMAT.media_type
+                            ),
                         },
                         ["heatmap", "score"],
                     ),

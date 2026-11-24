@@ -34,7 +34,7 @@ class EmbeddingTableSink(Sink):
     """
 
     name = "embedding_table"
-    format = embedding_table.NAME
+    format = embedding_table.FORMAT.name
     ordered = True
     example_options: ClassVar[dict[str, Any]] = {"output": "embeddings"}
     reads: ClassVar[dict[str, Col]] = {
@@ -85,7 +85,7 @@ class EmbeddingTableSink(Sink):
             stride=frame["stride_x"],
         )
         self._path: Path = (
-            run.work_dir / f"{self.options.output}.{embedding_table.EXTENSION}"
+            run.work_dir / f"{self.options.output}.{embedding_table.FORMAT.extension}"
         )
         self._thread = ThreadPoolExecutor(max_workers=1)
         self._pending: list[Future[None]] = []

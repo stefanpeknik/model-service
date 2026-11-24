@@ -47,7 +47,9 @@ def heatmap_success(artifact: Path) -> ProviderSuccess:
     """The job's result: the heatmap its one sink wrote."""
     return ProviderSuccess(
         RunResult(
-            outputs={"heatmap": SharedArtifact(str(artifact), score_grid.MEDIA_TYPE)}
+            outputs={
+                "heatmap": SharedArtifact(str(artifact), score_grid.FORMAT.media_type)
+            }
         ),
         ExecutionTarget(
             "prostate-heatmap",
