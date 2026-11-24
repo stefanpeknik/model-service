@@ -25,6 +25,7 @@ from model_service.registry import default_registry
 
 
 CATALOG = Path("catalog")
+ENVIRONMENTS = Path("deploy/helm/environments")
 REFERENCE = Path("docs/reference")
 
 
@@ -44,9 +45,11 @@ def generated(repo: Path) -> dict[Path, str]:
     catalog = load_catalog(repo / CATALOG)
     return {
         **schema_files(registry, CATALOG),
-        **linked_files(repo, CATALOG),
+        **linked_files(repo, CATALOG, ENVIRONMENTS),
         REFERENCE / "components.md": components_page(registry, catalog),
-        REFERENCE / "served-models.md": served_models_page(catalog, repo / CATALOG),
+        REFERENCE / "served-models.md": served_models_page(
+            catalog, repo / ENVIRONMENTS
+        ),
         REFERENCE / "analyses.md": analyses_page(catalog),
         REFERENCE / "formats.md": formats_page(registry),
     }

@@ -8,8 +8,7 @@ from typing import Any, ClassVar
 
 from pydantic import Field, SerializerFunctionWrapHandler, model_serializer
 
-from components.base import Loader
-from components.base.options import Options
+from components import Loader, Options
 
 
 class MlflowOptions(Options):
@@ -61,7 +60,7 @@ class MlflowOptions(Options):
 class Mlflow(Loader):
     """Downloads one artifact (e.g. an ONNX file) from MLflow.
 
-    `weights: {use: mlflow, uri: "mlflow-artifacts:/65/<run>/artifacts/model.onnx"}`.
+    `loader: {use: mlflow, uri: "mlflow-artifacts:/65/<run>/artifacts/model.onnx"}`.
     The tracking server comes from the environment (`MLFLOW_TRACKING_URI`),
     which each deployment environment sets once. After the download the
     revision carries the artifact's SHA-256, so `describe()` names the bytes

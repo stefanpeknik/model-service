@@ -6,13 +6,11 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import Field
 
-from components.base import Step
-from components.base.columns import Col
-from components.base.options import Options
+from components import Col, Options, Step
 
 
 if TYPE_CHECKING:
-    from components.base.columns import Batch
+    from components import Batch
 
 
 class ClsMeanPoolOptions(Options):

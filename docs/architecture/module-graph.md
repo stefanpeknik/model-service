@@ -49,7 +49,7 @@ flowchart LR
   end
 
   subgraph sg_components["components (top-level package: what an author writes)"]
-    base["components.base<br/>kinds · Options · Col · Run · Problem · slots"]
+    base["components (from components._kinds)<br/>kinds · Options · Col · Run · Problem · slots"]
     pieces["steps · loaders · runtimes<br/>sources · sinks · empaia"]
   end
 
@@ -91,7 +91,7 @@ A few arrows cross into packages of another process at module level only:
 
 - `catalog` imports `providers.empaia.ead` for the EMPAIA vocabulary (modes,
   triggers, viewer settings) that `expose.empaia` is checked against;
-- the EMPAIA converters and publishers in `components.empaia` import the
+- the EMPAIA converters and publishers in `components.providers.empaia` import the
   gateway errors and types of `providers.empaia.app_service`, and
   `slide_tiles` imports `slides` inside its methods only, so the control plane never
   loads OpenSlide;
@@ -100,7 +100,7 @@ A few arrows cross into packages of another process at module level only:
 - `served_model.replies` imports the `cls_mean_pool` step to drop register
   tokens from the raw route's unpooled reply.
 
-Between the two top-level packages, `components.base` imports nothing from
+Between the two top-level packages, `components._kinds` imports nothing from
 `model_service` at run time (`tests/test_process_boundaries.py` checks it).
 The component folders import `model_service.formats`, `contracts` and the
 EMPAIA gateway; none of those import `components`, and the registry finds

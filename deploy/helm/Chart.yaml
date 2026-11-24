@@ -1,0 +1,5 @@
+apiVersion: v2
+name: model-service
+description: Model service Helm chart
+version: 0.1.0
+type: application

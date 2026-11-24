@@ -6,31 +6,31 @@ A catalog file names a component with `{use: <name>, …options}`; EMPAIA conver
 
 | Kind | Usable in | Folder |
 | --- | --- | --- |
-| [loader](#loaders) | served model `weights:`, analysis step `weights:` | `src/components/loaders/` |
+| [loader](#loaders) | served model `loader:`, analysis step `loader:` | `src/components/loaders/` |
 | [runtime](#runtimes) | served model `runtime:` | `src/components/runtimes/` |
 | [step](#steps) | served model `pre:`, served model `post:`, analysis `steps:` | `src/components/steps/` |
 | [source](#sources) | analysis `source:` | `src/components/sources/` |
 | [sink](#sinks) | analysis `sinks:` | `src/components/sinks/` |
-| [converter](#converters) | EMPAIA exposure `inputs:` | `src/components/empaia/converters/` |
-| [publisher](#publishers) | EMPAIA exposure `outputs:` | `src/components/empaia/publishers/` |
+| [converter](#converters) | EMPAIA exposure `inputs:` | `src/components/providers/empaia/converters/` |
+| [publisher](#publishers) | EMPAIA exposure `outputs:` | `src/components/providers/empaia/publishers/` |
 
 ## Loaders
 
 Fetches a model's weights (an MLflow artifact, a Hugging Face repo, ...).
 
-Used under a served model's `weights:` and under the `weights:` of an
+Used under a served model's `loader:` and under the `loader:` of an
 analysis step that carries its own small model.
 
 ### `huggingface` (loader)
 
 Downloads one commit of a Hugging Face Hub repository.
 
-`weights: {use: huggingface, repo: paige-ai/Virchow2, revision: <commit>}`.
+`loader: {use: huggingface, repo: paige-ai/Virchow2, revision: <commit>}`.
 The files go to the Hub's own cache (`HF_HOME`), which each deployment
 environment points at a shared volume, so a restart downloads nothing.
 A gated repository needs `HF_TOKEN` in the environment.
 
-- **Usable in:** served model `weights:`, analysis step `weights:`
+- **Usable in:** served model `loader:`, analysis step `loader:`
 - **Example:** `{use: huggingface, repo: paige-ai/Virchow2, revision: 3158645804b69e3f3bc4439d4116edddf0840a72}`
 - **Used in:** [`prov-gigapath`](served-models.md#prov-gigapath), [`virchow2`](served-models.md#virchow2)
 - **Code:** [`src/components/loaders/huggingface.py`](../../src/components/loaders/huggingface.py)
@@ -45,10 +45,10 @@ A gated repository needs `HF_TOKEN` in the environment.
 
 Weights at a path on the machine running the model, for tests and trials.
 
-`weights: {use: local, path: /data/model.onnx}`. Nothing is downloaded; on
+`loader: {use: local, path: /data/model.onnx}`. Nothing is downloaded; on
 the cluster the path must be on a mounted volume.
 
-- **Usable in:** served model `weights:`, analysis step `weights:`
+- **Usable in:** served model `loader:`, analysis step `loader:`
 - **Example:** `{use: local, path: /data/model.onnx}`
 - **Used in:** no catalog file yet
 - **Code:** [`src/components/loaders/local.py`](../../src/components/loaders/local.py)
@@ -61,13 +61,13 @@ the cluster the path must be on a mounted volume.
 
 Downloads one artifact (e.g. an ONNX file) from MLflow.
 
-`weights: {use: mlflow, uri: "mlflow-artifacts:/65/<run>/artifacts/model.onnx"}`.
+`loader: {use: mlflow, uri: "mlflow-artifacts:/65/<run>/artifacts/model.onnx"}`.
 The tracking server comes from the environment (`MLFLOW_TRACKING_URI`),
 which each deployment environment sets once. After the download the
 revision carries the artifact's SHA-256, so `describe()` names the bytes
 that run; `sha256:` pins them.
 
-- **Usable in:** served model `weights:`, analysis step `weights:`
+- **Usable in:** served model `loader:`, analysis step `loader:`
 - **Example:** `{use: mlflow, uri: 'mlflow-artifacts:/0/0123456789abcdef/artifacts/model.onnx'}`
 - **Used in:** [`episeg-1`](served-models.md#episeg-1), [`prostate-classifier-1`](served-models.md#prostate-classifier-1)
 - **Code:** [`src/components/loaders/mlflow.py`](../../src/components/loaders/mlflow.py)
@@ -327,7 +327,7 @@ read when the job is admitted and overrides the file's.
 - **EAD input type:** `primitive`
 - **Gives:** a value
 - **Used in:** no catalog file yet
-- **Code:** [`src/components/empaia/converters/primitive.py`](../../src/components/empaia/converters/primitive.py)
+- **Code:** [`src/components/providers/empaia/converters/primitive.py`](../../src/components/providers/empaia/converters/primitive.py)
 
 ### `rectangle` (converter)
 
@@ -342,7 +342,7 @@ with the region-of-interest class, so the viewer lets a user draw it.
 - **EAD input type:** `rectangle`
 - **Gives:** a file
 - **Used in:** [`prostate-heatmap`](analyses.md#prostate-heatmap)
-- **Code:** [`src/components/empaia/converters/rectangle.py`](../../src/components/empaia/converters/rectangle.py)
+- **Code:** [`src/components/providers/empaia/converters/rectangle.py`](../../src/components/providers/empaia/converters/rectangle.py)
 
 ### `wsi` (converter)
 
@@ -358,7 +358,7 @@ is refused: model-service does not download slides.
 - **EAD input type:** `wsi`
 - **Gives:** a file
 - **Used in:** [`prostate-heatmap`](analyses.md#prostate-heatmap)
-- **Code:** [`src/components/empaia/converters/wsi.py`](../../src/components/empaia/converters/wsi.py)
+- **Code:** [`src/components/providers/empaia/converters/wsi.py`](../../src/components/providers/empaia/converters/wsi.py)
 
 ## Publishers
 
@@ -383,7 +383,7 @@ a multi-channel grid is refused when the analysis loads.
 - **Reads:** [`score_grid`](formats.md#score_grid)
 - **EAD output types:** `continuous_pixelmap`
 - **Used in:** [`prostate-heatmap`](analyses.md#prostate-heatmap)
-- **Code:** [`src/components/empaia/publishers/continuous_pixelmap.py`](../../src/components/empaia/publishers/continuous_pixelmap.py)
+- **Code:** [`src/components/providers/empaia/publishers/continuous_pixelmap.py`](../../src/components/providers/empaia/publishers/continuous_pixelmap.py)
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -403,7 +403,7 @@ anything is posted.
 - **Reads:** [`value`](formats.md#value)
 - **EAD output types:** `bool`, `float`, `integer`, `string`
 - **Used in:** no catalog file yet
-- **Code:** [`src/components/empaia/publishers/primitive.py`](../../src/components/empaia/publishers/primitive.py)
+- **Code:** [`src/components/providers/empaia/publishers/primitive.py`](../../src/components/providers/empaia/publishers/primitive.py)
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |

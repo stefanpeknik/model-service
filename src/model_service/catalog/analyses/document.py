@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
-from components.base import slots
+from components import slots
 from model_service.catalog.analyses import checks
 from model_service.catalog.analyses.declaration import Analysis
 from model_service.catalog.analyses.exposure import exposure_schema, resolve_exposure
@@ -29,7 +29,7 @@ from model_service.catalog.schema import usable
 
 
 if TYPE_CHECKING:
-    from components.base import Sink, Source, Step
+    from components import Sink, Source, Step
     from model_service.catalog.analyses.declaration import AnalysisStep
     from model_service.catalog.context import ResolveContext
     from model_service.catalog.errors import YamlPath

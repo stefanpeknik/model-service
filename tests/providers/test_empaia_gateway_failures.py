@@ -8,7 +8,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestServer
 from rationai.empaia import Client
 
-from components.empaia.publishers.primitive import primitive_body
+from components.providers.empaia.publishers.primitive import primitive_body
 from model_service.providers.empaia.app_service.gateway import (
     EmpaiaGatewayError,
     PrimitiveType,

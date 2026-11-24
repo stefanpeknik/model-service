@@ -19,7 +19,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from jsonschema import Draft7Validator
 
-from components.base import EmpaiaInput, EmpaiaOutput
+from components import EmpaiaInput, EmpaiaOutput
 from model_service.providers.empaia.ead.vocabulary import (
     VIEWER_CONFIG_KEY,
     AppMode,
@@ -232,7 +232,7 @@ def generate_ead(analysis: Analysis) -> dict[str, Any]:
     }
     parameters = exposure.parameters
     if parameters:
-        from components.empaia.converters.primitive import (
+        from components.providers.empaia.converters.primitive import (
             Primitive,
         )
 

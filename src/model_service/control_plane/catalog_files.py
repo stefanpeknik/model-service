@@ -1,6 +1,6 @@
 """Read the catalog from the file the chart's catalog ConfigMap holds.
 
-`deploy/helm/rayservice/templates/model-catalog.yaml` renders `catalog.json`:
+`deploy/helm/templates/model-catalog.yaml` renders `catalog.json`:
 `{"served-models": {id: document}, "analyses": {id: document}}`, the deployed
 served models and analyses after the environment's patches. They resolve
 through the catalog loader, so the control plane runs the same load-time checks as the

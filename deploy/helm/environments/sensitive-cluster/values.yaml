@@ -1,0 +1,40 @@
+# rationai-jobs-ns: the cluster model-service ran on before this platform
+# (upstream main: Serve applications only). It deploys the whole platform; the
+# render fails until these are filled in, each named by its error:
+# - rayImage.tag, rayGpuImage.tag, controlPlane.image.tag: the images to run;
+# - controlPlane.database.existingSecret, controlPlane.encryption.existingSecret:
+#   a Secret with `database-url` (PostgreSQL) and `provider-context-key`.
+# Runs write their outputs under /mnt/projects: `projects-rw`, the writable
+# claim the workers mount there too (/mnt/data is the read-only `data-ro`).
+# Hand-applied objects: k8s/ beside this file (the TensorRT and Hugging Face
+# cache claims the workers mount). EMPAIA is off here.
+environment: sensitive-cluster
+servedModelSettings:
+  env:
+    MLFLOW_TRACKING_URI: http://mlflow.rationai-mlflow:5000
+
+sharedStorageRoots: [/mnt/data, /mnt/projects]
+
+workers: [cpu, gpu]
+
+# Always, as this cluster pulled before.
+rayImage:
+  repository: cerit.io/rationai/model-service-ray-cpu
+  tag: ""
+  pullPolicy: Always
+rayGpuImage:
+  repository: cerit.io/rationai/model-service-ray
+  tag: ""
+  pullPolicy: Always
+
+controlPlane:
+  enabled: true
+  image:
+    tag: ""
+  database:
+    existingSecret: ""
+  encryption:
+    existingSecret: ""
+  sharedStorage:
+    existingClaim: projects-rw
+    mountPath: /mnt/projects

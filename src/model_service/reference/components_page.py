@@ -7,7 +7,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from components.base import (
+from components import (
     KINDS,
     InputConverter,
     Publisher,
@@ -28,7 +28,7 @@ from model_service.reference.markdown import (
 
 
 if TYPE_CHECKING:
-    from components.base import Col, Component, Slot
+    from components import Col, Component, Slot
     from model_service.catalog import Catalog
     from model_service.catalog.analyses import Analysis
     from model_service.registry import Registry
@@ -241,7 +241,7 @@ def _used_in(catalog: Catalog) -> dict[tuple[str, str], list[str]]:
     named: list[tuple[str, list[Component]]] = [
         (
             f"[`{model.id}`](served-models.md#{model.id})",
-            [model.weights, model.runtime, *model.pre, *model.post],
+            [model.loader, model.runtime, *model.pre, *model.post],
         )
         for model in catalog.served_models.values()
     ]

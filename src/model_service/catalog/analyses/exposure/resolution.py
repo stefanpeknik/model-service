@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from components.base import slots
-from components.empaia.converters.primitive import primitive_of
+from components import slots
+from components.providers.empaia.converters.primitive import primitive_of
 from model_service.catalog.analyses.exposure.fields import EmpaiaFields, ExposeFields
 from model_service.providers.empaia.ead.vocabulary import AppMode, Trigger, ViewerConfig
 from model_service.registry.empaia import TYPE, converters_for, publishers_for
@@ -15,7 +15,7 @@ from model_service.registry.empaia import TYPE, converters_for, publishers_for
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from components.base import InputConverter, Publisher
+    from components import InputConverter, Publisher
     from model_service.catalog.analyses.declaration import Analysis
     from model_service.catalog.context import ResolveContext
     from model_service.catalog.errors import YamlPath

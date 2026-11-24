@@ -171,7 +171,7 @@ class AnalysisReplica:
         analysis = resolved.analysis
         verified = {
             model_id: await self._verified(
-                model_id, digest, analysis.models[model_id].weights.expected_revision()
+                model_id, digest, analysis.models[model_id].loader.expected_revision()
             )
             for model_id, digest in resolved.model_digests.items()
         }

@@ -15,6 +15,7 @@ from model_service.catalog import load_catalog
 from model_service.control_plane.catalog_files import CatalogError
 from model_service.control_plane.catalog_mount import MountedCatalog
 from tests.support.model_documents import served_document
+from tests.support.paths import RATIONAI_TEST
 
 
 if TYPE_CHECKING:
@@ -30,9 +31,7 @@ def heatmap() -> dict[str, Any]:
 
 
 def prostate() -> dict[str, Any]:
-    entry = load_catalog(CATALOG, "rationai-test").served_models[
-        "prostate-classifier-1"
-    ]
+    entry = load_catalog(CATALOG, RATIONAI_TEST).served_models["prostate-classifier-1"]
     return entry.declaration
 
 

@@ -4,7 +4,7 @@ model-service beside the EMPAIA test instance, reading slides from the
 instance's slide volume. It is the test deployment; the earlier one in
 `peknik-ns` (with EMPAIA stand-ins) was removed on 2026-10-30. The namespace
 and the EMPAIA services in it are shared: change only the objects listed here.
-Release `model-service`, values `deploy/helm/rayservice/values.rationai-test.yaml`.
+Release `model-service`, values `deploy/helm/environments/rationai-test/values.yaml`.
 
 ## Layout
 
@@ -30,7 +30,7 @@ Release `model-service`, values `deploy/helm/rayservice/values.rationai-test.yam
 - No marketplace registration: the instance's marketplace needs credentials
   model-service doesn't have yet.
 
-Objects outside the chart, in `deploy/k8s/rationai-test-ns/`: PostgreSQL
+Objects outside the chart, in `deploy/helm/environments/rationai-test/k8s/`: PostgreSQL
 and its claim, and the TensorRT and Hugging Face cache claims. Secrets: `model-service-db` (`postgres-password`, `database-url`,
 `provider-context-key`, generated at install), `huggingface-secret` (the
 namespace's own), `mlflow-public-credentials` (GPU workers, for MLflow
@@ -43,9 +43,9 @@ a second Ray cluster (about 4.5 GiB more) before removing the old one.
 ## Install
 
 ```sh
-oc apply -f deploy/k8s/rationai-test-ns/storage.yaml -f deploy/k8s/rationai-test-ns/postgres.yaml
-helm install model-service deploy/helm/rayservice -n rationai-infra-test-ns \
-  -f deploy/helm/rayservice/values.rationai-test.yaml
+oc apply -f deploy/helm/environments/rationai-test/k8s/storage.yaml -f deploy/helm/environments/rationai-test/k8s/postgres.yaml
+helm install model-service deploy/helm -n rationai-infra-test-ns \
+  -f deploy/helm/environments/rationai-test/values.yaml
 ```
 
 Upgrades use `helm upgrade` with the same arguments.
@@ -54,7 +54,7 @@ Served models and analyses come from `catalog/`: the values deploy the IDs
 named in `servedModels` (`prostate-classifier-1`, `virchow2` and
 `prov-gigapath`; EPISeg's weights sit on an MLflow this cluster can't reach)
 and in `analyses` (`prostate-heatmap`, `virchow2-embeddings` and
-`prov-gigapath-embeddings`), with the `catalog/environments/rationai-test/`
+`prov-gigapath-embeddings`), with the `deploy/helm/environments/rationai-test/`
 patches. A catalog-only change needs no image rebuild and doesn't restart the control plane: kubelet
 updates the mounted catalog ConfigMap (within about a minute) and the control plane
 reloads it. If the new catalog doesn't load, the control plane keeps the old one and
@@ -84,7 +84,7 @@ podman push cerit.io/stefanpeknik/model-service-ray:core-$REV
 podman push cerit.io/stefanpeknik/model-service-control-plane:core-$REV
 ```
 
-Set both tags in `values.rationai-test.yaml`, then `helm upgrade`.
+Set both tags in `environments/rationai-test/values.yaml`, then `helm upgrade`.
 
 ## Routing jobs here
 

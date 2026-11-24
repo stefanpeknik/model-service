@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from components.base import RuntimeContext
+from components import RuntimeContext
 from model_service.served_model.batching import Batcher
 from model_service.served_model.guards import check_output, check_rows, check_tile
 from model_service.served_model.replies import raw_reply
@@ -35,7 +35,7 @@ from model_service.served_model.replies import raw_reply
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from components.base import Step
+    from components import Step
     from model_service.catalog.served_models import ServedModel
     from model_service.served_model.replies import RawReply
 
@@ -61,7 +61,7 @@ class ServedModelHost:
                 `<cache_root>/<id>/<first 12 hex digits of the digest>`.
         """
         self.model = model
-        weights = model.weights.fetch(Path(tempfile.mkdtemp(prefix="weights-")))
+        weights = model.loader.fetch(Path(tempfile.mkdtemp(prefix="weights-")))
         self._run = model.runtime.load(
             weights,
             RuntimeContext(
@@ -123,7 +123,7 @@ class ServedModelHost:
         return {
             "id": self.model.id,
             "digest": self.model.digest,
-            "weights_revision": self.model.weights.revision(),
+            "weights_revision": self.model.loader.revision(),
             "execution_providers": self.model.runtime.active_providers(),
         }
 

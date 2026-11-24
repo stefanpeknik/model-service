@@ -1,4 +1,4 @@
-"""The repo's `catalog/` loads for the base files and every environment.
+"""The repo's `catalog/` loads for the base files and every environment's patches.
 
 This runs every load-time check the control plane runs, through the same loader and
 component registry, and lists every mistake in the standard format:
@@ -7,18 +7,24 @@ component registry, and lists every mistake in the standard format:
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from model_service.catalog import CatalogInvalid, environments, load_catalog
+from tests.support.paths import CATALOG, ENVIRONMENTS
 
 
-CATALOG = Path(__file__).resolve().parents[2] / "catalog"
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
-@pytest.mark.parametrize("environment", [None, *environments(CATALOG)])
-def test_the_catalog_loads(environment: str | None) -> None:
+@pytest.mark.parametrize(
+    "environment",
+    [None, *environments(ENVIRONMENTS)],
+    ids=lambda e: "base" if e is None else e.name,
+)
+def test_the_catalog_loads(environment: Path | None) -> None:
     errors = ""
     try:
         load_catalog(CATALOG, environment)

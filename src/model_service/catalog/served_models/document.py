@@ -4,7 +4,7 @@ A served-model file names a loader, a runtime and steps, and says what goes
 in and out:
 
 ```yaml
-weights: {use: mlflow, uri: "mlflow-artifacts:/…/model.onnx"}
+loader: {use: mlflow, uri: "mlflow-artifacts:/…/model.onnx"}
 runtime: {use: onnx, tensorrt: true, threads: 4}
 input: {tile_size: 512, mpp: 0.468}
 output: {kind: scores, channels: 1, size: 1, range: [0, 1]}
@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import Field, create_model
 
-from components.base import Loader, Runtime, Step, slots
+from components import Loader, Runtime, Step, slots
 from model_service.catalog.context import ResolveContext
 from model_service.catalog.errors import CatalogInvalid
 from model_service.catalog.schema import usable
@@ -51,17 +51,17 @@ def build_served_model(
         The `ServedModel`, or None if anything failed.
     """
     fields = ctx.fields(Fields, document)
-    weights = ctx.component(slots.WEIGHTS, document.get("weights"), ("weights",))
+    loader = ctx.component(slots.LOADER, document.get("loader"), ("loader",))
     runtime = ctx.component(slots.RUNTIME, document.get("runtime"), ("runtime",))
     pre = cast("list[Step]", ctx.components(slots.PRE, document.get("pre"), ("pre",)))
     post = cast(
         "list[Step]", ctx.components(slots.POST, document.get("post"), ("post",))
     )
-    if fields is None or weights is None or runtime is None or ctx.errors:
+    if fields is None or loader is None or runtime is None or ctx.errors:
         return None
     return ServedModel(
         id=ctx.document_id,
-        weights=cast("Loader", weights),
+        loader=cast("Loader", loader),
         runtime=cast("Runtime", runtime),
         pre=tuple(pre),
         post=tuple(post),
@@ -89,7 +89,7 @@ def served_model_schema(registry: Registry) -> type[BaseModel]:
         "served model",
         __base__=Fields,
         __doc__=SUMMARY,
-        weights=(usable(registry, slots.WEIGHTS), _field("weights")),
+        loader=(usable(registry, slots.LOADER), _field("loader")),
         runtime=(usable(registry, slots.RUNTIME), _field("runtime")),
         pre=(pre, _field("pre")),
         post=(post, _field("post")),
@@ -100,7 +100,7 @@ def _field(name: str) -> Any:
     """A component field of the file schema, with `Fields`' description and default.
 
     Args:
-        name: The field, e.g. `weights`.
+        name: The field, e.g. `loader`.
 
     Returns:
         The pydantic field.

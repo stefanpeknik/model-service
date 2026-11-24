@@ -11,7 +11,7 @@ A served model is a file in `catalog/served-models/`; this package serves it.
 - `deployment.py`: `host_config`, which reads the `user_config` Helm renders.
 
 Deployment contract (what Helm renders for each served model, one application
-each, in `deploy/helm/rayservice/templates/_helpers.tpl`):
+each, in `deploy/helm/templates/_helpers.tpl`):
 
 ```yaml
 - name: <id>                     # the file name

@@ -12,14 +12,14 @@ from typing import TYPE_CHECKING, ClassVar
 import numpy as np
 from pydantic import Field
 
-from components.base import Col, Opened, Options, Source
+from components import Col, Opened, Options, Source
 
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
     from pathlib import Path
 
-    from components.base import Batch, Run
+    from components import Batch, Run
 
 
 class MyComponentOptions(Options):

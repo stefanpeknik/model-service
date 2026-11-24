@@ -6,8 +6,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field
 
-from components.base import Runtime
-from components.base.options import Options
+from components import Options, Runtime
 
 
 if TYPE_CHECKING:
@@ -15,7 +14,7 @@ if TYPE_CHECKING:
 
     import numpy as np
 
-    from components.base import BatchFunction, RuntimeContext
+    from components import BatchFunction, RuntimeContext
 
 
 # Constructor options name classes; files name them by these keys.

@@ -7,8 +7,7 @@ from typing import Any, ClassVar
 
 from pydantic import Field
 
-from components.base import Loader
-from components.base.options import Options
+from components import Loader, Options
 
 
 class LocalOptions(Options):
@@ -27,7 +26,7 @@ class LocalOptions(Options):
 class Local(Loader):
     """Weights at a path on the machine running the model, for tests and trials.
 
-    `weights: {use: local, path: /data/model.onnx}`. Nothing is downloaded; on
+    `loader: {use: local, path: /data/model.onnx}`. Nothing is downloaded; on
     the cluster the path must be on a mounted volume.
     """
 

@@ -1,6 +1,6 @@
 """The `my_component` publisher: a `<data format>` output as an EMPAIA `<EAD type>`.
 
-Copy to `src/components/empaia/publishers/<name>.py` and replace
+Copy to `src/components/providers/empaia/publishers/<name>.py` and replace
 `my_component`, `MyComponent` and the placeholders in <angle brackets>. A
 format with no sample yet needs a writer in `SAMPLES` in
 `tests/components/helpers/empaia.py`.
@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from components.base import Commit, EmpaiaOutput, Publisher
+from components import Commit, EmpaiaOutput, Publisher
 from model_service.formats import value
 
 

@@ -51,7 +51,7 @@ def test_every_catalog_file_fits_the_schema_it_names(path: Path) -> None:
         (
             "served-models.schema.json",
             {
-                "weights": {"use": "mlflow", "uri": "mlflow-artifacts:/1/a/model.onnx"},
+                "loader": {"use": "mlflow", "uri": "mlflow-artifacts:/1/a/model.onnx"},
                 "runtime": {"use": "onnx", "thread": 4},
                 "input": {"tile_size": 512, "mpp": 0.5},
                 "output": {"kind": "scores"},

@@ -17,12 +17,12 @@ if TYPE_CHECKING:
     from model_service.catalog.served_models import ServedModel
 
 
-def served_models_page(catalog: Catalog, root: Path) -> str:
+def served_models_page(catalog: Catalog, environments: Path) -> str:
     """Render the served-models reference.
 
     Args:
         catalog: The base catalog.
-        root: The catalog directory, for environment patches.
+        environments: The folder of environments, for their patches.
 
     Returns:
         The page.
@@ -55,7 +55,7 @@ def served_models_page(catalog: Catalog, root: Path) -> str:
         written = model.declaration
         file = f"catalog/{FOLDER}/{model_id}.yaml"
         rows = [
-            ["Weights", code(written["weights"])],
+            ["Weights", code(written["loader"])],
             ["Runtime", code(written["runtime"])],
             ["Pre", ", ".join(map(code, written.get("pre") or [])) or "none"],
             ["Post", ", ".join(map(code, written.get("post") or [])) or "none"],
@@ -69,7 +69,7 @@ def served_models_page(catalog: Catalog, root: Path) -> str:
             ],
             ["Resources", code(written["resources"])],
             ["Called by", ", ".join(callers.get(model_id, [])) or "no analysis"],
-            ["Patched in", _patches(root, model_id) or "no environment"],
+            ["Patched in", _patches(environments, model_id) or "no environment"],
             ["File", f"[`{file}`](../../{file})"],
         ]
         parts += [f"## `{model_id}`", facts(rows)]
@@ -112,18 +112,18 @@ def _reply(model: ServedModel) -> str:
     return "LZ4-compressed features with an `x-output-shape` header"
 
 
-def _patches(root: Path, model_id: str) -> str:
+def _patches(environments: Path, model_id: str) -> str:
     """The environments that patch the file, with the keys each changes.
 
     Args:
-        root: The catalog root.
+        environments: The folder of environments.
         model_id: The served model.
 
     Returns:
         `<environment> (<keys>)` per patch, semicolon-separated.
     """
     found = []
-    for path in sorted(root.glob(f"environments/*/{FOLDER}/{model_id}.yaml")):
+    for path in sorted(environments.glob(f"*/{FOLDER}/{model_id}.yaml")):
         keys = ", ".join(code(k) for k in yaml.safe_load(path.read_text()) or {})
         found.append(f"{path.parts[-3]} ({keys})")
     return "; ".join(found)

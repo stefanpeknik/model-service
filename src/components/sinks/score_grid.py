@@ -9,15 +9,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from components.base import Col, Sink
+from components import Col, Sink
 from model_service.formats import score_grid
 
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from components.base import Batch
-    from components.base.run import Run
+    from components import Batch, Run
 
 
 class ScoreGridSink(Sink):

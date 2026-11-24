@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib
 from typing import TYPE_CHECKING
 
-from components.base import Publisher, Sink
+from components import Publisher, Sink
 from model_service.formats.known import FORMATS
 from model_service.reference.markdown import GENERATED, code, docstring, facts
 

@@ -18,7 +18,7 @@ from model_service.served_model.guards import ModelOutputError, check_output
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from components.base import Batch
+    from components import Batch
     from model_service.catalog.analyses import ModelStep
 
 

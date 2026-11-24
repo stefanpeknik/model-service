@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from components.base import KINDS, Component
+from components import KINDS, Component
 from model_service.registry import default_registry
 from tests.components.helpers import conformance
 

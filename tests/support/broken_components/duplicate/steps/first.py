@@ -1,4 +1,4 @@
-from components.base import Batch, Step
+from components import Batch, Step
 
 
 class First(Step):

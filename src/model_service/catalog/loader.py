@@ -1,11 +1,11 @@
-"""Load a catalog directory for one environment.
+"""Load a catalog directory, optionally patched for one environment.
 
-Layout, relative to the catalog root:
-
-- `served-models/<id>.yaml` and `analyses/<id>.yaml`: one document per file,
-  the file name is its ID;
-- `environments/<env>/<folder>/<id>.yaml`: a patch holding only what differs
-  in that environment, deep-merged over the base file.
+The catalog root holds `served-models/<id>.yaml` and `analyses/<id>.yaml`:
+one document per file, the file name is its ID. An environment is a folder of
+its own (in this repo `deploy/helm/environments/<env>/`) whose
+`<folder>/<id>.yaml` files are patches holding only what differs on that
+cluster, deep-merged over the base file; its other files (Helm values, worker
+groups, manifests) are not the loader's.
 
 Served models resolve first, so analyses can call them. Every file is read
 and every document resolved before anything is reported, so one load lists
@@ -36,32 +36,32 @@ if TYPE_CHECKING:
     from model_service.registry import Registry
 
 
-ENVIRONMENTS = "environments"
 ID = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 MAPPING = "A mapping of keys to values"
 FOLDERS = (served_models.FOLDER, analyses.FOLDER)
+# What else an environment folder holds, which the loader leaves to Helm.
+ENVIRONMENT_FILES = ("values.yaml", "workers/", "k8s/")
 
 
-def environments(root: Path) -> list[str]:
-    """The environments that have a patch folder in the catalog.
+def environments(folder: Path) -> list[Path]:
+    """The environment folders in a folder of environments.
 
     Args:
-        root: The catalog directory.
+        folder: E.g. `deploy/helm/environments`.
 
     Returns:
-        Environment names, sorted.
+        Each environment's folder, sorted by name; none if `folder` is missing.
     """
-    folder = root / ENVIRONMENTS
     if not folder.is_dir():
         return []
     return sorted(
-        p.name for p in folder.iterdir() if p.is_dir() and not p.name.startswith(".")
+        p for p in folder.iterdir() if p.is_dir() and not p.name.startswith(".")
     )
 
 
 def load_catalog(
     root: Path,
-    environment: str | None = None,
+    environment: Path | None = None,
     *,
     registry: Registry | None = None,
 ) -> Catalog:
@@ -69,7 +69,8 @@ def load_catalog(
 
     Args:
         root: The catalog directory.
-        environment: Whose patches to apply; None for the base files alone.
+        environment: The folder of the environment whose patches to apply;
+            None for the base files alone.
         registry: The components documents may name; this repo's by default.
 
     Returns:
@@ -79,12 +80,13 @@ def load_catalog(
         CatalogInvalid: With every error found, in the standard format.
     """
     loader = _Loader(root, registry or default_registry())
-    if environment is not None and environment not in environments(root):
+    if environment is not None and not environment.is_dir():
+        known = ", ".join(p.name for p in environments(environment.parent)) or "none"
         loader.file_error(
-            root / ENVIRONMENTS / environment,
+            environment,
             "no such environment",
-            f"Environments: {', '.join(environments(root)) or 'none'}",
-            f"create {loader.show(root / ENVIRONMENTS / environment)}/ or fix the name",
+            f"Environments: {known}",
+            f"create {loader.show(environment)}/ or fix the name",
         )
         raise CatalogInvalid(loader.errors)
     catalog = loader.load(environment)
@@ -114,9 +116,13 @@ class _Loader:
             path: A file or folder in the catalog.
 
         Returns:
-            The shown path.
+            The shown path; absolute when it lies outside the catalog's parent.
         """
-        return str(path.relative_to(self.root.parent))
+        return (
+            str(path.relative_to(self.root.parent))
+            if path.is_relative_to(self.root.parent)
+            else str(path)
+        )
 
     def file_error(self, path: Path, what: str, fits: str, hint: str) -> None:
         """Record a mistake about a whole file or folder.
@@ -129,11 +135,11 @@ class _Loader:
         """
         self.errors.append(CatalogError(self.show(path), "", what, fits, hint))
 
-    def load(self, environment: str | None) -> Catalog:
+    def load(self, environment: Path | None) -> Catalog:
         """Resolve the served models, then the analyses.
 
         Args:
-            environment: Whose patches to apply, or None for the base files.
+            environment: The environment folder whose patches to apply, or None.
 
         Returns:
             The catalog; `self.errors` holds what failed.
@@ -189,14 +195,14 @@ class _Loader:
         return resolved
 
     def _files(
-        self, environment: str | None
+        self, environment: Path | None
     ) -> tuple[dict[str, list[Path]], dict[tuple[str, str], Path]]:
         """Sort YAML files into base files and this environment's patches.
 
         Files in no catalog folder are reported.
 
         Args:
-            environment: Whose patches to pick, or None for none.
+            environment: The environment folder whose patches to pick, or None.
 
         Returns:
             Base files by folder, and patches by (folder, file stem).
@@ -209,17 +215,30 @@ class _Loader:
                 continue
             if len(parts) == 2 and parts[0] in FOLDERS:
                 bases[parts[0]].append(path)
-            elif len(parts) == 4 and parts[0] == ENVIRONMENTS and parts[2] in FOLDERS:
-                if parts[1] == environment:
-                    patches[(parts[2], path.stem)] = path
             else:
                 folders = [f"{f}/" for f in sorted(FOLDERS)]
                 self.file_error(
                     path,
                     "not a catalog folder",
-                    f"Folders: {', '.join([*folders, f'{ENVIRONMENTS}/<env>/'])}",
+                    f"Folders: {', '.join(folders)}",
                     "move the file into one of them",
                 )
+        if environment is not None:
+            for path in sorted(environment.rglob("*.y*ml")):
+                parts = path.relative_to(environment).parts
+                if any(part.startswith(".") for part in parts):
+                    continue
+                if len(parts) == 2 and parts[0] in FOLDERS and path.suffix == ".yaml":
+                    patches[(parts[0], path.stem)] = path
+                elif parts[0] not in ("values.yaml", "workers", "k8s"):
+                    folders = [f"{f}/" for f in sorted(FOLDERS)]
+                    self.file_error(
+                        path,
+                        "not a patch folder",
+                        f"Patch folders: {', '.join(folders)}, beside "
+                        f"{', '.join(ENVIRONMENT_FILES)}",
+                        "move the file into one of them",
+                    )
         return bases, patches
 
     def _resolve[T](

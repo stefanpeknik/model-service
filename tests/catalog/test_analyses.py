@@ -7,10 +7,11 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from components.base import Col
+from components import Col
 from model_service.catalog import CatalogInvalid, load_catalog
 from tests.support.analysis_catalog import REGISTRY, write
 from tests.support.analysis_catalog import served_model as model
+from tests.support.paths import RATIONAI_TEST
 
 
 if TYPE_CHECKING:
@@ -50,10 +51,10 @@ def heatmap_ids() -> list[str]:
     )
 
 
-@pytest.mark.parametrize("environment", [None, "rationai-test"])
+@pytest.mark.parametrize("environment", [None, RATIONAI_TEST])
 @pytest.mark.parametrize("analysis_id", heatmap_ids())
 def test_heatmap_analyses_tile_at_their_models_geometry(
-    environment: str | None, analysis_id: str
+    environment: Path | None, analysis_id: str
 ) -> None:
     catalog = load_catalog(CATALOG, environment)
     heatmap = catalog.analyses[analysis_id]
@@ -71,13 +72,13 @@ def test_heatmap_analyses_tile_at_their_models_geometry(
     )
 
 
-@pytest.mark.parametrize("environment", [None, "rationai-test"])
+@pytest.mark.parametrize("environment", [None, RATIONAI_TEST])
 @pytest.mark.parametrize(
     ("analysis_id", "score_map"),
     [("prostate-heatmap", (1, 1, 1)), ("episeg-heatmap", (1, 1024, 1024))],
 )
 def test_the_prostate_and_episeg_heatmaps_tile_half_a_tile_apart(
-    environment: str | None, analysis_id: str, score_map: tuple[int, int, int]
+    environment: Path | None, analysis_id: str, score_map: tuple[int, int, int]
 ) -> None:
     heatmap = load_catalog(CATALOG, environment).analyses[analysis_id]
 

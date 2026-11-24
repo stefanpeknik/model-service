@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
-from components.base import EmpaiaInput
+from components import EmpaiaInput
 from model_service.contracts.failures import (
     FailureCode,
     InvalidInvocation,

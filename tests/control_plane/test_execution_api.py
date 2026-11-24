@@ -39,6 +39,8 @@ from model_service.control_plane.synchronous_runs import SynchronousAnalysisServ
 from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from tests.support.memory_repository import InMemoryExecutionRepository
+from tests.support.paths import CATALOG as CATALOG_DIR
+from tests.support.paths import RATIONAI_TEST
 
 
 if TYPE_CHECKING:
@@ -54,7 +56,7 @@ if TYPE_CHECKING:
     type Handler = Callable[[AnalysisRunRequest], Awaitable[RunResult]]
 
 
-CATALOG = load_catalog(Path(__file__).resolve().parents[2] / "catalog", "rationai-test")
+CATALOG = load_catalog(CATALOG_DIR, RATIONAI_TEST)
 RUN = "/v1/analyses/prostate-heatmap/run"
 SCHEDULE = "/v1/analyses/prostate-heatmap/schedule"
 

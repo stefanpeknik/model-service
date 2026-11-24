@@ -19,7 +19,7 @@ REPO = Path(__file__).resolve().parents[2]
 CATALOG = REPO / "catalog"
 
 MODEL = """
-    weights: {use: local, path: /weights/model.onnx}
+    loader: {use: local, path: /weights/model.onnx}
     runtime: {use: onnx}
     input: {tile_size: 64, mpp: 0.5}
     output: {kind: scores, channels: 1, size: 1, range: [0, 1]}
@@ -83,8 +83,8 @@ def test_a_wrong_value_and_an_unknown_key_are_refused_with_what_fits(
         "should be 'scores' or 'embedding'. output: `{kind: scores, …}` or "
         "`{kind: embedding, summaries: […]}`. Hint: change `kind`",
         "catalog/served-models/m1.yaml:contract: unknown key `contract`. Keys of "
-        "this file: batching, input, output, post, pre, resources, runtime, "
-        "serving, weights. Hint: remove it",
+        "this file: batching, input, loader, output, post, pre, resources, runtime, "
+        "serving. Hint: remove it",
     ]
 
 
@@ -113,7 +113,7 @@ def test_a_hugging_face_revision_must_be_a_commit(root: Path) -> None:
         load_catalog(root)
 
     assert [str(e) for e in raised.value.errors] == [
-        "catalog/served-models/m1.yaml:weights.revision: `main` is invalid: string "
+        "catalog/served-models/m1.yaml:loader.revision: `main` is invalid: string "
         "should match pattern '^[0-9a-f]{40}$'. revision: The full 40-character "
         "commit hash to download. A branch or tag can move, so the weights would "
         "change under the same file. Hint: copy the full commit hash from the "

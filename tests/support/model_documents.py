@@ -8,7 +8,7 @@ from typing import Any
 def served_document(tile_size: int = 64) -> dict[str, Any]:
     """A small served-model document that resolves without weights on disk."""
     return {
-        "weights": {"use": "local", "path": "/weights/model.onnx"},
+        "loader": {"use": "local", "path": "/weights/model.onnx"},
         "runtime": {"use": "onnx"},
         "input": {"tile_size": tile_size, "mpp": 0.5},
         "output": {"kind": "embedding", "summaries": ["global"]},

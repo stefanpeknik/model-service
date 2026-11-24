@@ -18,9 +18,9 @@ catalog file may name the component, and its folder there must match it:
 | A per-tile transform, in a served model's `pre:`/`post:` or as an analysis step | step | `steps/` |
 | A new way to produce items from a slide | source | `sources/` |
 | A new kind of output file | sink | `sinks/`, plus a module in `src/model_service/formats/` if the format is new |
-| A new EMPAIA input or output type | converter, publisher | `empaia/converters/`, `empaia/publishers/` |
+| A new EMPAIA input or output type | converter, publisher | `providers/empaia/converters/`, `providers/empaia/publishers/` |
 
-Each kind's base class in `src/components/base/` names both: its `slots`
+Each kind's base class in `src/components/_kinds/` names both: its `slots`
 and its `folder`. A component in the wrong folder fails the scan with an
 error naming the folder it belongs in.
 
@@ -39,7 +39,7 @@ Each template passes its kind's conformance suite as copied
 failure points at your change. The scan skips `_templates/`, so the
 templates never show up as components.
 
-Each kind's base class in `src/components/base/` (`step.py`, `sink.py`, ...)
+Each kind's base class in `src/components/_kinds/` (`step.py`, `sink.py`, ...)
 documents the methods to write, and [Components](../reference/components.md) links
 the code of every existing component, often the closest example.
 
@@ -59,11 +59,11 @@ from typing import TYPE_CHECKING, Any, ClassVar
 import numpy as np
 from pydantic import Field
 
-from components.base import Col, Options, Step
+from components import Col, Options, Step
 
 
 if TYPE_CHECKING:
-    from components.base import Batch
+    from components import Batch
 
 
 class ThresholdOptions(Options):

@@ -34,7 +34,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from pydantic import ValidationError
 
-from components.base import (
+from components import (
     EmpaiaInput,
     EmpaiaOutput,
     InputConverter,
@@ -46,8 +46,8 @@ from components.base import (
     Source,
     Step,
 )
-from components.base.columns import Col, resolved, rows
-from components.base.problems import Problem
+from components._kinds.columns import Col, resolved, rows
+from components._kinds.problems import Problem
 from tests.components.helpers import offline
 from tests.components.helpers.empaia import FakeGateway, sample_artifact
 from tests.components.helpers.models import fake_model
@@ -58,8 +58,8 @@ from tests.components.helpers.slides import fake_frame
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from components.base.columns import Batch
-    from components.base.component import Component
+    from components._kinds.columns import Batch
+    from components._kinds.component import Component
 
 
 def check(component: type[Component], work_dir: Path) -> list[str]:

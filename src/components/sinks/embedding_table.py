@@ -11,7 +11,7 @@ from __future__ import annotations
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from components.base import Col, Sink
+from components import Col, Sink
 from model_service.contracts.failures import FailureCode, RunFailure
 from model_service.formats import embedding_table
 
@@ -20,8 +20,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-    from components.base import Batch
-    from components.base.run import Run
+    from components import Batch, Run
 
 
 class EmbeddingTableSink(Sink):

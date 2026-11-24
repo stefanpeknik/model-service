@@ -16,6 +16,7 @@ from model_service.catalog.analyses import (
 )
 from model_service.contracts.failures import InvalidInvocation, UnknownAnalysisError
 from tests.support.analysis_catalog import REGISTRY, served_model, write
+from tests.support.paths import RATIONAI_TEST
 
 
 if TYPE_CHECKING:
@@ -76,8 +77,8 @@ def test_the_runner_reads_back_exactly_what_was_resolved(catalog: Catalog) -> No
     assert loaded.model_digests == {"m1": catalog.served_models["m1"].digest}
 
 
-@pytest.mark.parametrize("environment", [None, "rationai-test"])
-def test_the_repo_analyses_read_back(environment: str | None) -> None:
+@pytest.mark.parametrize("environment", [None, RATIONAI_TEST])
+def test_the_repo_analyses_read_back(environment: Path | None) -> None:
     catalog = load_catalog(CATALOG, environment)
     for analysis_id in catalog.analyses:
         resolved = resolve_run(catalog, analysis_id)

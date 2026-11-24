@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from components.base import Batch, Step, slots
+from components import Batch, Step, slots
 from model_service.registry import Registry, RegistryError
-from tests.support.components.empaia.converters.text import Text as TextIn
-from tests.support.components.empaia.publishers.text import Text as TextOut
+from tests.support.components.providers.empaia.converters.text import Text as TextIn
+from tests.support.components.providers.empaia.publishers.text import Text as TextOut
 from tests.support.components.steps.mean_intensity import MeanIntensity
 
 

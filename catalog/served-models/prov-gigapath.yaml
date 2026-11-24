@@ -5,7 +5,7 @@
 # to 256 and cropped to 224, so the encoder sees only its centre 196 px. The fix (256 px tiles) ships later
 # under a new model ID.
 # The revision is the `main` commit the golden references were recorded with.
-weights: {use: huggingface, repo: prov-gigapath/prov-gigapath, revision: 64f9e26c15019f2d4f6d9113c6822f88bb16b01b, files: [config.json, pytorch_model.bin]}
+loader: {use: huggingface, repo: prov-gigapath/prov-gigapath, revision: 64f9e26c15019f2d4f6d9113c6822f88bb16b01b, files: [config.json, pytorch_model.bin]}
 runtime: {use: timm, transform: none}
 pre: [{use: resize, size: 256, interpolation: bicubic}, {use: center_crop, size: 224}, {use: normalize, preset: imagenet}]
 input: {tile_size: 224, mpp: 0.5}

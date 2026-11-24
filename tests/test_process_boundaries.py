@@ -102,7 +102,7 @@ class ProcessBoundaryTests(unittest.TestCase):
 
     def test_the_kind_base_classes_load_without_the_service(self) -> None:
         """A component imports its kind; that must not pull in the plumbing."""
-        modules = loaded_modules("components.base")
+        modules = loaded_modules("components")
 
         self.assertEqual(under(modules, "model_service"), [])
 

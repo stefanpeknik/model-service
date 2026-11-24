@@ -29,7 +29,7 @@ def served_model(
 ) -> str:
     """A served-model file that resolves without weights on disk."""
     return f"""
-        weights: {{use: local, path: /weights/model.onnx}}
+        loader: {{use: local, path: /weights/model.onnx}}
         runtime: {{use: onnx}}
         input: {{tile_size: {tile_size}, mpp: {mpp}}}
         output: {{{output}}}

@@ -7,12 +7,11 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import Field
 
-from components.base import Loader
-from components.base.options import Options
+from components import Loader, Options
 
 
 if TYPE_CHECKING:
-    from components.base.problems import Problem
+    from components import Problem
 
 
 class HuggingfaceOptions(Options):
@@ -48,7 +47,7 @@ class HuggingfaceOptions(Options):
 class Huggingface(Loader):
     """Downloads one commit of a Hugging Face Hub repository.
 
-    `weights: {use: huggingface, repo: paige-ai/Virchow2, revision: <commit>}`.
+    `loader: {use: huggingface, repo: paige-ai/Virchow2, revision: <commit>}`.
     The files go to the Hub's own cache (`HF_HOME`), which each deployment
     environment points at a shared volume, so a restart downloads nothing.
     A gated repository needs `HF_TOKEN` in the environment.

@@ -15,7 +15,7 @@ import lz4.frame
 import numpy as np
 import pytest
 
-from components.base import Runtime
+from components import Runtime
 from model_service.catalog.served_models import resolve_served_model
 from model_service.registry import Registry, default_registry
 from model_service.served_model.guards import ModelInputError, ModelOutputError
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-    from components.base import BatchFunction, RuntimeContext
+    from components import BatchFunction, RuntimeContext
 
 
 TILE = 8
@@ -52,7 +52,7 @@ REGISTRY = Registry({(c.kind, c.name): c for c in [*default_registry(), Recordin
 
 def declaration(weights: Path, **blocks: Any) -> dict[str, Any]:
     return {
-        "weights": {"use": "local", "path": str(weights)},
+        "loader": {"use": "local", "path": str(weights)},
         "runtime": {"use": "onnx"},
         "input": {"tile_size": TILE, "mpp": 0.5},
         "output": {"kind": "scores", "channels": 1, "size": 1, "range": [0, 1]},

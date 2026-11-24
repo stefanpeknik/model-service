@@ -7,13 +7,11 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self
 import numpy as np
 from pydantic import Field, model_validator
 
-from components.base import Step
-from components.base.columns import Col
-from components.base.options import Options
+from components import Col, Options, Step
 
 
 if TYPE_CHECKING:
-    from components.base.columns import Batch
+    from components import Batch
 
 
 PRESETS = {"imagenet": ((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))}

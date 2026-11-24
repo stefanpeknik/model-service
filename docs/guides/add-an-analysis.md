@@ -81,7 +81,7 @@ loads it.
 ## 4. Deploy and run it
 
 Add the ID to `analyses` in the environment's values file if it names IDs,
-as `values.rationai-test.yaml` does, and `helm upgrade`. The chart refuses to
+as `environments/rationai-test/values.yaml` does, and `helm upgrade`. The chart refuses to
 render an analysis whose served model the release doesn't deploy.
 
 From Python, with the RationAI SDK:

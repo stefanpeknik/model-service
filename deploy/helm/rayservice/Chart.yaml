@@ -1,5 +1,0 @@
-apiVersion: v2
-name: rayservice
-description: Model service Helm chart
-version: 0.1.0
-type: application

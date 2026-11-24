@@ -34,7 +34,7 @@ EMPAIA app.
 You'll write in two places. YAML goes in `catalog/`, one file per served
 model or analysis. Code goes in `src/components/`, one small class per file,
 in the folder that says where it may be used. Copy a template from
-`src/components/_templates/` and subclass a kind from `src/components/base/`.
+`src/components/_templates/` and subclass a kind imported from `components`.
 Everything in `src/model_service/` is the plumbing that loads, checks and runs
 those two, and a new model or analysis shouldn't need to touch it.
 
@@ -92,14 +92,13 @@ For one tile, skip the control plane and post it to the served model's Ray Serve
 catalog/
   served-models/<id>.yaml            one file per served model
   analyses/<id>.yaml                 one file per analysis
-  environments/<env>/                per-cluster patches of those files
   .schemas/                          generated JSON Schemas
 src/components/           what you write
   steps/                  pre/post steps of a served model and steps of an analysis
   loaders/  runtimes/     where weights come from and what runs them (served models)
   sources/  sinks/        where an analysis's items come from and what it writes
-  empaia/                 converters/ and publishers/ for EMPAIA inputs and outputs
-  base/                   the kind classes you subclass, Options, Col, Run, Problem
+  providers/empaia/       converters/ and publishers/ for EMPAIA inputs and outputs
+  _kinds/                 the kind classes you subclass (import them from `components`)
   _templates/             one file per kind to copy
 src/model_service/        the plumbing
   catalog/                loading and checking catalog files
@@ -112,7 +111,9 @@ src/model_service/        the plumbing
   slides/                 slide reading and tissue detection for sources
   contracts/              data shapes processes hand each other
   reference/              what tools/generate.py writes
-deploy/helm/rayservice/   the chart; reads catalog/ through a symlink
+deploy/helm/              the chart (`model-service`); reads catalog/ through a symlink
+  environments/<env>/     one cluster: values.yaml, served-models/ patches, workers/, k8s/ (applied by hand)
+deploy/images/            the Dockerfiles
 docs/                     guides, generated reference, architecture, dated operations records
 tests/                    unit, catalog, chart and PostgreSQL tests; tests/live/ for the cluster
 tools/                    generate.py for the reference; warm_model.py, request_preprocessing.py for the cluster

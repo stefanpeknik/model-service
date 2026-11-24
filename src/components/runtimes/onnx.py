@@ -7,14 +7,13 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field
 
-from components.base import Runtime
-from components.base.options import Options
+from components import Options, Runtime
 
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from components.base import BatchFunction, RuntimeContext
+    from components import BatchFunction, RuntimeContext
 
 logger = logging.getLogger(__name__)
 TENSORRT = "TensorrtExecutionProvider"

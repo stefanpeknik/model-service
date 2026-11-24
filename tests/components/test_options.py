@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from components.base import per_run_fields, with_overrides
+from components import per_run_fields, with_overrides
 from tests.support.components.steps.mean_intensity import MeanIntensityOptions
 
 

@@ -1,6 +1,6 @@
 """The `my_component` converter: an EMPAIA `<EAD type>` input as a run input.
 
-Copy to `src/components/empaia/converters/<name>.py` and
+Copy to `src/components/providers/empaia/converters/<name>.py` and
 replace `my_component`, `MyComponent` and the placeholders in <angle brackets>.
 Add example data for the EAD type to `EXAMPLE_INPUTS` in
 `tests/components/helpers/empaia.py`.
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from components.base import EmpaiaInput, InputConverter
+from components import EmpaiaInput, InputConverter
 
 
 if TYPE_CHECKING:

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
-    from components.base import Loader, Runtime, Step
+    from components import Loader, Runtime, Step
     from model_service.catalog.served_models.fields import (
         Batching,
         Input,
@@ -26,7 +26,7 @@ class ServedModel:
 
     Attributes:
         id: The model ID, the file name; also the Serve application's name.
-        weights: The loader.
+        loader: The loader that fetches the weights.
         runtime: The runtime.
         pre: Steps run on each tile before the runtime.
         post: Steps run on each output after the runtime.
@@ -40,7 +40,7 @@ class ServedModel:
     """
 
     id: str
-    weights: Loader
+    loader: Loader
     runtime: Runtime
     pre: tuple[Step, ...]
     post: tuple[Step, ...]
@@ -68,7 +68,8 @@ class ServedModel:
             The hex digest.
         """
         canonical = {
-            "weights": self.weights.spelled_out(),
+            # Named for the file's old `weights:` key, so no digest changed.
+            "weights": self.loader.spelled_out(),
             "runtime": self.runtime.spelled_out(),
             "pre": [step.spelled_out() for step in self.pre],
             "post": [step.spelled_out() for step in self.post],

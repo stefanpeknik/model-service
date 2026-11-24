@@ -5,13 +5,13 @@ from typing import TYPE_CHECKING
 import numpy as np
 from pydantic import Field
 
-from components.base import Options, Runtime
+from components import Options, Runtime
 
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from components.base import BatchFunction, RuntimeContext
+    from components import BatchFunction, RuntimeContext
 
 
 class ConstantOptions(Options):

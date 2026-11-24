@@ -5,13 +5,13 @@ from typing import TYPE_CHECKING, Any, ClassVar
 import numpy as np
 from pydantic import Field
 
-from components.base import Col, Sink, SinkOptions
+from components import Col, Sink, SinkOptions
 
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from components.base import Batch
+    from components import Batch
 
 
 class ScoreTableOptions(SinkOptions):

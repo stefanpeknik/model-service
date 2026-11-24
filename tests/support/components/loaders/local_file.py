@@ -5,7 +5,7 @@ from typing import Any, ClassVar
 
 from pydantic import Field
 
-from components.base import Loader, Options
+from components import Loader, Options
 
 
 class LocalFileOptions(Options):

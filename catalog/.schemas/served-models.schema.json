@@ -703,7 +703,7 @@
   "additionalProperties": false,
   "description": "Served-model files: a loader, a runtime, steps, and what goes in and out.",
   "properties": {
-    "weights": {
+    "loader": {
       "description": "A loader: `{use: mlflow, uri: …}`.",
       "discriminator": {
         "mapping": {
@@ -724,7 +724,7 @@
           "$ref": "#/$defs/loader_mlflow"
         }
       ],
-      "title": "Weights"
+      "title": "Loader"
     },
     "runtime": {
       "description": "A runtime: `{use: onnx, …}`.",
@@ -829,7 +829,7 @@
     }
   },
   "required": [
-    "weights",
+    "loader",
     "runtime",
     "input",
     "output",

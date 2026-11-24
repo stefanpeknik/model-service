@@ -1,0 +1,90 @@
+groupName: mig20-gpu-workers
+replicas: 0
+minReplicas: 0
+maxReplicas: 4
+rayStartParams:
+  num-gpus: "1"
+template:
+  spec:
+{{- include "model-service.empaiaDns" . | nindent 4 }}
+    securityContext:
+      fsGroup: 1000
+      fsGroupChangePolicy: OnRootMismatch
+      runAsNonRoot: true
+      runAsUser: 1000
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: ray-worker
+        image: "{{ required "rayGpuImage.repository is required" .Values.rayGpuImage.repository }}:{{ required "rayGpuImage.tag is required" .Values.rayGpuImage.tag }}"
+        imagePullPolicy: {{ .Values.rayGpuImage.pullPolicy }}
+        resources:
+          limits:
+            cpu: 8
+            memory: 24Gi
+            nvidia.com/mig-2g.20gb: 1
+          requests:
+            cpu: 8
+            memory: 24Gi
+        env:
+          {{- include "model-service.rayLogEnv" . | nindent 10 }}
+          - name: HTTPS_PROXY
+            value: http://proxy.ics.muni.cz:3128
+          - name: HF_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: huggingface-secret
+                key: token
+{{- include "model-service.empaiaEnv" . | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsUser: 1000
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "ray stop"]
+        volumeMounts:
+          - name: data
+            mountPath: /mnt/data
+          - name: public-data
+            mountPath: /mnt/data/Public
+          - name: projects
+            mountPath: /mnt/projects
+          - name: bioptic-tree
+            mountPath: /mnt/bioptic_tree
+          - name: trt-cache-volume
+            mountPath: /mnt/cache
+          - name: huggingface-cache
+            mountPath: /mnt/huggingface_cache
+{{- if and .Values.empaia.apiUrls .Values.empaia.workspaceClaim }}
+          - name: empaia-workspace
+            mountPath: {{ .Values.empaia.workspaceRoot | quote }}
+{{- end }}
+{{- include "model-service.slideVolumeMount" . | nindent 10 }}
+    volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: data-ro
+      - name: public-data
+        persistentVolumeClaim:
+          claimName: rationai-data-ro-pvc-jobs
+      - name: projects
+        persistentVolumeClaim:
+          claimName: projects-rw
+      - name: bioptic-tree
+        persistentVolumeClaim:
+          claimName: bioptictree-ro
+      - name: trt-cache-volume
+        persistentVolumeClaim:
+          claimName: tensorrt-cache-pvc
+      - name: huggingface-cache
+        persistentVolumeClaim:
+          claimName: huggingface-cache-pvc
+{{- if and .Values.empaia.apiUrls .Values.empaia.workspaceClaim }}
+      - name: empaia-workspace
+        persistentVolumeClaim:
+          claimName: {{ .Values.empaia.workspaceClaim | quote }}
+{{- end }}
+{{- include "model-service.slideVolume" . | nindent 6 }}

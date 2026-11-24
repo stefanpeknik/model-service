@@ -1,0 +1,94 @@
+{{- $environment := required "environment is required: the folder in environments/ this release deploys" .Values.environment }}
+apiVersion: ray.io/v1
+kind: RayService
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  rayClusterConfig:
+    rayVersion: 2.58.0
+    enableInTreeAutoscaling: true
+    autoscalerOptions:
+      idleTimeoutSeconds: 60
+      # The autoscaler sidecar writes monitor.log; keep it small.
+      env:
+        {{- include "model-service.rayLogRotationEnv" . | nindent 8 }}
+      securityContext:
+        runAsUser: 1000
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+    headGroupSpec:
+      rayStartParams:
+        num-cpus: "0"
+        dashboard-host: "0.0.0.0"
+      template:
+        spec:
+          securityContext:
+            fsGroupChangePolicy: OnRootMismatch
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: ray-head
+              image: "{{ required "rayImage.repository is required" .Values.rayImage.repository }}:{{ required "rayImage.tag is required" .Values.rayImage.tag }}"
+              imagePullPolicy: {{ .Values.rayImage.pullPolicy }}
+              resources:
+                limits:
+                  cpu: 0
+                  memory: 4Gi
+                requests:
+                  cpu: 0
+                  memory: 4Gi
+              env:
+                - name: HTTPS_PROXY
+                  value: http://proxy.ics.muni.cz:3128
+                {{- include "model-service.rayLogEnv" . | nindent 16 }}
+              ports:
+                - containerPort: 6379
+                  name: gcs-server
+                - containerPort: 8265
+                  name: dashboard
+                - containerPort: 10001
+                  name: client
+                - containerPort: 8000
+                  name: serve
+              securityContext:
+                runAsUser: 1000
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+    workerGroupSpecs:
+{{- range $workerName := .Values.workers }}
+{{- $workerPath := printf "environments/%s/workers/%s.yaml" $environment $workerName }}
+{{- $workerFile := $.Files.Get $workerPath }}
+{{- if not $workerFile }}{{ fail (printf "workers names %s, but %s does not exist" $workerName $workerPath) }}{{ end }}
+{{- $workerContent := tpl $workerFile $ | fromYaml }}
+      - {{ toYaml $workerContent | nindent 8 | trim }}
+{{- end }}
+  serveConfigV2: |
+    # JSON for Serve's files; no access line per request (each tile is one).
+    logging_config:
+      encoding: JSON
+      enable_access_log: false
+{{- $served := include "model-service.servedModels" . | fromJson }}
+{{- $analyses := include "model-service.analyses" . | fromJson }}
+    {{- /* Serve needs a list, even an empty one. */}}
+    applications:{{ if not (or $served $analyses) }} []{{ end }}
+{{- range $id, $document := $served }}
+      - {{ include "model-service.servedModelApplication" (dict "id" $id "document" $document "settings" $.Values.servedModelSettings) | nindent 8 | trim }}
+{{- end }}
+{{- /* One analysis runner executes every deployed analysis; none without analyses. */}}
+{{- if $analyses }}
+      - name: analysis-runner
+        route_prefix: /analyses
+        import_path: model_service.analysis_runner.serve:app
+        deployments:
+          - name: AnalysisRunner
+            {{- include "model-service.cpuOnlyDeployment" (dict "root" $ "deployment" .Values.analysisRunner.deployment) | nindent 12 }}
+            user_config:
+              shared_storage_roots: {{ toJson .Values.sharedStorageRoots }}
+              {{- with .Values.analysisRunner.userConfig }}
+              {{- toYaml . | nindent 14 }}
+              {{- end }}
+{{- end }}

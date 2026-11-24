@@ -201,7 +201,7 @@ class Fields(Block):
     listed so a misspelt key names every key that fits.
 
     Attributes:
-        weights: The loader.
+        loader: The loader that fetches the weights.
         runtime: The runtime.
         pre: Steps before the runtime, per tile.
         post: Steps after the runtime, per tile.
@@ -212,7 +212,7 @@ class Fields(Block):
         serving: Scaling and queue limits.
     """
 
-    weights: Any = Field(description="A loader: `{use: mlflow, uri: …}`.")
+    loader: Any = Field(description="A loader: `{use: mlflow, uri: …}`.")
     runtime: Any = Field(description="A runtime: `{use: onnx, …}`.")
     pre: Any = Field(None, description="Steps run on each tile before the runtime.")
     post: Any = Field(None, description="Steps run on each output after the runtime.")

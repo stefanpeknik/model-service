@@ -6,14 +6,14 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 import numpy as np
 from pydantic import Field
 
-from components.base import Col, Opened, Options, PerRun, Source
+from components import Col, Opened, Options, PerRun, Source
 
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
     from pathlib import Path
 
-    from components.base import Batch
+    from components import Batch
 
 
 class GridOptions(Options):

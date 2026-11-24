@@ -8,7 +8,7 @@ Each file in `catalog/served-models/` is one trained model behind the generic ho
 
 | Key | Description |
 | --- | --- |
-| `weights` | A loader: `{use: mlflow, uri: …}`. |
+| `loader` | A loader: `{use: mlflow, uri: …}`. |
 | `runtime` | A runtime: `{use: onnx, …}`. |
 | `pre` | Steps run on each tile before the runtime. |
 | `post` | Steps run on each output after the runtime. |
@@ -45,7 +45,7 @@ Each file in `catalog/served-models/` is one trained model behind the generic ho
 - **Batching:** up to 256 tiles, waiting 0.05 s to fill
 - **Resources:** `{gpus: 1, cpus: 4, memory_gib: 12}`
 - **Called by:** [`prostate-heatmap`](analyses.md#prostate-heatmap)
-- **Patched in:** rationai-test (`weights`)
+- **Patched in:** rationai-test (`loader`)
 - **File:** [`catalog/served-models/prostate-classifier-1.yaml`](../../catalog/served-models/prostate-classifier-1.yaml)
 
 ## `prov-gigapath`

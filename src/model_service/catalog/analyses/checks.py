@@ -12,14 +12,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
-from components.base import (
+from components import (
     Problem,
     Source,
     TileGeometryOptions,
     per_run_fields,
     slots,
 )
-from components.base.columns import resolved
+from components._kinds.columns import resolved
 from model_service.catalog.analyses.model_step import ModelStep
 from model_service.catalog.errors import render_path
 
@@ -27,7 +27,7 @@ from model_service.catalog.errors import render_path
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from components.base import Col, Component, Sink
+    from components import Col, Component, Sink
     from model_service.catalog.analyses.declaration import AnalysisStep
     from model_service.catalog.context import ResolveContext
     from model_service.catalog.errors import YamlPath

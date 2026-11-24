@@ -4,13 +4,13 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 import numpy as np
 
-from components.base import Col, Sink
+from components import Col, Sink
 
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from components.base import Batch
+    from components import Batch
 
 
 class KeyLog(Sink):

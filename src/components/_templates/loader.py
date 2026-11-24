@@ -11,7 +11,7 @@ from typing import Any, ClassVar
 
 from pydantic import Field
 
-from components.base import Loader, Options
+from components import Loader, Options
 
 
 class MyComponentOptions(Options):
@@ -27,7 +27,7 @@ class MyComponentOptions(Options):
 class MyComponent(Loader):
     """<One sentence: where it fetches weights from>.
 
-    `weights: {use: my_component, path: <example>}`. <What the deployment
+    `loader: {use: my_component, path: <example>}`. <What the deployment
     environment must provide, e.g. a token or a tracking URI.>
     """
 

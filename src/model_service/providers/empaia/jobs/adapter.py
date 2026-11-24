@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import ValidationError
 
-from components.base import EmpaiaInput, EmpaiaOutput
+from components import EmpaiaInput, EmpaiaOutput
 from model_service.contracts.invocation import (
     InputAccessContext,
     Invocation,
@@ -81,7 +81,7 @@ from model_service.registry.empaia import converter, publisher
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from components.base import Commit
+    from components import Commit
     from model_service.catalog import Catalog
     from model_service.catalog.analyses import Analysis
     from model_service.contracts.json_values import JsonValue

@@ -9,11 +9,12 @@ editors with the YAML language server read; the loader and Helm ignore it.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 from model_service.catalog import analyses, served_models
-from model_service.catalog.loader import ENVIRONMENTS, FOLDERS
+from model_service.catalog.loader import FOLDERS, environments
 from model_service.catalog.schema import file_schema, patch_schema
 
 
@@ -49,32 +50,34 @@ def schema_files(registry: Registry, catalog: Path) -> dict[Path, str]:
     return files
 
 
-def linked_files(repo: Path, catalog: Path) -> dict[Path, str]:
-    """Every catalog file, starting with the line that links its schema.
+def linked_files(repo: Path, catalog: Path, envs: Path) -> dict[Path, str]:
+    """Every catalog file and environment patch, starting with the line that links its schema.
 
     Args:
         repo: The repository root.
         catalog: The catalog directory, relative to `repo`.
+        envs: The folder of environments, relative to `repo`.
 
     Returns:
         File contents by path relative to the repo.
     """
-    folders = set(FOLDERS)
+    found: list[tuple[Path, str]] = []
+    for folder in FOLDERS:
+        found += [
+            (path, f"{folder}.schema.json")
+            for path in sorted((repo / catalog / folder).glob("*.yaml"))
+        ]
+        for environment in environments(repo / envs):
+            found += [
+                (path, f"{folder}.patch.schema.json")
+                for path in sorted((environment / folder).glob("*.yaml"))
+            ]
     files = {}
-    for path in sorted((repo / catalog).rglob("*.yaml")):
-        relative = path.relative_to(repo / catalog)
-        parts = relative.parts
-        if any(part.startswith(".") for part in parts):
-            continue
-        if len(parts) == 2 and parts[0] in folders:
-            schema = f"{parts[0]}.schema.json"
-        elif len(parts) == 4 and parts[0] == ENVIRONMENTS and parts[2] in folders:
-            schema = f"{parts[2]}.patch.schema.json"
-        else:
-            continue
-        up = PurePosixPath(*[".."] * (len(parts) - 1))
-        line = f"{MODELINE}{up / SCHEMAS / schema}"
-        files[catalog / relative] = with_modeline(path.read_text(), line)
+    for path, schema in found:
+        up = PurePosixPath(os.path.relpath(repo / catalog / SCHEMAS, path.parent))
+        files[path.relative_to(repo)] = with_modeline(
+            path.read_text(), f"{MODELINE}{up / schema}"
+        )
     return files
 
 

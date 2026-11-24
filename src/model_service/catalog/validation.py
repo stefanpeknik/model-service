@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
-from components.base.problems import Problem
+from components._kinds.problems import Problem
 from model_service.catalog.errors import render_path
 
 

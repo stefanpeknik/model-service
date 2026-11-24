@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock
 import numpy as np
 from rationai.empaia.typing import SlideInfo
 
-from components.base import EmpaiaOutput
+from components import EmpaiaOutput
 from model_service.contracts.result import RunResult, SharedArtifact
 from model_service.control_plane.scheduler.public import (
     ProviderFinishFailureError,

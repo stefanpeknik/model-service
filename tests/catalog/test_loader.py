@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 REGISTRY = Registry.scan("tests.support.components")
 
 MODEL = """
-    weights: {use: local_file, path: w.onnx}
+    loader: {use: local_file, path: w.onnx}
     runtime: {use: constant, value: 0.5, threads: 4}
     post: [{use: mean_intensity, channels: 2}]
     input: {tile_size: 8, mpp: 0.5}
@@ -38,7 +38,7 @@ def root(tmp_path: Path) -> Path:
     catalog = tmp_path / "catalog"
     (catalog / "served-models").mkdir(parents=True)
     (catalog / "analyses").mkdir()
-    (catalog / "environments" / "test-env").mkdir(parents=True)
+    (tmp_path / "environments" / "test-env").mkdir(parents=True)
     return catalog
 
 
@@ -49,7 +49,8 @@ def write(root: Path, name: str, text: str) -> None:
 
 
 def load(root: Path, environment: str | None = None) -> Catalog:
-    return load_catalog(root, environment, registry=REGISTRY)
+    folder = root.parent / "environments" / environment if environment else None
+    return load_catalog(root, folder, registry=REGISTRY)
 
 
 def errors(root: Path, environment: str | None = None) -> list[str]:
@@ -65,7 +66,7 @@ def model(catalog: Catalog, model_id: str = "m1") -> ServedModel:
 def test_an_empty_catalog_loads_for_the_base_and_every_environment(
     root: Path,
 ) -> None:
-    assert environments(root) == ["test-env"]
+    assert [p.name for p in environments(root.parent / "environments")] == ["test-env"]
     for environment in [None, "test-env"]:
         catalog = load(root, environment)
         assert (catalog.served_models, catalog.analyses) == ({}, {})
@@ -97,9 +98,9 @@ def test_every_mistake_in_every_file_is_reported_in_one_load(root: Path) -> None
     )
 
     assert errors(root) == [
-        "catalog/served-models/a.yaml:weights.path: missing option `path`. "
+        "catalog/served-models/a.yaml:loader.path: missing option `path`. "
         "path: A weights file on this machine. "
-        "Hint: add `path: …` under `weights:`",
+        "Hint: add `path: …` under `loader:`",
         "catalog/served-models/a.yaml:runtime.valu: unknown option `valu`. "
         "Options of `constant`: threads, value. Hint: did you mean `value`?",
         "catalog/served-models/b.yaml:input.tile_size: `-1` is invalid: input "
@@ -145,15 +146,15 @@ def test_a_missing_component_and_a_bare_name_are_errors(root: Path) -> None:
     write(
         root,
         "served-models/m1.yaml",
-        MODEL.replace("weights: {use: local_file, path: w.onnx}", "").replace(
+        MODEL.replace("loader: {use: local_file, path: w.onnx}", "").replace(
             "{use: constant, value: 0.5, threads: 4}", "constant"
         ),
     )
 
     assert errors(root)[1:] == [
-        "catalog/served-models/m1.yaml:weights: missing `weights:`. "
-        "A loader, e.g. `weights: {use: local_file, …}`. "
-        "Hint: add `weights:` with `use:` and its options",
+        "catalog/served-models/m1.yaml:loader: missing `loader:`. "
+        "A loader, e.g. `loader: {use: local_file, …}`. "
+        "Hint: add `loader:` with `use:` and its options",
         "catalog/served-models/m1.yaml:runtime: `constant` is not a mapping. "
         "`runtime: {use: <name>, <option>: <value>, …}`. "
         "Hint: write `runtime: {use: constant}`",
@@ -163,7 +164,9 @@ def test_a_missing_component_and_a_bare_name_are_errors(root: Path) -> None:
 def test_an_environment_patch_overrides_only_what_it_names(root: Path) -> None:
     write(root, "served-models/m1.yaml", MODEL)
     write(
-        root, "environments/test-env/served-models/m1.yaml", "runtime: {value: 0.9}\n"
+        root.parent,
+        "environments/test-env/served-models/m1.yaml",
+        "runtime: {value: 0.9}\n",
     )
 
     options = model(load(root, "test-env")).runtime.options
@@ -174,17 +177,21 @@ def test_an_environment_patch_overrides_only_what_it_names(root: Path) -> None:
 
 def test_a_null_in_a_patch_removes_the_key(root: Path) -> None:
     write(root, "served-models/m1.yaml", MODEL)
-    write(root, "environments/test-env/served-models/m1.yaml", "post: null\n")
+    write(root.parent, "environments/test-env/served-models/m1.yaml", "post: null\n")
 
     assert model(load(root, "test-env")).post == ()
 
 
 def test_a_mistake_in_a_patched_value_names_the_patch_file(root: Path) -> None:
     write(root, "served-models/m1.yaml", MODEL)
-    write(root, "environments/test-env/served-models/m1.yaml", "runtime: {value: 7}\n")
+    write(
+        root.parent,
+        "environments/test-env/served-models/m1.yaml",
+        "runtime: {value: 7}\n",
+    )
 
     assert errors(root, "test-env") == [
-        "catalog/environments/test-env/served-models/m1.yaml:runtime.value: `7` is "
+        "environments/test-env/served-models/m1.yaml:runtime.value: `7` is "
         "invalid: input should be less than or equal to 1. "
         "value: The score every tile gets. Hint: change `value`",
     ]
@@ -193,20 +200,34 @@ def test_a_mistake_in_a_patched_value_names_the_patch_file(root: Path) -> None:
 def test_a_patch_without_a_base_file_is_an_error(root: Path) -> None:
     write(root, "served-models/m1.yaml", MODEL)
     write(
-        root, "environments/test-env/served-models/m2.yaml", "runtime: {value: 0.9}\n"
+        root.parent,
+        "environments/test-env/served-models/m2.yaml",
+        "runtime: {value: 0.9}\n",
     )
 
     assert errors(root, "test-env") == [
-        "catalog/environments/test-env/served-models/m2.yaml: patches a file that "
+        "environments/test-env/served-models/m2.yaml: patches a file that "
         "does not exist. Base files in served-models/: m1.yaml. "
         "Hint: name the patch after the file it changes",
     ]
 
 
+def test_a_patch_outside_the_patch_folders_is_an_error(root: Path) -> None:
+    write(root.parent, "environments/test-env/served-model/m1.yaml", "post: null\n")
+    write(root.parent, "environments/test-env/values.yaml", "workers: []\n")
+    write(root.parent, "environments/test-env/workers/cpu.yaml", "groupName: cpu\n")
+
+    assert errors(root, "test-env") == [
+        "environments/test-env/served-model/m1.yaml: not a patch folder. Patch "
+        "folders: analyses/, served-models/, beside values.yaml, workers/, k8s/. "
+        "Hint: move the file into one of them",
+    ]
+
+
 def test_an_unknown_environment_is_an_error(root: Path) -> None:
     assert errors(root, "prod") == [
-        "catalog/environments/prod: no such environment. Environments: test-env. "
-        "Hint: create catalog/environments/prod/ or fix the name",
+        "environments/prod: no such environment. Environments: test-env. "
+        "Hint: create environments/prod/ or fix the name",
     ]
 
 
@@ -238,8 +259,7 @@ def test_an_unknown_environment_is_an_error(root: Path) -> None:
             "models/m1.yaml",
             MODEL,
             "catalog/models/m1.yaml: not a catalog folder. Folders: analyses/, "
-            "served-models/, environments/<env>/. Hint: move the file into one of "
-            "them",
+            "served-models/. Hint: move the file into one of them",
         ),
     ],
 )

@@ -13,12 +13,22 @@ import yaml
 
 from model_service.catalog import load_catalog
 from model_service.control_plane.catalog_mount import MountedCatalog
+from tests.support.paths import RATIONAI_TEST
 
 
 REPO = Path(__file__).resolve().parents[2]
-CHART = REPO / "deploy" / "helm" / "rayservice"
+CHART = REPO / "deploy" / "helm"
 CATALOG = REPO / "catalog"
-TEST_VALUES = CHART / "values.rationai-test.yaml"
+TEST_VALUES = CHART / "environments" / "rationai-test" / "values.yaml"
+SENSITIVE_VALUES = CHART / "environments" / "sensitive-cluster" / "values.yaml"
+# What sensitive-cluster leaves for whoever installs it to fill in.
+SENSITIVE_PLACEHOLDERS = {
+    "rayImage.tag": "t",
+    "rayGpuImage.tag": "t",
+    "controlPlane.image.tag": "t",
+    "controlPlane.database.existingSecret": "model-service-db",
+    "controlPlane.encryption.existingSecret": "model-service-db",
+}
 TEST_ANALYSES = ("prostate-heatmap", "virchow2-embeddings", "prov-gigapath-embeddings")
 BASE_VALUES = CHART / "values.yaml"
 
@@ -78,8 +88,28 @@ def test_an_environment_deploys_its_served_models_and_one_runner() -> None:
     } == {"model_service.served_model.serve:app"}
 
 
-def test_the_base_values_serve_every_model_on_the_generic_host() -> None:
-    apps = applications(render())
+def sensitive(**settings: object) -> dict[tuple[str, str], Any]:
+    """Render sensitive-cluster with its placeholders filled in."""
+    return render(SENSITIVE_VALUES, **SENSITIVE_PLACEHOLDERS, **settings)
+
+
+def test_sensitive_cluster_names_each_placeholder_it_needs() -> None:
+    for key in SENSITIVE_PLACEHOLDERS:
+        filled = {k: v for k, v in SENSITIVE_PLACEHOLDERS.items() if k != key}
+        with pytest.raises(subprocess.CalledProcessError) as failed:
+            render(SENSITIVE_VALUES, **filled)
+        assert f"{key} is required" in failed.value.stderr
+
+
+def test_a_release_needs_an_environment() -> None:
+    with pytest.raises(subprocess.CalledProcessError) as failed:
+        render(workers=["cpu"])
+
+    assert "environment is required" in failed.value.stderr
+
+
+def test_sensitive_cluster_serves_every_model_on_the_generic_host() -> None:
+    apps = applications(sensitive())
 
     assert set(apps) == {
         *load_catalog(CATALOG).served_models,
@@ -92,7 +122,7 @@ def test_the_base_values_serve_every_model_on_the_generic_host() -> None:
 
 def test_the_control_plane_catalog_carries_the_deployed_served_models() -> None:
     data = catalog_data(render(TEST_VALUES))
-    catalog = load_catalog(CATALOG, "rationai-test")
+    catalog = load_catalog(CATALOG, RATIONAI_TEST)
     entries = catalog.served_models
     analyses = catalog.analyses
 
@@ -196,8 +226,8 @@ def test_without_analyses_there_is_no_runner() -> None:
     assert catalog_data(objects)["catalog.json"]["analyses"] == {}
 
 
-def test_the_base_values_deploy_every_analysis() -> None:
-    data = catalog_data(render())
+def test_sensitive_cluster_deploys_every_analysis() -> None:
+    data = catalog_data(sensitive())
 
     assert set(data["catalog.json"]["analyses"]) == set(load_catalog(CATALOG).analyses)
 
@@ -217,14 +247,12 @@ def test_a_named_analysis_without_a_file_fails_the_render() -> None:
     assert "no-such-analysis" in failed.value.stderr
 
 
-@pytest.mark.parametrize("values", [(TEST_VALUES,), ()])
-def test_cpu_only_apps_can_only_be_placed_on_cpu_workers(
-    values: tuple[Path, ...],
-) -> None:
+@pytest.mark.parametrize("environment", ["rationai-test", "sensitive-cluster"])
+def test_cpu_only_apps_can_only_be_placed_on_cpu_workers(environment: str) -> None:
     # The autoscaler's own reading of each worker group, rayStartParams quoting included.
     kuberay = pytest.importorskip("ray.autoscaler._private.kuberay.autoscaling_config")
     name = cpu_worker_resource()["name"]
-    objects = render(*values)
+    objects = render(TEST_VALUES) if environment == "rationai-test" else sensitive()
     service = objects[("RayService", "model-service")]
     groups = {
         group["groupName"]: kuberay._get_ray_resources_from_group_spec(group, False)

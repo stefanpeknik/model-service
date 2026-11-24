@@ -18,8 +18,8 @@ from pydantic import ConfigDict, Field
 if TYPE_CHECKING:
     from pydantic import BaseModel
 
-    from components.base.component import Component
-    from components.base.slots import Slot
+    from components._kinds.component import Component
+    from components._kinds.slots import Slot
     from model_service.registry import Registry
 
 

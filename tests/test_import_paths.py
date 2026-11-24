@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 
 
-TEMPLATES = Path(__file__).resolve().parents[1] / "deploy/helm/rayservice/templates"
+TEMPLATES = Path(__file__).resolve().parents[1] / "deploy/helm/templates"
 PATH = re.compile(r"\bimport_path\W+([\w.]+:\w+)")
 
 

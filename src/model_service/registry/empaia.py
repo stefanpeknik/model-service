@@ -1,6 +1,6 @@
 """How the EMPAIA converter or publisher of a declared type is picked.
 
-The components live in `components/empaia/`. An input's declared EAD type
+The components live in `components/providers/empaia/`. An input's declared EAD type
 picks its converter; an output's EAD type and its sink's data format pick its
 publisher. The catalog picks them when an analysis loads, and the EMPAIA
 provider picks the same ones again from what admission recorded,
@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
-from components.base import InputConverter, Publisher
-from components.base.slots import EMPAIA_INPUTS, EMPAIA_OUTPUTS
+from components import InputConverter, Publisher
+from components._kinds.slots import EMPAIA_INPUTS, EMPAIA_OUTPUTS
 from model_service.registry import default_registry
 
 

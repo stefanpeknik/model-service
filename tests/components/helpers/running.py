@@ -8,17 +8,17 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from components.base import Sink, Source, Step
-from components.base.columns import Col, resolved
-from components.base.run import Run
+from components import Sink, Source, Step
+from components._kinds.columns import Col, resolved
+from components._kinds.run import Run
 from tests.components.helpers.slides import fake_frame, fake_slide
 
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from components.base.columns import Batch
-    from components.base.component import Component
+    from components._kinds.columns import Batch
+    from components._kinds.component import Component
 
 
 @dataclass(frozen=True)

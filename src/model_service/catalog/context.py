@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
 
-from components.base import KINDS
-from components.base.problems import Problem
+from components import KINDS
+from components._kinds.problems import Problem
 from model_service.catalog.errors import CatalogError, render_path
 from model_service.catalog.validation import problems
 
@@ -25,8 +25,8 @@ if TYPE_CHECKING:
 
     from pydantic import BaseModel
 
-    from components.base.component import Component
-    from components.base.slots import Slot
+    from components._kinds.component import Component
+    from components._kinds.slots import Slot
     from model_service.catalog.errors import YamlPath
     from model_service.catalog.served_models import ServedModel
     from model_service.registry import Registry

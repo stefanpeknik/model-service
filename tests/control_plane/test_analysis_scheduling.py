@@ -21,6 +21,8 @@ from model_service.formats import score_grid
 from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from tests.support.memory_repository import InMemoryExecutionRepository
+from tests.support.paths import CATALOG as CATALOG_DIR
+from tests.support.paths import RATIONAI_TEST
 
 
 if TYPE_CHECKING:
@@ -31,7 +33,7 @@ if TYPE_CHECKING:
 
 pytestmark = pytest.mark.anyio
 
-CATALOG = load_catalog(Path(__file__).resolve().parents[2] / "catalog", "rationai-test")
+CATALOG = load_catalog(CATALOG_DIR, RATIONAI_TEST)
 SCHEDULE = "/v1/analyses/prostate-heatmap/schedule"
 SETTINGS = {"min_tissue_fraction": 0.0, "skip_background": True, "stride_fraction": 1.0}
 RAN = ServedModelRun(

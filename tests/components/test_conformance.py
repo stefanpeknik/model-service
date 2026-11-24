@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 from pydantic import Field
 
-from components.base import (
+from components import (
     Col,
     Commit,
     EmpaiaInput,
@@ -34,7 +34,7 @@ from tests.components.helpers import conformance
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from components.base import Batch, BatchFunction, Component, RuntimeContext
+    from components import Batch, BatchFunction, Component, RuntimeContext
 
 
 COMPONENTS = [*default_registry(), *Registry.scan("tests.support.components")]

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -20,6 +19,8 @@ from model_service.control_plane.scheduler.dispatch import (
 )
 from model_service.control_plane.synchronous_runs import SynchronousAnalysisService
 from model_service.formats import score_grid
+from tests.support.paths import CATALOG as CATALOG_DIR
+from tests.support.paths import RATIONAI_TEST
 
 
 if TYPE_CHECKING:
@@ -30,7 +31,7 @@ if TYPE_CHECKING:
 
 pytestmark = pytest.mark.anyio
 
-CATALOG = load_catalog(Path(__file__).resolve().parents[2] / "catalog", "rationai-test")
+CATALOG = load_catalog(CATALOG_DIR, RATIONAI_TEST)
 RUN = "/v1/analyses/prostate-heatmap/run"
 RESULT = RunResult(
     {"heatmap": SharedArtifact("/mnt/shared/out.npz", score_grid.FORMAT.media_type)},
@@ -304,8 +305,6 @@ async def test_models_list_served_models_with_declarations_and_analyses() -> Non
     assert "prostate-heatmap" in prostate["analyses"]
     assert prostate["declaration"]["input"] == {"tile_size": 512, "mpp": 0.468}
     # The environment's patch is part of the declaration.
-    assert prostate["declaration"]["weights"]["uri"].startswith(
-        "mlflow-artifacts:/169/"
-    )
+    assert prostate["declaration"]["loader"]["uri"].startswith("mlflow-artifacts:/169/")
     assert prostate["digest"] == served["prostate-classifier-1"].digest
     assert "virchow2-embeddings" in by_id["virchow2"]["analyses"]

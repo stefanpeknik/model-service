@@ -8,14 +8,14 @@ from typing import TYPE_CHECKING, Any, cast
 from pydantic import ConfigDict, create_model
 from pydantic.fields import FieldInfo
 
-from components.base import per_run_fields, with_overrides
+from components import per_run_fields, with_overrides
 from model_service.catalog.analyses.model_step import ModelStep
 
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from components.base import Col, Component, Sink, Source, Step
+    from components import Col, Component, Sink, Source, Step
     from model_service.catalog.analyses.exposure import EmpaiaExposure
     from model_service.catalog.served_models import ServedModel
 

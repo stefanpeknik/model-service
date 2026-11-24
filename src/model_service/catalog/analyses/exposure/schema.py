@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, create_model
 from pydantic.fields import FieldInfo
 
-from components.base import slots
+from components import slots
 from model_service.catalog.analyses.exposure.fields import EmpaiaFields, ExposeFields
 
 

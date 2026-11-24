@@ -33,6 +33,7 @@ from model_service.providers.empaia.settings import EmpaiaSettings
 from model_service.providers.empaia.triggers import PreprocessingTriggers
 from tests.support.analysis_catalog import REGISTRY, write
 from tests.support.analysis_catalog import served_model as model
+from tests.support.paths import RATIONAI_TEST
 
 
 CATALOG = Path(__file__).resolve().parents[2] / "catalog"
@@ -45,7 +46,7 @@ OLD_NAMESPACE = "org.empaia.rationai.heatmap_prostate_classifier_1.v3.0"
 NEW_NAMESPACE = "org.empaia.rationai.prostate_heatmap.v3.0"
 
 
-def prostate_app(environment: str | None = None) -> AnalysisApp:
+def prostate_app(environment: Path | None = None) -> AnalysisApp:
     analyses = load_catalog(CATALOG, environment).analyses
     return analysis_app(analyses["prostate-heatmap"])
 
@@ -75,9 +76,9 @@ def tmp_app(tmp_path: Path, expose: str) -> AnalysisApp:
     return analysis_app(analyses["a1"])
 
 
-@pytest.mark.parametrize("environment", [None, "rationai-test"])
+@pytest.mark.parametrize("environment", [None, RATIONAI_TEST])
 def test_the_prostate_app_matches_its_recording_apart_from_its_namespace(
-    environment: str | None,
+    environment: Path | None,
 ) -> None:
     app = prostate_app(environment)
 
@@ -97,7 +98,7 @@ def test_the_prostate_app_matches_its_recording_apart_from_its_namespace(
 
 
 def test_every_exposed_analysis_yields_a_valid_app_in_every_environment() -> None:
-    for environment in (None, "rationai-test"):
+    for environment in (None, RATIONAI_TEST):
         catalog = load_catalog(CATALOG, environment)
         apps = analysis_apps(catalog)
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from components.base import Col
+from components import Col
 from model_service.catalog.served_models.fields import ScoresOutput
 
 

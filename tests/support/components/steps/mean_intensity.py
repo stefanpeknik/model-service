@@ -5,11 +5,11 @@ from typing import TYPE_CHECKING, ClassVar
 import numpy as np
 from pydantic import Field
 
-from components.base import Col, Options, PerRun, Problem, Step
+from components import Col, Options, PerRun, Problem, Step
 
 
 if TYPE_CHECKING:
-    from components.base import Batch
+    from components import Batch
 
 
 class MeanIntensityOptions(Options):

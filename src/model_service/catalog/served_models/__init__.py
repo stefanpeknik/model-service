@@ -1,7 +1,7 @@
 """Served-model files (`catalog/served-models/<id>.yaml`) and what they resolve to.
 
 A served model is a trained model behind one generic Serve host: a loader
-(`weights:`), a runtime, optional per-tile `pre:`/`post:` steps, and the
+(`loader:`), a runtime, optional per-tile `pre:`/`post:` steps, and the
 `input`, `output`, `batching`, `resources` and `serving` blocks. Its `digest`
 identifies what it computes; the host reports it from `describe()`.
 """

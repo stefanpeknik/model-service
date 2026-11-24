@@ -1,6 +1,6 @@
 # How the chart deploys the catalog
 
-The Helm chart in `deploy/helm/rayservice/` reads the repo's `catalog/`
+The Helm chart in `deploy/helm/` reads the repo's `catalog/`
 through its `catalog` symlink and renders one RayService, the control-plane Deployment
 and the control plane's catalog ConfigMap. Nothing in the chart lists models or
 analyses: it globs the catalog folders and the values pick from them.
@@ -9,19 +9,27 @@ analyses: it globs the catalog folders and the values pick from them.
 
 | Key | What it sets |
 | --- | --- |
-| `environment` | Whose patches in `catalog/environments/<environment>/` are deep-merged over the base files; empty for the base files alone. |
+| `environment` | The cluster this release deploys: the folder `deploy/helm/environments/<environment>/` whose `served-models/` patches are deep-merged over the base files and whose `workers/` files `workers` names. Required. |
 | `servedModels` | `["*"]` deploys every file in `catalog/served-models/`, a list of IDs deploys those. Each one becomes a Serve application of the generic host, `model_service.served_model.serve:app`, at route `/<id>`. |
 | `servedModelSettings` | What every served model gets, so catalog files don't repeat it: `cacheRoot` for TensorRT engines (ONNX Runtime keeps them in `<cacheRoot>/<id>/<digest>`), `env` for the replicas' environment variables (`MLFLOW_TRACKING_URI`, `HF_HOME`), and `setupTimeoutSeconds` for each application's `runtime_env`. |
 | `analyses` | The same choice for `catalog/analyses/`. An analysis whose served model the release doesn't deploy fails the render. |
 | `analysisRunner` | The one `analysis-runner` application (`model_service.analysis_runner.serve:app`, route `/analyses`) that runs every deployed analysis: its Serve deployment options, and as `userConfig` the threads reading tiles and the tiles in flight per run. It isn't rendered when no analysis is deployed. |
 | `cpuWorkerResource` | A Ray custom resource only CPU worker groups advertise. The analysis runner requests it, so Ray never places it on a GPU worker's free CPUs. |
 | `sharedStorageRoots` | The roots callers may name in shared-storage requests. |
-| `workers`, `rayImage`, `rayGpuImage` | The worker groups, from `deploy/helm/rayservice/workers/<name>.yaml`, and their images. |
+| `workers`, `rayImage`, `rayGpuImage` | The worker groups, from `deploy/helm/environments/<environment>/workers/<name>.yaml`, and their images. |
 | `controlPlane`, `empaia` | The control-plane Deployment and the EMPAIA provider's settings. |
 
-`values.yaml` holds the defaults for the cluster the base files target;
-`values.rationai-test.yaml` overrides them for the test namespace
-([runbook](../operations/rationai-test-ns.md)).
+`values.yaml` holds cluster-neutral defaults. Each cluster has a folder in
+`environments/` with its `values.yaml` (installed with
+`-f environments/<env>/values.yaml`), its served-model patches, its worker
+groups and, in `k8s/`, the objects applied by hand before the first install
+(`.helmignore` keeps them out of the chart):
+
+- `rationai-test`: the test namespace beside the EMPAIA test instance
+  ([runbook](../operations/rationai-test-ns.md));
+- `sensitive-cluster`: `rationai-jobs-ns`, where model-service ran before this
+  platform. Its values leave the image tags and the database and encryption
+  Secrets empty, so the render fails naming each until they are filled in.
 
 ## From a served-model file to a Serve application
 
@@ -43,7 +51,7 @@ out in `src/model_service/served_model/__init__.py`. The test cluster's patch fo
 example, gives it half a GPU, smaller batches and one replica:
 
 ```yaml
-# catalog/environments/rationai-test/served-models/virchow2.yaml
+# deploy/helm/environments/rationai-test/served-models/virchow2.yaml
 batching: {max_size: 64, wait_s: 0.05}
 resources: {gpus: 0.5, cpus: 1}
 serving: {max_replicas: 1, target_ongoing_requests: 128, max_ongoing_requests: 256, max_queued_requests: 2048, downscale_delay_s: 300}
@@ -62,7 +70,7 @@ need a new image.
 
 ## Worker groups
 
-Worker groups are defined in `deploy/helm/rayservice/workers/` and selected
+Worker groups are defined in `deploy/helm/environments/<environment>/workers/` and selected
 by `workers`. Kubernetes pod limits must exceed the Ray resources the
 replicas on that pod reserve, plus Ray's own overhead: a GPU worker with
 4 CPUs fits one served model that asks for `cpus: 4` and nothing else.

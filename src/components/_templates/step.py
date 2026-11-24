@@ -10,11 +10,11 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import Field
 
-from components.base import Col, Options, Step
+from components import Col, Options, Step
 
 
 if TYPE_CHECKING:
-    from components.base import Batch
+    from components import Batch
 
 
 class MyComponentOptions(Options):

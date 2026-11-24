@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal
 
 from pydantic import Field
 
-from components.base import (
+from components import (
     Col,
     Opened,
     PerRun,
@@ -29,8 +29,7 @@ if TYPE_CHECKING:
 
     import numpy as np
 
-    from components.base import Batch
-    from components.base.run import Run
+    from components import Batch, Run
 
 
 SLIDE = "slide"

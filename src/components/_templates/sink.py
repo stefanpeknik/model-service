@@ -11,14 +11,14 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 import numpy as np
 
-from components.base import Col, Sink
+from components import Col, Sink
 from model_service.formats import value
 
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from components.base import Batch, Run
+    from components import Batch, Run
 
 
 class MyComponent(Sink):

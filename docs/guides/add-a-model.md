@@ -30,7 +30,7 @@ extension, for one) completes keys and underlines mistakes as you type.
 
 ```yaml
 # yaml-language-server: $schema=../.schemas/served-models.schema.json
-weights: {use: mlflow, uri: "mlflow-artifacts:/65/<run>/artifacts/model.onnx"}
+loader: {use: mlflow, uri: "mlflow-artifacts:/65/<run>/artifacts/model.onnx"}
 runtime: {use: onnx, tensorrt: true, workspace_gib: 8, optimization_level: 3, threads: 4}
 input: {tile_size: 512, mpp: 0.468}
 output: {kind: scores, channels: 1, size: 1, range: [0, 1]}
@@ -38,7 +38,7 @@ batching: {max_size: 256, wait_s: 0.05}
 resources: {gpus: 1, cpus: 4, memory_gib: 12}
 ```
 
-- `weights` says where the weights come from. An MLflow URI names one run's
+- `loader` says where the weights come from. An MLflow URI names one run's
   file; add `sha256:` (the file's `sha256sum`) so overwritten weights are
   refused instead of served. A Hugging Face repository needs the full commit
   hash as `revision`, so the weights can't change under the same file.
@@ -96,10 +96,10 @@ loads it.
 ## 5. Deploy it
 
 A values file deploys every served model, or the IDs it names in
-`servedModels`. `values.rationai-test.yaml` names them, so add yours there. If
+`servedModels`. `deploy/helm/environments/rationai-test/values.yaml` names them, so add yours there. If
 the model differs on one cluster, say a smaller batch or another MLflow
 server, put only the difference in
-`catalog/environments/<environment>/served-models/my-classifier.yaml`. The
+`deploy/helm/environments/<environment>/served-models/my-classifier.yaml`. The
 test cluster's `prostate-classifier-1.yaml` patch is one line. Then run
 `helm upgrade`. A catalog change needs no image rebuild, and the control plane picks up
 the new catalog without restarting. Running `helm upgrade` against a shared

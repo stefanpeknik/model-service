@@ -10,6 +10,7 @@ from model_service.catalog import CatalogInvalid, load_catalog
 from model_service.providers.empaia.ead.vocabulary import AppMode, Trigger
 from tests.support.analysis_catalog import REGISTRY, write
 from tests.support.analysis_catalog import served_model as model
+from tests.support.paths import RATIONAI_TEST
 
 
 CATALOG = Path(__file__).resolve().parents[2] / "catalog"
@@ -45,8 +46,8 @@ def errors(root: Path) -> list[str]:
     return [str(error) for error in raised.value.errors]
 
 
-@pytest.mark.parametrize("environment", [None, "rationai-test"])
-def test_the_prostate_heatmap_is_the_prostate_app(environment: str | None) -> None:
+@pytest.mark.parametrize("environment", [None, RATIONAI_TEST])
+def test_the_prostate_heatmap_is_the_prostate_app(environment: Path | None) -> None:
     analysis = load_catalog(CATALOG, environment).analyses
     app = analysis["prostate-heatmap"].empaia
 

@@ -13,14 +13,14 @@ import pkgutil
 from functools import cache
 from typing import TYPE_CHECKING
 
-from components.base import KINDS
-from components.base.component import Component
+from components import KINDS
+from components._kinds.component import Component
 
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from components.base.slots import Slot
+    from components._kinds.slots import Slot
 
 
 DEFAULT_PACKAGE = "components"
@@ -160,7 +160,7 @@ def _path(package: str, folder: str) -> str:
         folder: A kind's folder, e.g. `empaia/converters`.
 
     Returns:
-        E.g. `components/empaia/converters/`.
+        E.g. `components/providers/empaia/converters/`.
     """
     return f"{package.replace('.', '/')}/{folder}/"
 
