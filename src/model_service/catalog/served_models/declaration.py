@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
-    from components.base import Component, Loader, Runtime, Step
+    from components.base import Loader, Runtime, Step
     from model_service.catalog.served_models.fields import (
         Batching,
         Input,
@@ -68,25 +68,13 @@ class ServedModel:
             The hex digest.
         """
         canonical = {
-            "weights": _component(self.weights),
-            "runtime": _component(self.runtime),
-            "pre": [_component(step) for step in self.pre],
-            "post": [_component(step) for step in self.post],
+            "weights": self.weights.spelled_out(),
+            "runtime": self.runtime.spelled_out(),
+            "pre": [step.spelled_out() for step in self.pre],
+            "post": [step.spelled_out() for step in self.post],
             "input": self.input.model_dump(mode="json"),
             "output": self.output.model_dump(mode="json"),
             "batching": {"max_size": self.batching.max_size},
         }
         text = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(text.encode()).hexdigest()
-
-
-def _component(component: Component) -> dict[str, Any]:
-    """A component as the digest covers it: its name and every option.
-
-    Args:
-        component: The component.
-
-    Returns:
-        `use` and every option, defaults included.
-    """
-    return {"use": component.name, **component.options.model_dump(mode="json")}

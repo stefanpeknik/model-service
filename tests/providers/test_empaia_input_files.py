@@ -11,12 +11,8 @@ from model_service.providers.empaia.app_service.input_files import (
     link_direct_input,
     write_rectangle_mask,
 )
-from model_service.providers.empaia.app_service.types import (
-    DirectAccess,
-    Rectangle,
-    SlideLevel,
-    SlideMetadata,
-)
+from model_service.providers.empaia.app_service.types import DirectAccess, Rectangle
+from tests.support.empaia_fixtures import slide_info
 
 
 class LinkDirectInputTests(unittest.TestCase):
@@ -54,9 +50,7 @@ if __name__ == "__main__":
 
 
 class RectangleMaskTests(unittest.TestCase):
-    SLIDE = SlideMetadata(
-        "slide-1", 1100, 900, 250.0, 250.0, (SlideLevel(0, 1100, 900),)
-    )
+    SLIDE = slide_info(width=1100, height=900, levels=1)
 
     def test_a_rectangle_is_clipped_to_the_slide(self) -> None:
         import pyvips
@@ -71,6 +65,20 @@ class RectangleMaskTests(unittest.TestCase):
             self.assertEqual(mask.getpoint(499, 899), [255.0])
             self.assertEqual(mask.getpoint(500, 899), [0.0])
             self.assertEqual(mask.getpoint(0, 799), [0.0])
+
+    def test_a_slide_without_a_positive_pixel_size_is_refused_for_good(self) -> None:
+        slide = self.SLIDE.model_copy(
+            update={
+                "pixel_size_nm": self.SLIDE.pixel_size_nm.model_copy(update={"x": 0.0})
+            }
+        )
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "mask.tiff"
+            with self.assertRaises(EmpaiaGatewayError) as raised:
+                write_rectangle_mask(path, slide, Rectangle(0, 0, 100, 100))
+
+            self.assertFalse(raised.exception.retryable)
+            self.assertFalse(path.exists())
 
     def test_a_rectangle_beside_the_slide_is_refused(self) -> None:
         with TemporaryDirectory() as directory:

@@ -103,20 +103,3 @@ def capacity_keys(analysis_id: str, models: tuple[str, ...]) -> tuple[CapacityKe
 
 type CapacityLimits = Callable[[CapacityKey], int]
 """The slots of a capacity key: how many attempts may hold one at once."""
-
-
-def fixed_limit(limit: int) -> CapacityLimits:
-    """The same limit for every capacity key.
-
-    Args:
-        limit: Slots per key.
-
-    Returns:
-        The limits.
-
-    Raises:
-        ValueError: The limit is not positive.
-    """
-    if limit <= 0:
-        raise ValueError("per-model limits must be positive")
-    return lambda _key: limit

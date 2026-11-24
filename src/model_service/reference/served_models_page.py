@@ -17,9 +17,6 @@ if TYPE_CHECKING:
     from model_service.catalog.served_models import ServedModel
 
 
-PAGE = Path("docs/reference/served-models.md")
-
-
 def served_models_page(catalog: Catalog, root: Path) -> str:
     """Render the served-models reference.
 

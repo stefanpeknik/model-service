@@ -44,7 +44,6 @@ from model_service.registry import default_registry
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from components.base import Component
     from model_service.catalog.analyses.declaration import Analysis
     from model_service.catalog.catalog import Catalog
     from model_service.catalog.served_models import ServedModel
@@ -117,12 +116,12 @@ def resolve_run(
     document: dict[str, Any] = {
         "id": analysis.id,
         "summary": analysis.summary,
-        "source": _component(analysis.source),
+        "source": analysis.source.spelled_out(),
         "steps": [
-            {"model": s.model.id} if isinstance(s, ModelStep) else _component(s)
+            {"model": s.model.id} if isinstance(s, ModelStep) else s.spelled_out()
             for s in analysis.steps
         ],
-        "sinks": [_component(s) for s in analysis.sinks],
+        "sinks": [s.spelled_out() for s in analysis.sinks],
         "served_models": {
             model_id: {DIGEST: model.digest, "declaration": model.declaration}
             for model_id, model in analysis.models.items()
@@ -208,18 +207,6 @@ def _resolve_analysis(
     if ctx.errors or analysis is None:
         raise CatalogInvalid(ctx.errors)
     return analysis
-
-
-def _component(component: Component) -> dict[str, Any]:
-    """A component with every option spelled out.
-
-    Args:
-        component: The component.
-
-    Returns:
-        `use` and every option, defaults included.
-    """
-    return {"use": component.name, **component.options.model_dump(mode="json")}
 
 
 def _digest(body: Mapping[str, Any]) -> str:

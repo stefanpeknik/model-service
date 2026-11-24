@@ -27,6 +27,18 @@ def media_type(name: str, suffix: str, version: int) -> str:
     return f"application/vnd.rationai.{name}+{suffix}; version={version}"
 
 
+def normalised(value: str) -> str:
+    """A media type with the whitespace around its parameters removed.
+
+    Args:
+        value: E.g. `application/x; version=1`.
+
+    Returns:
+        E.g. `application/x;version=1`.
+    """
+    return ";".join(part.strip() for part in value.split(";"))
+
+
 def require(given: str, known: tuple[str, ...]) -> None:
     """Refuse a media type that is none of the versions a reader knows.
 
@@ -37,8 +49,7 @@ def require(given: str, known: tuple[str, ...]) -> None:
     Raises:
         UnsupportedFormat: If `given` is not one of `known`.
     """
-    normalised = ";".join(part.strip() for part in given.split(";"))
-    if normalised not in {";".join(k.split("; ")) for k in known}:
+    if normalised(given) not in {normalised(k) for k in known}:
         raise UnsupportedFormat(
             f"cannot read `{given}`; this reader knows {', '.join(known)}"
         )

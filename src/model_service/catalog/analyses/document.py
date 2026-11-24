@@ -90,7 +90,9 @@ def build_analysis(document: dict[str, Any], ctx: ResolveContext) -> Analysis | 
     fields = ctx.fields(Fields, document)
     source = ctx.component(slots.SOURCE, document.get("source"), ("source",))
     steps = _steps(ctx, document.get("steps"))
-    sinks = _list(ctx, slots.SINKS, document.get("sinks"), required=True)
+    sinks = ctx.components(
+        slots.SINKS, document.get("sinks"), ("sinks",), required=True
+    )
     if fields is None or source is None or steps is None or ctx.errors:
         return None
     sink_list = cast("list[Sink]", sinks)
@@ -164,7 +166,7 @@ def _steps(ctx: ResolveContext, value: object) -> list[AnalysisStep] | None:
     if value is None:
         return []
     if not isinstance(value, list):
-        _not_a_list(ctx, slots.STEPS, ("steps",))
+        ctx.not_a_list(slots.STEPS, ("steps",))
         return None
     steps: list[AnalysisStep] = []
     ok = True
@@ -193,53 +195,6 @@ def _steps(ctx: ResolveContext, value: object) -> list[AnalysisStep] | None:
             continue
         steps.append(cast("Step", step))
     return steps if ok else None
-
-
-def _list(
-    ctx: ResolveContext, slot: slots.Slot, value: object, *, required: bool
-) -> list[Any]:
-    """Resolve a list of components under `slot`, reporting a missing one.
-
-    Args:
-        ctx: Collects errors.
-        slot: The slot, `sinks:` for instance.
-        value: Its value.
-        required: Whether the list needs an entry.
-
-    Returns:
-        The components that resolved.
-    """
-    key = slot.key
-    if value is None or (required and value == []):
-        if required:
-            ctx.error(
-                (key,),
-                f"missing `{key}:`",
-                f"`{key}: [{{use: <name>, …}}, …]`",
-                f"add at least one entry under `{key}:`",
-            )
-        return []
-    if not isinstance(value, list):
-        _not_a_list(ctx, slot, (key,))
-        return []
-    found = [ctx.component(slot, item, (key, i)) for i, item in enumerate(value)]
-    return [c for c in found if c is not None]
-
-
-def _not_a_list(ctx: ResolveContext, slot: slots.Slot, path: YamlPath) -> None:
-    """Report a slot that holds something other than a list.
-
-    Args:
-        ctx: Collects errors.
-        slot: The slot.
-        path: Where it is in the file.
-    """
-    ctx.error(
-        path,
-        "not a list",
-        f"`{slot.key}: [{{use: <name>, …}}, …]`",
-        f"write `{slot.key}:` as a list",
-    )
 
 
 __all__ = ["FOLDER", "Fields", "analysis_schema", "build_analysis"]

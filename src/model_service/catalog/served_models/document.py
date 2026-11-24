@@ -31,8 +31,6 @@ from model_service.registry import default_registry
 if TYPE_CHECKING:
     from pydantic import BaseModel
 
-    from components.base import Slot
-    from model_service.catalog.errors import YamlPath
     from model_service.registry import Registry
 
 
@@ -55,16 +53,18 @@ def build_served_model(
     fields = ctx.fields(Fields, document)
     weights = ctx.component(slots.WEIGHTS, document.get("weights"), ("weights",))
     runtime = ctx.component(slots.RUNTIME, document.get("runtime"), ("runtime",))
-    pre = _steps(ctx, slots.PRE, document.get("pre"), ("pre",))
-    post = _steps(ctx, slots.POST, document.get("post"), ("post",))
+    pre = cast("list[Step]", ctx.components(slots.PRE, document.get("pre"), ("pre",)))
+    post = cast(
+        "list[Step]", ctx.components(slots.POST, document.get("post"), ("post",))
+    )
     if fields is None or weights is None or runtime is None or ctx.errors:
         return None
     return ServedModel(
         id=ctx.document_id,
         weights=cast("Loader", weights),
         runtime=cast("Runtime", runtime),
-        pre=pre,
-        post=post,
+        pre=tuple(pre),
+        post=tuple(post),
         input=fields.input,
         output=fields.output,
         batching=fields.batching,
@@ -109,34 +109,6 @@ def _field(name: str) -> Any:
     if info.is_required():
         return Field(description=info.description)
     return Field(info.default, description=info.description)
-
-
-def _steps(
-    ctx: ResolveContext, slot: Slot, value: object, path: YamlPath
-) -> tuple[Step, ...]:
-    """Resolve `pre:` or `post:`; a step that fails is left out after its error.
-
-    Args:
-        ctx: Collects errors.
-        slot: The slot.
-        value: Its value.
-        path: Where it is in the file.
-
-    Returns:
-        The steps that resolved, in order.
-    """
-    if value is None:
-        return ()
-    if not isinstance(value, list):
-        ctx.error(
-            path,
-            "not a list",
-            f"`{slot.key}: [{{use: <step>, …}}, …]`",
-            f"write `{slot.key}:` as a list of steps",
-        )
-        return ()
-    steps = [ctx.component(slot, item, (*path, i)) for i, item in enumerate(value)]
-    return tuple(cast("Step", step) for step in steps if step is not None)
 
 
 def resolve_served_model(

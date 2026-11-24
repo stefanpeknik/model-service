@@ -64,6 +64,7 @@ from model_service.control_plane.scheduler.targets import (
     CapacityLimits,
     ExecutionTarget,
 )
+from tests.support.memory_repository import fixed_limit
 from tests.support.repository_contract import ExecutionRepositoryContract
 from tests.support.scheduling import stored_target
 
@@ -276,6 +277,9 @@ class PostgresExecutionRepositoryTests(
             make_conninfo("", **conninfo_to_dict(self.dsn)),
             cipher=self.cipher,
             schema=self.schema,
+            capacity_limits=fixed_limit(1),
+            processing_policy=self.processing_policy,
+            finish_policy=self.processing_policy,
         )
         self._repositories.append(repository)
 
@@ -913,8 +917,7 @@ class PostgresExecutionRepositoryTests(
             self.dsn,
             cipher=self.cipher,
             schema=schema or self.schema,
-            per_model_limit=per_model_limit,
-            capacity_limits=capacity_limits,
+            capacity_limits=capacity_limits or fixed_limit(per_model_limit),
             processing_policy=self.processing_policy,
             finish_policy=self.processing_policy,
         )

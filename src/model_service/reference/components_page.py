@@ -34,7 +34,6 @@ if TYPE_CHECKING:
     from model_service.registry import Registry
 
 
-PAGE = Path("docs/reference/components.md")
 SRC = Path(__file__).resolve().parents[2]
 
 

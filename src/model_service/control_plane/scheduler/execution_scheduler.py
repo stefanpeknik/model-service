@@ -7,7 +7,7 @@ ExecutionTransitions decides state changes; ExecutionWorker performs leased work
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
@@ -37,7 +37,7 @@ from model_service.control_plane.scheduler.worker import ExecutionWorker
 
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Callable, Mapping
+    from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 
     from model_service.contracts.invocation import Invocation
     from model_service.control_plane.scheduler.protocols import AnalysisDispatch
@@ -51,6 +51,26 @@ if TYPE_CHECKING:
         ExecutionRepository,
     )
     from model_service.providers.provider import ProviderAdapter
+
+
+REPOSITORY_UNAVAILABLE = "execution repository is temporarily unavailable"
+SCHEDULING_UNAVAILABLE = "execution scheduling is temporarily unavailable"
+
+
+@contextmanager
+def _unavailable_as_scheduling(message: str = REPOSITORY_UNAVAILABLE) -> Iterator[None]:
+    """Report an unavailable repository as unavailable scheduling.
+
+    Args:
+        message: The safe message callers see.
+
+    Raises:
+        SchedulingUnavailableError: If the block's repository call is unavailable.
+    """
+    try:
+        yield
+    except ExecutionRepositoryUnavailableError as error:
+        raise SchedulingUnavailableError(message) from error
 
 
 class ExecutionScheduler:
@@ -156,12 +176,8 @@ class ExecutionScheduler:
         Raises:
             SchedulingUnavailableError: The execution repository is unavailable.
         """
-        try:
+        with _unavailable_as_scheduling():
             await self._repository.check_ready()
-        except ExecutionRepositoryUnavailableError as error:
-            raise SchedulingUnavailableError(
-                "execution repository is temporarily unavailable"
-            ) from error
 
     async def schedule(self, request: AnalysisScheduleRequest) -> ScheduleResult:
         """Identify and replay a submission, prepare new inputs, then admit the complete execution.
@@ -257,12 +273,8 @@ class ExecutionScheduler:
             ScheduleConflictError: The key was used for a request with a different fingerprint.
             SchedulingUnavailableError: The execution repository is unavailable.
         """
-        try:
+        with _unavailable_as_scheduling(SCHEDULING_UNAVAILABLE):
             return await self._repository.find_submission(identity)
-        except ExecutionRepositoryUnavailableError as error:
-            raise SchedulingUnavailableError(
-                "execution scheduling is temporarily unavailable"
-            ) from error
 
     async def _admit(self, admission: Admission) -> ScheduleResult:
         """Store a new execution, or return the one a concurrent submission admitted first.
@@ -277,12 +289,8 @@ class ExecutionScheduler:
             ScheduleConflictError: A concurrent submission used the key for a different request.
             SchedulingUnavailableError: The execution repository is unavailable.
         """
-        try:
+        with _unavailable_as_scheduling(SCHEDULING_UNAVAILABLE):
             admitted = await self._repository.admit(admission)
-        except ExecutionRepositoryUnavailableError as error:
-            raise SchedulingUnavailableError(
-                "execution scheduling is temporarily unavailable"
-            ) from error
         # The rest of the request's log lines name the execution.
         EXECUTION_ID.set(admitted.execution.id)
         return ScheduleResult(self._view(admitted.execution), created=admitted.created)
@@ -300,12 +308,8 @@ class ExecutionScheduler:
             UnknownExecutionError: No execution has this ID.
             SchedulingUnavailableError: The execution repository is unavailable.
         """
-        try:
+        with _unavailable_as_scheduling():
             execution = await self._repository.get(execution_id)
-        except ExecutionRepositoryUnavailableError as error:
-            raise SchedulingUnavailableError(
-                "execution repository is temporarily unavailable"
-            ) from error
         return self._view(execution)
 
     async def get_many(self, execution_ids: list[str]) -> list[ExecutionView]:
@@ -320,12 +324,8 @@ class ExecutionScheduler:
         Raises:
             SchedulingUnavailableError: The execution repository is unavailable.
         """
-        try:
+        with _unavailable_as_scheduling():
             executions = await self._repository.get_many(execution_ids)
-        except ExecutionRepositoryUnavailableError as error:
-            raise SchedulingUnavailableError(
-                "execution repository is temporarily unavailable"
-            ) from error
         return [self._view(execution) for execution in executions]
 
     async def cancel(self, execution_id: str) -> ExecutionView:
@@ -341,12 +341,8 @@ class ExecutionScheduler:
             UnknownExecutionError: No execution has this ID.
             SchedulingUnavailableError: The execution repository is unavailable.
         """
-        try:
+        with _unavailable_as_scheduling():
             execution = await self._repository.request_cancel(execution_id)
-        except ExecutionRepositoryUnavailableError as error:
-            raise SchedulingUnavailableError(
-                "execution repository is temporarily unavailable"
-            ) from error
         self._active_work.cancel(execution_id)
         return self._view(execution)
 

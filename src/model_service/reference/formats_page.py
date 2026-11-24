@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from components.base import Publisher, Sink
@@ -13,9 +12,6 @@ from model_service.reference.markdown import GENERATED, code, docstring, facts
 
 if TYPE_CHECKING:
     from model_service.registry import Registry
-
-
-PAGE = Path("docs/reference/formats.md")
 
 
 def formats_page(registry: Registry) -> str:

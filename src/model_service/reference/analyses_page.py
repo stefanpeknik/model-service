@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from model_service.catalog.analyses import FOLDER, ModelStep
@@ -22,9 +21,6 @@ if TYPE_CHECKING:
     from model_service.catalog import Catalog
     from model_service.catalog.analyses import Analysis
     from model_service.catalog.analyses.exposure import EmpaiaExposure
-
-
-PAGE = Path("docs/reference/analyses.md")
 
 
 def analyses_page(catalog: Catalog) -> str:

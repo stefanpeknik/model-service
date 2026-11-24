@@ -7,7 +7,10 @@ from typing import TYPE_CHECKING
 from sqlalchemy import and_, func, or_, select
 
 from model_service.control_plane.scheduler.internal_state import WorkKind
-from model_service.control_plane.scheduler.status import ExecutionStatus
+from model_service.control_plane.scheduler.status import (
+    TERMINAL_STATUSES,
+    ExecutionStatus,
+)
 from model_service.control_plane.scheduler.store.rows import ExecutionRow
 
 
@@ -85,13 +88,7 @@ class MaintenanceOperations:
                 ),
                 or_(
                     and_(
-                        ExecutionRow.status.not_in(
-                            (
-                                ExecutionStatus.SUCCEEDED,
-                                ExecutionStatus.FAILED,
-                                ExecutionStatus.CANCELLED,
-                            )
-                        ),
+                        ExecutionRow.status.not_in(TERMINAL_STATUSES),
                         ExecutionRow.deadline_at <= now,
                     ),
                     and_(

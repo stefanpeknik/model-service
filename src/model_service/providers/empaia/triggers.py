@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING
 
 import httpx
 
+from model_service.providers.empaia.credentials import authorized_client
+
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -77,14 +79,9 @@ class PreprocessingTriggers:
             for app in apps
             for trigger in app.triggers
         }
-        async with httpx.AsyncClient(
-            timeout=self._timeout, transport=self._transport
-        ) as client:
-            headers = {}
-            if (
-                authorization := await self._credentials.authorization(client)
-            ) is not None:
-                headers["Authorization"] = authorization
+        async with authorized_client(
+            self._credentials, timeout=self._timeout, transport=self._transport
+        ) as (client, headers):
             if await self._align(client, headers, wanted):
                 await self._align(client, headers, wanted)
 

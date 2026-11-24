@@ -104,6 +104,14 @@ class Component(ABC):
         """
         return cls(cls.Options.model_validate(values))
 
+    def spelled_out(self) -> dict[str, Any]:
+        """The component as a catalog value with every option written out.
+
+        Returns:
+            `use` and every option, defaults included, as JSON values.
+        """
+        return {"use": self.name, **self.options.model_dump(mode="json")}
+
     @classmethod
     def hint(cls, problem: Problem) -> str | None:
         """How to fix a problem with this component's use, in one sentence.

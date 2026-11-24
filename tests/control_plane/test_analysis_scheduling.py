@@ -164,7 +164,7 @@ async def test_every_attempt_sends_the_document_admitted(root: Path) -> None:
             SCHEDULE, json=body(root), headers={"Idempotency-Key": "run-1"}
         )
         # The analysis leaves the catalog after admission; the run doesn't care.
-        deployment.replace_catalog(Catalog(None))
+        deployment.replace_catalog(Catalog())
         async with deployment.scheduler.running():
             view = await wait_for(client, created.json()["execution"]["id"])
 

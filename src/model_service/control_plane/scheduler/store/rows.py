@@ -11,19 +11,15 @@ from typing import TYPE_CHECKING
 
 from pydantic import TypeAdapter
 from sqlalchemy import (
-    CheckConstraint,
     DateTime,
     Enum,
-    Index,
     Integer,
     LargeBinary,
     Text,
     UniqueConstraint,
-    and_,
     false,
     func,
     literal,
-    or_,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -180,71 +176,3 @@ class ExecutionRow(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.clock_timestamp()
     )
-
-
-for counter in (
-    ExecutionRow.processing_attempts,
-    ExecutionRow.processing_rejections,
-    ExecutionRow.finish_attempts,
-):
-    CheckConstraint(counter >= 0)
-
-CheckConstraint(
-    ExecutionRow.error_code.is_(None) == ExecutionRow.error_message.is_(None)
-)
-CheckConstraint(
-    or_(
-        and_(
-            ExecutionRow.fencing_token.is_(None),
-            ExecutionRow.lease_owner.is_(None),
-            ExecutionRow.lease_expires_at.is_(None),
-        ),
-        and_(
-            ExecutionRow.fencing_token.is_not(None),
-            ExecutionRow.lease_owner.is_not(None),
-            ExecutionRow.lease_expires_at.is_not(None),
-        ),
-    )
-)
-CheckConstraint(
-    or_(
-        ExecutionRow.result.is_(None),
-        ExecutionRow.work_kind == WorkKind.PROVIDER_FINISH,
-        ExecutionRow.status.in_(
-            [
-                ExecutionStatus.SUCCEEDED,
-                ExecutionStatus.FAILED,
-                ExecutionStatus.CANCELLED,
-            ]
-        ),
-    )
-)
-Index(
-    "executions_due_idx",
-    ExecutionRow.next_attempt_at,
-    ExecutionRow.created_at,
-    postgresql_where=ExecutionRow.work_kind.is_not(None),
-)
-Index(
-    "executions_active_processing_idx",
-    ExecutionRow.lease_expires_at,
-    postgresql_where=and_(
-        ExecutionRow.work_kind == WorkKind.PROCESSING,
-        ExecutionRow.fencing_token.is_not(None),
-    ),
-)
-for name, column in (
-    ("executions_deadline_idx", ExecutionRow.deadline_at),
-    ("executions_report_deadline_idx", ExecutionRow.terminal_report_deadline_at),
-):
-    Index(name, column, postgresql_where=ExecutionRow.work_kind.is_not(None))
-Index(
-    "executions_lease_idx",
-    ExecutionRow.lease_expires_at,
-    postgresql_where=ExecutionRow.fencing_token.is_not(None),
-)
-Index(
-    "executions_finished_idx",
-    ExecutionRow.updated_at,
-    postgresql_where=ExecutionRow.work_kind.is_(None),
-)

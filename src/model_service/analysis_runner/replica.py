@@ -277,8 +277,6 @@ class AnalysisReplica:
             await close_resource(
                 access.aclose, timeout_seconds=self._cleanup_timeout_seconds
             )
-        except asyncio.CancelledError:
-            raise
         except Exception as error:
             logger.warning("input access cleanup failed: %s", type(error).__name__)
 

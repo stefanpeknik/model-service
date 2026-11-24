@@ -15,17 +15,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
 
 import httpx
 import jwt
 
+from model_service.providers.empaia.credentials import authorized_client
 from model_service.providers.empaia.ead.apps import NAMESPACE_PREFIX
 
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Sequence
+    from collections.abc import Sequence
 
     from model_service.providers.empaia.credentials import OutgoingCredentials
     from model_service.providers.empaia.ead.apps import AnalysisApp
@@ -85,7 +85,9 @@ class Marketplace:
             jwt.InvalidTokenError: If the credentials' token cannot be decoded.
             KeyError: If a token response or discovery document lacks a field.
         """
-        async with self._client() as (client, headers):
+        async with authorized_client(
+            self._credentials, timeout=self._timeout, transport=self._transport
+        ) as (client, headers):
             for app in apps:
                 response = await client.post(
                     f"{self._mock}/portal-apps",
@@ -124,7 +126,9 @@ class Marketplace:
             KeyError: If the portal app list or a token response lacks a field.
         """
         keep = {app.portal_app_id for app in apps}
-        async with self._client() as (client, headers):
+        async with authorized_client(
+            self._credentials, timeout=self._timeout, transport=self._transport
+        ) as (client, headers):
             # The mock ignores the query's filters and lists every portal app.
             response = await client.put(
                 f"{self._customer}/portal-apps/query",
@@ -172,30 +176,6 @@ class Marketplace:
             ).startswith(image):
                 return namespace
         return None
-
-    @asynccontextmanager
-    async def _client(
-        self,
-    ) -> AsyncIterator[tuple[httpx.AsyncClient, dict[str, str]]]:
-        """Open an HTTP client with the `Authorization` header the credentials give.
-
-        Yields:
-            The client and the headers to send, empty without credentials.
-
-        Raises:
-            httpx.HTTPError: If fetching a token fails.
-            jwt.InvalidTokenError: If the credentials' token cannot be decoded.
-            KeyError: If a token response or discovery document lacks a field.
-        """
-        async with httpx.AsyncClient(
-            timeout=self._timeout, transport=self._transport
-        ) as client:
-            headers = {}
-            if (
-                authorization := await self._credentials.authorization(client)
-            ) is not None:
-                headers["Authorization"] = authorization
-            yield client, headers
 
 
 async def register_until_done(

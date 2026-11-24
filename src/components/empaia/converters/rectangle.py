@@ -63,18 +63,12 @@ class Rectangle(InputConverter):
                 the mask fails.
         """
         from model_service.providers.empaia.app_service.input_files import (
-            write_rectangle_input,
             write_rectangle_mask,
         )
-        from model_service.providers.empaia.app_service.responses import (
-            rectangle,
-            slide_metadata,
-        )
+        from model_service.providers.empaia.app_service.responses import rectangle
 
         region = rectangle(await gateway.get_input_data(item.name))
-        slide = slide_metadata(await gateway.get_input_data(item.slide or "slide"))
+        slide = await gateway.slide_info(item.slide or "slide")
         target = directory / MASK_FILE
-        await asyncio.to_thread(
-            write_rectangle_input, write_rectangle_mask, target, slide, region
-        )
+        await asyncio.to_thread(write_rectangle_mask, target, slide, region)
         return target

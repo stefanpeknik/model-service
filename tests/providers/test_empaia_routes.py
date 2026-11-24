@@ -80,7 +80,7 @@ class ScriptedScheduler:
 def client(scheduler: ScriptedScheduler) -> AsyncClient:
     app = create_app(
         scheduler,  # type: ignore[arg-type]
-        catalog=lambda: Catalog(None),
+        catalog=lambda: Catalog(),
         provider_routes=[create_router],
     )
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://ms")
@@ -204,7 +204,7 @@ class EmpaiaRouteTests(unittest.IsolatedAsyncioTestCase):
 
         app = create_app(
             ScriptedScheduler(view(ExecutionStatus.QUEUED)),  # type: ignore[arg-type]
-            catalog=lambda: Catalog(None),
+            catalog=lambda: Catalog(),
             access=Access(authenticator=Nobody()),
             provider_routes=[create_router],
         )

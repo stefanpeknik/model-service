@@ -21,11 +21,9 @@ class Catalog:
     environment's patch.
 
     Attributes:
-        environment: The environment whose patches were applied, or None.
         served_models: Served models by ID.
         analyses: Analyses by ID.
     """
 
-    environment: str | None
     served_models: Mapping[str, ServedModel] = field(default_factory=dict)
     analyses: Mapping[str, Analysis] = field(default_factory=dict)

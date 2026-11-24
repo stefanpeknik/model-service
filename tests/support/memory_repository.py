@@ -31,7 +31,6 @@ from model_service.control_plane.scheduler.public import (
 )
 from model_service.control_plane.scheduler.status import ExecutionStatus
 from model_service.control_plane.scheduler.store.repository import ExecutionRepository
-from model_service.control_plane.scheduler.targets import fixed_limit
 from model_service.control_plane.scheduler.transitions.common import work_deadline_at
 from model_service.control_plane.scheduler.transitions.execution_transitions import (
     ExecutionTransitions,
@@ -371,3 +370,10 @@ class FakeDispatch:
         if inspect.isawaitable(value):
             return await value
         return value
+
+
+def fixed_limit(limit: int) -> CapacityLimits:
+    """The same capacity limit for every key."""
+    if limit <= 0:
+        raise ValueError("per-model limits must be positive")
+    return lambda _key: limit

@@ -8,7 +8,7 @@ governs leases.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -37,7 +37,7 @@ from model_service.control_plane.scheduler.store.rows import (
     DEFAULT_SCHEMA,
     ExecutionRow,
 )
-from model_service.control_plane.scheduler.targets import ExecutionTarget, fixed_limit
+from model_service.control_plane.scheduler.targets import ExecutionTarget
 from model_service.control_plane.scheduler.transitions.execution_transitions import (
     ExecutionTransitions,
 )
@@ -67,10 +67,9 @@ class PostgresDatabase:
         *,
         cipher: ProtectedContextCipher,
         schema: str = DEFAULT_SCHEMA,
-        per_model_limit: int = 1,
-        capacity_limits: CapacityLimits | None = None,
-        processing_policy: RetryPolicy | None = None,
-        finish_policy: RetryPolicy | None = None,
+        capacity_limits: CapacityLimits,
+        processing_policy: RetryPolicy,
+        finish_policy: RetryPolicy,
         pool_size: int = 10,
     ) -> None:
         """Validate schema and capacity, configure a pooled async engine, and retain context encryption and retry policies.
@@ -81,16 +80,14 @@ class PostgresDatabase:
             dsn: libpq DSN or PostgreSQL URL.
             cipher: Cipher for the stored provider context.
             schema: PostgreSQL schema holding the execution table.
-            per_model_limit: Attempts allowed at once per capacity key when
-                `capacity_limits` is None.
             capacity_limits: Attempts allowed at once per capacity key (a served
                 model, or a model-free analysis).
-            processing_policy: Processing retry policy; defaults to 3 attempts, 5 s to 1 min backoff.
-            finish_policy: Provider finish retry policy; same default.
+            processing_policy: Processing retry policy.
+            finish_policy: Provider finish retry policy.
             pool_size: Pooled connections, with as many again allowed as overflow.
 
         Raises:
-            ValueError: schema is not an identifier or the per-model limit is not positive.
+            ValueError: schema is not an identifier.
         """
         if not schema or not schema.replace("_", "a").isalnum():
             raise ValueError("PostgreSQL schema must be an identifier")
@@ -116,21 +113,8 @@ class PostgresDatabase:
             execution_options={"schema_translate_map": {DEFAULT_SCHEMA: schema}},
         )
         self._sessions = async_sessionmaker(self._engine, expire_on_commit=False)
-        self.capacity_limit = capacity_limits or fixed_limit(per_model_limit)
-        self.transitions = ExecutionTransitions(
-            processing_policy
-            or RetryPolicy(
-                max_attempts=3,
-                initial_backoff=timedelta(seconds=5),
-                maximum_backoff=timedelta(minutes=1),
-            ),
-            finish_policy
-            or RetryPolicy(
-                max_attempts=3,
-                initial_backoff=timedelta(seconds=5),
-                maximum_backoff=timedelta(minutes=1),
-            ),
-        )
+        self.capacity_limit = capacity_limits
+        self.transitions = ExecutionTransitions(processing_policy, finish_policy)
 
     async def aclose(self) -> None:
         """Dispose of the connection pool."""

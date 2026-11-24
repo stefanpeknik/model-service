@@ -32,18 +32,6 @@ class SlideLevel:
 
 
 @dataclass(frozen=True, slots=True)
-class SlideMetadata:
-    """Carry slide identity, base dimensions, nanometer pixel sizes, and pyramid levels."""
-
-    identifier: str
-    width: int
-    height: int
-    pixel_size_nm_x: float
-    pixel_size_nm_y: float
-    levels: tuple[SlideLevel, ...]
-
-
-@dataclass(frozen=True, slots=True)
 class Rectangle:
     """Carry integer slide-space coordinates and dimensions for a region of interest."""
 

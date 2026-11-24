@@ -125,6 +125,7 @@ class Gateway(StrictGateway):
         return DirectAccess(self.service.slide, supported=True)
 
     async def slide_info(self, name: str) -> SlideInfo:
+        self.service.reads.append(f"{name} (info)")
         return slide_info(256, 256, 4)
 
     async def publish_pixelmap(
@@ -279,11 +280,13 @@ async def test_a_standalone_job_runs_the_analysis_and_publishes_its_heatmap(
         "region_of_interest": {"type": "rectangle"},
     }
     # The run: the slide linked, the rectangle made a mask, progress reported.
+    # The slide's info is read for the rectangle's mask and again to publish.
     assert service.reads == [
         "stride_fraction",
         "slide (direct access)",
         "region_of_interest",
-        "slide",
+        "slide (info)",
+        "slide (info)",
     ]
     assert service.progress
     # Publication: the heatmap on the job's slide, then finalization.

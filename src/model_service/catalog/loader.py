@@ -147,7 +147,7 @@ class _Loader:
         found = self._folder(
             analyses.FOLDER, analyses.build_analysis, bases, patches, models, failed
         )
-        return Catalog(environment, models, found)
+        return Catalog(models, found)
 
     def _folder[T](
         self,

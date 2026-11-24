@@ -100,6 +100,7 @@ async def test_analyses_list_inputs_outputs_settings_and_models() -> None:
     assert response.status_code == 200
     (listed,) = [a for a in response.json() if a["id"] == "prostate-heatmap"]
     schema = listed.pop("settings_schema")
+    exposure = listed.pop("exposure")
     assert listed == {
         "id": "prostate-heatmap",
         "summary": "Scores each tile of a prostate slide into a heatmap.",
@@ -120,8 +121,9 @@ async def test_analyses_list_inputs_outputs_settings_and_models() -> None:
             "stride_fraction": 0.5,
         },
         "models": ["prostate-classifier-1"],
-        "exposure": {},
     }
+    assert exposure["empaia"]["name"] == "Prostate cancer heatmap"
+    assert exposure["empaia"]["outputs"] == {"heatmap": {"type": "continuous_pixelmap"}}
     assert schema["additionalProperties"] is False
     assert {k: v["default"] for k, v in schema["properties"].items()} == {
         "min_tissue_fraction": 0.0,

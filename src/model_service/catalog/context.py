@@ -103,6 +103,49 @@ class ResolveContext:
         options = {k: v for k, v in value.items() if k != "use"}
         return self.build(component, options, path, slot)
 
+    def components(
+        self, slot: Slot, value: object, path: YamlPath, *, required: bool = False
+    ) -> list[Component]:
+        """Resolve a list of `{use: <name>, …}` values; each that fails is left out.
+
+        Args:
+            slot: Where the list sits, e.g. `sinks:` or `post:`.
+            value: The YAML value; None when the key is missing.
+            path: The list's path in the document.
+            required: Whether the list needs at least one entry.
+
+        Returns:
+            The components that resolved, in order.
+        """
+        if value is None or (required and value == []):
+            if required:
+                self.error(
+                    path,
+                    f"missing `{slot.key}:`",
+                    f"`{slot.key}: [{{use: <name>, …}}, …]`",
+                    f"add at least one entry under `{slot.key}:`",
+                )
+            return []
+        if not isinstance(value, list):
+            self.not_a_list(slot, path)
+            return []
+        found = [self.component(slot, item, (*path, i)) for i, item in enumerate(value)]
+        return [c for c in found if c is not None]
+
+    def not_a_list(self, slot: Slot, path: YamlPath) -> None:
+        """Record a slot that holds something other than a list.
+
+        Args:
+            slot: The slot.
+            path: Where it is in the file.
+        """
+        self.error(
+            path,
+            "not a list",
+            f"`{slot.key}: [{{use: <name>, …}}, …]`",
+            f"write `{slot.key}:` as a list",
+        )
+
     def build[C: Component](
         self, component: type[C], options: dict[str, Any], path: YamlPath, slot: Slot
     ) -> C | None:

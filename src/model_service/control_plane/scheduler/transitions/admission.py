@@ -75,11 +75,7 @@ class AdmissionTransitions:
         Returns:
             The cancelled record, or the same record unchanged if it already ended.
         """
-        if execution.status in {
-            ExecutionStatus.SUCCEEDED,
-            ExecutionStatus.FAILED,
-            ExecutionStatus.CANCELLED,
-        }:
+        if execution.status.terminal:
             return execution
         return replace(
             execution,

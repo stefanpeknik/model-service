@@ -26,7 +26,7 @@ from model_service.control_plane.scheduler.public import (
 from model_service.control_plane.scheduler.status import ExecutionStatus
 
 
-CATALOG = Catalog(None)
+CATALOG = Catalog()
 EXECUTION = "00000000-0000-4000-8000-000000000001"
 
 

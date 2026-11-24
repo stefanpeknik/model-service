@@ -11,13 +11,15 @@ from __future__ import annotations
 import asyncio
 import time
 from abc import ABC, abstractmethod
+from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
+import httpx
 import jwt
 
 
 if TYPE_CHECKING:
-    import httpx
+    from collections.abc import AsyncIterator
 
 
 class OutgoingCredentials(ABC):
@@ -123,3 +125,32 @@ class ClientCredentials(OutgoingCredentials):
         issued = float(claims.get("iat", time.time()))
         self._token = token
         self._renew_at = issued + (float(claims["exp"]) - issued) / 2
+
+
+@asynccontextmanager
+async def authorized_client(
+    credentials: OutgoingCredentials,
+    *,
+    timeout: float,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> AsyncIterator[tuple[httpx.AsyncClient, dict[str, str]]]:
+    """Open an HTTP client with the `Authorization` header the credentials give.
+
+    Args:
+        credentials: Supplies the header, or none.
+        timeout: The HTTP timeout, in seconds.
+        transport: An httpx transport, e.g. for tests; the default if None.
+
+    Yields:
+        The client and the headers to send, empty without credentials.
+
+    Raises:
+        httpx.HTTPError: If fetching a token fails.
+        jwt.InvalidTokenError: If the credentials' token cannot be decoded.
+        KeyError: If a token response or discovery document lacks a field.
+    """
+    async with httpx.AsyncClient(timeout=timeout, transport=transport) as client:
+        headers = {}
+        if (authorization := await credentials.authorization(client)) is not None:
+            headers["Authorization"] = authorization
+        yield client, headers

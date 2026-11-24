@@ -17,11 +17,15 @@ class ExecutionStatus(StrEnum):
     @property
     def terminal(self) -> bool:
         """Whether an execution in this status is finished for good."""
-        return self in {
-            ExecutionStatus.SUCCEEDED,
-            ExecutionStatus.FAILED,
-            ExecutionStatus.CANCELLED,
-        }
+        return self in TERMINAL_STATUSES
+
+
+TERMINAL_STATUSES = (
+    ExecutionStatus.SUCCEEDED,
+    ExecutionStatus.FAILED,
+    ExecutionStatus.CANCELLED,
+)
+"""The statuses an execution never leaves."""
 
 
 class ExecutionErrorCode(StrEnum):

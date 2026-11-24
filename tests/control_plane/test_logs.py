@@ -47,7 +47,7 @@ BODY = {
 
 class RequestIdTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        catalog = Catalog(None)
+        catalog = Catalog()
         scheduler = ExecutionScheduler(
             repository=InMemoryExecutionRepository(),
             dispatch=FakeDispatch({}),

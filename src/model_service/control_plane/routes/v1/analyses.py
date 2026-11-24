@@ -13,6 +13,7 @@ that document. `/v1/executions` reads and cancels it.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 
@@ -148,7 +149,7 @@ def analysis_view(analysis: Analysis) -> AnalysisView:
         settings=analysis.settings(),
         settings_schema=analysis.settings_schema(),
         models=list(analysis.models),
-        exposure={},
+        exposure=deepcopy(analysis.declaration.get("expose") or {}),
     )
 
 

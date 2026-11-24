@@ -27,7 +27,7 @@ from model_service.providers.empaia.app_service.gateway import (
     PrimitiveType,
 )
 from model_service.providers.empaia.app_service.http import HttpEmpaiaGateway
-from tests.support.empaia_fixtures import PIXELMAP_ID, SLIDE_ID, created
+from tests.support.empaia_fixtures import PIXELMAP_ID, SLIDE_ID, created, slide_data
 
 
 RECTANGLE = Rectangle(Rectangle.Options())
@@ -106,12 +106,7 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
                     if request.url.path.endswith("/inputs/slide"):
                         return httpx.Response(
                             200,
-                            json={
-                                "id": "slide-1",
-                                "extent": {"x": 1200, "y": 600, "z": 1},
-                                "pixel_size_nm": {"x": 250, "y": 250},
-                                "levels": [{"extent": {"x": 1200, "y": 600}}],
-                            },
+                            json=slide_data(1200, 600),
                         )
                     return httpx.Response(
                         200,
@@ -327,12 +322,7 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
             if request.url.path.endswith("/inputs/slide"):
                 return httpx.Response(
                     200,
-                    json={
-                        "id": "slide-1",
-                        "extent": {"x": 1200, "y": 600, "z": 1},
-                        "pixel_size_nm": {"x": 250.0, "y": 250.0},
-                        "levels": [{"extent": {"x": 1200, "y": 600, "z": 1}}],
-                    },
+                    json=slide_data(1200, 600),
                 )
             if request.url.path.endswith("/inputs/region_of_interest"):
                 return httpx.Response(

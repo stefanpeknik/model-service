@@ -21,6 +21,7 @@ from components.base import (
 )
 from components.base.columns import resolved
 from model_service.catalog.analyses.model_step import ModelStep
+from model_service.catalog.errors import render_path
 
 
 if TYPE_CHECKING:
@@ -159,9 +160,7 @@ def check_settings(
         for name in sorted(per_run_fields(type(component.options))):
             if name in owners:
                 first_path, first = owners[name]
-                where = "".join(
-                    f"[{p}]" if isinstance(p, int) else p for p in first_path
-                )
+                where = render_path(first_path)
                 ctx.error(
                     path,
                     f"per-run setting `{name}` of `{component.name}` is also a "

@@ -11,7 +11,7 @@ import pkgutil
 from dataclasses import replace
 
 import model_service.formats
-from model_service.formats.media_type import Format
+from model_service.formats.media_type import Format, normalised
 
 
 def _scan() -> dict[str, Format]:
@@ -53,20 +53,8 @@ def format_of(media_type: str) -> Format | None:
     Returns:
         The format whose reader takes it, or None.
     """
-    given = _normalised(media_type)
+    given = normalised(media_type)
     return next(
-        (f for f in FORMATS.values() if given in {_normalised(k) for k in f.known}),
+        (f for f in FORMATS.values() if given in {normalised(k) for k in f.known}),
         None,
     )
-
-
-def _normalised(media_type: str) -> str:
-    """A media type with the whitespace around its parameters removed.
-
-    Args:
-        media_type: E.g. `application/x; version=1`.
-
-    Returns:
-        E.g. `application/x;version=1`.
-    """
-    return ";".join(part.strip() for part in media_type.split(";"))
