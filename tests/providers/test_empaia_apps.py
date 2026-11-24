@@ -1,4 +1,4 @@
-"""Analyses with `expose.empaia` become EMPAIA apps, registered in the marketplace at startup."""
+"""Pipelines with `providers.empaia` become EMPAIA apps, registered in the marketplace at startup."""
 
 from __future__ import annotations
 
@@ -20,9 +20,9 @@ from model_service.providers.empaia.credentials import (
     NoCredentials,
 )
 from model_service.providers.empaia.ead.apps import (
-    AnalysisApp,
-    analysis_app,
-    analysis_apps,
+    PipelineApp,
+    pipeline_app,
+    pipeline_apps,
 )
 from model_service.providers.empaia.ead.vocabulary import VIEWER_CONFIG_KEY, AppMode
 from model_service.providers.empaia.registration import (
@@ -31,9 +31,8 @@ from model_service.providers.empaia.registration import (
 )
 from model_service.providers.empaia.settings import EmpaiaSettings
 from model_service.providers.empaia.triggers import PreprocessingTriggers
-from tests.support.analysis_catalog import REGISTRY, write
-from tests.support.analysis_catalog import served_model as model
 from tests.support.paths import RATIONAI_TEST
+from tests.support.pipeline_catalog import REGISTRY, model_file, write
 
 
 CATALOG = Path(__file__).resolve().parents[2] / "catalog"
@@ -46,23 +45,23 @@ OLD_NAMESPACE = "org.empaia.rationai.heatmap_prostate_classifier_1.v3.0"
 NEW_NAMESPACE = "org.empaia.rationai.prostate_heatmap.v3.0"
 
 
-def prostate_app(environment: Path | None = None) -> AnalysisApp:
-    analyses = load_catalog(CATALOG, environment).analyses
-    return analysis_app(analyses["prostate-heatmap"])
+def prostate_app(environment: Path | None = None) -> PipelineApp:
+    pipelines = load_catalog(CATALOG, environment).pipelines
+    return pipeline_app(pipelines["prostate-heatmap"])
 
 
-def tmp_app(tmp_path: Path, expose: str) -> AnalysisApp:
-    """The app of a small analysis with this `expose.empaia` body."""
+def tmp_app(tmp_path: Path, providers: str) -> PipelineApp:
+    """The app of a small pipeline with this `providers.empaia` body."""
     root = tmp_path / "catalog"
-    write(root, "served-models/m1.yaml", model())
+    write(root, "models/m1.yaml", model_file())
     write(
         root,
-        "analyses/a1.yaml",
+        "pipelines/a1.yaml",
         """
         source: {use: slide_tiles}
         steps: [{model: m1}]
         sinks: [{use: score_grid, output: heatmap}]
-        expose:
+        providers:
           empaia:
             name: Test heatmap
             name_short: TestHM
@@ -70,10 +69,10 @@ def tmp_app(tmp_path: Path, expose: str) -> AnalysisApp:
             outputs:
               heatmap: {type: continuous_pixelmap}
         """.rstrip(" ")
-        + "\n".join(f"            {line}" for line in expose.splitlines()),
+        + "\n".join(f"            {line}" for line in providers.splitlines()),
     )
-    analyses = load_catalog(root, registry=REGISTRY).analyses
-    return analysis_app(analyses["a1"])
+    pipelines = load_catalog(root, registry=REGISTRY).pipelines
+    return pipeline_app(pipelines["a1"])
 
 
 @pytest.mark.parametrize("environment", [None, RATIONAI_TEST])
@@ -87,7 +86,7 @@ def test_the_prostate_app_matches_its_recording_apart_from_its_namespace(
     assert app.global_configuration == BEFORE["global_configuration"]
     assert app.modes == (AppMode.STANDALONE, AppMode.PREPROCESSING)
     assert app.image("model-service") == (
-        "http::model-service/analyses/prostate-heatmap"
+        "http::model-service/pipelines/prostate-heatmap"
     )
     # Its triggers' tags list the app under them in the marketplace.
     tags = app.portal_app("model-service", "org-1")["active_app_views"]["v3"]["tags"]
@@ -95,16 +94,18 @@ def test_the_prostate_app_matches_its_recording_apart_from_its_namespace(
         "PROSTATE",
         "H_AND_E",
     )
+    # The marketplace's own tag lists, by EMPAIA's names.
+    assert set(tags) == {"tissues", "stains", "indications", "analysis", "clearances"}
 
 
-def test_every_exposed_analysis_yields_a_valid_app_in_every_environment() -> None:
+def test_every_exposed_pipeline_yields_a_valid_app_in_every_environment() -> None:
     for environment in (None, RATIONAI_TEST):
         catalog = load_catalog(CATALOG, environment)
-        apps = analysis_apps(catalog)
+        apps = pipeline_apps(catalog)
 
-        exposed = [i for i, e in catalog.analyses.items() if e.empaia]
-        assert [app.analysis_id for app in apps] == exposed
-        assert "prostate-heatmap" in exposed
+        offered = [i for i, e in catalog.pipelines.items() if e.empaia]
+        assert [app.pipeline_id for app in apps] == offered
+        assert "prostate-heatmap" in offered
 
 
 def test_a_preprocessing_only_app_leaves_out_the_region_of_interest(
@@ -286,11 +287,11 @@ def listed_app(portal_app_id: str, namespace: str, image: str) -> dict[str, obje
 
 
 # An app this deployment registered under the prostate app's earlier
-# namespace, at a route no analysis has now.
+# namespace, at a route no pipeline has now.
 RETIRED_APP = listed_app(
     "retired",
     OLD_NAMESPACE,
-    "http::model-service/analyses/heatmap-prostate-classifier-1",
+    "http::model-service/pipelines/heatmap-prostate-classifier-1",
 )
 # Apps model-service never registered: a RationAI container app under the same
 # namespace prefix, another model-service deployment's app, another vendor's.
@@ -303,7 +304,7 @@ FOREIGN_APPS = [
     listed_app(
         "other-deployment",
         "org.empaia.rationai.constant.v3.0",
-        "http::model-service-dev/analyses/constant",
+        "http::model-service-dev/pipelines/constant",
     ),
     listed_app(
         "other-vendor", "org.empaia.vendor.app.v3.0", "registry.example/vendor/app:1"
@@ -459,9 +460,9 @@ class TriggerTests(unittest.IsolatedAsyncioTestCase):
         await self.mds(ours).ensure([])
         self.assertEqual([item["id"] for item in self.items], ["b", "d"])
 
-    async def test_each_analysis_triggers_its_own_app_only(self) -> None:
+    async def test_each_pipeline_triggers_its_own_app_only(self) -> None:
         ours = "model-service:model-service"
-        # Ours, for the retired app the prostate analysis replaces.
+        # Ours, for the retired app the prostate pipeline replaces.
         self.items[:] = [
             {**self.trigger("a", ours, "PROSTATE"), "portal_app_id": "retired"}
         ]

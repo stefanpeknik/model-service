@@ -3,7 +3,7 @@
 The geometry is the team's code: `ratiopath.tiling.grid_tiles` places the
 tiles, and `model_service.slides.tile_reader.TileReader` picks the level and drops tiles
 outside the tissue or the region of interest. Frame fields follow ratiopath's
-slide rows; `tile` is channels-first, as served models take it.
+slide rows; `tile` is channels-first, as models take it.
 """
 
 from __future__ import annotations
@@ -151,7 +151,7 @@ class SlideTiles(Source):
         if problem.detail.get("option") in {"tile_size", "mpp"}:
             return (
                 "leave `tile_size` and `mpp` out so the first model step sets "
-                "them; a model-free analysis sets both"
+                "them; a model-free pipeline sets both"
             )
         return None
 

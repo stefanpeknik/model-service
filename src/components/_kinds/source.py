@@ -44,8 +44,8 @@ class TileGeometryOptions(Options):
     """Options of a source that reads tiles at a model's geometry.
 
     A source whose `Options` derive from this takes `tile_size` and `mpp`
-    from the analysis's first model step wherever the file leaves them out;
-    the catalog fills them in when the analysis loads and refuses a value
+    from the pipeline's first model step wherever the file leaves them out;
+    the catalog fills them in when the pipeline loads and refuses a value
     that differs from the model's.
 
     Attributes:
@@ -71,11 +71,11 @@ class TileGeometryOptions(Options):
 
 
 class Source(Component):
-    """Produces an analysis's items from its inputs, e.g. tiles of a slide.
+    """Produces a pipeline's items from its inputs, e.g. tiles of a slide.
 
     A source whose options derive from `TileGeometryOptions` takes
-    `tile_size` and `mpp` from the analysis's first model step wherever the
-    file leaves them out; the catalog fills them in when the analysis loads.
+    `tile_size` and `mpp` from the pipeline's first model step wherever the
+    file leaves them out; the catalog fills them in when the pipeline loads.
 
     Attributes:
         frame: The fields of the frame row the source gives.

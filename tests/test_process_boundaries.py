@@ -1,7 +1,7 @@
 """Each process imports only its own packages: the control plane never loads Ray, replicas never load it.
 
-The processes: the control plane (`control_plane/`), the generic served-model host
-(`served_model/`) and the analysis runner (`analysis_runner/`); `catalog/`,
+The processes: the control plane (`control_plane/`), the generic model host
+(`model_host/`) and the pipeline runner (`pipeline_runner/`); `catalog/`,
 `registry/`, `formats/` and `contracts/` are shared and stay light, and so
 does the top-level `components` package every process scans.
 """
@@ -65,8 +65,8 @@ class ProcessBoundaryTests(unittest.TestCase):
                 "ratiopath",
                 "pyvips",
                 "openslide",
-                "model_service.served_model.serve",
-                "model_service.analysis_runner",
+                "model_service.model_host.serve",
+                "model_service.pipeline_runner",
                 "model_service.slides",
             ),
             [],
@@ -107,18 +107,18 @@ class ProcessBoundaryTests(unittest.TestCase):
         self.assertEqual(under(modules, "model_service"), [])
 
     def test_the_replicas_load_no_control_plane_code(self) -> None:
-        for serve in ("analysis_runner", "served_model"):
+        for serve in ("pipeline_runner", "model_host"):
             with self.subTest(serve):
                 modules = loaded_modules(f"model_service.{serve}.serve")
                 self.assertEqual(under(modules, "model_service.control_plane"), [])
 
-    def test_the_served_model_replica_loads_no_runner_or_slide_code(self) -> None:
-        modules = loaded_modules("model_service.served_model.serve")
+    def test_the_model_replica_loads_no_runner_or_slide_code(self) -> None:
+        modules = loaded_modules("model_service.model_host.serve")
 
         self.assertEqual(
             under(
                 modules,
-                "model_service.analysis_runner",
+                "model_service.pipeline_runner",
                 "model_service.slides",
                 "openslide",
                 "pyvips",
@@ -126,10 +126,10 @@ class ProcessBoundaryTests(unittest.TestCase):
             [],
         )
 
-    def test_the_served_model_host_core_loads_without_ray(self) -> None:
+    def test_the_model_host_core_loads_without_ray(self) -> None:
         """Only the Serve wrapper needs Ray; the chart's tests and tools use the rest."""
         modules = loaded_modules(
-            "model_service.served_model.deployment, model_service.served_model.host"
+            "model_service.model_host.deployment, model_service.model_host.host"
         )
 
         self.assertEqual(
@@ -144,9 +144,9 @@ class ProcessBoundaryTests(unittest.TestCase):
             [],
         )
 
-    def test_the_analysis_runner_core_loads_without_ray(self) -> None:
+    def test_the_pipeline_runner_core_loads_without_ray(self) -> None:
         """Only its Serve wrapper may need Ray; slide libraries load per run."""
-        modules = loaded_modules("model_service.analysis_runner")
+        modules = loaded_modules("model_service.pipeline_runner")
 
         self.assertEqual(
             under(

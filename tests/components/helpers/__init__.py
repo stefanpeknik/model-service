@@ -2,7 +2,7 @@
 
 - `fake_slide(path)`: a small tiled TIFF that OpenSlide and pyvips open;
 - `fake_frame()`: the frame row a slide source gives, for sinks;
-- `fake_model(output=…)`: a served-model stand-in for `model.` dimensions,
+- `fake_model(output=…)`: a model stand-in for `model.` dimensions,
   batch calls and the host's `infer(tile)`;
 - `run_component(component, data)`: run a step, source or sink once;
 - `FakeGateway(directory)`: a fake EMPAIA job for converters and publishers;

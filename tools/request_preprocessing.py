@@ -5,10 +5,10 @@ Usage: request_preprocessing.py SLIDE_ID [WAIT_SECONDS]
 Creates a Medical Data Service preprocessing request for the slide; the
 Workbench Daemon then starts a job of every app whose trigger matches the
 slide's tissue and stain, other apps' included. model-service's own app is
-the prostate-heatmap analysis's (portal app
+the prostate-heatmap pipeline's (portal app
 `8e76c21e-4ab4-42c5-91ad-c93fda10f57c`, app
 `d3560de0-59f2-4cb9-bc9c-aa01888ce0c5`); its jobs reach
-`POST /v1/empaia/analyses/prostate-heatmap`. Run it in a control-plane pod, which has
+`POST /v1/empaia/pipelines/prostate-heatmap`. Run it in a control-plane pod, which has
 the MDS URL and client credentials in its environment:
 
     oc exec -i deploy/model-service-control-plane -- python - SLIDE_ID 120 \

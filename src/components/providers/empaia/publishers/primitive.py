@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 
 class Primitive(Publisher):
-    """Posts one scalar as the primitive type the analysis names.
+    """Posts one scalar as the primitive type the pipeline names.
 
     The value must fit the type: a bool is not an integer, a float takes
     whole numbers, and an empty string is refused. It is checked before

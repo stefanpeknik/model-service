@@ -6,7 +6,7 @@ A reference set is a directory:
 - `raw/<model>/replies.npz`: each reply decoded to an array, keyed `tile_<i>`
   (and `unpooled_<i>` for the embedding route without pooling);
 - `raw/<model>/case.json`: the slides, levels and positions the tiles came from;
-- `runs/<analysis>/<slide>.<ext>`: the output of one synchronous run per slide.
+- `runs/<pipeline>/<slide>.<ext>`: the output of one synchronous run per slide.
 
 The repo keeps only `manifest.json` (file hashes and provenance) next to this
 module; the files live on the deployment's shared storage and in a local copy.
@@ -33,10 +33,10 @@ ReplyKind = Literal["score", "score_map", "embedding"]
 
 @dataclass(frozen=True, slots=True)
 class RawCase:
-    """A served model's raw route, as the references exercise it.
+    """A model's raw route, as the references exercise it.
 
     Attributes:
-        model: The served model's ID, also its route prefix.
+        model: The model's ID, also its route prefix.
         kind: How its reply is decoded: a JSON float, an LZ4 score map or an
             LZ4 embedding with a shape header.
         tile_size: Edge of the square RGB tile it takes.
@@ -53,14 +53,14 @@ class RawCase:
 
 @dataclass(frozen=True, slots=True)
 class RunCase:
-    """An analysis with recorded references; the manifest says what recorded them.
+    """A pipeline with recorded references; the manifest says what recorded them.
 
     Attributes:
-        analysis: The analysis ID.
+        pipeline: The pipeline ID.
         extension: The output file's extension.
     """
 
-    analysis: str
+    pipeline: str
     extension: str
 
 
@@ -75,7 +75,7 @@ RAW_CASES = {
 }
 
 RUN_CASES = {
-    case.analysis: case
+    case.pipeline: case
     for case in (
         RunCase("prostate-heatmap", "npz"),
         RunCase("episeg-heatmap", "npz"),

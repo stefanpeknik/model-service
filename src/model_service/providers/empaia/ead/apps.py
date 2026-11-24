@@ -1,11 +1,11 @@
-"""The EMPAIA app of each analysis with `expose.empaia`, and its EAD.
+"""The EMPAIA app of each pipeline with `providers.empaia`, and its EAD.
 
 The EAD merges what each input's converter and each output's publisher
 contribute (their `io` entries) with the namespace, which comes from the
-analysis ID, the modes, the permissions and the viewer configuration key.
+pipeline ID, the modes, the permissions and the viewer configuration key.
 Standalone mode takes every input and the parameters; preprocessing only
 the required inputs, because EMPAIA starts it with a slide alone. The app's
-image is `http::<target>/analyses/<id>`, which JES hands to model-service.
+image is `http::<target>/pipelines/<id>`, which JES hands to model-service.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
     from model_service.catalog import Catalog
-    from model_service.catalog.analyses import Analysis
+    from model_service.catalog.pipelines import Pipeline
 
 
 EAD_SCHEMA_URL = "https://gitlab.com/empaia/integration/definitions/-/raw/main/ead/ead-schema.v3.json"
@@ -43,11 +43,11 @@ NAMESPACE_PREFIX = "org.empaia.rationai."
 
 
 @dataclass(frozen=True, slots=True)
-class AnalysisApp:
-    """The EMPAIA app of one analysis.
+class PipelineApp:
+    """The EMPAIA app of one pipeline.
 
     Attributes:
-        analysis_id: The analysis it runs.
+        pipeline_id: The pipeline it runs.
         modes: The job modes it supports.
         ead: Its EAD.
         global_configuration: Values for the EAD's `configuration.global`,
@@ -55,7 +55,7 @@ class AnalysisApp:
         triggers: The slides EMPAIA preprocesses with it.
     """
 
-    analysis_id: str
+    pipeline_id: str
     modes: tuple[AppMode, ...]
     ead: dict[str, Any]
     global_configuration: dict[str, str] = field(default_factory=dict)
@@ -68,9 +68,9 @@ class AnalysisApp:
             target: model-service's name in JES's HTTP targets.
 
         Returns:
-            `http::<target>/analyses/<analysis id>`.
+            `http::<target>/pipelines/<pipeline id>`.
         """
-        return f"http::{target}/analyses/{self.analysis_id}"
+        return f"http::{target}/pipelines/{self.pipeline_id}"
 
     @property
     def app_id(self) -> str:
@@ -153,90 +153,90 @@ class AnalysisApp:
         }
 
 
-def analysis_apps(catalog: Catalog) -> list[AnalysisApp]:
-    """The app of every deployed analysis with `expose.empaia`.
+def pipeline_apps(catalog: Catalog) -> list[PipelineApp]:
+    """The app of every deployed pipeline with `providers.empaia`.
 
     Args:
         catalog: The deployed catalog.
 
     Returns:
-        One app per exposed analysis, by analysis ID.
+        One app per exposed pipeline, by pipeline ID.
 
     Raises:
         jsonschema.ValidationError: If a generated EAD fails the EAD v3 schema.
     """
     return [
-        analysis_app(analysis)
-        for _, analysis in sorted(catalog.analyses.items())
-        if analysis.empaia is not None
+        pipeline_app(pipeline)
+        for _, pipeline in sorted(catalog.pipelines.items())
+        if pipeline.empaia is not None
     ]
 
 
-def analysis_app(analysis: Analysis) -> AnalysisApp:
-    """Build the app of one analysis with `expose.empaia`.
+def pipeline_app(pipeline: Pipeline) -> PipelineApp:
+    """Build the app of one pipeline with `providers.empaia`.
 
     Args:
-        analysis: The analysis.
+        pipeline: The pipeline.
 
     Returns:
         The app, its EAD schema-validated.
 
     Raises:
-        ValueError: If the analysis has no `expose.empaia`.
+        ValueError: If the pipeline has no `providers.empaia`.
         jsonschema.ValidationError: If the EAD fails the EAD v3 schema.
     """
-    exposure = analysis.empaia
-    if exposure is None:
-        raise ValueError(f"{analysis.id} is not offered in EMPAIA")
-    ead = generate_ead(analysis)
+    empaia = pipeline.empaia
+    if empaia is None:
+        raise ValueError(f"{pipeline.id} is not offered in EMPAIA")
+    ead = generate_ead(pipeline)
     configuration = {}
     if VIEWER_CONFIG_KEY in ead.get("configuration", {}).get("global", {}):
-        settings = analysis.settings()
-        viewer = exposure.viewer.with_input_defaults(
-            {name: settings[name] for name in exposure.parameters}
+        settings = pipeline.settings()
+        viewer = empaia.viewer.with_input_defaults(
+            {name: settings[name] for name in empaia.parameters}
         )
         configuration[VIEWER_CONFIG_KEY] = viewer.for_io(ead["io"])
-    return AnalysisApp(
-        analysis.id, exposure.modes, ead, configuration, exposure.triggers
+    return PipelineApp(
+        pipeline.id, empaia.modes, ead, configuration, empaia.triggers
     )
 
 
-def generate_ead(analysis: Analysis) -> dict[str, Any]:
-    """Merge the converters' and publishers' fragments into the analysis's EAD.
+def generate_ead(pipeline: Pipeline) -> dict[str, Any]:
+    """Merge the converters' and publishers' fragments into the pipeline's EAD.
 
     Args:
-        analysis: An analysis with `expose.empaia`.
+        pipeline: A pipeline with `providers.empaia`.
 
     Returns:
         The schema-validated EAD.
 
     Raises:
-        ValueError: If the analysis has no `expose.empaia`.
+        ValueError: If the pipeline has no `providers.empaia`.
         jsonschema.ValidationError: If the EAD fails the EAD v3 schema.
     """
-    exposure = analysis.empaia
-    if exposure is None:
-        raise ValueError(f"{analysis.id} is not offered in EMPAIA")
+    empaia = pipeline.empaia
+    if empaia is None:
+        raise ValueError(f"{pipeline.id} is not offered in EMPAIA")
     mode_inputs = {
-        mode: exposure.mode_inputs(mode, analysis.inputs) for mode in exposure.modes
+        mode: empaia.mode_inputs(mode, pipeline.inputs) for mode in empaia.modes
     }
     used = {name for names in mode_inputs.values() for name in names}
     io: dict[str, Any] = {
-        name: converter.io_fragment(EmpaiaInput(name, exposure.slide))
-        for name, converter in exposure.inputs.items()
+        name: converter.io_fragment(EmpaiaInput(name, empaia.slide))
+        for name, converter in empaia.inputs.items()
         if name in used
     }
     io |= {
-        name: publisher.io_fragment(EmpaiaOutput(name, exposure.slide))
-        for name, publisher in exposure.outputs.items()
+        name: publisher.io_fragment(EmpaiaOutput(name, empaia.slide))
+        for name, publisher in empaia.outputs.items()
     }
-    parameters = exposure.parameters
+    parameters = empaia.parameters
     if parameters:
         from components.providers.empaia.converters.primitive import (
             Primitive,
         )
 
-        schema = analysis.settings_schema()["properties"]
+        schema = pipeline.settings_schema()["properties"]
         primitive = Primitive(Primitive.Options())
         io |= {
             name: primitive.io_fragment(EmpaiaInput(name, setting=schema[name]))
@@ -244,11 +244,11 @@ def generate_ead(analysis: Analysis) -> dict[str, Any]:
         }
     ead: dict[str, Any] = {
         "$schema": EAD_SCHEMA_URL,
-        "name": exposure.name,
-        "name_short": exposure.name_short,
-        "namespace": f"{NAMESPACE_PREFIX}{_identifier(analysis.id)}.v3.0",
+        "name": empaia.name,
+        "name_short": empaia.name_short,
+        "namespace": f"{NAMESPACE_PREFIX}{_identifier(pipeline.id)}.v3.0",
         "description": " ".join(
-            [exposure.description, *(m.description for m in exposure.modes)]
+            [empaia.description, *(m.description for m in empaia.modes)]
         ),
         # The RationAI direct-access route serves apps allowed raw slide access.
         "permissions": {
@@ -262,13 +262,13 @@ def generate_ead(analysis: Analysis) -> dict[str, Any]:
                     *names,
                     *(parameters if mode is AppMode.STANDALONE else ()),
                 ],
-                "outputs": list(exposure.outputs),
+                "outputs": list(empaia.outputs),
             }
             for mode, names in mode_inputs.items()
         },
     }
     # The viewer's configuration also carries the parameters' defaults.
-    if exposure.viewer.inputs or exposure.viewer.outputs or parameters:
+    if empaia.viewer.inputs or empaia.viewer.outputs or parameters:
         ead["configuration"] = {
             "global": {
                 VIEWER_CONFIG_KEY: {
@@ -320,7 +320,7 @@ def _identifier(value: str) -> str:
     """Replace each non-alphanumeric character with `_` for use in a namespace.
 
     Args:
-        value: An analysis ID.
+        value: A pipeline ID.
 
     Returns:
         The identifier.

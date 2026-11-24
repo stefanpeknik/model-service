@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 class MyComponent(InputConverter):
     """<One sentence: which EMPAIA input it converts, into what>.
 
-    `inputs: {<input>: {type: string}}` under `expose.empaia`.
+    `inputs: {<input>: {type: string}}` under `providers.empaia`.
     """
 
     name = "my_component"

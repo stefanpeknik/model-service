@@ -1,1 +1,1 @@
-"""Sources: produce an analysis's items from its inputs."""
+"""Sources: produce a pipeline's items from its inputs."""

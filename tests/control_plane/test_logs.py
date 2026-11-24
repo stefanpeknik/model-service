@@ -28,17 +28,17 @@ from tests.support.memory_repository import (
     FakeDispatch,
     InMemoryExecutionRepository,
 )
-from tests.support.scheduling import resolve_test_analysis, scheduling_catalog
+from tests.support.scheduling import resolve_test_pipeline, scheduling_catalog
 
 
 if TYPE_CHECKING:
-    from model_service.contracts.analysis_http import AnalysisRunRequest
+    from model_service.contracts.pipeline_http import PipelineRunRequest
 
 
 # What Uvicorn loads with `--log-config` in the control-plane container.
 LOG_CONFIG = Path(model_service.control_plane.__file__).with_name("log-config.json")
-# Scheduling an analysis the catalog lacks is refused, and the refusal is logged.
-UNKNOWN_ANALYSIS = "/v1/analyses/missing/schedule"
+# Scheduling a pipeline the catalog lacks is refused, and the refusal is logged.
+UNKNOWN_PIPELINE = "/v1/pipelines/missing/schedule"
 BODY = {
     "inputs": {"slide": {"kind": "shared_path", "path": "slide.tiff"}},
     "input_access": {"kind": "shared_storage", "state": {"root": "/data"}},
@@ -56,7 +56,7 @@ class RequestIdTests(unittest.IsolatedAsyncioTestCase):
                     SharedStorageAccessFactory([Path("/data")])
                 )
             },
-            resolve_analysis=resolve_test_analysis,
+            resolve_pipeline=resolve_test_pipeline,
             default_timeout=timedelta(minutes=1),
             maximum_timeout=timedelta(hours=1),
         )
@@ -93,7 +93,7 @@ class RequestIdTests(unittest.IsolatedAsyncioTestCase):
         stream = self.capture_logs()
 
         response = await self.client.post(
-            UNKNOWN_ANALYSIS,
+            UNKNOWN_PIPELINE,
             json=BODY,
             headers={"X-Request-ID": "jes-1234", "Idempotency-Key": "k"},
         )
@@ -111,7 +111,7 @@ class RequestIdTests(unittest.IsolatedAsyncioTestCase):
 class ExecutionIdTests(unittest.IsolatedAsyncioTestCase):
     async def test_log_lines_while_an_execution_runs_name_it(self) -> None:
         class LoggingDispatch:
-            async def run_analysis(self, request: AnalysisRunRequest) -> RunResult:
+            async def run_pipeline(self, request: PipelineRunRequest) -> RunResult:
                 logging.getLogger("model_service.tests").warning("dispatching")
                 return RunResult({"heatmap": InlineOutput(1)})
 
@@ -128,7 +128,7 @@ class ExecutionIdTests(unittest.IsolatedAsyncioTestCase):
                 repository=repository,
                 dispatch=LoggingDispatch(),
                 providers=providers,
-                resolve_analysis=resolve_test_analysis,
+                resolve_pipeline=resolve_test_pipeline,
                 default_timeout=timedelta(minutes=1),
                 maximum_timeout=timedelta(hours=1),
             )
@@ -147,7 +147,7 @@ class ExecutionIdTests(unittest.IsolatedAsyncioTestCase):
                 base_url="http://api",
             ) as client:
                 response = await client.post(
-                    "/v1/analyses/a1/schedule",
+                    "/v1/pipelines/a1/schedule",
                     json={
                         **BODY,
                         "input_access": {

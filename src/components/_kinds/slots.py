@@ -10,7 +10,7 @@ class Slot:
     """One key of a catalog document that takes components.
 
     Attributes:
-        document: The kind of document, e.g. `served model` or `analysis`.
+        document: The kind of document, e.g. `model` or `pipeline`.
         key: The YAML key, e.g. `runtime` or `steps`.
     """
 
@@ -22,13 +22,13 @@ class Slot:
         return f"`{self.key}:`"
 
 
-LOADER = Slot("served model", "loader")
-RUNTIME = Slot("served model", "runtime")
-PRE = Slot("served model", "pre")
-POST = Slot("served model", "post")
-SOURCE = Slot("analysis", "source")
-STEPS = Slot("analysis", "steps")
-STEP_LOADER = Slot("analysis step", "loader")
-SINKS = Slot("analysis", "sinks")
-EMPAIA_INPUTS = Slot("EMPAIA exposure", "inputs")
-EMPAIA_OUTPUTS = Slot("EMPAIA exposure", "outputs")
+LOADER = Slot("model", "loader")
+RUNTIME = Slot("model", "runtime")
+PRE = Slot("model", "pre")
+POST = Slot("model", "post")
+SOURCE = Slot("pipeline", "source")
+STEPS = Slot("pipeline", "steps")
+STEP_LOADER = Slot("pipeline step", "loader")
+SINKS = Slot("pipeline", "sinks")
+EMPAIA_INPUTS = Slot("EMPAIA provider settings", "inputs")
+EMPAIA_OUTPUTS = Slot("EMPAIA provider settings", "outputs")

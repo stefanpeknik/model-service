@@ -1,8 +1,8 @@
 # EMPAIA integration
 
-EMPAIA is a provider: it decides where an analysis's inputs come from and
-where its outputs go. An analysis becomes one EMPAIA app through its
-`expose.empaia` section; served models, the analysis runner and the scheduler
+EMPAIA is a provider: it decides where a pipeline's inputs come from and
+where its outputs go. A pipeline becomes one EMPAIA app through its
+`providers.empaia` section; models, the pipeline runner and the scheduler
 are the same ones the standalone API uses.
 
 ## One job
@@ -14,16 +14,16 @@ sequenceDiagram
   participant R as empaia.jobs.routes
   participant A as empaia.jobs.adapter
   participant S as scheduler
-  participant N as analysis runner
+  participant N as pipeline runner
   participant AS as EMPAIA App Service
 
-  Note over R,AS: at control-plane start, empaia.registration posts one app per exposed<br/>analysis, carrying all its modes, to the marketplace (idempotent),<br/>aligns triggers, and deletes its own apps no analysis has
+  Note over R,AS: at control-plane start, empaia.registration posts one app per offered<br/>pipeline, carrying all its modes, to the marketplace (idempotent),<br/>aligns triggers, and deletes its own apps no pipeline has
   WD->>JES: start job for app (STANDALONE or PREPROCESSING)
-  JES->>R: POST /v1/empaia/analyses/{id} (job token)
+  JES->>R: POST /v1/empaia/pipelines/{id} (job token)
   R->>A: identify + prepare
   A->>AS: read configuration, mode, parameters, which inputs exist
   A-->>S: PreparedInvocation (input types, publishers), priority HIGH or NORMAL
-  S->>N: run the resolved analysis document
+  S->>N: run the resolved pipeline document
   N->>AS: inputs through their converters (slide link, rectangle mask), progress
   N-->>S: outputs in the job's workspace
   S->>A: finish(outcome)
@@ -36,12 +36,12 @@ sequenceDiagram
 
 | Module | Role |
 | --- | --- |
-| `catalog/analyses/exposure/` | `expose.empaia`: its keys (`fields.py`), its schema (`schema.py`), and picking converters and publishers with the load-time checks in `resolution.py`: EMPAIA's name limit, preprocessing without required inputs, parameters, bound shapes |
+| `catalog/pipelines/providers/` | `providers.empaia`: its keys (`fields.py`), its schema (`schema.py`), and picking converters and publishers with the load-time checks in `resolution.py`: EMPAIA's name limit, preprocessing without required inputs, parameters, bound shapes |
 | `src/components/providers/empaia/` | Converters (`wsi`, `rectangle`, `primitive`) and publishers (`primitive`, `continuous_pixelmap`), one per EAD type |
 | `registry/empaia.py` | Picks the one converter or publisher that takes a declared EAD type, for the catalog at load time and for the provider from what admission recorded |
 | `providers/empaia/provider.py` | The provider: what EMPAIA adds to the control plane and to replicas |
 | `providers/empaia/ead/` | `apps.py` merges the components' fragments into each app's EAD v3; `vocabulary.py` holds modes, triggers and viewer settings |
-| `providers/empaia/registration.py`, `triggers.py` | At startup, retried: register the apps, align the preprocessing triggers, delete owned apps no analysis has (namespace `org.empaia.rationai.…` and image on this JES target) |
+| `providers/empaia/registration.py`, `triggers.py` | At startup, retried: register the apps, align the preprocessing triggers, delete owned apps no pipeline has (namespace `org.empaia.rationai.…` and image on this JES target) |
 | `providers/empaia/jobs/` | The JES-facing routes, payload parsing, the scheduler adapter (`adapter.py`, which also runs the publication loop), input access |
 | `providers/empaia/app_service/` | The App Service gateway, one method per SDK call family, over the `rationai.empaia` SDK client |
 

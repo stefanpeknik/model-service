@@ -1,7 +1,7 @@
 """`/v1/empaia`: the remote execution protocol of EMPAIA's Job Execution Service.
 
-An EMPAIA app registered as `http::<target>/analyses/<id>` reaches
-`POST /analyses/<id>` with what an app container would get: the App API URL,
+An EMPAIA app registered as `http::<target>/pipelines/<id>` reaches
+`POST /pipelines/<id>` with what an app container would get: the App API URL,
 the job ID and the job token. The registration names what runs; the job's
 inputs and configuration are read from the App API like a container would.
 Submission is idempotent per job: JES's `Idempotency-Key` is the job ID, so a
@@ -27,7 +27,7 @@ from model_service.control_plane.http.errors import (
 )
 from model_service.control_plane.http.scheduling import submit
 from model_service.control_plane.scheduler.public import (
-    AnalysisScheduleRequest,
+    PipelineScheduleRequest,
     SchedulingUnavailableError,
     UnknownExecutionError,
 )
@@ -87,7 +87,7 @@ def create_router(scheduler: Scheduler, access: Access | None = None) -> APIRout
     router = APIRouter(prefix="/v1/empaia")
 
     async def admit(
-        request: AnalysisScheduleRequest,
+        request: PipelineScheduleRequest,
         body: EmpaiaExecutionRequest,
         response: Response,
         idempotency_key: str | None,
@@ -117,21 +117,21 @@ def create_router(scheduler: Scheduler, access: Access | None = None) -> APIRout
         return remote_status(result.execution)
 
     @router.post(
-        "/analyses/{analysis_id}",
+        "/pipelines/{pipeline_id}",
         status_code=status.HTTP_202_ACCEPTED,
         responses={200: {"model": EmpaiaExecutionStatus}, **ERRORS},
         dependencies=[access.require(Action.SUBMIT_PROVIDER_JOB)],
     )
-    async def execute_analysis(
-        analysis_id: str,
+    async def execute_pipeline(
+        pipeline_id: str,
         body: EmpaiaExecutionRequest,
         response: Response,
         idempotency_key: Annotated[str | None, Header()] = None,
     ) -> EmpaiaExecutionStatus:
-        """Admit an EMPAIA job as a run of the analysis its app exposes.
+        """Admit an EMPAIA job as a run of the pipeline its app exposes.
 
         Args:
-            analysis_id: The analysis the app runs.
+            pipeline_id: The pipeline the app runs.
             body: The job's App Service URL, id and token.
             response: The response, 201 for a new execution or 200 for a repeat.
             idempotency_key: Optional; must equal the job id.
@@ -140,12 +140,12 @@ def create_router(scheduler: Scheduler, access: Access | None = None) -> APIRout
             The execution's status.
 
         Raises:
-            HTTPException: The key differs from the job id, the analysis is not
+            HTTPException: The key differs from the job id, the pipeline is not
                 deployed or not offered in EMPAIA, or the job is invalid or
                 cannot be admitted.
         """
-        request = AnalysisScheduleRequest(
-            analysis_id=analysis_id, provider=PROVIDER_NAME, body=_payload(body)
+        request = PipelineScheduleRequest(
+            pipeline_id=pipeline_id, provider=PROVIDER_NAME, body=_payload(body)
         )
         return await admit(request, body, response, idempotency_key)
 

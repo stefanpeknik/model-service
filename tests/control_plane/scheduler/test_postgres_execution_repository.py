@@ -340,7 +340,7 @@ class PostgresExecutionRepositoryTests(
         for index in range(18):
             await self._admit_execution(
                 f"overlap-{index}",
-                analysis_id=f"analysis-{index % 2}",
+                pipeline_id=f"pipeline-{index % 2}",
                 models=model_sets[index % len(model_sets)],
             )
         repositories = [self._repository() for _ in range(8)]
@@ -365,7 +365,7 @@ class PostgresExecutionRepositoryTests(
         self.assertTrue(claims)
         self.assertLessEqual(max(in_use.values()), 1, in_use)
 
-    async def test_each_served_model_has_its_own_limit(self) -> None:
+    async def test_each_model_has_its_own_limit(self) -> None:
         def limits(key: CapacityKey) -> int:
             return 2 if key.id == "wide" else 1
 

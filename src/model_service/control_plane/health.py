@@ -1,4 +1,4 @@
-"""Check that Ray Serve answers and exposes every expected served-model and runner route.
+"""Check that Ray Serve answers and exposes every expected model and runner route.
 
 Route presence says the applications are deployed, not that a GPU is warm.
 """
@@ -41,7 +41,7 @@ class DeploymentStatus:
 
 
 class DeploymentHealth:
-    """Checks Ray Serve exposes the route of every served model and the runner."""
+    """Checks Ray Serve exposes the route of every model and the runner."""
 
     def __init__(
         self,
@@ -55,7 +55,7 @@ class DeploymentHealth:
         Args:
             client: Shared HTTP client, owned by the caller.
             origin: Ray Serve origin.
-            routes: Gives the route prefixes every served model and the runner must
+            routes: Gives the route prefixes every model and the runner must
                 expose, asked on each check, so a reloaded catalog counts.
         """
         self._client = client

@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from model_service.contracts.failures import (
     InvalidInvocation,
-    UnknownAnalysisError,
+    UnknownPipelineError,
     failure_status,
 )
 from model_service.control_plane.http.errors import (
@@ -38,7 +38,7 @@ def runs_unavailable(what: str) -> HTTPException:
     """The 503 answered when the control plane has no runner for synchronous runs.
 
     Args:
-        what: What isn't available, e.g. `synchronous analysis runs`.
+        what: What isn't available, e.g. `synchronous pipeline runs`.
 
     Returns:
         The HTTP error to raise.
@@ -61,14 +61,14 @@ async def run_synchronously(
         The run's result.
 
     Raises:
-        HTTPException: 404 for an unknown analysis; 422 for an invalid
+        HTTPException: 404 for an unknown pipeline; 422 for an invalid
             request or a non-retryable failure; 429 when the runner has no
             capacity; 503 for a retryable failure or an unknown outcome.
         asyncio.CancelledError: If the client disconnects first.
     """
     try:
         return await _run_while_connected(request, operation)
-    except UnknownAnalysisError as error:
+    except UnknownPipelineError as error:
         raise lookup_error(error) from error
     except InvalidInvocation as error:
         raise http_error(422, ApiErrorCode.INVALID_REQUEST, str(error)) from error
@@ -79,7 +79,7 @@ async def run_synchronously(
         raise http_error(
             429,
             ApiErrorCode.RUNNER_BACKPRESSURE,
-            "analysis runner capacity is temporarily unavailable",
+            "pipeline runner capacity is temporarily unavailable",
             retryable=True,
             headers=headers,
         ) from error
@@ -94,7 +94,7 @@ async def run_synchronously(
         raise http_error(
             503,
             ApiErrorCode.RUNNER_UNAVAILABLE,
-            "analysis outcome is unknown",
+            "pipeline outcome is unknown",
             retryable=True,
         ) from error
 

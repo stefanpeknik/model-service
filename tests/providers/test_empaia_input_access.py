@@ -1,4 +1,4 @@
-"""EMPAIA inputs reach the analysis runner through the provider's access adapter."""
+"""EMPAIA inputs reach the pipeline runner through the provider's access adapter."""
 
 from __future__ import annotations
 
@@ -14,12 +14,8 @@ from typing import TYPE_CHECKING, Any
 import httpx
 from fastapi import FastAPI
 
-from model_service.analysis_runner.http_errors import answer_http
-from model_service.analysis_runner.replica import AnalysisReplica
-from model_service.analysis_runner.settings import ReplicaSettings
 from model_service.catalog import load_catalog
-from model_service.catalog.analyses import resolve_run
-from model_service.contracts.analysis_http import AnalysisRunRequest
+from model_service.catalog.pipelines import resolve_run
 from model_service.contracts.failures import (
     FailureCode,
     InvalidInvocation,
@@ -32,16 +28,20 @@ from model_service.contracts.invocation import (
     Invocation,
     ProviderInput,
 )
+from model_service.contracts.pipeline_http import PipelineRunRequest
 from model_service.control_plane.scheduler.dispatch import (
-    HTTPAnalysisDispatch,
+    HTTPPipelineDispatch,
     RemoteFailureError,
 )
+from model_service.pipeline_runner.http_errors import answer_http
+from model_service.pipeline_runner.replica import PipelineReplica
+from model_service.pipeline_runner.settings import ReplicaSettings
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.app_service.types import DirectAccess
 from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessFactory
 from tests.components.helpers import fake_model, fake_slide
-from tests.support.analysis_catalog import REGISTRY, served_model, write
 from tests.support.empaia_fixtures import StrictGateway
+from tests.support.pipeline_catalog import REGISTRY, model_file, write
 
 
 # A slide on the slide volume, which direct access names.
@@ -64,7 +64,7 @@ PROTECTED: dict[str, JsonValue] = {
 if TYPE_CHECKING:
     import numpy as np
 
-    from model_service.catalog.analyses import ResolvedAnalysis
+    from model_service.catalog.pipelines import ResolvedPipeline
     from model_service.contracts.json_values import JsonValue
     from model_service.providers.empaia.app_service.gateway import (
         EmpaiaGateway,
@@ -92,13 +92,13 @@ def attempt(protected: dict[str, JsonValue] | None = None) -> ExecutionContext:
     )
 
 
-def heatmap(root: Path) -> ResolvedAnalysis:
-    """A heatmap analysis over the slide, resolved as admission does."""
+def heatmap(root: Path) -> ResolvedPipeline:
+    """A heatmap pipeline over the slide, resolved as admission does."""
     catalog = root / "catalog"
-    write(catalog, "served-models/m1.yaml", served_model())
+    write(catalog, "models/m1.yaml", model_file())
     write(
         catalog,
-        "analyses/a1.yaml",
+        "pipelines/a1.yaml",
         """
         source: {use: slide_tiles, region_of_interest: ignored}
         steps: [{model: m1}]
@@ -109,7 +109,7 @@ def heatmap(root: Path) -> ResolvedAnalysis:
 
 
 class Handle:
-    """Served model `m1`, which runs `on_infer` before each tile."""
+    """Model `m1`, which runs `on_infer` before each tile."""
 
     def __init__(self, digest: str, on_infer: Any = None) -> None:
         self.digest = digest
@@ -234,7 +234,7 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         seen_credentials: list[str] = []
         closed: list[bool] = []
-        seen_requests: list[AnalysisRunRequest] = []
+        seen_requests: list[PipelineRunRequest] = []
 
         class Gateway(StrictGateway):
             async def direct_access(self, name: str) -> DirectAccess | None:
@@ -250,7 +250,7 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
         with TemporaryDirectory() as directory:
             resolved = heatmap(Path(directory))
             handle = Handle(resolved.model_digests["m1"])
-            core = AnalysisReplica(
+            core = PipelineReplica(
                 ReplicaSettings(),
                 models=lambda _id: handle,
                 access={
@@ -261,8 +261,8 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
             )
             runner = FastAPI()
 
-            @runner.post("/analyses/", response_model=None)
-            async def endpoint(body: AnalysisRunRequest):  # type: ignore[no-untyped-def]
+            @runner.post("/pipelines/", response_model=None)
+            async def endpoint(body: PipelineRunRequest):  # type: ignore[no-untyped-def]
                 seen_requests.append(body)
                 return await answer_http(core.run(body))
 
@@ -271,13 +271,13 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=runner)
             ) as client:
-                dispatch = HTTPAnalysisDispatch(client, origin="http://ray")
-                result = await dispatch.run_analysis(
-                    AnalysisRunRequest(request, resolved.document, attempt())
+                dispatch = HTTPPipelineDispatch(client, origin="http://ray")
+                result = await dispatch.run_pipeline(
+                    PipelineRunRequest(request, resolved.document, attempt())
                 )
                 with self.assertRaises(RemoteFailureError) as raised:
-                    await dispatch.run_analysis(
-                        AnalysisRunRequest(
+                    await dispatch.run_pipeline(
+                        PipelineRunRequest(
                             request,
                             resolved.document,
                             ExecutionContext(processing_attempt_id="attempt"),
@@ -321,7 +321,7 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
                         )
 
             handle = Handle(resolved.model_digests["m1"], record_modes)
-            core = AnalysisReplica(
+            core = PipelineReplica(
                 ReplicaSettings(),
                 models=lambda _id: handle,
                 access={"empaia": EmpaiaInputAccessFactory(lambda _c: Gateway(), root)},
@@ -329,7 +329,7 @@ class EmpaiaInputAccessTests(unittest.IsolatedAsyncioTestCase):
             previous = os.umask(0o077)
             try:
                 await core.run(
-                    AnalysisRunRequest(slide_job(), resolved.document, attempt())
+                    PipelineRunRequest(slide_job(), resolved.document, attempt())
                 )
             finally:
                 os.umask(previous)

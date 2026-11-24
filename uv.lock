@@ -2102,19 +2102,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-analysis-runner = [
-    { name = "fastapi" },
-    { name = "h5py" },
-    { name = "httpx" },
-    { name = "openslide-bin" },
-    { name = "openslide-python" },
-    { name = "pydantic-settings" },
-    { name = "python-json-logger" },
-    { name = "pyvips", extra = ["binary"] },
-    { name = "rationai-empaia" },
-    { name = "ratiopath" },
-    { name = "ray", extra = ["serve"] },
-]
 control-plane = [
     { name = "asgi-correlation-id" },
     { name = "cryptography" },
@@ -2143,7 +2130,7 @@ gpu = [
     { name = "torch", version = "2.8.0", source = { registry = "https://pypi.org/simple" } },
     { name = "torchvision", version = "0.23.0", source = { registry = "https://pypi.org/simple" } },
 ]
-served-models = [
+models = [
     { name = "fastapi" },
     { name = "lz4" },
     { name = "mlflow" },
@@ -2156,6 +2143,19 @@ served-models = [
     { name = "torchvision", version = "0.23.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(python_full_version < '3.14' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-13-model-service-cpu') or (python_full_version < '3.14' and sys_platform == 'darwin' and extra == 'extra-13-model-service-cpu') or (extra == 'extra-13-model-service-cpu' and extra == 'extra-13-model-service-gpu')" },
     { name = "torchvision", version = "0.23.0", source = { registry = "https://pypi.org/simple" }, marker = "extra != 'extra-13-model-service-cpu' or extra == 'extra-13-model-service-gpu'" },
     { name = "torchvision", version = "0.23.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(python_full_version >= '3.14' and extra == 'extra-13-model-service-cpu') or (platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-13-model-service-cpu') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-13-model-service-cpu') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-13-model-service-cpu') or (extra == 'extra-13-model-service-cpu' and extra == 'extra-13-model-service-gpu')" },
+]
+pipeline-runner = [
+    { name = "fastapi" },
+    { name = "h5py" },
+    { name = "httpx" },
+    { name = "openslide-bin" },
+    { name = "openslide-python" },
+    { name = "pydantic-settings" },
+    { name = "python-json-logger" },
+    { name = "pyvips", extra = ["binary"] },
+    { name = "rationai-empaia" },
+    { name = "ratiopath" },
+    { name = "ray", extra = ["serve"] },
 ]
 
 [package.dev-dependencies]
@@ -2176,48 +2176,48 @@ docs = [
 requires-dist = [
     { name = "asgi-correlation-id", marker = "extra == 'control-plane'", specifier = ">=4.3,<5" },
     { name = "cryptography", marker = "extra == 'control-plane'", specifier = ">=45.0.0" },
-    { name = "fastapi", marker = "extra == 'analysis-runner'", specifier = ">=0.115.0" },
     { name = "fastapi", marker = "extra == 'control-plane'", specifier = ">=0.115.0" },
-    { name = "fastapi", marker = "extra == 'served-models'", specifier = ">=0.115.0" },
-    { name = "h5py", marker = "extra == 'analysis-runner'", specifier = ">=3.11,<4" },
-    { name = "httpx", marker = "extra == 'analysis-runner'", specifier = ">=0.27.0" },
+    { name = "fastapi", marker = "extra == 'models'", specifier = ">=0.115.0" },
+    { name = "fastapi", marker = "extra == 'pipeline-runner'", specifier = ">=0.115.0" },
+    { name = "h5py", marker = "extra == 'pipeline-runner'", specifier = ">=3.11,<4" },
     { name = "httpx", marker = "extra == 'control-plane'", specifier = ">=0.27.0" },
+    { name = "httpx", marker = "extra == 'pipeline-runner'", specifier = ">=0.27.0" },
     { name = "jsonschema", marker = "extra == 'control-plane'", specifier = ">=4.23.0,<5" },
-    { name = "lz4", marker = "extra == 'served-models'", specifier = ">=4.4.5" },
-    { name = "mlflow", marker = "extra == 'served-models'", specifier = "<3.0" },
+    { name = "lz4", marker = "extra == 'models'", specifier = ">=4.4.5" },
+    { name = "mlflow", marker = "extra == 'models'", specifier = "<3.0" },
     { name = "numpy", specifier = ">=1.26.4" },
     { name = "onnxruntime", marker = "extra == 'cpu'", specifier = "==1.23.2" },
     { name = "onnxruntime-gpu", marker = "extra == 'gpu'", specifier = "==1.23.2" },
-    { name = "openslide-bin", marker = "extra == 'analysis-runner'", specifier = ">=4.0.0,<5" },
-    { name = "openslide-python", marker = "extra == 'analysis-runner'", specifier = ">=1.4.0" },
-    { name = "pillow", marker = "extra == 'served-models'", specifier = ">=11.3.0" },
+    { name = "openslide-bin", marker = "extra == 'pipeline-runner'", specifier = ">=4.0.0,<5" },
+    { name = "openslide-python", marker = "extra == 'pipeline-runner'", specifier = ">=1.4.0" },
+    { name = "pillow", marker = "extra == 'models'", specifier = ">=11.3.0" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'control-plane'", specifier = ">=3.2.0" },
     { name = "pydantic", specifier = ">=2.10.0" },
-    { name = "pydantic-settings", marker = "extra == 'analysis-runner'", specifier = ">=2.10.0,<3" },
     { name = "pydantic-settings", marker = "extra == 'control-plane'", specifier = ">=2.10.0,<3" },
+    { name = "pydantic-settings", marker = "extra == 'pipeline-runner'", specifier = ">=2.10.0,<3" },
     { name = "pyjwt", marker = "extra == 'control-plane'", specifier = ">=2.15.1,<3" },
-    { name = "python-json-logger", marker = "extra == 'analysis-runner'", specifier = ">=3.2,<5" },
     { name = "python-json-logger", marker = "extra == 'control-plane'", specifier = ">=3.2,<5" },
-    { name = "pyvips", extras = ["binary"], marker = "extra == 'analysis-runner'", specifier = ">=3.0.0,<4" },
+    { name = "python-json-logger", marker = "extra == 'pipeline-runner'", specifier = ">=3.2,<5" },
+    { name = "pyvips", extras = ["binary"], marker = "extra == 'pipeline-runner'", specifier = ">=3.0.0,<4" },
     { name = "pyyaml", specifier = ">=6.0.2" },
-    { name = "rationai-empaia", marker = "extra == 'analysis-runner'", git = "ssh://git@gitlab.ics.muni.cz/524810/empaia.git?rev=828833088ac24a0eab659456613c2d56ff4e9944" },
     { name = "rationai-empaia", marker = "extra == 'control-plane'", git = "ssh://git@gitlab.ics.muni.cz/524810/empaia.git?rev=828833088ac24a0eab659456613c2d56ff4e9944" },
-    { name = "ratiopath", marker = "extra == 'analysis-runner'", specifier = ">=1.4.0" },
-    { name = "ray", extras = ["serve"], marker = "extra == 'analysis-runner'", specifier = ">=2.58.0" },
-    { name = "ray", extras = ["serve"], marker = "extra == 'served-models'", specifier = ">=2.58.0" },
+    { name = "rationai-empaia", marker = "extra == 'pipeline-runner'", git = "ssh://git@gitlab.ics.muni.cz/524810/empaia.git?rev=828833088ac24a0eab659456613c2d56ff4e9944" },
+    { name = "ratiopath", marker = "extra == 'pipeline-runner'", specifier = ">=1.4.0" },
+    { name = "ray", extras = ["serve"], marker = "extra == 'models'", specifier = ">=2.58.0" },
+    { name = "ray", extras = ["serve"], marker = "extra == 'pipeline-runner'", specifier = ">=2.58.0" },
     { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'control-plane'", specifier = ">=2.0.36,<2.1" },
     { name = "tensorrt-cu12-libs", marker = "extra == 'gpu'", specifier = "==10.9.0.34", index = "https://pypi.nvidia.com/" },
-    { name = "timm", marker = "extra == 'served-models'", specifier = ">=1.0,<2" },
+    { name = "timm", marker = "extra == 'models'", specifier = ">=1.0,<2" },
     { name = "torch", marker = "extra == 'cpu'", specifier = "==2.8.0", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "model-service", extra = "cpu" } },
     { name = "torch", marker = "extra == 'gpu'", specifier = "==2.8.0" },
-    { name = "torch", marker = "extra == 'served-models'", specifier = "==2.8.0" },
+    { name = "torch", marker = "extra == 'models'", specifier = "==2.8.0" },
     { name = "torchvision", marker = "extra == 'cpu'", specifier = "==0.23.0", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "model-service", extra = "cpu" } },
     { name = "torchvision", marker = "extra == 'gpu'", specifier = "==0.23.0" },
-    { name = "torchvision", marker = "extra == 'served-models'", specifier = "==0.23.0" },
+    { name = "torchvision", marker = "extra == 'models'", specifier = "==0.23.0" },
     { name = "uvicorn", marker = "extra == 'control-plane'", specifier = ">=0.30.0" },
     { name = "yoyo-migrations", marker = "extra == 'control-plane'", specifier = ">=9.0.0,<10" },
 ]
-provides-extras = ["control-plane", "analysis-runner", "served-models", "cpu", "gpu"]
+provides-extras = ["control-plane", "pipeline-runner", "models", "cpu", "gpu"]
 
 [package.metadata.requires-dev]
 dev = [

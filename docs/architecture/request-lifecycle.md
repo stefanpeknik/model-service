@@ -124,7 +124,7 @@ When a slot is available:
 3.  **Asyncio Loop**: The request enters the actor's entrypoint (usually `__call__`).
 4.  **Replica Concurrency Limit**: The replica will not run more than `max_ongoing_requests` concurrently. Requests beyond that should not be dispatched to this replica; instead they remain queued at the caller-side handle.
 5.  **Batching**: The request waits in the replica's batching buffer until `batching.max_size` tiles are there or `batching.wait_s` has passed (see [Batching](batching.md)).
-6.  **Inference**: The served model's runtime runs on the batch, between its `pre:` and `post:` steps.
+6.  **Inference**: The model's runtime runs on the batch, between its `pre:` and `post:` steps.
 
 ### 5. Response & Return
 

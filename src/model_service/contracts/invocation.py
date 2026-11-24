@@ -1,6 +1,6 @@
 """An invocation: what is run, on which inputs, with which access, by when.
 
-It crosses every process boundary (control plane, scheduler database, the analysis
+It crosses every process boundary (control plane, scheduler database, the pipeline
 runner on Ray), so the types are strict and JSON-serializable.
 """
 
@@ -53,7 +53,7 @@ type RunInput = Annotated[SharedPathInput | ProviderInput, Field(discriminator="
 
 
 # Which access adapter resolves an invocation's inputs and outputs; each
-# provider names its own, the analysis runner holds one adapter per kind.
+# provider names its own, the pipeline runner holds one adapter per kind.
 type InputAccessKind = str
 
 
@@ -113,13 +113,13 @@ type Deadline = Annotated[
 
 @dataclass(frozen=True, slots=True)
 class Invocation:
-    """One request to run an analysis; stored durably for scheduled executions.
+    """One request to run a pipeline; stored durably for scheduled executions.
 
     Attributes:
-        inputs: The analysis's inputs, by name.
+        inputs: The pipeline's inputs, by name.
         configuration: The settings: a caller's or an EMPAIA job's, and once
             admitted, every setting the run uses, defaults included, so the
-            record shows what ran. The resolved analysis carries them too.
+            record shows what ran. The resolved pipeline carries them too.
         input_access: How the runner reaches its inputs.
         deadline_at: When the execution must finish.
         output_path: Where the single artifact output is written, if set.

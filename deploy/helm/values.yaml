@@ -2,34 +2,34 @@
 # values on top: `-f environments/<env>/values.yaml`, which sets `environment`,
 # the cluster's workers, images, storage and secrets.
 #
-# Served models come from the repo's catalog/ (the chart's `catalog` symlink):
-# every catalog/served-models/<id>.yaml is one Serve application of the
+# Models come from the repo's catalog/ (the chart's `catalog` symlink):
+# every catalog/models/<id>.yaml is one Serve application of the
 # generic host, with no list to edit. `environment` names the folder
-# environments/<env>/ whose served-models/ patches are merged over the base
-# files and whose workers/ files `workers` names; `servedModels` deploys all
+# environments/<env>/ whose models/ patches are merged over the base
+# files and whose workers/ files `workers` names; `models` deploys all
 # files (["*"]) or the IDs listed.
 environment: ""
-servedModels: ["*"]
+models: ["*"]
 
-# Environment-wide settings every served model gets: `cacheRoot` on a shared
+# Environment-wide settings every model gets: `cacheRoot` on a shared
 # volume (ONNX Runtime keeps TensorRT engines in <cacheRoot>/<id>/<digest>),
 # `env` as each replica's environment variables, and `setupTimeoutSeconds` as
 # the limit on setting up each application's runtime_env (empty: Ray's 600).
-servedModelSettings:
+modelSettings:
   cacheRoot: /mnt/cache/trt_cache
   setupTimeoutSeconds: 1800
   env:
     HF_HOME: /mnt/huggingface_cache
 
-# Analyses come from catalog/analyses/ the same way: ["*"] deploys every file,
-# named IDs a subset. Each analysis's served models must be deployed too, or
-# the render fails naming them. With none, the analysis runner isn't rendered.
-analyses: ["*"]
+# Pipelines come from catalog/pipelines/ the same way: ["*"] deploys every file,
+# named IDs a subset. Each pipeline's models must be deployed too, or
+# the render fails naming them. With none, the pipeline runner isn't rendered.
+pipelines: ["*"]
 
-# The one analysis runner (`analysis_runner.serve:app`, route /analyses) that
-# executes every deployed analysis: its Ray Serve deployment options, and as
+# The one pipeline runner (`pipeline_runner.serve:app`, route /pipelines) that
+# executes every deployed pipeline: its Ray Serve deployment options, and as
 # `userConfig` the threads reading tiles and the tiles in flight per run.
-analysisRunner:
+pipelineRunner:
   deployment:
     max_ongoing_requests: 1
     max_queued_requests: 4
@@ -47,10 +47,10 @@ analysisRunner:
     num_threads: 8
     max_concurrent_tasks: 16
 
-# Keeps CPU-only Serve apps off GPU workers. The analysis runner requests
+# Keeps CPU-only Serve apps off GPU workers. The pipeline runner requests
 # `perReplica` of this Ray custom resource, and only the CPU worker groups
 # advertise it (`perWorker` each, in rayStartParams). Without it, Ray may place
-# the runner on a GPU worker's free CPUs, and the served model that needs them
+# the runner on a GPU worker's free CPUs, and the model that needs them
 # can't start. perWorker / perReplica caps the CPU-only
 # replicas on one worker; keep it above their max_replicas summed (CPUs are
 # the real limit).
@@ -60,7 +60,7 @@ cpuWorkerResource:
   perReplica: 1
 
 # Roots callers may name in shared-storage requests (control plane and
-# analysis runner); each environment lists its own.
+# pipeline runner); each environment lists its own.
 sharedStorageRoots: []
 
 # Worker groups: file names in environments/<environment>/workers/.
@@ -121,7 +121,7 @@ empaia:
   # AppService URLs that may receive EMPAIA job credentials.
   apiUrls: []
   workspaceRoot: /mnt/model-service-executions
-  # Shared by the control plane and the analysis runner: the runner writes job outputs
+  # Shared by the control plane and the pipeline runner: the runner writes job outputs
   # there and the control plane publishes them. Required by the control plane with apiUrls.
   workspaceClaim: ""
   # Slide inputs are linked from the file named by the RationAI direct-access
@@ -134,10 +134,10 @@ empaia:
   # Extra DNS search domains for pods that call AppService, when the
   # installation hands out short host names from another namespace.
   dnsSearches: []
-  # The control plane registers an app, with its modes, for every deployed analysis with
-  # `expose.empaia`, at startup, in this marketplace (the marketplace mock that
+  # The control plane registers an app, with its modes, for every deployed pipeline with
+  # `providers.empaia`, at startup, in this marketplace (the marketplace mock that
   # EMPAIA test installations run), and deletes the apps it registered there
-  # that no deployed analysis has any more. Empty url: no registration.
+  # that no deployed pipeline has any more. Empty url: no registration.
   marketplace:
     url: ""
     organizationId: ""
@@ -146,7 +146,7 @@ empaia:
     # deployment owns.
     jesTarget: model-service
     # The installation's Medical Data Service: the control plane keeps the preprocessing
-    # triggers the analyses list there, with these client credentials.
+    # triggers the pipelines list there, with these client credentials.
     # Empty: triggers are left alone.
     mdsUrl: ""
     # Client credentials for the marketplace, from a Secret; empty idpUrl: none.

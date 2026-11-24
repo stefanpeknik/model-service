@@ -1,4 +1,4 @@
-"""A request to run an analysis: inputs, their access, settings and output path."""
+"""A request to run a pipeline: inputs, their access, settings and output path."""
 
 from __future__ import annotations
 
@@ -19,9 +19,9 @@ class RunRequest(BaseModel):
     """Inputs and their access, settings, and an optional output path.
 
     Attributes:
-        inputs: The analysis's inputs, by name.
+        inputs: The pipeline's inputs, by name.
         input_access: How the runner reaches them.
-        configuration: Settings that differ from the analysis's; see its
+        configuration: Settings that differ from the pipeline's; see its
             settings schema for the names, types and limits.
         output_path: Where the single artifact output is written.
     """
@@ -33,8 +33,8 @@ class RunRequest(BaseModel):
     configuration: Annotated[
         JsonObject | None,
         Field(
-            description="Settings that differ from the analysis's, by name; "
-            "GET /v1/analyses gives each analysis's settings_schema."
+            description="Settings that differ from the pipeline's, by name; "
+            "GET /v1/pipelines gives each pipeline's settings_schema."
         ),
     ] = None
     output_path: Annotated[str, Field(strict=True, min_length=1)] | None = None

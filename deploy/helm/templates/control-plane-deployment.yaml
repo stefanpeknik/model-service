@@ -7,7 +7,7 @@
 {{- $empaia := .Values.empaia.apiUrls }}
 {{- $workspaceClaim := "" }}
 {{- if $empaia }}
-{{- $workspaceClaim = required "empaia.workspaceClaim is required with apiUrls: the control plane publishes EMPAIA results the analysis runner wrote there" .Values.empaia.workspaceClaim }}
+{{- $workspaceClaim = required "empaia.workspaceClaim is required with apiUrls: the control plane publishes EMPAIA results the pipeline runner wrote there" .Values.empaia.workspaceClaim }}
 {{- end }}
 apiVersion: apps/v1
 kind: Deployment

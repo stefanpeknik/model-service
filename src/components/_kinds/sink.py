@@ -24,10 +24,10 @@ class SinkOptions(Options):
     """Options every sink has.
 
     Attributes:
-        output: The output name callers and exposure refer to.
+        output: The output name callers and providers refer to.
     """
 
-    output: str = Field(description="The output name callers and exposure refer to.")
+    output: str = Field(description="The output name callers and providers refer to.")
 
 
 class Sink(Component):

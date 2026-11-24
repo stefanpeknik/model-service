@@ -1,5 +1,5 @@
--- Executions: one durable run of an analysis per provider submission, with the
--- resolved analysis document every attempt sends, its pending work, lease and
+-- Executions: one durable run of a pipeline per provider submission, with the
+-- resolved pipeline document every attempt sends, its pending work, lease and
 -- outcome.
 -- depends:
 
@@ -8,10 +8,10 @@ CREATE TABLE executions (
     provider TEXT NOT NULL,
     submission_key TEXT NOT NULL,
     request_fingerprint TEXT NOT NULL,
-    analysis_id TEXT NOT NULL,
+    pipeline_id TEXT NOT NULL,
     models TEXT[] NOT NULL,
-    analysis_digest TEXT NOT NULL,
-    analysis JSONB NOT NULL,
+    pipeline_digest TEXT NOT NULL,
+    pipeline JSONB NOT NULL,
     status TEXT NOT NULL CHECK (
         status IN ('queued', 'running', 'succeeded', 'failed', 'cancelled')
     ),

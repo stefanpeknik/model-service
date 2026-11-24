@@ -13,8 +13,8 @@ it.
 _Avoid_: API (for the process), gateway
 
 **Data plane**:
-The Ray Serve applications that do the compute: one per served model, and the
-analysis runner. Callers reach it directly only for raw inference; analyses
+The Ray Serve applications that do the compute: one per model, and the
+pipeline runner. Callers reach it directly only for raw inference; pipelines
 come through the control plane.
 _Avoid_: Execution plane, workers
 
@@ -23,15 +23,15 @@ _Avoid_: Execution plane, workers
 **Component**:
 A small reusable piece of code that catalog files name by its name. Its kind
 decides where it may be used: a **loader** fetches weights, a **runtime** runs
-them, a **step** transforms data item by item, a **source** produces an
-analysis's items from its inputs, a **sink** collects results, an **input
+them, a **step** transforms data item by item, a **source** produces a
+pipeline's items from its inputs, a **sink** collects results, an **input
 converter** turns an EMPAIA input into a run input, and a **publisher** carries
 an output into EMPAIA.
 _Avoid_: Unit, plug-in, module
 
 **Sink**:
-The component that collects an analysis's results into one output file of a
-data format. An analysis may have several, written all or nothing.
+The component that collects a pipeline's results into one output file of a
+data format. A pipeline may have several, written all or nothing.
 _Avoid_: Writer, output builder
 
 **Data format**:
@@ -40,7 +40,7 @@ a media type with a version. Readers refuse a version they don't know.
 _Avoid_: Output type, schema (for the file layout)
 
 **Catalog**:
-The served-model and analysis files of one deployment, checked together, with
+The model and pipeline files of one deployment, checked together, with
 the environment's patches applied.
 _Avoid_: Model catalog, config
 
@@ -51,46 +51,49 @@ _Avoid_: Override file, copy
 
 ## Work
 
-**Served model**:
+**Model**:
 One trained model deployed behind the generic host, assembled from a loader,
 a runtime and optional steps, and declaring the tiles it takes and what it
-returns. Its file name is its model ID.
-_Avoid_: Model deployment, inference implementation, model class
+returns: a file in `catalog/models/`, whose name is its model ID. Its trained
+parameters are its weights.
+_Avoid_: Served model, model deployment, inference implementation, model class
 
 **Model output**:
-What a served model declares it returns per tile: scores (a score map of
+What a model declares it returns per tile: scores (a score map of
 some channels) or an embedding (one vector per summary). It replaces the
 inference contract.
 _Avoid_: Inference contract, model type
 
 **Model digest**:
-A fingerprint of everything that decides what a served model computes. A run
+A fingerprint of everything that decides what a model computes. A run
 whose model's digest differs from the one it was admitted with fails rather
 than produce results from another model.
 
 **Model inference**:
-A call to one served model with one model-ready tile that returns its output.
+A call to one model with one model-ready tile that returns its output.
 It does not orchestrate whole-slide processing.
 _Avoid_: Model operation, low-level model call
 
-**Analysis**:
+**Pipeline**:
 One slide-in, results-out job described in one catalog file: a source, steps
-that may call served models, and sinks. Its file name is its public ID.
-_Avoid_: Builder, pipeline, workflow, scenario
+that may call models, and sinks, in that order. A file in
+`catalog/pipelines/`, whose name is its public ID. A pipeline runs models.
+_Avoid_: Analysis, builder, workflow, scenario
 
 **Setting**:
-An option of an analysis's components that a caller may change for one run,
+An option of a pipeline's components that a caller may change for one run,
 such as the stride between tiles. EMPAIA offers settings as job parameters.
 _Avoid_: Builder configuration, parameter (outside EMPAIA)
 
-**Exposure**:
-How an analysis is offered beyond the public API. Exposing an analysis to EMPAIA
-makes it one EMPAIA app.
-_Avoid_: Registration, publishing (for the app itself)
+**Provider settings**:
+How a pipeline is offered beyond the public API, under its file's
+`providers:` key. A pipeline with `providers.empaia` is one EMPAIA app; the
+standalone provider needs no settings and is always available.
+_Avoid_: Exposure, registration, publishing (for the app itself)
 
 **Run**:
-One request to execute an analysis with concrete inputs, settings and an
-output path. It executes the analysis as it was resolved when the run was
+One request to execute a pipeline with concrete inputs, settings and an
+output path. It executes the pipeline as it was resolved when the run was
 admitted.
 _Avoid_: Job, inside model-service
 
@@ -152,8 +155,8 @@ executions through processing and provider finish.
 _Avoid_: Demand controller, control plane (the scheduler is one part of it), job scheduler
 
 **Model capacity**:
-How many scheduled runs may use one served model at once. A run is claimed
-only when every served model it calls has room; an analysis without models
+How many scheduled runs may use one model at once. A run is claimed
+only when every model it calls has room; a pipeline without models
 has capacity of its own.
 
 **Synchronous headroom**:
@@ -181,7 +184,7 @@ The provider that relates a scheduled execution to an EMPAIA job and its input
 and publication conventions.
 
 **EMPAIA app**:
-What EMPAIA lists and starts jobs of. Each analysis exposed to EMPAIA is one
+What EMPAIA lists and starts jobs of. Each pipeline offered through EMPAIA is one
 app.
 _Avoid_: App, when meaning a Ray Serve application
 
@@ -204,32 +207,32 @@ The successful EMPAIA provider finish that uploads the result and finalizes
 the EMPAIA job.
 
 **EMPAIA application definition (EAD)**:
-The EMPAIA declaration of one app, generated from the analysis's EMPAIA
-exposure and the fragments its converters and publishers contribute.
+The EMPAIA declaration of one app, generated from the pipeline's EMPAIA
+provider settings and the fragments its converters and publishers contribute.
 _Avoid_: EAD configuration, model configuration
 
 **Input access**:
 The provider-neutral view through which a run reads its named inputs.
-Provider transport details do not change the analysis.
+Provider transport details do not change the pipeline.
 
 **Shared-storage path**:
-A path that both a standalone caller and the analysis runner resolve to the
+A path that both a standalone caller and the pipeline runner resolve to the
 same file on shared storage.
 _Avoid_: Local path
 
 ## Slides
 
 **Model target MPP**:
-The physical pixel resolution a served model expects, from its training data.
-Analyses read the slide level closest to it.
+The physical pixel resolution a model expects, from its training data.
+Pipelines read the slide level closest to it.
 
 **Region of interest**:
-A mask limiting an analysis to part of a slide. An analysis requires it,
+A mask limiting a pipeline to part of a slide. A pipeline requires it,
 accepts it, or ignores it.
 
 **Tissue mask**:
-A mask separating tissue from background, so an analysis can skip empty
-glass. Analyses compute their own from colour saturation until QC publishes
+A mask separating tissue from background, so a pipeline can skip empty
+glass. Pipelines compute their own from colour saturation until QC publishes
 one.
 _Avoid_: Coverage mask
 
@@ -252,7 +255,7 @@ _Avoid_: Coverage mask, when meaning tissue; tissue mask
 ## Named clients and JES
 
 **RationAI SDK**:
-The public client library for served models, analyses and executions in
+The public client library for models, pipelines and executions in
 model-service, with readers for every data format.
 _Avoid_: SDK, when the intended library is ambiguous
 

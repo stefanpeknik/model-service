@@ -15,7 +15,7 @@ from components import (
     Source,
     per_run_fields,
 )
-from model_service.catalog.analyses import ModelStep
+from model_service.catalog.pipelines import ModelStep
 from model_service.reference.markdown import (
     GENERATED,
     code,
@@ -30,7 +30,7 @@ from model_service.reference.markdown import (
 if TYPE_CHECKING:
     from components import Col, Component, Slot
     from model_service.catalog import Catalog
-    from model_service.catalog.analyses import Analysis
+    from model_service.catalog.pipelines import Pipeline
     from model_service.registry import Registry
 
 
@@ -240,14 +240,14 @@ def _used_in(catalog: Catalog) -> dict[tuple[str, str], list[str]]:
     """
     named: list[tuple[str, list[Component]]] = [
         (
-            f"[`{model.id}`](served-models.md#{model.id})",
+            f"[`{model.id}`](models.md#{model.id})",
             [model.loader, model.runtime, *model.pre, *model.post],
         )
-        for model in catalog.served_models.values()
+        for model in catalog.models.values()
     ]
     named += [
-        (f"[`{analysis.id}`](analyses.md#{analysis.id})", _components_of(analysis))
-        for analysis in catalog.analyses.values()
+        (f"[`{pipeline.id}`](pipelines.md#{pipeline.id})", _components_of(pipeline))
+        for pipeline in catalog.pipelines.values()
     ]
     used: dict[tuple[str, str], list[str]] = defaultdict(list)
     for link, components in named:
@@ -258,17 +258,17 @@ def _used_in(catalog: Catalog) -> dict[tuple[str, str], list[str]]:
     return used
 
 
-def _components_of(analysis: Analysis) -> list[Component]:
-    """Every component an analysis names.
+def _components_of(pipeline: Pipeline) -> list[Component]:
+    """Every component a pipeline names.
 
     Args:
-        analysis: The analysis.
+        pipeline: The pipeline.
 
     Returns:
         Its components, model steps left out.
     """
-    steps = [s for s in analysis.steps if not isinstance(s, ModelStep)]
-    exposed: list[Component] = []
-    if analysis.empaia is not None:
-        exposed = [*analysis.empaia.inputs.values(), *analysis.empaia.outputs.values()]
-    return [analysis.source, *steps, *analysis.sinks, *exposed]
+    steps = [s for s in pipeline.steps if not isinstance(s, ModelStep)]
+    offered: list[Component] = []
+    if pipeline.empaia is not None:
+        offered = [*pipeline.empaia.inputs.values(), *pipeline.empaia.outputs.values()]
+    return [pipeline.source, *steps, *pipeline.sinks, *offered]

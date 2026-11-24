@@ -10,8 +10,8 @@ Release `model-service`, values `deploy/helm/environments/rationai-test/values.y
 
 - control-plane Deployment `model-service-control-plane` with PostgreSQL
   `model-service-postgres`.
-- RayService with one CPU worker group (the analysis runner) and
-  one MIG GPU worker group (served models) that scales to zero. The runner
+- RayService with one CPU worker group (the pipeline runner) and
+  one MIG GPU worker group (models) that scales to zero. The runner
   requests the `cpu_worker` Ray resource, which only the CPU group
   advertises, so it never takes the GPU worker's 4 CPUs that
   `prostate-classifier-1` needs (`cpuWorkerResource` in the chart's
@@ -50,10 +50,10 @@ helm install model-service deploy/helm -n rationai-infra-test-ns \
 
 Upgrades use `helm upgrade` with the same arguments.
 
-Served models and analyses come from `catalog/`: the values deploy the IDs
-named in `servedModels` (`prostate-classifier-1`, `virchow2` and
+Models and pipelines come from `catalog/`: the values deploy the IDs
+named in `models` (`prostate-classifier-1`, `virchow2` and
 `prov-gigapath`; EPISeg's weights sit on an MLflow this cluster can't reach)
-and in `analyses` (`prostate-heatmap`, `virchow2-embeddings` and
+and in `pipelines` (`prostate-heatmap`, `virchow2-embeddings` and
 `prov-gigapath-embeddings`), with the `deploy/helm/environments/rationai-test/`
 patches. A catalog-only change needs no image rebuild and doesn't restart the control plane: kubelet
 updates the mounted catalog ConfigMap (within about a minute) and the control plane
@@ -106,7 +106,7 @@ curl localhost:18080/healthz/catalog
 ```
 
 `prostate-classifier-1`, `virchow2` and `prov-gigapath` start the GPU
-worker. To warm a served model with one blank tile, or start a job of the
+worker. To warm a model with one blank tile, or start a job of the
 prostate app from EMPAIA, run these scripts in a control-plane pod:
 
 ```sh
@@ -118,9 +118,9 @@ oc exec -i deploy/model-service-control-plane -- python - SLIDE_ID 120 < tools/r
 
 - Control plane: refused submissions and ignored EMPAIA configuration keys, with
   reasons.
-- Analysis progress and errors: the analysis runner's JSON lines on the CPU
+- Pipeline progress and errors: the pipeline runner's JSON lines on the CPU
   worker pod's stdout (`oc logs`), each naming its execution, and the Ray
-  dashboard's Serve page; model calls in the served model's replica log;
+  dashboard's Serve page; model calls in the model's replica log;
   Python tracebacks also in `/tmp/ray/session_latest/logs/worker-*.err`.
 - EMPAIA side: `test-jobs-jes` (job start and end) and `test-jobs-app-api`
   (every App API call of a job).

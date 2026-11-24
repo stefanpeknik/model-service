@@ -40,7 +40,7 @@ class ContinuousPixelmap(Publisher):
     keeps `MIN_PIXELS_PER_SCORE` pixels per score. Tiles are dense, so an
     unscored cell inside an uploaded tile reads 0, but a tile without a
     scored cell is not uploaded. EMPAIA pixelmaps carry one channel here, so
-    a multi-channel grid is refused when the analysis loads.
+    a multi-channel grid is refused when the pipeline loads.
     """
 
     name = "continuous_pixelmap"

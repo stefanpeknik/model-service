@@ -19,8 +19,8 @@ from model_service.control_plane.http.auth import (
     Principal,
 )
 from model_service.control_plane.scheduler.public import (
-    AnalysisScheduleRequest,
     ExecutionView,
+    PipelineScheduleRequest,
     ScheduleResult,
 )
 from model_service.control_plane.scheduler.status import ExecutionStatus
@@ -38,15 +38,15 @@ class Scheduler:
     async def check_ready(self) -> None:
         return None
 
-    async def schedule(self, request: AnalysisScheduleRequest) -> ScheduleResult:
+    async def schedule(self, request: PipelineScheduleRequest) -> ScheduleResult:
         raise AssertionError(request)
 
     async def get(self, execution_id: str) -> ExecutionView:
         return ExecutionView(
             id=execution_id,
-            analysis_id="a1",
+            pipeline_id="a1",
             models=["m1"],
-            analysis_digest=None,
+            pipeline_digest=None,
             status=ExecutionStatus.QUEUED,
         )
 

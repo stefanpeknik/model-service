@@ -65,8 +65,8 @@ class PostgresExecutionRepository(ExecutionRepository):
             dsn: libpq DSN or PostgreSQL URL.
             cipher: Cipher for the stored provider context.
             schema: PostgreSQL schema holding the execution table.
-            capacity_limits: Attempts allowed at once per capacity key (a served
-                model, or a model-free analysis).
+            capacity_limits: Attempts allowed at once per capacity key (a
+                model, or a model-free pipeline).
             processing_policy: Processing retry policy.
             finish_policy: Provider finish retry policy.
             pool_size: Pooled connections, with as many again allowed as overflow.

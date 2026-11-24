@@ -36,7 +36,7 @@ class ClsMeanPool(Step):
 
     `post: [{use: cls_mean_pool, registers: 4}]` turns Virchow2's tokens
     `(1 + registers + patches, dim)` into `(2, dim)`, the summaries
-    `[global, local_mean]`. It runs in the served model, so only the two
+    `[global, local_mean]`. It runs in the model, so only the two
     vectors leave the replica.
 
     The mean is computed with PyTorch, the way the encoder's own code pools,

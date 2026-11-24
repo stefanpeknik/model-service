@@ -4,10 +4,10 @@
 
 | Read | For |
 | --- | --- |
-| [Add a model](guides/add-a-model.md) | A served-model file: weights, runtime, what goes in and out |
-| [Add an analysis](guides/add-an-analysis.md) | An analysis file, running it, offering it in EMPAIA |
+| [Add a model](guides/add-a-model.md) | A model file: weights, runtime, what goes in and out |
+| [Add a pipeline](guides/add-a-pipeline.md) | A pipeline file, running it, offering it in EMPAIA |
 | [Write a component](guides/write-a-component.md) | The code for a missing loader, runtime, step, source, sink or EMPAIA adapter, and its test |
-| [Raw inference](available-models.md) | One tile straight to a served model's Ray Serve route |
+| [Raw inference](available-models.md) | One tile straight to a model's Ray Serve route |
 | [Glossary](glossary.md) | The terms these pages use |
 
 ## Reference
@@ -18,9 +18,9 @@ are stale.
 | Read | For |
 | --- | --- |
 | [Components](reference/components.md) | Every component: where it may be used, its options, its columns |
-| [Served models](reference/served-models.md) | Every served-model file in `catalog/` |
-| [Analyses](reference/analyses.md) | Every analysis file, with its inputs, outputs, settings and EMPAIA app |
-| [Data formats](reference/formats.md) | The files analyses write, by media type and version |
+| [Models](reference/models.md) | Every model file in `catalog/` |
+| [Pipelines](reference/pipelines.md) | Every pipeline file, with its inputs, outputs, settings and EMPAIA app |
+| [Data formats](reference/formats.md) | The files pipelines write, by media type and version |
 
 ## Design
 
@@ -40,7 +40,7 @@ are stale.
 | --- | --- |
 | [rationai-infra-test-ns deployment](operations/rationai-test-ns.md) | The test deployment beside the EMPAIA test instance: images, upgrades, the GPU and quota rules |
 | [Golden references, 2026-11-22](operations/golden-references-2026-11-22.md) | Outputs recorded before the rebuild, which live tests compare against |
-| [EMPAIA app reconcile, 2026-11-22](operations/empaia-app-reconcile-2026-11-22.md) | Apps registered from analyses; apps without one retired |
+| [EMPAIA app reconcile, 2026-11-22](operations/empaia-app-reconcile-2026-11-22.md) | Apps registered from pipelines; apps without one retired |
 | [Core acceptance, 2026-10-14](operations/core-acceptance-2026-10-14.md) | Live evidence for the scheduler and API core |
 | [Image empaia-30, 2026-11-11](operations/empaia-30-deploy-2026-11-11.md) | The process-split package layout deployed; raw inference leaves the control plane |
 | [Standalone EMPAIA runs, 2026-11-06](operations/empaia-standalone-runs-2026-11-06.md) | Region-of-interest jobs from the case browser |

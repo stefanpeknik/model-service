@@ -50,11 +50,11 @@ type RunOutput = Annotated[InlineOutput | SharedArtifact, Field(discriminator="k
 
 
 @dataclass(frozen=True, slots=True)
-class ServedModelRun:
-    """What a served model ran during a run, as its `describe()` reported it.
+class ModelRun:
+    """What a model ran during a run, as its `describe()` reported it.
 
     Attributes:
-        digest: The served model's declaration digest.
+        digest: The model's declaration digest.
         weights_revision: The weights it loaded, e.g. `<repo>@<commit>`.
         execution_providers: What the runtime actually runs on: ONNX Runtime's
             providers in priority order, or the torch device, so a fallback
@@ -72,12 +72,12 @@ class RunResult:
 
     Attributes:
         outputs: One output per declared output name.
-        served_models: What each served model the analysis called ran, by
-            served-model id; empty for a model-free analysis.
+        models: What each model the pipeline called ran, by
+            model id; empty for a model-free pipeline.
     """
 
     outputs: Annotated[dict[str, RunOutput], Field(strict=True)]
-    served_models: Annotated[dict[str, ServedModelRun], Field(strict=True)] = field(
+    models: Annotated[dict[str, ModelRun], Field(strict=True)] = field(
         default_factory=dict
     )
 

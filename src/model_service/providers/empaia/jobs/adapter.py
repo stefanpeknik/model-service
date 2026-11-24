@@ -1,6 +1,6 @@
 """Translate EMPAIA jobs into durable executions and publish their stored outcomes.
 
-A job runs an analysis (`/v1/empaia/analyses/{id}`). Admission reads the job's
+A job runs a pipeline (`/v1/empaia/pipelines/{id}`). Admission reads the job's
 configuration and parameters, records each input's EAD type and how each
 output is published, and caps deadlines at credential expiry. Finish
 publishes through the recorded publishers: it validates the result,
@@ -32,8 +32,8 @@ from model_service.contracts.invocation import (
 from model_service.contracts.json_values import is_json_value
 from model_service.contracts.result import SharedArtifact
 from model_service.control_plane.scheduler.public import (
-    AnalysisScheduleRequest,
     InvalidScheduleRequestError,
+    PipelineScheduleRequest,
     PreparedInvocation,
     Priority,
     ProviderCancellation,
@@ -83,7 +83,7 @@ if TYPE_CHECKING:
 
     from components import Commit
     from model_service.catalog import Catalog
-    from model_service.catalog.analyses import Analysis
+    from model_service.catalog.pipelines import Pipeline
     from model_service.contracts.json_values import JsonValue
     from model_service.contracts.result import RunResult
     from model_service.control_plane.scheduler.public import BeforeMutation
@@ -127,14 +127,14 @@ class EmpaiaProviderAdapter(ProviderAdapter):
             workspace_root: The root of the job workspaces finish removes; None
                 removes nothing.
             catalog: The deployed catalog, read at each admission; None
-                offers no analysis.
+                offers no pipeline.
         """
         self._gateway_factory = gateway_factory
         self._catalog = catalog
         self._allowed_api_urls = tuple(url.rstrip("/") for url in allowed_api_urls)
         self._workspace_root = workspace_root
 
-    def identify(self, request: AnalysisScheduleRequest) -> SubmissionIdentity:
+    def identify(self, request: PipelineScheduleRequest) -> SubmissionIdentity:
         """Key admission by installation and job, fingerprinting stable request fields.
 
         Renewable credentials are left out of the fingerprint.
@@ -151,7 +151,7 @@ class EmpaiaProviderAdapter(ProviderAdapter):
         context = schedule_payload(request.body)
         canonical = json.dumps(
             {
-                "analysis_id": request.analysis_id,
+                "pipeline_id": request.pipeline_id,
                 "installation_id": context.installation_id,
                 "job_id": context.job_id,
                 "api_url": context.api_url,
@@ -168,7 +168,7 @@ class EmpaiaProviderAdapter(ProviderAdapter):
 
     async def prepare(
         self,
-        request: AnalysisScheduleRequest,
+        request: PipelineScheduleRequest,
         deadline_at: datetime,
     ) -> PreparedInvocation:
         """Admit an EMPAIA job as an invocation of provider inputs.
@@ -191,7 +191,7 @@ class EmpaiaProviderAdapter(ProviderAdapter):
 
         Raises:
             InvalidScheduleRequestError: If the payload is invalid, the API URL is not
-                allowed, the credential has no valid expiry, the analysis is not
+                allowed, the credential has no valid expiry, the pipeline is not
                 offered in EMPAIA, the configuration is not JSON, the invocation
                 fails validation, or the App Service rejects a request.
             SchedulingUnavailableError: If the gateway cannot be created or closed, or
@@ -203,7 +203,7 @@ class EmpaiaProviderAdapter(ProviderAdapter):
                 "EMPAIA api_url is not an allowed AppService"
             )
         credential_expires_at = credential_expiry(context.credential)
-        analysis = self._analysis(request.analysis_id)
+        pipeline = self._pipeline(request.pipeline_id)
         async with preparation_gateway(self._gateway_factory, context) as gateway:
             try:
                 configuration = await gateway.get_configuration()
@@ -212,8 +212,8 @@ class EmpaiaProviderAdapter(ProviderAdapter):
                         "EMPAIA configuration must contain only JSON-compatible values"
                     )
                 mode = await gateway.get_mode()
-                admitted = await _admit_analysis(
-                    analysis, configuration, mode, gateway, context.job_id
+                admitted = await _admit_pipeline(
+                    pipeline, configuration, mode, gateway, context.job_id
                 )
             except EmpaiaGatewayError as error:
                 raise_preparation_error(error)
@@ -250,25 +250,25 @@ class EmpaiaProviderAdapter(ProviderAdapter):
             ),
         )
 
-    def _analysis(self, analysis_id: str) -> Analysis:
-        """The deployed analysis a job runs, which must be offered in EMPAIA.
+    def _pipeline(self, pipeline_id: str) -> Pipeline:
+        """The deployed pipeline a job runs, which must be offered in EMPAIA.
 
         Args:
-            analysis_id: The analysis the job's app runs.
+            pipeline_id: The pipeline the job's app runs.
 
         Returns:
-            The analysis.
+            The pipeline.
 
         Raises:
-            InvalidScheduleRequestError: It is not deployed or has no `expose.empaia`.
+            InvalidScheduleRequestError: It is not deployed or has no `providers.empaia`.
         """
-        found = self._catalog().analyses if self._catalog else {}
-        analysis = found.get(analysis_id)
-        if analysis is None or analysis.empaia is None:
+        found = self._catalog().pipelines if self._catalog else {}
+        pipeline = found.get(pipeline_id)
+        if pipeline is None or pipeline.empaia is None:
             raise InvalidScheduleRequestError(
-                f"analysis {analysis_id!r} is not offered in EMPAIA"
+                f"pipeline {pipeline_id!r} is not offered in EMPAIA"
             )
-        return analysis
+        return pipeline
 
     async def finish(
         self,
@@ -338,7 +338,7 @@ class EmpaiaProviderAdapter(ProviderAdapter):
     ) -> Publications:
         """How a result is published, as admitted.
 
-        The result must have the analysis's outputs, no more.
+        The result must have the pipeline's outputs, no more.
 
         Args:
             context: The job's context, with the publications admission recorded.
@@ -349,15 +349,15 @@ class EmpaiaProviderAdapter(ProviderAdapter):
 
         Raises:
             EmpaiaGatewayError: Not retryable if the result doesn't match the
-                analysis.
+                pipeline.
         """
         sinks = {
             sink["output"]
-            for sink in cast("list[dict[str, Any]]", outcome.target.analysis["sinks"])
+            for sink in cast("list[dict[str, Any]]", outcome.target.pipeline["sinks"])
         }
         if set(outcome.result.outputs) != sinks:
             raise EmpaiaGatewayError.invalid(
-                "EMPAIA job result does not match its analysis's outputs"
+                "EMPAIA job result does not match its pipeline's outputs"
             )
         return context.publications
 
@@ -373,20 +373,20 @@ class EmpaiaProviderAdapter(ProviderAdapter):
         await asyncio.to_thread(remove_directory, directory)
 
 
-async def _admit_analysis(
-    analysis: Analysis,
+async def _admit_pipeline(
+    pipeline: Pipeline,
     configuration: dict[str, JsonValue],
     mode: EmpaiaJobMode,
     gateway: EmpaiaGateway,
     job_id: str,
 ) -> _Admitted:
-    """Admit a job of an analysis's app: its settings, parameters, inputs and publications.
+    """Admit a job of a pipeline's app: its settings, parameters, inputs and publications.
 
-    The scheduler resolves the analysis with the settings, so a bad value
+    The scheduler resolves the pipeline with the settings, so a bad value
     refuses the job.
 
     Args:
-        analysis: The analysis the app runs.
+        pipeline: The pipeline the app runs.
         configuration: The job's provider configuration.
         mode: How the job was started.
         gateway: The job's gateway, for parameters and input presence.
@@ -398,19 +398,19 @@ async def _admit_analysis(
     Raises:
         EmpaiaGatewayError: A parameter or input lookup failed.
     """
-    app = analysis.empaia
+    app = pipeline.empaia
     assert app is not None
     settings = known_settings(
-        analysis.settings(), f"analysis {analysis.id}", configuration, job_id
+        pipeline.settings(), f"pipeline {pipeline.id}", configuration, job_id
     )
     if mode is EmpaiaJobMode.STANDALONE:
-        schema = analysis.settings_schema()["properties"]
+        schema = pipeline.settings_schema()["properties"]
         primitive = converter({"type": "primitive"})
         for name in app.parameters:
             item = EmpaiaInput(name, app.slide, schema[name])
             settings[name] = await primitive.materialize(gateway, item, Path())  # type: ignore[assignment]
     names = await job_inputs(
-        {name: analysis.inputs[name] for name in app.inputs}, gateway
+        {name: pipeline.inputs[name] for name in app.inputs}, gateway
     )
     return _Admitted(
         configuration=settings,

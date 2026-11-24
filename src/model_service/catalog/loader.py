@@ -1,13 +1,13 @@
 """Load a catalog directory, optionally patched for one environment.
 
-The catalog root holds `served-models/<id>.yaml` and `analyses/<id>.yaml`:
+The catalog root holds `models/<id>.yaml` and `pipelines/<id>.yaml`:
 one document per file, the file name is its ID. An environment is a folder of
 its own (in this repo `deploy/helm/environments/<env>/`) whose
 `<folder>/<id>.yaml` files are patches holding only what differs on that
 cluster, deep-merged over the base file; its other files (Helm values, worker
 groups, manifests) are not the loader's.
 
-Served models resolve first, so analyses can call them. Every file is read
+Models resolve first, so pipelines can call them. Every file is read
 and every document resolved before anything is reported, so one load lists
 every mistake.
 """
@@ -19,7 +19,8 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from model_service.catalog import analyses, served_models
+from model_service.catalog import models as model_files
+from model_service.catalog import pipelines
 from model_service.catalog.catalog import Catalog
 from model_service.catalog.context import ResolveContext
 from model_service.catalog.errors import CatalogError, CatalogInvalid
@@ -32,13 +33,13 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from model_service.catalog.errors import YamlPath
-    from model_service.catalog.served_models import ServedModel
+    from model_service.catalog.models import Model
     from model_service.registry import Registry
 
 
 ID = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 MAPPING = "A mapping of keys to values"
-FOLDERS = (served_models.FOLDER, analyses.FOLDER)
+FOLDERS = (model_files.FOLDER, pipelines.FOLDER)
 # What else an environment folder holds, which the loader leaves to Helm.
 ENVIRONMENT_FILES = ("values.yaml", "workers/", "k8s/")
 
@@ -136,7 +137,7 @@ class _Loader:
         self.errors.append(CatalogError(self.show(path), "", what, fits, hint))
 
     def load(self, environment: Path | None) -> Catalog:
-        """Resolve the served models, then the analyses.
+        """Resolve the models, then the pipelines.
 
         Args:
             environment: The environment folder whose patches to apply, or None.
@@ -145,13 +146,13 @@ class _Loader:
             The catalog; `self.errors` holds what failed.
         """
         bases, patches = self._files(environment)
-        folder = served_models.FOLDER
+        folder = model_files.FOLDER
         models = self._folder(
-            folder, served_models.build_served_model, bases, patches, {}, set()
+            folder, model_files.build_model, bases, patches, {}, set()
         )
         failed = {path.stem for path in bases[folder]} - models.keys()
         found = self._folder(
-            analyses.FOLDER, analyses.build_analysis, bases, patches, models, failed
+            pipelines.FOLDER, pipelines.build_pipeline, bases, patches, models, failed
         )
         return Catalog(models, found)
 
@@ -161,18 +162,18 @@ class _Loader:
         build: Callable[[dict[str, Any], ResolveContext], T | None],
         bases: dict[str, list[Path]],
         patches: dict[tuple[str, str], Path],
-        models: Mapping[str, ServedModel],
+        models: Mapping[str, Model],
         failed: set[str],
     ) -> dict[str, T]:
         """Resolve every document of one folder and report stray patches.
 
         Args:
-            folder: `served-models` or `analyses`.
+            folder: `models` or `pipelines`.
             build: Resolves one merged document through a context.
             bases: Base files by folder.
             patches: This environment's patches by (folder, file stem).
-            models: The served models an analysis may call.
-            failed: IDs of served-model files that failed to resolve.
+            models: The models a pipeline may call.
+            failed: IDs of model files that failed to resolve.
 
         Returns:
             The resolved documents by ID.
@@ -246,7 +247,7 @@ class _Loader:
         build: Callable[[dict[str, Any], ResolveContext], T | None],
         path: Path,
         patch_path: Path | None,
-        models: Mapping[str, ServedModel],
+        models: Mapping[str, Model],
         failed_models: set[str],
     ) -> T | None:
         """Read, patch and resolve one document, recording its errors.
@@ -255,8 +256,8 @@ class _Loader:
             build: Resolves the merged document through a context.
             path: The base file.
             patch_path: The environment's patch of it, if any.
-            models: The served models an analysis may call.
-            failed_models: IDs of served models that failed to resolve.
+            models: The models a pipeline may call.
+            failed_models: IDs of models that failed to resolve.
 
         Returns:
             The resolved document, or None after an error.

@@ -1,11 +1,11 @@
 # Raw inference
 
-Every served model answers single tiles on its own Ray Serve route,
+Every model answers single tiles on its own Ray Serve route,
 `POST /<model-id>/` on the Ray Serve origin (`http://<release>-serve-svc:8000`
 inside the cluster). The control plane doesn't proxy these calls; use an
-[analysis](reference/analyses.md) to run a model over a whole slide. Which
+[pipeline](reference/pipelines.md) to run a model over a whole slide. Which
 models a deployment serves is in `GET /v1/models` on the control plane, and
-[Served models](reference/served-models.md) lists the ones in `catalog/`.
+[Models](reference/models.md) lists the ones in `catalog/`.
 
 ## Request
 
@@ -16,7 +16,7 @@ model's `input.tile_size`, which `GET /v1/models/<id>` returns under
 
 ## Reply
 
-The format follows from the served model's `output:`:
+The format follows from the model's `output:`:
 
 | `output:` | Reply |
 | --- | --- |

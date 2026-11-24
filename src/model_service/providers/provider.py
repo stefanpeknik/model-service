@@ -1,7 +1,7 @@
 """The provider contract: what a provider is and every method it writes.
 
 A provider is a `Provider` (here) listed in `providers/registry.py`. The control plane
-process and the analysis runner compose the providers there and name none
+process and the pipeline runner compose the providers there and name none
 of them. A provider writes:
 
 - `Provider.control_plane` and `Provider.input_access`: what it adds to each process;
@@ -12,7 +12,7 @@ of them. A provider writes:
   `InputAccess`: `input_path`, `output_path`, `aclose`.
 
 Each provider imports what only one process needs inside the method for it:
-the analysis runner loads provider modules, so those import no api/ code.
+the pipeline runner loads provider modules, so those import no api/ code.
 """
 
 from __future__ import annotations
@@ -28,21 +28,21 @@ if TYPE_CHECKING:
 
     from fastapi import APIRouter
 
-    from model_service.analysis_runner.settings import ReplicaSettings
     from model_service.catalog import Catalog
     from model_service.contracts.invocation import InputAccessKind
     from model_service.contracts.json_values import JsonValue
     from model_service.contracts.result import RunResult
     from model_service.control_plane.scheduler.protocols import Scheduler
     from model_service.control_plane.scheduler.public import (
-        AnalysisScheduleRequest,
         BeforeMutation,
+        PipelineScheduleRequest,
         PreparedInvocation,
         ProviderFinishOutcome,
         ProviderName,
         SubmissionIdentity,
     )
     from model_service.control_plane.scheduler.settings import SchedulerSettings
+    from model_service.pipeline_runner.settings import ReplicaSettings
     from model_service.providers.input_access import InputAccessFactory
 
 
@@ -52,7 +52,7 @@ class ProviderAdapter(ABC):
     name: ProviderName
 
     @abstractmethod
-    def identify(self, request: AnalysisScheduleRequest) -> SubmissionIdentity:
+    def identify(self, request: PipelineScheduleRequest) -> SubmissionIdentity:
         """Compute submission identity locally without I/O or external side effects.
 
         Args:
@@ -66,7 +66,7 @@ class ProviderAdapter(ABC):
     @abstractmethod
     async def prepare(
         self,
-        request: AnalysisScheduleRequest,
+        request: PipelineScheduleRequest,
         deadline_at: datetime,
     ) -> PreparedInvocation:
         """Resolve and validate new inputs and configuration before admission.
@@ -138,7 +138,7 @@ class Provider(ABC):
         """Build what this provider adds to the control plane.
 
         Args:
-            catalog: Gives the deployed served models and analyses in use.
+            catalog: Gives the deployed models and pipelines in use.
             settings: the control plane's scheduler settings.
 
         Returns:
@@ -150,7 +150,7 @@ class Provider(ABC):
     def input_access(
         self, settings: ReplicaSettings
     ) -> Mapping[InputAccessKind, InputAccessFactory]:
-        """Build the adapters the analysis runner uses for the inputs this provider hands out.
+        """Build the adapters the pipeline runner uses for the inputs this provider hands out.
 
         Args:
             settings: The runner replica's settings.

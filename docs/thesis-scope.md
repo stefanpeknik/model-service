@@ -15,20 +15,20 @@ writing Python or rebuilding an image.
 
 | Area | What it gives | Where |
 | --- | --- | --- |
-| Public API | One HTTP entry point for analyses, executions and the catalog, with auth hooks, capacity checks and health | `src/model_service/control_plane/` (incl. `http/`) |
-| Durable scheduler | Executions stored in PostgreSQL: queueing until every served model a run calls has capacity, leases, retries, deadlines, cancellation, priorities | `src/model_service/control_plane/scheduler/` |
+| Public API | One HTTP entry point for pipelines, executions and the catalog, with auth hooks, capacity checks and health | `src/model_service/control_plane/` (incl. `http/`) |
+| Durable scheduler | Executions stored in PostgreSQL: queueing until every model a run calls has capacity, leases, retries, deadlines, cancellation, priorities | `src/model_service/control_plane/scheduler/` |
 | Components | Small reusable classes of seven kinds (loader, runtime, step, source, sink, EMPAIA converter and publisher) that catalog files name, found by a folder scan, each with a conformance suite | `src/components/`, `src/model_service/registry/` |
-| Catalog | Served-model and analysis files with per-cluster patches, checked before deployment with errors naming the file, the YAML path and a fix; the control plane reloads it without restarting | `catalog/`, `src/model_service/catalog/` |
-| Served models | One generic Ray Serve host for every trained model, checking each batch against the file's declaration and reporting a digest of what it computes | `src/model_service/served_model/` |
-| Analyses | One generic runner for every whole-slide job: heatmaps (score grids) and tile embeddings (HDF5) today, in versioned data formats | `src/model_service/analysis_runner/`, `src/model_service/formats/` |
-| EMPAIA provider | Self-registration of each exposed analysis as an EMPAIA app, JES job execution in STANDALONE and PREPROCESSING modes, publication of primitives and pixelmaps through the EMPAIA SDK | `providers/empaia/`, [EMPAIA integration](architecture/empaia.md) |
+| Catalog | Model and pipeline files with per-cluster patches, checked before deployment with errors naming the file, the YAML path and a fix; the control plane reloads it without restarting | `catalog/`, `src/model_service/catalog/` |
+| Models | One generic Ray Serve host for every trained model, checking each batch against the file's declaration and reporting a digest of what it computes | `src/model_service/model_host/` |
+| Pipelines | One generic runner for every whole-slide job: heatmaps (score grids) and tile embeddings (HDF5) today, in versioned data formats | `src/model_service/pipeline_runner/`, `src/model_service/formats/` |
+| EMPAIA provider | Self-registration of each pipeline offered through EMPAIA as an EMPAIA app, JES job execution in STANDALONE and PREPROCESSING modes, publication of primitives and pixelmaps through the EMPAIA SDK | `providers/empaia/`, [EMPAIA integration](architecture/empaia.md) |
 | Newcomer tooling | Three guides, reference docs and JSON Schemas generated from the code, a catalog test | `docs/guides/`, `docs/reference/`, `tools/generate.py` |
 | Tests | About 500 unit, catalog, chart and PostgreSQL tests, plus live checks against golden references recorded on the cluster | `tests/` |
 
 ## Preserved
 
 The team's model maths is unchanged. The four model classes became
-served-model files on the generic host, built from the `onnx` and `timm`
+model files on the generic host, built from the `onnx` and `timm`
 runtimes and a few steps (`resize`, `center_crop`, `normalize`,
 `cls_mean_pool`). Each file keeps its class's quirks: Prov-GigaPath still
 crops its 224 px tile to the centre, and EPISeg still runs on ONNX Runtime's
@@ -42,22 +42,22 @@ since the test cluster can't reach its weights. The fixes come later, under
 new model IDs.
 
 The baseline's heatmap script became the `prostate-heatmap` and
-`episeg-heatmap` analyses, and the team's tiling and tissue code is reused
+`episeg-heatmap` pipelines, and the team's tiling and tissue code is reused
 in `slides/` and the `slide_tiles` source.
 
 ## How traffic flows
 
 Raw per-tile inference does not go through model-service's control plane: a caller
-posts a tile straight to the served model's Ray Serve route
+posts a tile straight to the model's Ray Serve route
 (`POST /<model-id>/`), as in the baseline.
 
-Analysis run (immediate or scheduled):
+Pipeline run (immediate or scheduled):
 
 ```text
 client ─HTTP─▶ control plane ──(scheduled: PostgreSQL row, worker claims it)
-                │ HTTP, the resolved analysis and control data only
+                │ HTTP, the resolved pipeline and control data only
                 ▼
-         analysis runner ─Ray handle per tile─▶ served model (batched)
+         pipeline runner ─Ray handle per tile─▶ model (batched)
                 │ reads the slide and writes the outputs on shared storage
                 ▼
          paths of the outputs ─▶ control plane ─▶ client / EMPAIA publication

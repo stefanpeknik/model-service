@@ -1,1 +1,1 @@
-"""Sinks: collect an analysis's results into a data format."""
+"""Sinks: collect a pipeline's results into a data format."""

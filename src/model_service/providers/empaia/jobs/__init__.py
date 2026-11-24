@@ -1,1 +1,1 @@
-"""An EMPAIA job run as an analysis: routes, payload, adapter, gateways, mapping, inputs."""
+"""An EMPAIA job run as a pipeline: routes, payload, adapter, gateways, mapping, inputs."""

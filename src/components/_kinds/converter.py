@@ -22,7 +22,7 @@ class EmpaiaInput:
     """One input of an EMPAIA app, as a converter sees it.
 
     Attributes:
-        name: The EAD io key, the analysis's input or setting name.
+        name: The EAD io key, the pipeline's input or setting name.
         slide: The io key of the app's `wsi` input, which other entries
             reference; None if the app has none.
         setting: For a standalone parameter, the JSON Schema of the setting
@@ -37,14 +37,14 @@ class EmpaiaInput:
 class InputConverter(Component):
     """Converts one EMPAIA input type (`wsi`, `rectangle`, ...) into a run input.
 
-    The analysis's `expose.empaia` declares each input's type, and that type
+    The pipeline's `providers.empaia` declares each input's type, and that type
     picks the converter, so nothing is guessed from the data. A converter
     contributes the input's EAD io entry and materialises it for a run: a
     file in the attempt's workspace, or a value read at admission.
 
     Attributes:
         ead_type: The EAD input type it converts.
-        gives_file: True if `materialize` writes a file the analysis reads;
+        gives_file: True if `materialize` writes a file the pipeline reads;
             False if it gives a value, read when the job is admitted.
     """
 

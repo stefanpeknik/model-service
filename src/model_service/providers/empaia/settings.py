@@ -1,6 +1,6 @@
 """EMPAIA wiring for the processes that talk to App Service, from `EMPAIA_*` variables.
 
-The control plane and the analysis runner read the same settings: the control plane admits
+The control plane and the pipeline runner read the same settings: the control plane admits
 jobs and publishes results, the runner reads job inputs.
 """
 

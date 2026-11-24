@@ -18,8 +18,8 @@ if TYPE_CHECKING:
 class Loader(Component):
     """Fetches a model's weights (an MLflow artifact, a Hugging Face repo, ...).
 
-    Used under a served model's `loader:` and under the `loader:` of an
-    analysis step that carries its own small model.
+    Used under a model's `loader:` and under the `loader:` of a
+    pipeline step that carries its own small model.
     """
 
     kind: ClassVar[str] = "loader"
@@ -51,7 +51,7 @@ class Loader(Component):
     def expected_revision(self) -> str | None:
         """The revision `revision()` must give after `fetch`, if the options pin it.
 
-        The analysis runner compares it with the served model's `describe()`,
+        The pipeline runner compares it with the model's `describe()`,
         so weights that changed under the same options are refused.
 
         Returns:

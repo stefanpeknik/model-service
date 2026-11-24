@@ -6,20 +6,20 @@ A catalog file names a component with `{use: <name>, …options}`; EMPAIA conver
 
 | Kind | Usable in | Folder |
 | --- | --- | --- |
-| [loader](#loaders) | served model `loader:`, analysis step `loader:` | `src/components/loaders/` |
-| [runtime](#runtimes) | served model `runtime:` | `src/components/runtimes/` |
-| [step](#steps) | served model `pre:`, served model `post:`, analysis `steps:` | `src/components/steps/` |
-| [source](#sources) | analysis `source:` | `src/components/sources/` |
-| [sink](#sinks) | analysis `sinks:` | `src/components/sinks/` |
-| [converter](#converters) | EMPAIA exposure `inputs:` | `src/components/providers/empaia/converters/` |
-| [publisher](#publishers) | EMPAIA exposure `outputs:` | `src/components/providers/empaia/publishers/` |
+| [loader](#loaders) | model `loader:`, pipeline step `loader:` | `src/components/loaders/` |
+| [runtime](#runtimes) | model `runtime:` | `src/components/runtimes/` |
+| [step](#steps) | model `pre:`, model `post:`, pipeline `steps:` | `src/components/steps/` |
+| [source](#sources) | pipeline `source:` | `src/components/sources/` |
+| [sink](#sinks) | pipeline `sinks:` | `src/components/sinks/` |
+| [converter](#converters) | EMPAIA provider settings `inputs:` | `src/components/providers/empaia/converters/` |
+| [publisher](#publishers) | EMPAIA provider settings `outputs:` | `src/components/providers/empaia/publishers/` |
 
 ## Loaders
 
 Fetches a model's weights (an MLflow artifact, a Hugging Face repo, ...).
 
-Used under a served model's `loader:` and under the `loader:` of an
-analysis step that carries its own small model.
+Used under a model's `loader:` and under the `loader:` of a
+pipeline step that carries its own small model.
 
 ### `huggingface` (loader)
 
@@ -30,9 +30,9 @@ The files go to the Hub's own cache (`HF_HOME`), which each deployment
 environment points at a shared volume, so a restart downloads nothing.
 A gated repository needs `HF_TOKEN` in the environment.
 
-- **Usable in:** served model `loader:`, analysis step `loader:`
+- **Usable in:** model `loader:`, pipeline step `loader:`
 - **Example:** `{use: huggingface, repo: paige-ai/Virchow2, revision: 3158645804b69e3f3bc4439d4116edddf0840a72}`
-- **Used in:** [`prov-gigapath`](served-models.md#prov-gigapath), [`virchow2`](served-models.md#virchow2)
+- **Used in:** [`prov-gigapath`](models.md#prov-gigapath), [`virchow2`](models.md#virchow2)
 - **Code:** [`src/components/loaders/huggingface.py`](../../src/components/loaders/huggingface.py)
 
 | Option | Type | Default | Description |
@@ -48,7 +48,7 @@ Weights at a path on the machine running the model, for tests and trials.
 `loader: {use: local, path: /data/model.onnx}`. Nothing is downloaded; on
 the cluster the path must be on a mounted volume.
 
-- **Usable in:** served model `loader:`, analysis step `loader:`
+- **Usable in:** model `loader:`, pipeline step `loader:`
 - **Example:** `{use: local, path: /data/model.onnx}`
 - **Used in:** no catalog file yet
 - **Code:** [`src/components/loaders/local.py`](../../src/components/loaders/local.py)
@@ -67,19 +67,19 @@ which each deployment environment sets once. After the download the
 revision carries the artifact's SHA-256, so `describe()` names the bytes
 that run; `sha256:` pins them.
 
-- **Usable in:** served model `loader:`, analysis step `loader:`
+- **Usable in:** model `loader:`, pipeline step `loader:`
 - **Example:** `{use: mlflow, uri: 'mlflow-artifacts:/0/0123456789abcdef/artifacts/model.onnx'}`
-- **Used in:** [`episeg-1`](served-models.md#episeg-1), [`prostate-classifier-1`](served-models.md#prostate-classifier-1)
+- **Used in:** [`episeg-1`](models.md#episeg-1), [`prostate-classifier-1`](models.md#prostate-classifier-1)
 - **Code:** [`src/components/loaders/mlflow.py`](../../src/components/loaders/mlflow.py)
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `uri` | string | required | The artifact's URI, e.g. `mlflow-artifacts:/<experiment>/<run>/artifacts/<path>`; it names one run's file. |
-| `sha256` | string | not set | The artifact's SHA-256 (`sha256sum` of the file). A run's artifact can be overwritten under the same URI; with this set, a download with other bytes is refused and the analysis runner checks it. |
+| `sha256` | string | not set | The artifact's SHA-256 (`sha256sum` of the file). A run's artifact can be overwritten under the same URI; with this set, a download with other bytes is refused and the pipeline runner checks it. |
 
 ## Runtimes
 
-Runs a model's weights (ONNX Runtime, timm, ...) inside a served model.
+Runs a model's weights (ONNX Runtime, timm, ...) inside the model host.
 
 ### `onnx` (runtime)
 
@@ -88,12 +88,12 @@ Runs an ONNX graph on ONNX Runtime, optionally through TensorRT.
 The graph takes the batch as the host gives it (uint8 RGB tiles,
 `(N, 3, tile_size, tile_size)`, unless `pre:` changes them) as its first
 input and returns its first output. Input and output names are read from
-the graph. The TensorRT engine cache lives in the served model's cache
+the graph. The TensorRT engine cache lives in the model's cache
 directory, so a changed model never reuses a stale engine.
 
-- **Usable in:** served model `runtime:`
+- **Usable in:** model `runtime:`
 - **Example:** `{use: onnx}`
-- **Used in:** [`episeg-1`](served-models.md#episeg-1), [`prostate-classifier-1`](served-models.md#prostate-classifier-1)
+- **Used in:** [`episeg-1`](models.md#episeg-1), [`prostate-classifier-1`](models.md#prostate-classifier-1)
 - **Code:** [`src/components/runtimes/onnx.py`](../../src/components/runtimes/onnx.py)
 
 | Option | Type | Default | Description |
@@ -119,9 +119,9 @@ With `transform: pretrained` the runtime takes uint8 RGB tiles and
 transforms each one; with `transform: none` it takes the float batch that
 `pre:` steps produced. The output is the model's, as float32.
 
-- **Usable in:** served model `runtime:`
+- **Usable in:** model `runtime:`
 - **Example:** `{use: timm}`
-- **Used in:** [`prov-gigapath`](served-models.md#prov-gigapath), [`virchow2`](served-models.md#virchow2)
+- **Used in:** [`prov-gigapath`](models.md#prov-gigapath), [`virchow2`](models.md#virchow2)
 - **Code:** [`src/components/runtimes/timm.py`](../../src/components/runtimes/timm.py)
 
 | Option | Type | Default | Description |
@@ -136,7 +136,7 @@ transforms each one; with `transform: none` it takes the float batch that
 
 Transforms data, row for row.
 
-The same step can be a served model's `pre:` or `post:` or an analysis
+The same step can be a model's `pre:` or `post:` or a pipeline
 step; the catalog file decides where it runs.
 
 ### `center_crop` (step)
@@ -148,11 +148,11 @@ margin puts the extra pixel where torchvision does (it rounds half to
 even), and a tile smaller than `size` is padded with zeros first, also as
 torchvision does.
 
-- **Usable in:** served model `pre:`, served model `post:`, analysis `steps:`
+- **Usable in:** model `pre:`, model `post:`, pipeline `steps:`
 - **Example:** `{use: center_crop, size: 224}`
 - **Reads:** `tile` `uint8[3,?,?]`
 - **Adds:** `tile` `uint8[3,size,size]`
-- **Used in:** [`prov-gigapath`](served-models.md#prov-gigapath)
+- **Used in:** [`prov-gigapath`](models.md#prov-gigapath)
 - **Code:** [`src/components/steps/center_crop.py`](../../src/components/steps/center_crop.py)
 
 | Option | Type | Default | Description |
@@ -165,7 +165,7 @@ Pools a ViT's tokens into two vectors: the class token and the patch mean.
 
 `post: [{use: cls_mean_pool, registers: 4}]` turns Virchow2's tokens
 `(1 + registers + patches, dim)` into `(2, dim)`, the summaries
-`[global, local_mean]`. It runs in the served model, so only the two
+`[global, local_mean]`. It runs in the model, so only the two
 vectors leave the replica.
 
 The mean is computed with PyTorch, the way the encoder's own code pools,
@@ -173,11 +173,11 @@ so the features match it bit for bit; PyTorch must be installed where
 the step runs. A raw-inference caller that asks for unpooled tokens gets
 the class token and the patch tokens, without the registers.
 
-- **Usable in:** served model `pre:`, served model `post:`, analysis `steps:`
+- **Usable in:** model `pre:`, model `post:`, pipeline `steps:`
 - **Example:** `{use: cls_mean_pool, registers: 4}`
 - **Reads:** `output` `float32[?,?]`
 - **Adds:** `output` `float32[2,?]`
-- **Used in:** [`virchow2`](served-models.md#virchow2)
+- **Used in:** [`virchow2`](models.md#virchow2)
 - **Code:** [`src/components/steps/cls_mean_pool.py`](../../src/components/steps/cls_mean_pool.py)
 
 | Option | Type | Default | Description |
@@ -193,11 +193,11 @@ mean and divides by the std per channel, as torchvision's `ToTensor`
 followed by `Normalize` does, and with the same float32 arithmetic, so
 the result matches it bit for bit.
 
-- **Usable in:** served model `pre:`, served model `post:`, analysis `steps:`
+- **Usable in:** model `pre:`, model `post:`, pipeline `steps:`
 - **Example:** `{use: normalize, preset: imagenet}`
 - **Reads:** `tile` `uint8[3,?,?]`
 - **Adds:** `tile` `float32[3,?,?]`
-- **Used in:** [`prov-gigapath`](served-models.md#prov-gigapath)
+- **Used in:** [`prov-gigapath`](models.md#prov-gigapath)
 - **Code:** [`src/components/steps/normalize.py`](../../src/components/steps/normalize.py)
 
 | Option | Type | Default | Description |
@@ -215,11 +215,11 @@ tile to 256 px, as Prov-GigaPath's transform does. Pillow does the
 resampling, with its antialiasing, so the pixels match torchvision's bit
 for bit; Pillow must be installed where the step runs.
 
-- **Usable in:** served model `pre:`, served model `post:`, analysis `steps:`
+- **Usable in:** model `pre:`, model `post:`, pipeline `steps:`
 - **Example:** `{use: resize, size: 256, interpolation: bicubic}`
 - **Reads:** `tile` `uint8[3,?,?]`
 - **Adds:** `tile` `uint8[3,?,?]`
-- **Used in:** [`prov-gigapath`](served-models.md#prov-gigapath)
+- **Used in:** [`prov-gigapath`](models.md#prov-gigapath)
 - **Code:** [`src/components/steps/resize.py`](../../src/components/steps/resize.py)
 
 | Option | Type | Default | Description |
@@ -229,11 +229,11 @@ for bit; Pillow must be installed where the step runs.
 
 ## Sources
 
-Produces an analysis's items from its inputs, e.g. tiles of a slide.
+Produces a pipeline's items from its inputs, e.g. tiles of a slide.
 
 A source whose options derive from `TileGeometryOptions` takes
-`tile_size` and `mpp` from the analysis's first model step wherever the
-file leaves them out; the catalog fills them in when the analysis loads.
+`tile_size` and `mpp` from the pipeline's first model step wherever the
+file leaves them out; the catalog fills them in when the pipeline loads.
 
 ### `slide_tiles` (source)
 
@@ -243,12 +243,12 @@ Every grid position is a key, so skipped tiles still count toward
 progress. The grid covers at least one tile, even on a slide smaller
 than a tile.
 
-- **Usable in:** analysis `source:`
+- **Usable in:** pipeline `source:`
 - **Example:** `{use: slide_tiles, tile_size: 64, mpp: 0.5, skip_background: false}`
 - **Inputs (example options):** `slide` (required), `region_of_interest` (optional)
 - **Frame:** `extent_x` `int64`, `extent_y` `int64`, `tile_extent_x` `int64`, `tile_extent_y` `int64`, `stride_x` `int64`, `stride_y` `int64`, `level` `int64`, `mpp_x` `float64`, `mpp_y` `float64`, `downsample` `float64`
 - **Adds:** `tile_x` `int64`, `tile_y` `int64`, `tile` `uint8[3,tile_size,tile_size]`
-- **Used in:** [`episeg-heatmap`](analyses.md#episeg-heatmap), [`prostate-heatmap`](analyses.md#prostate-heatmap), [`prov-gigapath-embeddings`](analyses.md#prov-gigapath-embeddings), [`virchow2-embeddings`](analyses.md#virchow2-embeddings)
+- **Used in:** [`episeg-heatmap`](pipelines.md#episeg-heatmap), [`prostate-heatmap`](pipelines.md#prostate-heatmap), [`prov-gigapath-embeddings`](pipelines.md#prov-gigapath-embeddings), [`virchow2-embeddings`](pipelines.md#virchow2-embeddings)
 - **Code:** [`src/components/sources/slide_tiles.py`](../../src/components/sources/slide_tiles.py)
 
 | Option | Type | Default | Description |
@@ -269,22 +269,22 @@ Writes a run's results into a file of one data format.
 Writes each tile's `features` and position as a row of an embedding table.
 
 Writes `<output>.h5` in the `embedding_table` format: tile corners on the
-level read and float32 features, one vector per summary of the served
+level read and float32 features, one vector per summary of the
 model, rows in grid order. Tiles the source skipped get no row; when it
 skipped all of them, the table is empty.
 
-- **Usable in:** analysis `sinks:`
+- **Usable in:** pipeline `sinks:`
 - **Example:** `{use: embedding_table, output: embeddings}`
 - **Reads:** `tile_x` `int64`, `tile_y` `int64`, `features` `float32[...]`
 - **Writes:** [`embedding_table`](formats.md#embedding_table)
 - **Frame fields read:** `downsample`, `extent_x`, `extent_y`, `level`, `mpp_x`, `mpp_y`, `stride_x`, `tile_extent_x`
 - **Rows in order:** yes
-- **Used in:** [`prov-gigapath-embeddings`](analyses.md#prov-gigapath-embeddings), [`virchow2-embeddings`](analyses.md#virchow2-embeddings)
+- **Used in:** [`prov-gigapath-embeddings`](pipelines.md#prov-gigapath-embeddings), [`virchow2-embeddings`](pipelines.md#virchow2-embeddings)
 - **Code:** [`src/components/sinks/embedding_table.py`](../../src/components/sinks/embedding_table.py)
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `output` | string | required | The output name callers and exposure refer to. |
+| `output` | string | required | The output name callers and providers refer to. |
 
 ### `score_grid` (sink)
 
@@ -293,36 +293,36 @@ Averages each tile's `scores` over the cells the tile covers into a score grid.
 Writes `<output>.npz` in the `score_grid` format: float32 scores in 0..1
 of shape (channels, rows, columns), with which cells any tile covered.
 
-- **Usable in:** analysis `sinks:`
+- **Usable in:** pipeline `sinks:`
 - **Example:** `{use: score_grid, output: heatmap}`
 - **Reads:** `tile_x` `int64`, `tile_y` `int64`, `scores` `float32[?,?,?]`
 - **Writes:** [`score_grid`](formats.md#score_grid)
 - **Frame fields read:** `extent_x`, `extent_y`, `level`, `mpp_x`, `mpp_y`, `stride_x`, `stride_y`, `tile_extent_x`, `tile_extent_y`
 - **Rows in order:** no
-- **Used in:** [`episeg-heatmap`](analyses.md#episeg-heatmap), [`prostate-heatmap`](analyses.md#prostate-heatmap)
+- **Used in:** [`episeg-heatmap`](pipelines.md#episeg-heatmap), [`prostate-heatmap`](pipelines.md#prostate-heatmap)
 - **Code:** [`src/components/sinks/score_grid.py`](../../src/components/sinks/score_grid.py)
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `output` | string | required | The output name callers and exposure refer to. |
+| `output` | string | required | The output name callers and providers refer to. |
 
 ## Converters
 
 Converts one EMPAIA input type (`wsi`, `rectangle`, ...) into a run input.
 
-The analysis's `expose.empaia` declares each input's type, and that type
+The pipeline's `providers.empaia` declares each input's type, and that type
 picks the converter, so nothing is guessed from the data. A converter
 contributes the input's EAD io entry and materialises it for a run: a
 file in the attempt's workspace, or a value read at admission.
 
 ### `primitive` (converter)
 
-An analysis setting offered as an EMPAIA primitive input in standalone mode.
+A pipeline setting offered as an EMPAIA primitive input in standalone mode.
 
 Its type and description come from the setting; the user's value is
 read when the job is admitted and overrides the file's.
 
-- **Usable in:** EMPAIA exposure `inputs:`
+- **Usable in:** EMPAIA provider settings `inputs:`
 - **Example:** `{inputs: {<name>: {type: primitive}}}`
 - **EAD input type:** `primitive`
 - **Gives:** a value
@@ -331,17 +331,17 @@ read when the job is admitted and overrides the file's.
 
 ### `rectangle` (converter)
 
-A rectangle on the app's slide, given to the analysis as a region-of-interest mask.
+A rectangle on the app's slide, given to the pipeline as a region-of-interest mask.
 
 The rectangle, clipped to the slide, becomes a pyramidal 8-bit TIFF of
 the slide's size and pixel size: 255 inside, 0 outside. EMPAIA offers it
 with the region-of-interest class, so the viewer lets a user draw it.
 
-- **Usable in:** EMPAIA exposure `inputs:`
+- **Usable in:** EMPAIA provider settings `inputs:`
 - **Example:** `{inputs: {<name>: {type: rectangle}}}`
 - **EAD input type:** `rectangle`
 - **Gives:** a file
-- **Used in:** [`prostate-heatmap`](analyses.md#prostate-heatmap)
+- **Used in:** [`prostate-heatmap`](pipelines.md#prostate-heatmap)
 - **Code:** [`src/components/providers/empaia/converters/rectangle.py`](../../src/components/providers/empaia/converters/rectangle.py)
 
 ### `wsi` (converter)
@@ -353,18 +353,18 @@ which model-service mounts where the installation's CDS does. A MIRAX
 `.mrxs` comes with its data directory. A slide the route has no path for
 is refused: model-service does not download slides.
 
-- **Usable in:** EMPAIA exposure `inputs:`
+- **Usable in:** EMPAIA provider settings `inputs:`
 - **Example:** `{inputs: {<name>: {type: wsi}}}`
 - **EAD input type:** `wsi`
 - **Gives:** a file
-- **Used in:** [`prostate-heatmap`](analyses.md#prostate-heatmap)
+- **Used in:** [`prostate-heatmap`](pipelines.md#prostate-heatmap)
 - **Code:** [`src/components/providers/empaia/converters/wsi.py`](../../src/components/providers/empaia/converters/wsi.py)
 
 ## Publishers
 
 Publishes a stored output of one data format as an EMPAIA output type.
 
-The analysis's `expose.empaia` names the EAD type of each output; the
+The pipeline's `providers.empaia` names the EAD type of each output; the
 publisher that reads the sink's format and emits that type is picked.
 
 ### `continuous_pixelmap` (publisher)
@@ -376,13 +376,13 @@ in every slide level from the one it was computed at to the coarsest that
 keeps `MIN_PIXELS_PER_SCORE` pixels per score. Tiles are dense, so an
 unscored cell inside an uploaded tile reads 0, but a tile without a
 scored cell is not uploaded. EMPAIA pixelmaps carry one channel here, so
-a multi-channel grid is refused when the analysis loads.
+a multi-channel grid is refused when the pipeline loads.
 
-- **Usable in:** EMPAIA exposure `outputs:`
+- **Usable in:** EMPAIA provider settings `outputs:`
 - **Example:** `{outputs: {<output>: {type: continuous_pixelmap}}}`
 - **Reads:** [`score_grid`](formats.md#score_grid)
 - **EAD output types:** `continuous_pixelmap`
-- **Used in:** [`prostate-heatmap`](analyses.md#prostate-heatmap)
+- **Used in:** [`prostate-heatmap`](pipelines.md#prostate-heatmap)
 - **Code:** [`src/components/providers/empaia/publishers/continuous_pixelmap.py`](../../src/components/providers/empaia/publishers/continuous_pixelmap.py)
 
 | Option | Type | Default | Description |
@@ -392,13 +392,13 @@ a multi-channel grid is refused when the analysis loads.
 
 ### `primitive` (publisher)
 
-Posts one scalar as the primitive type the analysis names.
+Posts one scalar as the primitive type the pipeline names.
 
 The value must fit the type: a bool is not an integer, a float takes
 whole numbers, and an empty string is refused. It is checked before
 anything is posted.
 
-- **Usable in:** EMPAIA exposure `outputs:`
+- **Usable in:** EMPAIA provider settings `outputs:`
 - **Example:** `{outputs: {<output>: {type: float}}}`
 - **Reads:** [`value`](formats.md#value)
 - **EAD output types:** `bool`, `float`, `integer`, `string`

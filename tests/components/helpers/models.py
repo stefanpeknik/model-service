@@ -1,4 +1,4 @@
-"""A fake served model for `model.` dimensions and model calls in tests."""
+"""A fake model for `model.` dimensions and model calls in tests."""
 
 from __future__ import annotations
 
@@ -42,10 +42,10 @@ class FakeOutput:
 
 @dataclass(frozen=True)
 class FakeModel:
-    """A served-model stand-in.
+    """A model stand-in.
 
     Attributes:
-        id: The served-model ID.
+        id: The model ID.
         input: What it takes.
         output: What it returns.
     """
@@ -80,7 +80,7 @@ class FakeModel:
         return np.broadcast_to(mean[:, None, None, None], shape).astype(np.float32)
 
     async def infer(self, tile: np.ndarray) -> np.ndarray:
-        """Infer one tile, as a served-model host's handle does.
+        """Infer one tile, as a model host's handle does.
 
         Args:
             tile: uint8 `(3, tile_size, tile_size)`.
@@ -93,11 +93,11 @@ class FakeModel:
 
 
 def fake_model(output: dict[str, Any] | None = None, **input_: Any) -> FakeModel:
-    """Build a fake served model.
+    """Build a fake model.
 
     Args:
         output: Output fields (`kind`, `channels`, `size`, `dim`,
-            `summaries`), as in a served-model file's `output:`.
+            `summaries`), as in a model file's `output:`.
         **input_: Input fields (`tile_size`, `mpp`).
 
     Returns:

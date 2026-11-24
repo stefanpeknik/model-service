@@ -2,7 +2,7 @@
 
 Code moves rename modules, and string paths escape the type checker: the
 `import_path` of each Serve application in the Helm templates. This test
-imports each module for real and looks the attribute up. The served-model
+imports each module for real and looks the attribute up. The model
 host pulls in Ray, ONNX Runtime and torch; the dev environment has them, so a
 real import is affordable and catches more than a find_spec check would. The
 templates are not YAML, so paths are read with a regular expression.
@@ -34,8 +34,8 @@ class ImportPathTests(unittest.TestCase):
         self.assertEqual(
             set(paths),
             {
-                "model_service.analysis_runner.serve:app",
-                "model_service.served_model.serve:app",
+                "model_service.pipeline_runner.serve:app",
+                "model_service.model_host.serve:app",
             },
         )
         for path in paths:

@@ -32,7 +32,7 @@ class MlflowOptions(Options):
         description=(
             "The artifact's SHA-256 (`sha256sum` of the file). A run's artifact "
             "can be overwritten under the same URI; with this set, a download "
-            "with other bytes is refused and the analysis runner checks it."
+            "with other bytes is refused and the pipeline runner checks it."
         ),
     )
 
@@ -42,7 +42,7 @@ class MlflowOptions(Options):
     ) -> dict[str, Any]:
         """Leave out an unset `sha256`.
 
-        The served-model digest, and the TensorRT cache directory named after
+        The model digest, and the TensorRT cache directory named after
         it, then stay what they were before the option existed.
 
         Args:
@@ -97,7 +97,7 @@ class Mlflow(Loader):
         digest = _sha256(path)
         if self.options.sha256 is not None and digest != self.options.sha256:
             raise ValueError(
-                f"{self.options.uri} has sha256 {digest}, but the served model "
+                f"{self.options.uri} has sha256 {digest}, but the model "
                 f"pins {self.options.sha256}"
             )
         self._fetched_sha256 = digest

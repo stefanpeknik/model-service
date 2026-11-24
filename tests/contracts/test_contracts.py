@@ -5,11 +5,11 @@ from datetime import UTC, datetime
 
 from pydantic import TypeAdapter, ValidationError
 
-from model_service.contracts.analysis_http import ANALYSIS_RUN_REQUEST
-from model_service.contracts.analysis_http import ErrorCode as RunnerErrorCode
 from model_service.contracts.caller_request import RunRequest
 from model_service.contracts.failures import FailureCode
 from model_service.contracts.invocation import INVOCATION, ExecutionContext, InputKind
+from model_service.contracts.pipeline_http import PIPELINE_RUN_REQUEST
+from model_service.contracts.pipeline_http import ErrorCode as RunnerErrorCode
 from model_service.contracts.result import RESULT, OutputKind
 from model_service.control_plane.http.errors import ApiErrorCode
 from model_service.control_plane.scheduler.status import ExecutionErrorCode
@@ -55,7 +55,7 @@ class ContractTests(unittest.TestCase):
                     "media_type": "image/tiff",
                 },
             },
-            "served_models": {
+            "models": {
                 "virchow2": {
                     "digest": "d" * 64,
                     "weights_revision": "paige-ai/Virchow2@abc123",
@@ -69,22 +69,22 @@ class ContractTests(unittest.TestCase):
         self.assertIs(result.outputs["heatmap"].kind, OutputKind.SHARED_ARTIFACT)
         self.assertEqual(RESULT.dump_python(result, mode="json"), body)
 
-    def test_run_request_nests_invocation_analysis_and_context(self) -> None:
+    def test_run_request_nests_invocation_pipeline_and_context(self) -> None:
         body = {
             "invocation": INVOCATION_BODY,
-            "analysis": {"id": "prostate-heatmap", "steps": []},
+            "pipeline": {"id": "prostate-heatmap", "steps": []},
             "execution_context": {
                 "processing_attempt_id": "attempt-1",
                 "execution_id": "execution-1",
                 "protected_context": {"credential": "secret"},
             },
         }
-        request = ANALYSIS_RUN_REQUEST.validate_python(body)
+        request = PIPELINE_RUN_REQUEST.validate_python(body)
 
         self.assertNotIn("secret", repr(request.execution_context))
-        self.assertEqual(ANALYSIS_RUN_REQUEST.dump_python(request, mode="json"), body)
+        self.assertEqual(PIPELINE_RUN_REQUEST.dump_python(request, mode="json"), body)
         with self.assertRaises(ValidationError):
-            ANALYSIS_RUN_REQUEST.validate_python({"invocation": INVOCATION_BODY})
+            PIPELINE_RUN_REQUEST.validate_python({"invocation": INVOCATION_BODY})
 
     def test_execution_context_rejects_invalid_attempts_and_non_json_secrets(
         self,
@@ -112,12 +112,12 @@ class ContractTests(unittest.TestCase):
             },
         )
         self.assertEqual(
-            ApiErrorCode.RUNNER_BACKPRESSURE, "analysis_runner_backpressure"
+            ApiErrorCode.RUNNER_BACKPRESSURE, "pipeline_runner_backpressure"
         )
-        self.assertEqual(ApiErrorCode.RUNNER_UNAVAILABLE, "analysis_runner_unavailable")
+        self.assertEqual(ApiErrorCode.RUNNER_UNAVAILABLE, "pipeline_runner_unavailable")
         self.assertEqual(ExecutionErrorCode.RUN_OUTCOME_UNKNOWN, "run_outcome_unknown")
         self.assertEqual(RunnerErrorCode.INVALID_INVOCATION, "invalid_run_request")
-        self.assertEqual(RunnerErrorCode.UNAVAILABLE, "analysis_runner_unavailable")
+        self.assertEqual(RunnerErrorCode.UNAVAILABLE, "pipeline_runner_unavailable")
         self.assertEqual(
             score_grid.FORMAT.media_type,
             "application/vnd.rationai.score-grid+npz; version=1",

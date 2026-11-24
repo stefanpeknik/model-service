@@ -15,7 +15,7 @@ catalog file may name the component, and its folder there must match it:
 | --- | --- | --- |
 | Weights from somewhere new | loader | `loaders/` |
 | A new way to run weights | runtime | `runtimes/` |
-| A per-tile transform, in a served model's `pre:`/`post:` or as an analysis step | step | `steps/` |
+| A per-tile transform, in a model's `pre:`/`post:` or as a pipeline step | step | `steps/` |
 | A new way to produce items from a slide | source | `sources/` |
 | A new kind of output file | sink | `sinks/`, plus a module in `src/model_service/formats/` if the format is new |
 | A new EMPAIA input or output type | converter, publisher | `providers/empaia/converters/`, `providers/empaia/publishers/` |
@@ -46,7 +46,7 @@ the code of every existing component, often the closest example.
 ## Write it
 
 Say you want a mask, not a score map: every score at or above a cutoff
-becomes 1, the rest 0. A step in the served model's `post:` does that.
+becomes 1, the rest 0. A step in the model's `post:` does that.
 `src/components/steps/threshold.py`:
 
 ```python
@@ -110,13 +110,13 @@ What each part is for:
 - `Options` lists what a file may set. Unknown keys are errors, and every
   field needs a `description`, which becomes the option's line in the
   reference docs and the editor's hover text. Mark an option `PerRun[...]`
-  if callers may change it for one run; it then becomes an analysis setting
+  if callers may change it for one run; it then becomes a pipeline setting
   and an EMPAIA job parameter.
 - `reads` and `adds` declare the columns, as dtype and shape without the
   batch axis. A dimension is a number, `None` for any size, or the name of
   one of your options. The catalog check uses them to tell a file author that your step
-  doesn't fit before anything runs. A served model's runtime output is the
-  column `output`; in an analysis, a model step adds `scores` or `features`.
+  doesn't fit before anything runs. A model's runtime output is the
+  column `output`; in a pipeline, a model step adds `scores` or `features`.
 - The class docstring is the component's reference page.
 - Import heavy libraries (torch, ONNX Runtime, OpenSlide) inside methods,
   never at the top of the module. The control plane imports every component to check
@@ -180,7 +180,7 @@ The other helpers cover the rest of the kinds:
 - `run_component(MySink, batches, work_dir=tmp_path)` feeds a sink batches
   and a `fake_frame()` and returns the artifact it wrote.
 - `fake_model(output={"kind": "embedding", "summaries": ["global"]})` stands
-  in for a served model, for `model.` dimensions and model calls.
+  in for a model, for `model.` dimensions and model calls.
 
 Regenerate the reference docs so they list your component, then run the
 whole suite:
@@ -198,6 +198,6 @@ else checks the file before a replica imports it.
 ## Use it
 
 Name it in a catalog file and check that file:
-`post: [{use: threshold}]` in a served model, then `uv run pytest tests/catalog`.
+`post: [{use: threshold}]` in a model, then `uv run pytest tests/catalog`.
 A component is code, so deploying it needs a new image; catalog files that
 use it deploy with `helm upgrade` once the image runs.

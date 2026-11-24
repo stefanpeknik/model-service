@@ -289,4 +289,4 @@ def _published(
         return stored
     if stored is None:
         return published
-    return replace(published, served_models=stored.served_models)
+    return replace(published, models=stored.models)

@@ -1,1 +1,1 @@
-"""Runtimes: run weights inside a served model."""
+"""Runtimes: run a model's weights inside the model host."""

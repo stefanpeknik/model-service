@@ -65,7 +65,7 @@ class MyComponent(Source):
 
         Args:
             inputs: Local paths by input name.
-            run: The run; `run.model` is the last model step's served model.
+            run: The run; `run.model` is the last model step's model.
 
         Yields:
             The frame, one key per tile and the function loading them.

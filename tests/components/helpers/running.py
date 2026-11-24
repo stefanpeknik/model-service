@@ -91,7 +91,7 @@ def run_component(
     work_dir: Path | None = None,
     frame: dict[str, Any] | None = None,
 ) -> Any:
-    """Run a step, source or sink once, as the analysis runner would.
+    """Run a step, source or sink once, as the pipeline runner would.
 
     Args:
         component: A component class (built from `options` or its example
@@ -100,7 +100,7 @@ def run_component(
             source's inputs by name. By default: random data for the declared
             reads, or a fake slide for each input.
         options: Options when `component` is a class.
-        model: The served-model declaration a sink or source gets as
+        model: The model declaration a sink or source gets as
             `run.model`.
         work_dir: Where sinks write and fake inputs go; needed for sources
             and sinks.

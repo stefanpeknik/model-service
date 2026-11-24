@@ -2,7 +2,7 @@
 
 The context resolves `{use: <name>, ...options}` values against the component
 registry, validates plain fields, follows `{model: <id>}` references to the
-served models resolved before and collects every mistake in the standard
+models resolved before and collects every mistake in the standard
 format, attributed to the file that supplied the value (the base file or the
 environment's patch).
 """
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from components._kinds.component import Component
     from components._kinds.slots import Slot
     from model_service.catalog.errors import YamlPath
-    from model_service.catalog.served_models import ServedModel
+    from model_service.catalog.models import Model
     from model_service.registry import Registry
 
 
@@ -40,21 +40,21 @@ class ResolveContext:
         registry: Registry,
         file_of: Callable[[YamlPath], str],
         document_id: str = "",
-        served_models: Mapping[str, ServedModel] | None = None,
+        models: Mapping[str, Model] | None = None,
         failed_models: Set[str] = frozenset(),
     ) -> None:
-        """Bind the registry, the served models and file attribution.
+        """Bind the registry, the models and file attribution.
 
         Args:
             registry: The components catalog files may name.
             file_of: The file that supplied the value at a path.
             document_id: The document's ID, its file name without `.yaml`.
-            served_models: The served models an analysis may call, by ID.
-            failed_models: IDs of served-model files that failed to resolve.
+            models: The models a pipeline may call, by ID.
+            failed_models: IDs of model files that failed to resolve.
         """
         self.document_id = document_id
         self.registry = registry
-        self.served_models = served_models or {}
+        self.models = models or {}
         self.failed_models = failed_models
         self.file_of = file_of
         self.errors: list[CatalogError] = []
@@ -195,10 +195,10 @@ class ResolveContext:
                 self._report((*path, *loc), problem, hint)
             return None
 
-    def served_model(self, value: object, path: YamlPath) -> ServedModel | None:
-        """Follow a `{model: <id>}` reference to a served model.
+    def model(self, value: object, path: YamlPath) -> Model | None:
+        """Follow a `{model: <id>}` reference to a model.
 
-        A reference to a served model that failed to resolve returns None
+        A reference to a model that failed to resolve returns None
         without a second error; its own errors already say what's wrong.
 
         Args:
@@ -206,17 +206,17 @@ class ResolveContext:
             path: Where the reference sits.
 
         Returns:
-            The served model, or None.
+            The model, or None.
         """
-        if isinstance(value, str) and value in self.served_models:
-            return self.served_models[value]
+        if isinstance(value, str) and value in self.models:
+            return self.models[value]
         if isinstance(value, str) and value in self.failed_models:
             return None
         self.error(
             path,
-            f"no served model `{value}`",
-            f"Served models: {_names(sorted(self.served_models))}",
-            f"add catalog/served-models/{value}.yaml or fix the name",
+            f"no model `{value}`",
+            f"Models: {_names(sorted(self.models))}",
+            f"add catalog/models/{value}.yaml or fix the name",
         )
         return None
 

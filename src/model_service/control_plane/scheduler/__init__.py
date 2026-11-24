@@ -11,7 +11,7 @@
   (expired leases, passed deadlines), composed by ExecutionTransitions.
 - internal_state.py: internal records, leases, retry policy and outcomes.
 - protocols.py: what the control plane needs from the scheduler (Scheduler); settings.py: process settings.
-- dispatch.py: sending an analysis run to the runner over HTTP, and how a send can end.
+- dispatch.py: sending a pipeline run to the runner over HTTP, and how a send can end.
 - store/: persistence: postgres/ (one operations class per concern over a shared
   PostgresDatabase), rows.py, migrate.py and migrations/.
 """

@@ -1,6 +1,6 @@
 """Standalone provider: shared-storage inputs and outputs, no external job lifecycle.
 
-The analysis runner loads this module through the provider registry, so it imports
+The pipeline runner loads this module through the provider registry, so it imports
 no control-plane code; the control-plane side (admission, finish) is adapter.py, imported lazily.
 """
 
@@ -16,26 +16,26 @@ from model_service.providers.standalone.shared_storage import SharedStorageAcces
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
-    from model_service.analysis_runner.settings import ReplicaSettings
     from model_service.catalog import Catalog
     from model_service.control_plane.scheduler.settings import SchedulerSettings
+    from model_service.pipeline_runner.settings import ReplicaSettings
     from model_service.providers.input_access import InputAccessFactory
     from model_service.providers.provider import ControlPlaneContribution
 
 
-# The provider name of requests made through the public analysis routes.
+# The provider name of requests made through the public pipeline routes.
 STANDALONE_PROVIDER = "standalone"
 
 
 class StandaloneProvider(Provider):
-    """Shared-storage jobs, through the public analysis routes the control plane serves."""
+    """Shared-storage jobs, through the public pipeline routes the control plane serves."""
 
     def control_plane(
         self, catalog: Callable[[], Catalog], settings: SchedulerSettings
     ) -> ControlPlaneContribution:
         """Contribute the standalone scheduler adapter, with no routes or background work.
 
-        The control plane's public analysis routes submit these jobs.
+        The control plane's public pipeline routes submit these jobs.
 
         Args:
             catalog: Unused.
@@ -59,7 +59,7 @@ class StandaloneProvider(Provider):
     def input_access(
         self, settings: ReplicaSettings
     ) -> Mapping[str, InputAccessFactory]:
-        """Give the analysis runner shared-storage access below the allowed roots.
+        """Give the pipeline runner shared-storage access below the allowed roots.
 
         Args:
             settings: Supplies the allowed shared-storage roots.

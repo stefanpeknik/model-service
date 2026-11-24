@@ -75,7 +75,7 @@ class Onnx(Runtime):
     The graph takes the batch as the host gives it (uint8 RGB tiles,
     `(N, 3, tile_size, tile_size)`, unless `pre:` changes them) as its first
     input and returns its first output. Input and output names are read from
-    the graph. The TensorRT engine cache lives in the served model's cache
+    the graph. The TensorRT engine cache lives in the model's cache
     directory, so a changed model never reuses a stale engine.
     """
 

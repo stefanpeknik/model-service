@@ -1,7 +1,7 @@
 """Specify the EMPAIA job boundary, protected credentials, and configurable gateway factory.
 
 Provider admission and finish use this boundary in the scheduler process; input access
-uses it in the analysis runner.
+uses it in the pipeline runner.
 """
 
 from __future__ import annotations
@@ -131,7 +131,7 @@ class EmpaiaInputState(EmpaiaJob):
 
 
 class Publications(BaseModel):
-    """What admission fixed about publishing an analysis's outputs.
+    """What admission fixed about publishing a pipeline's outputs.
 
     Attributes:
         slide: The app's slide input, which outputs reference.
@@ -159,7 +159,7 @@ class AdmittedEmpaiaJobContext(EmpaiaJobContext):
     """The protected context stored with an admitted job's execution.
 
     Attributes:
-        publications: How the analysis's outputs are published, as admitted.
+        publications: How the pipeline's outputs are published, as admitted.
     """
 
     publications: Publications

@@ -1,7 +1,7 @@
 """`embedding_table`: one feature row per tile, in grid order, as an HDF5 table.
 
 The table's header comes from the source's frame (level, sizes, stride) and
-the run's served model (its ID, summaries and mpp). Rows are written by one
+the run's model (its ID, summaries and mpp). Rows are written by one
 thread of the sink's own, in the order they arrive, so the runner's event
 loop never waits on HDF5.
 """
@@ -27,7 +27,7 @@ class EmbeddingTableSink(Sink):
     """Writes each tile's `features` and position as a row of an embedding table.
 
     Writes `<output>.h5` in the `embedding_table` format: tile corners on the
-    level read and float32 features, one vector per summary of the served
+    level read and float32 features, one vector per summary of the
     model, rows in grid order. Tiles the source skipped get no row; when it
     skipped all of them, the table is empty.
     """
@@ -59,11 +59,11 @@ class EmbeddingTableSink(Sink):
 
         Args:
             frame: The source's frame row.
-            run: The run's `Run`; `run.model` is the served model whose
+            run: The run's `Run`; `run.model` is the model whose
                 features the rows hold.
 
         Raises:
-            ValueError: If the run has no served model or it returns scores.
+            ValueError: If the run has no model or it returns scores.
         """
         model = run.model
         if model is None:

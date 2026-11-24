@@ -1,8 +1,8 @@
-"""The catalog: served-model and analysis files, checked and resolved.
+"""The catalog: model and pipeline files, checked and resolved.
 
 `load_catalog(root, environment)` reads a catalog directory, deep-merges the
-environment's patches over the base files and resolves every served model,
-then every analysis, or raises `CatalogInvalid` listing every mistake as
+environment's patches over the base files and resolves every model,
+then every pipeline, or raises `CatalogInvalid` listing every mistake as
 `<file>:<yaml path>: <what's wrong>. <what would fit>. Hint: <how to fix>`.
 The control plane, the catalog test and tools all load through it. It imports no Ray,
 ONNX Runtime, torch or OpenSlide.

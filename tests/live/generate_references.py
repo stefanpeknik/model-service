@@ -9,7 +9,7 @@ outputs stay there (copy them next to the raw references, then `--manifest`):
         --out .cache/golden/refs --model prostate-classifier-1
     uv run python -m tests.live.generate_references run \
         --api-url http://localhost:18080 --shared-root /mnt/shared/golden \
-        --analysis prostate-heatmap
+        --pipeline prostate-heatmap
     uv run python -m tests.live.generate_references manifest \
         --out .cache/golden/refs --image-tag empaia-36 --source-revision 0352fa6
 """
@@ -105,11 +105,11 @@ def read_tile(
 def call_raw(
     client: httpx.Client, case: RawCase, tile: NDArray[np.uint8], *, pooled: bool = True
 ) -> NDArray[np.generic]:
-    """Send a tile to a served model's raw route and decode the reply.
+    """Send a tile to a model's raw route and decode the reply.
 
     Args:
         client: Client with the Serve base URL.
-        case: The served model.
+        case: The model.
         tile: The RGB tile.
         pooled: For embeddings, whether the route pools the tokens.
 
@@ -135,7 +135,7 @@ def call_raw(
 
 
 def record_raw(args: argparse.Namespace) -> None:
-    """Record one served model's raw-route references.
+    """Record one model's raw-route references.
 
     Args:
         args: The parsed `raw` command line.
@@ -171,20 +171,20 @@ def record_raw(args: argparse.Namespace) -> None:
 
 
 def record_run(args: argparse.Namespace) -> None:
-    """Run one analysis synchronously on each slide.
+    """Run one pipeline synchronously on each slide.
 
     Args:
         args: The parsed `run` command line.
     """
     import httpx
 
-    case = RUN_CASES[args.analysis]
+    case = RUN_CASES[args.pipeline]
     deadline = datetime.now(UTC) + timedelta(seconds=args.timeout)
     with httpx.Client(base_url=args.api_url, timeout=args.timeout + 60) as client:
         for name in SLIDES:
-            output = f"{args.prefix}/{case.analysis}/{Path(name).stem}.{case.extension}"
+            output = f"{args.prefix}/{case.pipeline}/{Path(name).stem}.{case.extension}"
             response = client.post(
-                f"/v1/analyses/{case.analysis}/run",
+                f"/v1/pipelines/{case.pipeline}/run",
                 json={
                     "inputs": {
                         "slide": {"kind": "shared_path", "path": f"slides/{name}"}
@@ -197,7 +197,7 @@ def record_run(args: argparse.Namespace) -> None:
                     "deadline_at": deadline.isoformat(),
                 },
             )
-            print(case.analysis, name, response.status_code, response.text[:500])
+            print(case.pipeline, name, response.status_code, response.text[:500])
             response.raise_for_status()
 
 
@@ -231,20 +231,20 @@ def main() -> None:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     commands = parser.add_subparsers(dest="command", required=True)
-    raw = commands.add_parser("raw", help="raw-route replies of one served model")
+    raw = commands.add_parser("raw", help="raw-route replies of one model")
     raw.add_argument("--serve-url", required=True)
     raw.add_argument("--slides", type=Path, required=True)
     raw.add_argument("--out", type=Path, required=True)
     raw.add_argument("--model", choices=sorted(RAW_CASES), required=True)
     raw.add_argument("--timeout", type=float, default=1800)
     raw.set_defaults(handler=record_raw)
-    run = commands.add_parser("run", help="synchronous runs of one analysis")
+    run = commands.add_parser("run", help="synchronous runs of one pipeline")
     run.add_argument("--api-url", required=True)
     run.add_argument("--shared-root", default="/mnt/shared/golden")
     run.add_argument(
         "--prefix", default="runs", help="output folder under the shared root"
     )
-    run.add_argument("--analysis", choices=sorted(RUN_CASES), required=True)
+    run.add_argument("--pipeline", choices=sorted(RUN_CASES), required=True)
     run.add_argument("--timeout", type=float, default=7200)
     run.set_defaults(handler=record_run)
     manifest = commands.add_parser("manifest", help="hash the local reference set")

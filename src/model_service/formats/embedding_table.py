@@ -11,7 +11,7 @@ HDF5 file (`.h5`), whose `schema_version` attribute is 2:
   with no tile (every tile was background) is (0, 0) or (0, summaries, 0);
 - file attributes, the header:
   - `schema_version`: 2;
-  - `model_id`: the served model that computed the features;
+  - `model_id`: the model that computed the features;
   - `summary_names`: the names of its summaries, e.g. `global`,
     `local_mean` (strings);
   - `coordinate_space`: `slide_level`, as `coordinates` are given;
@@ -84,7 +84,7 @@ class Header:
     first two are fixed, and the writer counts the rows.
 
     Attributes:
-        model_id: The served model that computed the features.
+        model_id: The model that computed the features.
         summary_names: Its summaries, one vector each per tile.
         slide_level: The slide level read.
         level_downsample: That level's downsample from level 0.

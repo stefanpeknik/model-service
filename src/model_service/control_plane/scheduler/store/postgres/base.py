@@ -80,8 +80,8 @@ class PostgresDatabase:
             dsn: libpq DSN or PostgreSQL URL.
             cipher: Cipher for the stored provider context.
             schema: PostgreSQL schema holding the execution table.
-            capacity_limits: Attempts allowed at once per capacity key (a served
-                model, or a model-free analysis).
+            capacity_limits: Attempts allowed at once per capacity key (a
+                model, or a model-free pipeline).
             processing_policy: Processing retry policy.
             finish_policy: Provider finish retry policy.
             pool_size: Pooled connections, with as many again allowed as overflow.
@@ -270,10 +270,10 @@ class PostgresDatabase:
                 fingerprint=row.request_fingerprint,
             ),
             target=ExecutionTarget(
-                analysis_id=row.analysis_id,
+                pipeline_id=row.pipeline_id,
                 models=tuple(row.models),
-                analysis_digest=row.analysis_digest,
-                analysis=row.analysis,
+                pipeline_digest=row.pipeline_digest,
+                pipeline=row.pipeline,
             ),
             status=row.status,
             invocation=row.invocation,

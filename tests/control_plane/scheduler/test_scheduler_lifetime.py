@@ -14,13 +14,13 @@ from model_service.control_plane.scheduler.internal_state import (
     RenewDirective,
     RetryPolicy,
 )
-from model_service.control_plane.scheduler.public import AnalysisScheduleRequest
+from model_service.control_plane.scheduler.public import PipelineScheduleRequest
 from model_service.control_plane.scheduler.status import ExecutionStatus
 from tests.support.memory_repository import FakeDispatch, InMemoryExecutionRepository
 from tests.support.scheduling import (
     MutableClock,
     StandaloneProvider,
-    resolve_test_analysis,
+    resolve_test_pipeline,
 )
 
 
@@ -50,7 +50,7 @@ class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):
             repository=self.repository,
             providers={self.provider.name: self.provider},
             dispatch=FakeDispatch({"a1": dispatch or self.completed_dispatch}),
-            resolve_analysis=resolve_test_analysis,
+            resolve_pipeline=resolve_test_pipeline,
             default_timeout=timedelta(hours=1),
             maximum_timeout=timedelta(hours=6),
             clock=self.clock,
@@ -70,8 +70,8 @@ class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):
     ) -> ScheduleResult:
         """Submit minimal standalone fixture work under the selected replay key."""
         return await scheduler.schedule(
-            AnalysisScheduleRequest(
-                analysis_id="a1",
+            PipelineScheduleRequest(
+                pipeline_id="a1",
                 provider="standalone",
                 body={},
                 idempotency_key=key,
@@ -178,8 +178,8 @@ class SchedulerLifetimeTests(unittest.IsolatedAsyncioTestCase):
         async with scheduler.running():
             await asyncio.wait_for(started.wait(), timeout=1)
             queued = await scheduler.schedule(
-                AnalysisScheduleRequest(
-                    analysis_id="a1",
+                PipelineScheduleRequest(
+                    pipeline_id="a1",
                     provider="standalone",
                     body={},
                     idempotency_key="queued-deadline",

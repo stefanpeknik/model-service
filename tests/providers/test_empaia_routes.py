@@ -8,7 +8,7 @@ from fastapi import Request
 from httpx import ASGITransport, AsyncClient
 
 from model_service.catalog import Catalog
-from model_service.contracts.failures import UnknownAnalysisError
+from model_service.contracts.failures import UnknownPipelineError
 from model_service.control_plane.app_factory import create_app
 from model_service.control_plane.http.auth import (
     Access,
@@ -17,9 +17,9 @@ from model_service.control_plane.http.auth import (
     Principal,
 )
 from model_service.control_plane.scheduler.public import (
-    AnalysisScheduleRequest,
     ExecutionError,
     ExecutionView,
+    PipelineScheduleRequest,
     ScheduleResult,
     UnknownExecutionError,
 )
@@ -27,7 +27,7 @@ from model_service.control_plane.scheduler.status import ExecutionStatus
 from model_service.providers.empaia.jobs.routes import create_router
 
 
-SUBMIT = "/v1/empaia/analyses/prostate-heatmap"
+SUBMIT = "/v1/empaia/pipelines/prostate-heatmap"
 TOKEN = "secret-job-token"
 JOB = {
     "app_api": "https://app-service.example/v3/",
@@ -40,9 +40,9 @@ JOB = {
 def view(status: ExecutionStatus, **fields: object) -> ExecutionView:
     return ExecutionView(
         id="execution-1",
-        analysis_id="prostate-heatmap",
+        pipeline_id="prostate-heatmap",
         models=["prostate-classifier-1"],
-        analysis_digest=None,
+        pipeline_digest=None,
         status=status,
         **fields,  # type: ignore[arg-type]
     )
@@ -54,16 +54,16 @@ class ScriptedScheduler:
     def __init__(self, current: ExecutionView, *, created: bool = True) -> None:
         self.current = current
         self.created = created
-        self.requests: list[AnalysisScheduleRequest] = []
-        self.unknown_analyses: set[str] = set()
+        self.requests: list[PipelineScheduleRequest] = []
+        self.unknown_pipelines: set[str] = set()
         self.cancelled: list[str] = []
 
     async def check_ready(self) -> None:
         return None
 
-    async def schedule(self, request: AnalysisScheduleRequest) -> ScheduleResult:
-        if request.analysis_id in self.unknown_analyses:
-            raise UnknownAnalysisError(request.analysis_id)
+    async def schedule(self, request: PipelineScheduleRequest) -> ScheduleResult:
+        if request.pipeline_id in self.unknown_pipelines:
+            raise UnknownPipelineError(request.pipeline_id)
         self.requests.append(request)
         return ScheduleResult(self.current, created=self.created)
 
@@ -87,7 +87,7 @@ def client(scheduler: ScriptedScheduler) -> AsyncClient:
 
 
 class EmpaiaRouteTests(unittest.IsolatedAsyncioTestCase):
-    async def test_submission_runs_the_apps_analysis(self) -> None:
+    async def test_submission_runs_the_apps_pipeline(self) -> None:
         scheduler = ScriptedScheduler(view(ExecutionStatus.QUEUED))
         async with client(scheduler) as http:
             response = await http.post(
@@ -104,8 +104,8 @@ class EmpaiaRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             scheduler.requests,
             [
-                AnalysisScheduleRequest(
-                    analysis_id="prostate-heatmap",
+                PipelineScheduleRequest(
+                    pipeline_id="prostate-heatmap",
                     provider="empaia",
                     body={
                         "installation_id": "https://app-service.example/v3",
@@ -138,17 +138,17 @@ class EmpaiaRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.json()["detail"]["code"], "invalid_request")
         self.assertEqual(scheduler.requests, [])
 
-    async def test_unknown_analysis_and_invalid_body_are_rejected_safely(
+    async def test_unknown_pipeline_and_invalid_body_are_rejected_safely(
         self,
     ) -> None:
         scheduler = ScriptedScheduler(view(ExecutionStatus.QUEUED))
-        scheduler.unknown_analyses.add("other")
+        scheduler.unknown_pipelines.add("other")
         async with client(scheduler) as http:
-            unknown = await http.post("/v1/empaia/analyses/other", json=JOB)
+            unknown = await http.post("/v1/empaia/pipelines/other", json=JOB)
             invalid = await http.post(SUBMIT, json={**JOB, "job_id": ""})
 
         self.assertEqual(unknown.status_code, 404)
-        self.assertEqual(unknown.json()["detail"]["code"], "unknown_analysis")
+        self.assertEqual(unknown.json()["detail"]["code"], "unknown_pipeline")
         self.assertEqual(invalid.status_code, 422)
         self.assertNotIn(TOKEN, invalid.text)
         self.assertEqual(scheduler.requests, [])

@@ -29,7 +29,7 @@ SENSITIVE_PLACEHOLDERS = {
     "controlPlane.database.existingSecret": "model-service-db",
     "controlPlane.encryption.existingSecret": "model-service-db",
 }
-TEST_ANALYSES = ("prostate-heatmap", "virchow2-embeddings", "prov-gigapath-embeddings")
+TEST_PIPELINES = ("prostate-heatmap", "virchow2-embeddings", "prov-gigapath-embeddings")
 BASE_VALUES = CHART / "values.yaml"
 
 pytestmark = pytest.mark.skipif(shutil.which("helm") is None, reason="needs helm")
@@ -73,19 +73,19 @@ def catalog_data(objects: dict[tuple[str, str], Any]) -> dict[str, Any]:
     return {key: json.loads(text) for key, text in data.items()}
 
 
-def test_an_environment_deploys_its_served_models_and_one_runner() -> None:
+def test_an_environment_deploys_its_models_and_one_runner() -> None:
     apps = applications(render(TEST_VALUES))
 
     assert set(apps) == {
         "prostate-classifier-1",
         "virchow2",
         "prov-gigapath",
-        "analysis-runner",
+        "pipeline-runner",
     }
     assert {
         apps[i]["import_path"]
         for i in ("prostate-classifier-1", "virchow2", "prov-gigapath")
-    } == {"model_service.served_model.serve:app"}
+    } == {"model_service.model_host.serve:app"}
 
 
 def sensitive(**settings: object) -> dict[tuple[str, str], Any]:
@@ -112,33 +112,35 @@ def test_sensitive_cluster_serves_every_model_on_the_generic_host() -> None:
     apps = applications(sensitive())
 
     assert set(apps) == {
-        *load_catalog(CATALOG).served_models,
-        "analysis-runner",
+        *load_catalog(CATALOG).models,
+        "pipeline-runner",
     }
     assert {
-        app["import_path"] for app in apps.values() if app["name"] != "analysis-runner"
-    } == {"model_service.served_model.serve:app"}
+        app["import_path"] for app in apps.values() if app["name"] != "pipeline-runner"
+    } == {"model_service.model_host.serve:app"}
 
 
-def test_the_control_plane_catalog_carries_the_deployed_served_models() -> None:
+def test_the_control_plane_catalog_carries_the_deployed_models() -> None:
     data = catalog_data(render(TEST_VALUES))
     catalog = load_catalog(CATALOG, RATIONAI_TEST)
-    entries = catalog.served_models
-    analyses = catalog.analyses
+    entries = catalog.models
+    pipelines = catalog.pipelines
 
     assert data["catalog.json"] == {
-        "served-models": {
+        "models": {
             model_id: entries[model_id].declaration
             for model_id in ("prostate-classifier-1", "virchow2", "prov-gigapath")
         },
-        "analyses": {
-            analysis_id: analyses[analysis_id].declaration
-            for analysis_id in TEST_ANALYSES
+        "pipelines": {
+            pipeline_id: pipelines[pipeline_id].declaration
+            for pipeline_id in TEST_PIPELINES
         },
     }
     # The catalog is all the control plane reads.
     assert set(data) == {"catalog.json"}
-    assert "empaia" in data["catalog.json"]["analyses"]["prostate-heatmap"]["expose"]
+    assert (
+        "empaia" in data["catalog.json"]["pipelines"]["prostate-heatmap"]["providers"]
+    )
 
 
 def test_the_control_plane_reads_the_rendered_catalog(tmp_path: Path) -> None:
@@ -148,30 +150,30 @@ def test_the_control_plane_reads_the_rendered_catalog(tmp_path: Path) -> None:
 
     catalog = MountedCatalog(tmp_path)
 
-    served = catalog.resolved.served_models
+    served = catalog.resolved.models
     assert sorted(served) == ["prostate-classifier-1", "prov-gigapath", "virchow2"]
     assert served["prostate-classifier-1"].input.tile_size == 512
-    prostate = catalog.resolved.analyses["prostate-heatmap"]
+    prostate = catalog.resolved.pipelines["prostate-heatmap"]
     assert prostate.empaia is not None
-    assert sorted(catalog.resolved.analyses) == sorted(TEST_ANALYSES)
+    assert sorted(catalog.resolved.pipelines) == sorted(TEST_PIPELINES)
 
 
 def test_an_environment_deploys_a_named_subset_or_none() -> None:
-    none = render(TEST_VALUES, servedModels=[], analyses=[])
+    none = render(TEST_VALUES, models=[], pipelines=[])
     named = render(
         TEST_VALUES,
-        servedModels=["prostate-classifier-1"],
-        analyses=["prostate-heatmap"],
+        models=["prostate-classifier-1"],
+        pipelines=["prostate-heatmap"],
     )
 
     assert "prostate-classifier-1" not in applications(none)
-    assert catalog_data(none)["catalog.json"] == {"served-models": {}, "analyses": {}}
+    assert catalog_data(none)["catalog.json"] == {"models": {}, "pipelines": {}}
     assert "prostate-classifier-1" in applications(named)
 
 
-def test_a_named_served_model_without_a_file_fails_the_render() -> None:
+def test_a_named_model_without_a_file_fails_the_render() -> None:
     with pytest.raises(subprocess.CalledProcessError) as failed:
-        render(TEST_VALUES, servedModels=["no-such-model"])
+        render(TEST_VALUES, models=["no-such-model"])
 
     assert "no-such-model" in failed.value.stderr
 
@@ -190,24 +192,24 @@ def test_catalog_changes_reach_the_control_plane_without_rolling_it() -> None:
     assert env["MODEL_CATALOG_DIR"] == mount["mountPath"]
 
 
-def test_one_analysis_runner_serves_the_deployed_analyses() -> None:
+def test_one_pipeline_runner_serves_the_deployed_pipelines() -> None:
     values = yaml.safe_load(TEST_VALUES.read_text(encoding="utf-8"))
-    sizing = values["analysisRunner"]
+    sizing = values["pipelineRunner"]
     marker = cpu_worker_resource()
     actor = {
         **sizing["deployment"]["ray_actor_options"],
         "resources": {marker["name"]: marker["perReplica"]},
     }
 
-    runner = applications(render(TEST_VALUES))["analysis-runner"]
+    runner = applications(render(TEST_VALUES))["pipeline-runner"]
 
     assert runner == {
-        "name": "analysis-runner",
-        "route_prefix": "/analyses",
-        "import_path": "model_service.analysis_runner.serve:app",
+        "name": "pipeline-runner",
+        "route_prefix": "/pipelines",
+        "import_path": "model_service.pipeline_runner.serve:app",
         "deployments": [
             {
-                "name": "AnalysisRunner",
+                "name": "PipelineRunner",
                 **sizing["deployment"],
                 "ray_actor_options": actor,
                 "user_config": {
@@ -219,32 +221,34 @@ def test_one_analysis_runner_serves_the_deployed_analyses() -> None:
     }
 
 
-def test_without_analyses_there_is_no_runner() -> None:
-    objects = render(TEST_VALUES, analyses=[])
+def test_without_pipelines_there_is_no_runner() -> None:
+    objects = render(TEST_VALUES, pipelines=[])
 
-    assert "analysis-runner" not in applications(objects)
-    assert catalog_data(objects)["catalog.json"]["analyses"] == {}
+    assert "pipeline-runner" not in applications(objects)
+    assert catalog_data(objects)["catalog.json"]["pipelines"] == {}
 
 
-def test_sensitive_cluster_deploys_every_analysis() -> None:
+def test_sensitive_cluster_deploys_every_pipeline() -> None:
     data = catalog_data(sensitive())
 
-    assert set(data["catalog.json"]["analyses"]) == set(load_catalog(CATALOG).analyses)
+    assert set(data["catalog.json"]["pipelines"]) == set(
+        load_catalog(CATALOG).pipelines
+    )
 
 
-def test_an_analysis_calling_an_undeployed_served_model_fails_the_render() -> None:
+def test_an_pipeline_calling_an_undeployed_model_fails_the_render() -> None:
     with pytest.raises(subprocess.CalledProcessError) as failed:
-        render(TEST_VALUES, servedModels=["virchow2"])
+        render(TEST_VALUES, models=["virchow2"])
 
     assert "prostate-heatmap" in failed.value.stderr
     assert "prostate-classifier-1" in failed.value.stderr
 
 
-def test_a_named_analysis_without_a_file_fails_the_render() -> None:
+def test_a_named_pipeline_without_a_file_fails_the_render() -> None:
     with pytest.raises(subprocess.CalledProcessError) as failed:
-        render(TEST_VALUES, analyses=["no-such-analysis"])
+        render(TEST_VALUES, pipelines=["no-such-pipeline"])
 
-    assert "no-such-analysis" in failed.value.stderr
+    assert "no-such-pipeline" in failed.value.stderr
 
 
 @pytest.mark.parametrize("environment", ["rationai-test", "sensitive-cluster"])
@@ -262,13 +266,13 @@ def test_cpu_only_apps_can_only_be_placed_on_cpu_workers(environment: str) -> No
     cpu_only = [
         deployment
         for app_name, app in apps.items()
-        if app_name == "analysis-runner"
+        if app_name == "pipeline-runner"
         for deployment in app["deployments"]
     ]
     served = [
         deployment
         for app in apps.values()
-        if app["import_path"] == "model_service.served_model.serve:app"
+        if app["import_path"] == "model_service.model_host.serve:app"
         for deployment in app["deployments"]
     ]
     requested = [
@@ -281,7 +285,7 @@ def test_cpu_only_apps_can_only_be_placed_on_cpu_workers(environment: str) -> No
     cpu_groups = {g: r for g, r in groups.items() if not r.get("GPU")}
     gpu_groups = {g: r for g, r in groups.items() if r.get("GPU")}
 
-    assert "analysis-runner" in apps
+    assert "pipeline-runner" in apps
     assert cpu_groups and gpu_groups
     assert all(amount > 0 for amount in requested)
     assert all(

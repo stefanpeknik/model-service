@@ -1,6 +1,6 @@
-"""EMPAIA vocabulary an analysis's `expose.empaia` uses: modes, triggers, viewer settings.
+"""EMPAIA vocabulary a pipeline's `providers.empaia` uses: modes, triggers, viewer settings.
 
-Light on purpose: the catalog loader validates `expose.empaia` with these
+Light on purpose: the catalog loader validates `providers.empaia` with these
 models, and the EMPAIA provider builds EADs from them.
 """
 

@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 class Step(Component):
     """Transforms data, row for row.
 
-    The same step can be a served model's `pre:` or `post:` or an analysis
+    The same step can be a model's `pre:` or `post:` or a pipeline
     step; the catalog file decides where it runs.
     """
 

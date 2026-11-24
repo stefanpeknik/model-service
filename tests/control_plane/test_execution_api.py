@@ -20,14 +20,14 @@ from httpx import (
 )
 
 from model_service.catalog import load_catalog
-from model_service.catalog.analyses import resolve_run
+from model_service.catalog.pipelines import resolve_run
 from model_service.contracts.result import InlineOutput, RunResult
-from model_service.control_plane.app_factory import analysis_resolver, create_app
+from model_service.control_plane.app_factory import create_app, pipeline_resolver
 from model_service.control_plane.health import DeploymentHealth
 from model_service.control_plane.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.control_plane.scheduler.public import (
-    AnalysisScheduleRequest,
     ExecutionView,
+    PipelineScheduleRequest,
     ScheduleResult,
     SchedulingUnavailableError,
 )
@@ -35,7 +35,7 @@ from model_service.control_plane.scheduler.status import ExecutionStatus
 from model_service.control_plane.scheduler.store.repository import (
     ExecutionRepositoryUnavailableError,
 )
-from model_service.control_plane.synchronous_runs import SynchronousAnalysisService
+from model_service.control_plane.synchronous_runs import SynchronousPipelineService
 from model_service.providers.standalone.adapter import StandaloneProviderAdapter
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from tests.support.memory_repository import InMemoryExecutionRepository
@@ -50,15 +50,15 @@ if TYPE_CHECKING:
     from starlette.types import Message, Scope
 
     from model_service.catalog import Catalog
-    from model_service.contracts.analysis_http import AnalysisRunRequest
+    from model_service.contracts.pipeline_http import PipelineRunRequest
     from model_service.control_plane.scheduler.internal_state import ExecutionRecord
 
-    type Handler = Callable[[AnalysisRunRequest], Awaitable[RunResult]]
+    type Handler = Callable[[PipelineRunRequest], Awaitable[RunResult]]
 
 
 CATALOG = load_catalog(CATALOG_DIR, RATIONAI_TEST)
-RUN = "/v1/analyses/prostate-heatmap/run"
-SCHEDULE = "/v1/analyses/prostate-heatmap/schedule"
+RUN = "/v1/pipelines/prostate-heatmap/run"
+SCHEDULE = "/v1/pipelines/prostate-heatmap/schedule"
 
 
 def catalog() -> Catalog:
@@ -78,10 +78,10 @@ class FakeDispatch:
     """Record dispatched runs and delegate to a test handler."""
 
     def __init__(self, handler: Handler | None = None) -> None:
-        self.calls: list[AnalysisRunRequest] = []
+        self.calls: list[PipelineRunRequest] = []
         self._handler = handler
 
-    async def run_analysis(self, request: AnalysisRunRequest) -> RunResult:
+    async def run_pipeline(self, request: PipelineRunRequest) -> RunResult:
         self.calls.append(request)
         if self._handler is None:
             return RunResult(outputs={"score": InlineOutput(value=0.9)})
@@ -94,19 +94,19 @@ class RecordingScheduler:
     alive = True
 
     def __init__(self) -> None:
-        self.requests: list[AnalysisScheduleRequest] = []
+        self.requests: list[PipelineScheduleRequest] = []
 
     async def check_ready(self) -> None:
         return None
 
-    async def schedule(self, request: AnalysisScheduleRequest) -> ScheduleResult:
+    async def schedule(self, request: PipelineScheduleRequest) -> ScheduleResult:
         self.requests.append(request)
         return ScheduleResult(
             execution=ExecutionView(
                 id="execution-1",
-                analysis_id=request.analysis_id,
+                pipeline_id=request.pipeline_id,
                 models=[],
-                analysis_digest=None,
+                pipeline_digest=None,
                 status=ExecutionStatus.QUEUED,
             ),
             created=True,
@@ -144,7 +144,7 @@ class ApiTestCase(unittest.IsolatedAsyncioTestCase):
                     SharedStorageAccessFactory([self.root])
                 )
             },
-            resolve_analysis=analysis_resolver(catalog),
+            resolve_pipeline=pipeline_resolver(catalog),
             default_timeout=timedelta(hours=1),
             maximum_timeout=timedelta(hours=6),
             poll_interval=0.01,
@@ -159,7 +159,7 @@ class ApiTestCase(unittest.IsolatedAsyncioTestCase):
     def app(self, **kwargs: object) -> FastAPI:
         options: dict[str, object] = {
             "catalog": catalog,
-            "analysis_runner": SynchronousAnalysisService(catalog, self.dispatch),
+            "pipeline_runner": SynchronousPipelineService(catalog, self.dispatch),
         }
         options.update(kwargs)
         return create_app(self.scheduler, **options)  # type: ignore[arg-type]
@@ -232,9 +232,9 @@ class ScheduleRouteTests(ApiTestCase):
             polled.json(),
             {
                 "id": execution_id,
-                "analysis_id": "prostate-heatmap",
+                "pipeline_id": "prostate-heatmap",
                 "models": ["prostate-classifier-1"],
-                "analysis_digest": resolve_run(
+                "pipeline_digest": resolve_run(
                     CATALOG, "prostate-heatmap", None
                 ).digest,
                 "status": "queued",
@@ -263,7 +263,7 @@ class ScheduleRouteTests(ApiTestCase):
             HEATMAP_DEFAULTS | {"stride_fraction": 1.0},
         )
 
-    async def test_a_setting_the_analysis_rejects_is_refused_naming_it(self) -> None:
+    async def test_a_setting_the_pipeline_rejects_is_refused_naming_it(self) -> None:
         body = {**self.schedule_request(), "configuration": {"stride_fraction": 0}}
         async with self.client(self.app()) as client:
             refused = await self.schedule(client, body)
@@ -289,8 +289,8 @@ class ScheduleRouteTests(ApiTestCase):
     async def test_lookup_and_validation_errors_are_distinct(self) -> None:
         body = self.schedule_request()
         async with self.client(self.app()) as client:
-            unknown_analysis = await self.schedule(
-                client, url="/v1/analyses/missing/schedule"
+            unknown_pipeline = await self.schedule(
+                client, url="/v1/pipelines/missing/schedule"
             )
             empty_key = await self.schedule(client, key="")
             no_key = await self.schedule(client, key=None)
@@ -302,7 +302,7 @@ class ScheduleRouteTests(ApiTestCase):
             )
             provider = await self.schedule(client, {**body, "provider": "standalone"})
 
-        self.assert_error(unknown_analysis, 404, "unknown_analysis")
+        self.assert_error(unknown_pipeline, 404, "unknown_pipeline")
         for response in (
             empty_key,
             no_key,
@@ -400,7 +400,7 @@ class HealthAndAvailabilityTests(ApiTestCase):
         return DeploymentHealth(
             client,
             origin="http://ray",
-            routes=lambda: ["/analyses", "/prostate-classifier-1"],
+            routes=lambda: ["/pipelines", "/prostate-classifier-1"],
         )
 
     async def test_a_control_plane_without_a_running_worker_is_not_live(self) -> None:
@@ -431,7 +431,7 @@ class HealthAndAvailabilityTests(ApiTestCase):
         self.assertEqual(stopped.json(), {"status": "catalog watcher stopped"})
 
     async def test_missing_routes_are_separate_from_readiness(self) -> None:
-        routes = {"/analyses/": "analysis-runner"}
+        routes = {"/pipelines/": "pipeline-runner"}
         async with (
             AsyncClient(
                 transport=MockTransport(lambda _request: Response(200, json=routes))
@@ -455,7 +455,7 @@ class HealthAndAvailabilityTests(ApiTestCase):
         )
 
     async def test_all_routes_present_is_ready(self) -> None:
-        routes = {"/analyses": "analysis-runner", "/prostate-classifier-1": "p"}
+        routes = {"/pipelines": "pipeline-runner", "/prostate-classifier-1": "p"}
         async with (
             AsyncClient(
                 transport=MockTransport(lambda _request: Response(200, json=routes))
@@ -526,7 +526,7 @@ class HealthAndAvailabilityTests(ApiTestCase):
     async def test_scheduler_unavailability_is_retryable(self) -> None:
         class UnavailableScheduler(RecordingScheduler):
             async def schedule(
-                self, request: AnalysisScheduleRequest
+                self, request: PipelineScheduleRequest
             ) -> ScheduleResult:
                 raise SchedulingUnavailableError("temporarily unavailable")
 

@@ -14,8 +14,8 @@ flowchart LR
   classDef ext fill:#f4f4f4,stroke:#999,stroke-dasharray:3
 
   subgraph sg_cp["control plane (uvicorn: control_plane.main)"]
-    cp["control_plane<br/>app_factory, catalog_mount,<br/>synchronous_runs, analysis_requests"]
-    routes["control_plane.routes.v1<br/>analyses · executions · models"]
+    cp["control_plane<br/>app_factory, catalog_mount,<br/>synchronous_runs, pipeline_requests"]
+    routes["control_plane.routes.v1<br/>pipelines · executions · models"]
     http["control_plane.http<br/>auth · errors · scheduling"]
     subgraph sg_sched["control_plane.scheduler"]
       scheduler["scheduler<br/>execution_scheduler, worker, dispatch"]
@@ -32,17 +32,17 @@ flowchart LR
     end
   end
 
-  subgraph sg_runner["Analysis runner (Ray Serve: analysis_runner.serve)"]
-    runner["analysis_runner<br/>run · replica · serve"]
+  subgraph sg_runner["Pipeline runner (Ray Serve: pipeline_runner.serve)"]
+    runner["pipeline_runner<br/>run · replica · serve"]
     slides["slides<br/>tile_reader · tissue"]
   end
 
-  subgraph sg_host["Served models (Ray Serve: served_model.serve)"]
-    host["served_model<br/>host · batching · guards · replies"]
+  subgraph sg_host["Models (Ray Serve: model.serve)"]
+    host["model<br/>host · batching · guards · replies"]
   end
 
   subgraph sg_shared["Shared, light: every process"]
-    catalog["catalog<br/>loader · served_models · analyses"]
+    catalog["catalog<br/>loader · models · pipelines"]
     registry["registry<br/>scan · EMPAIA pickers"]
     formats["formats"]
     contracts["contracts"]
@@ -90,14 +90,14 @@ flowchart LR
 A few arrows cross into packages of another process at module level only:
 
 - `catalog` imports `providers.empaia.ead` for the EMPAIA vocabulary (modes,
-  triggers, viewer settings) that `expose.empaia` is checked against;
+  triggers, viewer settings) that `providers.empaia` is checked against;
 - the EMPAIA converters and publishers in `components.providers.empaia` import the
   gateway errors and types of `providers.empaia.app_service`, and
   `slide_tiles` imports `slides` inside its methods only, so the control plane never
   loads OpenSlide;
-- `analysis_runner` imports `served_model.guards` to check each model's
+- `pipeline_runner` imports `model.guards` to check each model's
   output against its declaration;
-- `served_model.replies` imports the `cls_mean_pool` step to drop register
+- `model.replies` imports the `cls_mean_pool` step to drop register
   tokens from the raw route's unpooled reply.
 
 Between the two top-level packages, `components._kinds` imports nothing from
@@ -121,15 +121,15 @@ sequenceDiagram
   participant P as provider adapter
   participant DB as scheduler.store → PostgreSQL
   participant W as scheduler.worker
-  participant A as analysis_runner
-  participant M as served_model hosts
+  participant A as pipeline_runner
+  participant M as model hosts
 
-  C->>R: POST /v1/analyses/{a}/schedule
+  C->>R: POST /v1/pipelines/{a}/schedule
   R->>H: submit()
   H->>S: schedule(request)
   S->>P: identify + prepare
-  S->>DB: admit with the resolved analysis (transitions.admission)
-  W->>DB: claim a slot in every served model it calls
+  S->>DB: admit with the resolved pipeline (transitions.admission)
+  W->>DB: claim a slot in every model it calls
   W->>A: HTTP run (dispatch) with the stored document
   A->>M: describe() digest check, then infer(tile) per tile
   A-->>W: result: output paths and media types

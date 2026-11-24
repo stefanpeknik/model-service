@@ -1,4 +1,4 @@
-"""Scheduler doubles shared by scheduler tests: a minimal provider, analyses and a clock."""
+"""Scheduler doubles shared by scheduler tests: a minimal provider, pipelines and a clock."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
 from model_service.catalog import load_catalog
-from model_service.catalog.analyses import resolve_run
+from model_service.catalog.pipelines import resolve_run
 from model_service.contracts.invocation import (
     InputAccessContext,
     Invocation,
@@ -20,46 +20,46 @@ from model_service.control_plane.scheduler.public import (
 )
 from model_service.control_plane.scheduler.targets import ExecutionTarget
 from model_service.providers.provider import ProviderAdapter
-from tests.support.analysis_catalog import REGISTRY, served_model, write
+from tests.support.pipeline_catalog import REGISTRY, model_file, write
 
 
 if TYPE_CHECKING:
     from datetime import datetime, timedelta
 
     from model_service.catalog import Catalog
-    from model_service.catalog.analyses import ResolvedAnalysis
+    from model_service.catalog.pipelines import ResolvedPipeline
     from model_service.contracts.json_values import JsonObject, JsonValue
     from model_service.control_plane.scheduler.public import (
-        AnalysisScheduleRequest,
         BeforeMutation,
+        PipelineScheduleRequest,
         ProviderFinishOutcome,
     )
 
 
-# Two analyses on two served models: `a1` calls `m1`, `a2` calls `m2`.
-ANALYSES = {"a1": "m1", "a2": "m2"}
+# Two pipelines on two models: `a1` calls `m1`, `a2` calls `m2`.
+PIPELINES = {"a1": "m1", "a2": "m2"}
 
 
-def stored_target(analysis_id: str, models: tuple[str, ...] = ()) -> ExecutionTarget:
+def stored_target(pipeline_id: str, models: tuple[str, ...] = ()) -> ExecutionTarget:
     """A target as admission stores it, with a stand-in document and digest."""
     document: JsonObject = {
-        "id": analysis_id,
+        "id": pipeline_id,
         "steps": [{"model": model} for model in models],
         "sinks": [],
     }
-    return ExecutionTarget(analysis_id, models, f"digest-{analysis_id}", document)
+    return ExecutionTarget(pipeline_id, models, f"digest-{pipeline_id}", document)
 
 
 @functools.cache
 def scheduling_catalog() -> Catalog:
-    """The catalog the scheduler tests resolve analyses in."""
+    """The catalog the scheduler tests resolve pipelines in."""
     with TemporaryDirectory() as directory:
         root = Path(directory)
-        for analysis_id, model_id in ANALYSES.items():
-            write(root, f"served-models/{model_id}.yaml", served_model())
+        for pipeline_id, model_id in PIPELINES.items():
+            write(root, f"models/{model_id}.yaml", model_file())
             write(
                 root,
-                f"analyses/{analysis_id}.yaml",
+                f"pipelines/{pipeline_id}.yaml",
                 f"""
                 source: {{use: slide_tiles}}
                 steps: [{{model: {model_id}}}]
@@ -69,11 +69,11 @@ def scheduling_catalog() -> Catalog:
         return load_catalog(root, registry=REGISTRY)
 
 
-def resolve_test_analysis(
-    analysis_id: str, settings: JsonObject | None
-) -> ResolvedAnalysis:
-    """Resolve one of `ANALYSES` as the control plane's resolver would."""
-    return resolve_run(scheduling_catalog(), analysis_id, settings)
+def resolve_test_pipeline(
+    pipeline_id: str, settings: JsonObject | None
+) -> ResolvedPipeline:
+    """Resolve one of `PIPELINES` as the control plane's resolver would."""
+    return resolve_run(scheduling_catalog(), pipeline_id, settings)
 
 
 class StandaloneProvider(ProviderAdapter):
@@ -81,7 +81,7 @@ class StandaloneProvider(ProviderAdapter):
 
     name = "standalone"
 
-    def identify(self, request: AnalysisScheduleRequest) -> SubmissionIdentity:
+    def identify(self, request: PipelineScheduleRequest) -> SubmissionIdentity:
         """Use the test replay key with a fixed fingerprint to isolate scheduler replay behavior."""
         assert request.idempotency_key is not None
         return SubmissionIdentity(
@@ -92,7 +92,7 @@ class StandaloneProvider(ProviderAdapter):
 
     async def prepare(
         self,
-        request: AnalysisScheduleRequest,
+        request: PipelineScheduleRequest,
         deadline_at: datetime,
     ) -> PreparedInvocation:
         """Create a shared-storage invocation of a slide with the scheduler-supplied deadline."""

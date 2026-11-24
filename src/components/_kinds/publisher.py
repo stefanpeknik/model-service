@@ -31,7 +31,7 @@ class PublisherOptions(Options):
     """Options every publisher has.
 
     Attributes:
-        type: The EAD output type, from the analysis's `expose.empaia`.
+        type: The EAD output type, from the pipeline's `providers.empaia`.
     """
 
     type: str = Field(
@@ -56,7 +56,7 @@ class EmpaiaOutput:
 class Publisher(Component):
     """Publishes a stored output of one data format as an EMPAIA output type.
 
-    The analysis's `expose.empaia` names the EAD type of each output; the
+    The pipeline's `providers.empaia` names the EAD type of each output; the
     publisher that reads the sink's format and emits that type is picked.
 
     Attributes:

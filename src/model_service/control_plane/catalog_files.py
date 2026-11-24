@@ -1,10 +1,10 @@
 """Read the catalog from the file the chart's catalog ConfigMap holds.
 
 `deploy/helm/templates/model-catalog.yaml` renders `catalog.json`:
-`{"served-models": {id: document}, "analyses": {id: document}}`, the deployed
-served models and analyses after the environment's patches. They resolve
+`{"models": {id: document}, "pipelines": {id: document}}`, the deployed
+models and pipelines after the environment's patches. They resolve
 through the catalog loader, so the control plane runs the same load-time checks as the
-catalog test, and an analysis naming a served model that isn't deployed is an
+catalog test, and a pipeline naming a model that isn't deployed is an
 error naming that model.
 """
 
@@ -34,11 +34,11 @@ def read_catalog(directory: Path) -> Catalog:
         directory: Where the ConfigMap is mounted.
 
     Returns:
-        The served models and analyses, as the catalog loader resolved them.
+        The models and pipelines, as the catalog loader resolved them.
 
     Raises:
-        CatalogError: If the file cannot be read, or a served model or
-            analysis does not resolve (the message lists every error in the
+        CatalogError: If the file cannot be read, or a model or
+            pipeline does not resolve (the message lists every error in the
             catalog's format).
     """
     return _resolve(_read_json(directory / CATALOG_FILE))
@@ -67,7 +67,7 @@ def _resolve(data: object) -> Catalog:
 
     The loader reads a catalog directory, so the documents are written out
     as one under a temporary directory first; errors then name
-    `catalog/served-models/<id>.yaml`, as in the repo.
+    `catalog/models/<id>.yaml`, as in the repo.
 
     Args:
         data: The parsed `catalog.json`: folder to `{id: document}`.

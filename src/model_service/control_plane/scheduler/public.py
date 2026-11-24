@@ -20,7 +20,7 @@ from model_service.control_plane.scheduler.status import ExecutionStatus
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from model_service.catalog.analyses import ResolvedAnalysis
+    from model_service.catalog.pipelines import ResolvedPipeline
     from model_service.contracts.json_values import JsonObject
     from model_service.control_plane.scheduler.targets import ExecutionTarget
 
@@ -30,30 +30,30 @@ type ProviderName = str
 
 
 @dataclass(frozen=True, slots=True)
-class AnalysisScheduleRequest:
-    """An analysis run; `body` is provider-specific, a `RunRequest` for standalone.
+class PipelineScheduleRequest:
+    """A pipeline run; `body` is provider-specific, a `RunRequest` for standalone.
 
     The provider prepares the invocation; its `configuration` holds the
-    caller's settings, which the scheduler resolves the analysis with.
+    caller's settings, which the scheduler resolves the pipeline with.
 
     Attributes:
-        analysis_id: The analysis to run.
+        pipeline_id: The pipeline to run.
         provider: The provider admitting it.
         body: The provider's request body.
         requested_timeout_seconds: How long the execution may take.
         idempotency_key: The caller's key naming the submission.
     """
 
-    analysis_id: str
+    pipeline_id: str
     provider: ProviderName
     body: dict[str, JsonValue]
     requested_timeout_seconds: int | None = None
     idempotency_key: str | None = None
 
 
-type AnalysisResolver = Callable[[str, JsonObject | None], ResolvedAnalysis]
-"""Resolve a deployed analysis with per-run settings (None keeps the file's),
-raising UnknownAnalysisError or InvalidInvocation."""
+type PipelineResolver = Callable[[str, JsonObject | None], ResolvedPipeline]
+"""Resolve a deployed pipeline with per-run settings (None keeps the file's),
+raising UnknownPipelineError or InvalidInvocation."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,9 +75,9 @@ class ExecutionView:
 
     Attributes:
         id: The execution's id.
-        analysis_id: The analysis it runs.
-        models: The served models the analysis calls.
-        analysis_digest: The digest of the analysis as resolved at
+        pipeline_id: The pipeline it runs.
+        models: The models the pipeline calls.
+        pipeline_digest: The digest of the pipeline as resolved at
             admission.
         status: Its status.
         configuration: Every setting it runs with, fixed at admission.
@@ -88,9 +88,9 @@ class ExecutionView:
     """
 
     id: str
-    analysis_id: str
+    pipeline_id: str
     models: list[str]
-    analysis_digest: str
+    pipeline_digest: str
     status: ExecutionStatus
     configuration: dict[str, JsonValue] | None = None
     result: RunResult | None = None
@@ -113,7 +113,7 @@ class ScheduleResult:
 
 
 class InvalidScheduleRequestError(ValueError):
-    """The schedule request is invalid for its analysis or provider."""
+    """The schedule request is invalid for its pipeline or provider."""
 
 
 class ScheduleConflictError(RuntimeError):
@@ -170,7 +170,7 @@ class ProviderSuccess:
     """Give provider finish the durable result to publish."""
 
     result: RunResult
-    # What produced it: the analysis document says what each output is.
+    # What produced it: the pipeline document says what each output is.
     target: ExecutionTarget
 
 

@@ -27,7 +27,7 @@ def problems(
         error: The validation error.
         model: The model that was validated.
         noun: What the keys are called, e.g. `option` or `key`.
-        owner: Who has the keys, e.g. "`onnx`" or "a served model".
+        owner: Who has the keys, e.g. "`onnx`" or "a model".
 
     Returns:
         Per error: its path inside the mapping, the problem, and the generic hint.

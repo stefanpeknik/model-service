@@ -1,7 +1,7 @@
 """Run leased processing and provider attempts with independent maintenance and renewal.
 
 Results are settled before provider finish is claimed, so a failed publication is
-retried without rerunning the analysis.
+retried without rerunning the pipeline.
 """
 
 from __future__ import annotations
@@ -11,9 +11,9 @@ import logging
 from contextlib import suppress
 from typing import TYPE_CHECKING
 
-from model_service.contracts.analysis_http import AnalysisRunRequest
 from model_service.contracts.invocation import ExecutionContext
 from model_service.contracts.log_context import logging_execution
+from model_service.contracts.pipeline_http import PipelineRunRequest
 from model_service.contracts.result import RunResult
 from model_service.control_plane.scheduler.dispatch import (
     ConfirmedRejectionError,
@@ -53,7 +53,7 @@ if TYPE_CHECKING:
     from datetime import timedelta
 
     from model_service.control_plane.scheduler.internal_state import Settlement
-    from model_service.control_plane.scheduler.protocols import AnalysisDispatch
+    from model_service.control_plane.scheduler.protocols import PipelineDispatch
     from model_service.control_plane.scheduler.public import ProviderName
     from model_service.control_plane.scheduler.running_work import ActiveWorkRegistry
     from model_service.control_plane.scheduler.store.repository import (
@@ -70,7 +70,7 @@ class ExecutionWorker:
         *,
         repository: ExecutionRepository,
         providers: Mapping[ProviderName, ProviderAdapter],
-        dispatch: AnalysisDispatch,
+        dispatch: PipelineDispatch,
         owner: str,
         lease_duration: timedelta,
         active_work: ActiveWorkRegistry,
@@ -81,7 +81,7 @@ class ExecutionWorker:
         Args:
             repository: Durable execution store.
             providers: Provider adapters by provider name.
-            dispatch: Client that runs analyses on the runner.
+            dispatch: Client that runs pipelines on the runner.
             owner: Lease owner ID of this worker.
             lease_duration: How long a claim stays valid without renewal.
             active_work: Registry of local tasks, used for prompt cancellation.
@@ -374,7 +374,7 @@ class ExecutionWorker:
             )
 
     async def _run_processing(self, claim: WorkClaim) -> Settlement:
-        """Dispatch the attempt: the stored analysis document to the runner.
+        """Dispatch the attempt: the stored pipeline document to the runner.
 
         Args:
             claim: Leased attempt.
@@ -390,8 +390,8 @@ class ExecutionWorker:
         )
         try:
             # Every attempt runs the document admitted, not the catalog as it is now.
-            result = await self._dispatch.run_analysis(
-                AnalysisRunRequest(claim.invocation, claim.target.analysis, context)
+            result = await self._dispatch.run_pipeline(
+                PipelineRunRequest(claim.invocation, claim.target.pipeline, context)
             )
             return ProcessingSucceeded(result)
         except ConfirmedRejectionError as error:
@@ -400,7 +400,7 @@ class ExecutionWorker:
             return ProcessingFailed(
                 error=ExecutionError(
                     code=ExecutionErrorCode.RUN_OUTCOME_UNKNOWN,
-                    message="analysis dispatch outcome is unknown",
+                    message="pipeline dispatch outcome is unknown",
                 ),
                 retryable=True,
             )

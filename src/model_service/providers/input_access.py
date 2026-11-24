@@ -1,7 +1,7 @@
 """How runs reach their inputs: the interface providers implement, and closing it.
 
 A provider's access adapter turns an invocation's provider-specific inputs into
-local files for one run, and says where outputs go; the analysis runner sees
+local files for one run, and says where outputs go; the pipeline runner sees
 only the resulting paths. An access may also pass the run's progress on to its
 provider. close_resource closes an access, or anything it holds, within
 a timeout; cleanup tasks stay referenced until they finish and their exceptions
@@ -30,7 +30,7 @@ class InputAccess(ABC):
         """Resolve a named invocation input to a local file.
 
         Args:
-            name: Input name, as the analysis reads it.
+            name: Input name, as the pipeline reads it.
 
         Returns:
             Local path the run can read the input from.

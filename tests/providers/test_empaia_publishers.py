@@ -216,7 +216,7 @@ class PrimitiveTests(unittest.IsolatedAsyncioTestCase):
                 assert gateway.posted == []
 
 
-def analysis_success(
+def pipeline_success(
     outputs: dict[str, SharedArtifact], sinks: list[str]
 ) -> ProviderSuccess:
     return ProviderSuccess(
@@ -249,7 +249,7 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
             lambda _context: gateway, allowed_api_urls=("https://empaia.invalid",)
         )
 
-    async def test_an_analysis_publishes_the_outputs_it_was_admitted_with(
+    async def test_an_pipeline_publishes_the_outputs_it_was_admitted_with(
         self,
     ) -> None:
         gateway = AsyncMock()
@@ -257,7 +257,7 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
         with TemporaryDirectory() as directory:
             await self.provider(gateway).finish(
                 admitted(heatmap={"type": "continuous_pixelmap", "tile_size": 512}),
-                analysis_success(
+                pipeline_success(
                     {
                         "heatmap": SharedArtifact(
                             str(heatmap_file(directory)), score_grid.FORMAT.media_type
@@ -277,13 +277,13 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
         gateway.slide_info.assert_awaited_once_with("slide")
         gateway.finalize.assert_awaited_once()
 
-    async def test_a_result_unlike_the_analysis_is_never_published(self) -> None:
+    async def test_a_result_unlike_the_pipeline_is_never_published(self) -> None:
         gateway = AsyncMock()
 
         with self.assertRaises(ProviderFinishFailureError) as raised:
             await self.provider(gateway).finish(
                 admitted(heatmap={"type": "continuous_pixelmap"}),
-                analysis_success(
+                pipeline_success(
                     {
                         "extra": SharedArtifact(
                             "/shared/x.npz", score_grid.FORMAT.media_type
@@ -306,7 +306,7 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(ProviderFinishFailureError) as raised:
                 await self.provider(gateway).finish(
                     admitted(heatmap={"type": "continuous_pixelmap"}),
-                    analysis_success(
+                    pipeline_success(
                         {
                             "heatmap": SharedArtifact(
                                 str(path), score_grid.FORMAT.media_type
@@ -332,7 +332,7 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
                         heatmap={"type": "continuous_pixelmap"},
                         score={"type": "float"},
                     ),
-                    analysis_success(
+                    pipeline_success(
                         {
                             "heatmap": SharedArtifact(
                                 str(heatmap_file(directory)),

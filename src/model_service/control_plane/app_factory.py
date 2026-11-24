@@ -16,7 +16,7 @@ from fastapi import FastAPI, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from model_service.catalog.analyses import resolve_run
+from model_service.catalog.pipelines import resolve_run
 from model_service.control_plane.catalog_mount import (
     CatalogState,
     CatalogStatus,
@@ -29,8 +29,8 @@ from model_service.control_plane.health import (
 )
 from model_service.control_plane.http.auth import Access
 from model_service.control_plane.http.errors import ApiErrorCode, http_error
-from model_service.control_plane.routes.v1 import analyses, executions, models
-from model_service.control_plane.scheduler.dispatch import HTTPAnalysisDispatch
+from model_service.control_plane.routes.v1 import executions, models, pipelines
+from model_service.control_plane.scheduler.dispatch import HTTPPipelineDispatch
 from model_service.control_plane.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.control_plane.scheduler.internal_state import RetryPolicy
 from model_service.control_plane.scheduler.public import SchedulingUnavailableError
@@ -42,7 +42,7 @@ from model_service.control_plane.scheduler.store.protected_context import (
     ProtectedContextCipher,
 )
 from model_service.control_plane.scheduler.targets import CapacityKind
-from model_service.control_plane.synchronous_runs import SynchronousAnalysisService
+from model_service.control_plane.synchronous_runs import SynchronousPipelineService
 from model_service.providers.registry import PROVIDERS
 from model_service.providers.standalone.provider import STANDALONE_PROVIDER
 
@@ -53,10 +53,10 @@ if TYPE_CHECKING:
     from starlette.types import Lifespan
 
     from model_service.catalog import Catalog
-    from model_service.catalog.analyses import ResolvedAnalysis
+    from model_service.catalog.pipelines import ResolvedPipeline
     from model_service.contracts.json_values import JsonObject
     from model_service.control_plane.scheduler.protocols import Scheduler
-    from model_service.control_plane.scheduler.public import AnalysisResolver
+    from model_service.control_plane.scheduler.public import PipelineResolver
     from model_service.control_plane.scheduler.targets import (
         CapacityKey,
         CapacityLimits,
@@ -64,28 +64,28 @@ if TYPE_CHECKING:
     from model_service.providers.provider import RouteFactory
 
 
-def analysis_resolver(catalog: Callable[[], Catalog]) -> AnalysisResolver:
-    """Make the scheduler's resolver of a deployed analysis with a run's settings.
+def pipeline_resolver(catalog: Callable[[], Catalog]) -> PipelineResolver:
+    """Make the scheduler's resolver of a deployed pipeline with a run's settings.
 
     Args:
         catalog: Gives the catalog in use; it may reload between admissions.
 
     Returns:
-        A function giving the resolved analysis, raising `UnknownAnalysisError`
+        A function giving the resolved pipeline, raising `UnknownPipelineError`
         or `InvalidInvocation`.
     """
 
-    def resolve(analysis_id: str, settings: JsonObject | None) -> ResolvedAnalysis:
-        """Resolve an analysis of the current catalog.
+    def resolve(pipeline_id: str, settings: JsonObject | None) -> ResolvedPipeline:
+        """Resolve a pipeline of the current catalog.
 
         Args:
-            analysis_id: The analysis.
+            pipeline_id: The pipeline.
             settings: Per-run settings; None keeps the file's.
 
         Returns:
-            The analysis and its document.
+            The pipeline and its document.
         """
-        return resolve_run(catalog(), analysis_id, settings)
+        return resolve_run(catalog(), pipeline_id, settings)
 
     return resolve
 
@@ -93,8 +93,8 @@ def analysis_resolver(catalog: Callable[[], Catalog]) -> AnalysisResolver:
 def capacity_limits(catalog: Callable[[], Catalog], default: int) -> CapacityLimits:
     """Make the scheduler's slots per capacity key.
 
-    A served model's `serving.max_concurrent_runs` sets its slots; a model
-    without it, one no longer deployed and a model-free analysis get the
+    A model's `serving.max_concurrent_runs` sets its slots; a model
+    without it, one no longer deployed and a model-free pipeline get the
     default.
 
     Args:
@@ -109,13 +109,13 @@ def capacity_limits(catalog: Callable[[], Catalog], default: int) -> CapacityLim
         """Slots of one capacity key in the current catalog.
 
         Args:
-            key: A served model or a model-free analysis.
+            key: A model or a model-free pipeline.
 
         Returns:
             How many attempts may hold a slot at once.
         """
         if key.kind is CapacityKind.MODEL:
-            model = catalog().served_models.get(key.id)
+            model = catalog().models.get(key.id)
             if model is not None and model.serving.max_concurrent_runs:
                 return int(model.serving.max_concurrent_runs)
         return default
@@ -127,7 +127,7 @@ def create_app(
     scheduler: Scheduler,
     *,
     catalog: Callable[[], Catalog],
-    analysis_runner: SynchronousAnalysisService | None = None,
+    pipeline_runner: SynchronousPipelineService | None = None,
     lifespan: Lifespan[FastAPI] | None = None,
     deployment_health: DeploymentHealth | None = None,
     catalog_status: Callable[[], CatalogStatus] | None = None,
@@ -139,10 +139,10 @@ def create_app(
 
     Args:
         scheduler: Admits, reads and cancels durable executions.
-        catalog: Gives the catalog in use: served models under `/v1/models`,
-            analyses under `/v1/analyses`.
-        analysis_runner: Runs analyses synchronously; None makes
-            `/v1/analyses/{id}/run` answer 503.
+        catalog: Gives the catalog in use: models under `/v1/models`,
+            pipelines under `/v1/pipelines`.
+        pipeline_runner: Runs pipelines synchronously; None makes
+            `/v1/pipelines/{id}/run` answer 503.
         lifespan: Startup and shutdown context for the app.
         deployment_health: Checks Ray Serve routes; None reports `not_configured`.
         catalog_status: Whether the mounted catalog is the one in use; None
@@ -226,7 +226,7 @@ def create_app(
 
     @app.get("/healthz/deployments")
     async def deployment_status(response: Response) -> DeploymentStatus:
-        """Report whether Ray Serve exposes every served-model and runner route.
+        """Report whether Ray Serve exposes every model and runner route.
 
         Args:
             response: The response, set to 503 when routes are missing or Ray
@@ -261,8 +261,8 @@ def create_app(
 
     app.include_router(models.create_router(catalog, access))
     app.include_router(
-        analyses.create_router(
-            catalog, analysis_runner, scheduler, access, STANDALONE_PROVIDER
+        pipelines.create_router(
+            catalog, pipeline_runner, scheduler, access, STANDALONE_PROVIDER
         )
     )
     for routes in provider_routes:
@@ -314,12 +314,12 @@ def build_control_plane(settings: SchedulerSettings | None = None) -> FastAPI:
     )
     contributions = [provider.control_plane(catalog, config) for provider in providers]
     client = httpx.AsyncClient()
-    dispatch = HTTPAnalysisDispatch(client, origin=config.ray_serve_origin)
+    dispatch = HTTPPipelineDispatch(client, origin=config.ray_serve_origin)
     scheduler = ExecutionScheduler(
         repository=repository,
         dispatch=dispatch,
         providers={c.adapter.name: c.adapter for c in contributions},
-        resolve_analysis=analysis_resolver(catalog),
+        resolve_pipeline=pipeline_resolver(catalog),
         default_timeout=config.default_deadline,
         maximum_timeout=config.maximum_deadline,
         lease_duration=config.lease_duration,
@@ -363,15 +363,15 @@ def build_control_plane(settings: SchedulerSettings | None = None) -> FastAPI:
     return create_app(
         scheduler,
         catalog=catalog,
-        analysis_runner=SynchronousAnalysisService(catalog, dispatch),
+        pipeline_runner=SynchronousPipelineService(catalog, dispatch),
         lifespan=lifespan,
         provider_routes=[c.routes for c in contributions if c.routes is not None],
         deployment_health=DeploymentHealth(
             client,
             origin=config.ray_serve_origin,
             routes=lambda: (
-                [f"/{model_id}" for model_id in catalog().served_models]
-                + (["/analyses"] if catalog().analyses else [])
+                [f"/{model_id}" for model_id in catalog().models]
+                + (["/pipelines"] if catalog().pipelines else [])
             ),
         ),
         catalog_status=mounted.status,

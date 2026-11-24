@@ -1,6 +1,6 @@
 """JSON Schema files for catalog files, and the line linking each file to its schema.
 
-Served-model and analysis files each get `catalog/.schemas/<folder>.schema.json`
+Model and pipeline files each get `catalog/.schemas/<folder>.schema.json`
 and, for environment patches, `<folder>.patch.schema.json`. Each catalog file
 starts with a `# yaml-language-server: $schema=<relative path>` comment, which
 editors with the YAML language server read; the loader and Helm ignore it.
@@ -13,7 +13,7 @@ import os
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
-from model_service.catalog import analyses, served_models
+from model_service.catalog import models, pipelines
 from model_service.catalog.loader import FOLDERS, environments
 from model_service.catalog.schema import file_schema, patch_schema
 
@@ -27,7 +27,7 @@ MODELINE = "# yaml-language-server: $schema="
 
 
 def schema_files(registry: Registry, catalog: Path) -> dict[Path, str]:
-    """The schema of served-model and analysis files, and of their patches.
+    """The schema of model and pipeline files, and of their patches.
 
     Args:
         registry: The components files may name.
@@ -36,12 +36,12 @@ def schema_files(registry: Registry, catalog: Path) -> dict[Path, str]:
     Returns:
         File contents by path relative to the repo.
     """
-    models = {
-        served_models.FOLDER: served_models.served_model_schema(registry),
-        analyses.FOLDER: analyses.analysis_schema(registry),
+    by_folder = {
+        models.FOLDER: models.model_schema(registry),
+        pipelines.FOLDER: pipelines.pipeline_schema(registry),
     }
     files = {}
-    for folder, model in models.items():
+    for folder, model in by_folder.items():
         schema = file_schema(model)
         files[catalog / SCHEMAS / f"{folder}.schema.json"] = _json(schema)
         files[catalog / SCHEMAS / f"{folder}.patch.schema.json"] = _json(

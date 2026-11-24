@@ -1,1 +1,1 @@
-"""Components for the providers an analysis is offered through, one folder each."""
+"""Components for the providers a pipeline is offered through, one folder each."""

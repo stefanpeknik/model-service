@@ -1,4 +1,4 @@
-"""Components that expose an analysis as an EMPAIA app.
+"""Components that offer a pipeline as an EMPAIA app.
 
 - converters/: turn an EMPAIA input type into a run input;
 - publishers/: carry a stored output into EMPAIA as an output type.

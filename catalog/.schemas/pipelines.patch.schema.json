@@ -1,0 +1,690 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "EmpaiaApp": {
+      "additionalProperties": false,
+      "description": "The EMPAIA app the pipeline becomes.",
+      "properties": {
+        "name": {
+          "description": "The app's name in EMPAIA (3 to 30 letters, digits, spaces, `-`, `_`).",
+          "maxLength": 30,
+          "minLength": 3,
+          "pattern": "^[a-zA-Z0-9_\\s\\-]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "name_short": {
+          "description": "The app's short name (3 to 10 characters).",
+          "maxLength": 10,
+          "minLength": 3,
+          "pattern": "^[a-zA-Z0-9_\\s\\-]+$",
+          "title": "Name Short",
+          "type": "string"
+        },
+        "description": {
+          "description": "What the app finds; each mode adds a sentence.",
+          "maxLength": 900,
+          "minLength": 3,
+          "title": "Description",
+          "type": "string"
+        },
+        "modes": {
+          "$ref": "#/$defs/ModesFields",
+          "description": "`standalone:`, `preprocessing:` or both."
+        },
+        "inputs": {
+          "additionalProperties": {
+            "$ref": "#/$defs/EmpaiaInput"
+          },
+          "description": "EAD type per input, `{type: <type>, …options}`; slide is wsi and region_of_interest rectangle unless given.",
+          "title": "Inputs",
+          "type": "object"
+        },
+        "outputs": {
+          "additionalProperties": {
+            "$ref": "#/$defs/EmpaiaOutput"
+          },
+          "description": "EAD type per published sink output, `{type: <type>, …options}`.",
+          "minProperties": 1,
+          "title": "Outputs",
+          "type": "object"
+        },
+        "viewer": {
+          "$ref": "#/$defs/ViewerConfig",
+          "description": "The AigoPath case browser's display settings, by io key."
+        }
+      },
+      "title": "EmpaiaApp",
+      "type": "object"
+    },
+    "EmpaiaInput": {
+      "additionalProperties": true,
+      "description": "`{type: <EAD type>, …options}`: the type picks the converter.",
+      "properties": {
+        "type": {
+          "description": "The EAD type.",
+          "enum": [
+            "primitive",
+            "rectangle",
+            "wsi"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "EmpaiaInput",
+      "type": "object"
+    },
+    "EmpaiaOutput": {
+      "additionalProperties": true,
+      "description": "`{type: <EAD type>, …options}`: the type and the sink's data format pick the publisher.",
+      "properties": {
+        "type": {
+          "description": "The EAD type.",
+          "enum": [
+            "bool",
+            "continuous_pixelmap",
+            "float",
+            "integer",
+            "string"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "EmpaiaOutput",
+      "type": "object"
+    },
+    "JsonValue": {},
+    "ModelStepFields": {
+      "additionalProperties": false,
+      "description": "A model step: calls a model on every tile.",
+      "properties": {
+        "model": {
+          "description": "A model ID, the name of a file in `models/`.",
+          "title": "Model",
+          "type": "string"
+        }
+      },
+      "title": "model step",
+      "type": "object"
+    },
+    "ModesFields": {
+      "additionalProperties": false,
+      "description": "The job modes the app offers; a mode is on when its key is present.",
+      "properties": {
+        "standalone": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StandaloneFields"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Standalone mode."
+        },
+        "preprocessing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PreprocessingFields"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Preprocessing mode."
+        }
+      },
+      "title": "ModesFields",
+      "type": "object"
+    },
+    "PreprocessingFields": {
+      "additionalProperties": false,
+      "description": "Preprocessing mode: EMPAIA runs the app on new slides.",
+      "properties": {
+        "triggers": {
+          "default": [],
+          "description": "The tissue and stain tags of the slides EMPAIA preprocesses.",
+          "items": {
+            "$ref": "#/$defs/Trigger"
+          },
+          "title": "Triggers",
+          "type": "array"
+        }
+      },
+      "title": "PreprocessingFields",
+      "type": "object"
+    },
+    "Providers": {
+      "additionalProperties": false,
+      "description": "How the pipeline is offered beyond the public API.",
+      "properties": {
+        "empaia": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EmpaiaApp"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The EMPAIA app the pipeline becomes."
+        }
+      },
+      "title": "Providers",
+      "type": "object"
+    },
+    "StandaloneFields": {
+      "additionalProperties": false,
+      "description": "Standalone mode: a user starts the app on a slide.",
+      "properties": {
+        "parameters": {
+          "default": [],
+          "description": "Per-run settings users fill in per job; the rest keep the file's values.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Parameters",
+          "type": "array"
+        }
+      },
+      "title": "StandaloneFields",
+      "type": "object"
+    },
+    "Trigger": {
+      "additionalProperties": false,
+      "description": "Slides whose preprocessing runs the model's apps: one tissue and stain pair.",
+      "properties": {
+        "tissue": {
+          "title": "Tissue",
+          "type": "string"
+        },
+        "stain": {
+          "title": "Stain",
+          "type": "string"
+        }
+      },
+      "title": "Trigger",
+      "type": "object"
+    },
+    "Triple": {
+      "maxItems": 3,
+      "minItems": 3,
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "type": "array"
+    },
+    "ViewerConfig": {
+      "additionalProperties": false,
+      "description": "How the AigoPath case browser shows an app's inputs and outputs, by io key.",
+      "properties": {
+        "inputs": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ViewerInput"
+          },
+          "title": "Inputs",
+          "type": "object"
+        },
+        "outputs": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ViewerOutput"
+          },
+          "title": "Outputs",
+          "type": "object"
+        }
+      },
+      "title": "ViewerConfig",
+      "type": "object"
+    },
+    "ViewerInput": {
+      "additionalProperties": true,
+      "description": "How the viewer shows an app input; a parameter's entry also has its `default`.",
+      "properties": {
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target"
+        },
+        "lossless": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lossless"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        }
+      },
+      "title": "ViewerInput",
+      "type": "object"
+    },
+    "ViewerOutput": {
+      "additionalProperties": true,
+      "description": "How the viewer shows an app output.",
+      "properties": {
+        "render": {
+          "anyOf": [
+            {
+              "enum": [
+                "shader",
+                "background",
+                "metric",
+                "none"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Render"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "visible": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Visible"
+        },
+        "shader": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewerShader"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "ViewerOutput",
+      "type": "object"
+    },
+    "ViewerShader": {
+      "additionalProperties": true,
+      "description": "An xOpat shader for an output.",
+      "properties": {
+        "type": {
+          "minLength": 1,
+          "title": "Type",
+          "type": "string"
+        },
+        "params": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The shader's parameters, e.g. `{threshold: 65, color: \"#ffff00\"}`: numbers, strings, booleans or lists of them.",
+          "title": "Params"
+        }
+      },
+      "title": "ViewerShader",
+      "type": "object"
+    },
+    "sink_embedding_table": {
+      "additionalProperties": false,
+      "description": "Writes each tile's `features` and position as a row of an embedding table.",
+      "properties": {
+        "output": {
+          "description": "The output name callers and providers refer to.",
+          "title": "Output",
+          "type": "string"
+        },
+        "use": {
+          "const": "embedding_table",
+          "description": "The sink `embedding_table`.",
+          "title": "Use",
+          "type": "string"
+        }
+      },
+      "title": "embedding_table (sink)",
+      "type": "object"
+    },
+    "sink_score_grid": {
+      "additionalProperties": false,
+      "description": "Averages each tile's `scores` over the cells the tile covers into a score grid.",
+      "properties": {
+        "output": {
+          "description": "The output name callers and providers refer to.",
+          "title": "Output",
+          "type": "string"
+        },
+        "use": {
+          "const": "score_grid",
+          "description": "The sink `score_grid`.",
+          "title": "Use",
+          "type": "string"
+        }
+      },
+      "title": "score_grid (sink)",
+      "type": "object"
+    },
+    "source_slide_tiles": {
+      "additionalProperties": false,
+      "description": "Grid tiles of one slide level, without background or tiles outside the ROI.",
+      "properties": {
+        "tile_size": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Tile edge in pixels; the first model step's when left out.",
+          "title": "Tile Size"
+        },
+        "mpp": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Microns per pixel to read at (the closest slide level); the first model step's when left out.",
+          "title": "Mpp"
+        },
+        "region_of_interest": {
+          "default": "optional",
+          "description": "Whether a run must give a region-of-interest mask (`required`), may (`optional`) or may not (`ignored`); only tiles the mask covers are read.",
+          "enum": [
+            "required",
+            "optional",
+            "ignored"
+          ],
+          "title": "Region Of Interest",
+          "type": "string"
+        },
+        "stride_fraction": {
+          "default": 0.5,
+          "description": "How far apart tiles are, as a share of the tile size: from 0.05 up to 1. 1 places tiles side by side; 0.5 overlaps them by half, for a finer result that takes about four times as long.",
+          "maximum": 1,
+          "minimum": 0.05,
+          "title": "Stride Fraction",
+          "type": "number"
+        },
+        "skip_background": {
+          "default": true,
+          "description": "Whether tiles without tissue are skipped; they get no result. Skipping is faster and leaves empty glass out. On by default.",
+          "title": "Skip Background",
+          "type": "boolean"
+        },
+        "min_tissue_fraction": {
+          "default": 0.0,
+          "description": "How much of a tile must be tissue for it to be analysed, when background is skipped: from 0 up to but not including 1. 0 analyses every tile with any tissue; 0.5 needs at least half.",
+          "exclusiveMaximum": 1,
+          "minimum": 0,
+          "title": "Min Tissue Fraction",
+          "type": "number"
+        },
+        "use": {
+          "const": "slide_tiles",
+          "description": "The source `slide_tiles`.",
+          "title": "Use",
+          "type": "string"
+        }
+      },
+      "title": "slide_tiles (source)",
+      "type": "object"
+    },
+    "step_center_crop": {
+      "additionalProperties": false,
+      "description": "Keeps the centre square of each uint8 tile, as torchvision's `CenterCrop`.",
+      "properties": {
+        "size": {
+          "description": "The edge of the centre square kept, in pixels.",
+          "exclusiveMinimum": 0,
+          "title": "Size",
+          "type": "integer"
+        },
+        "use": {
+          "const": "center_crop",
+          "description": "The step `center_crop`.",
+          "title": "Use",
+          "type": "string"
+        }
+      },
+      "title": "center_crop (step)",
+      "type": "object"
+    },
+    "step_cls_mean_pool": {
+      "additionalProperties": false,
+      "description": "Pools a ViT's tokens into two vectors: the class token and the patch mean.",
+      "properties": {
+        "registers": {
+          "default": 0,
+          "description": "Register tokens after the class token, left out of the mean and of unpooled tokens (Virchow2 has 4).",
+          "minimum": 0,
+          "title": "Registers",
+          "type": "integer"
+        },
+        "use": {
+          "const": "cls_mean_pool",
+          "description": "The step `cls_mean_pool`.",
+          "title": "Use",
+          "type": "string"
+        }
+      },
+      "title": "cls_mean_pool (step)",
+      "type": "object"
+    },
+    "step_normalize": {
+      "additionalProperties": false,
+      "description": "Turns uint8 RGB tiles into the float32 input most PyTorch models expect.",
+      "properties": {
+        "preset": {
+          "anyOf": [
+            {
+              "const": "imagenet",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Named mean and std: `imagenet` is mean (0.485, 0.456, 0.406), std (0.229, 0.224, 0.225). Give either this or `mean` and `std`.",
+          "title": "Preset"
+        },
+        "mean": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Triple"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Per-channel (RGB) mean, on the [0, 1] scale."
+        },
+        "std": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Triple"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Per-channel (RGB) standard deviation, on the [0, 1] scale."
+        },
+        "use": {
+          "const": "normalize",
+          "description": "The step `normalize`.",
+          "title": "Use",
+          "type": "string"
+        }
+      },
+      "title": "normalize (step)",
+      "type": "object"
+    },
+    "step_resize": {
+      "additionalProperties": false,
+      "description": "Resizes uint8 RGB tiles, as torchvision's `Resize` does to a PIL image.",
+      "properties": {
+        "size": {
+          "description": "The shorter edge after resizing, in pixels; the longer edge keeps the aspect ratio, so a square tile becomes `size` x `size`.",
+          "exclusiveMinimum": 0,
+          "title": "Size",
+          "type": "integer"
+        },
+        "interpolation": {
+          "default": "bilinear",
+          "description": "The resampling filter: `bilinear`, `bicubic` or `nearest`.",
+          "enum": [
+            "bilinear",
+            "bicubic",
+            "nearest"
+          ],
+          "title": "Interpolation",
+          "type": "string"
+        },
+        "use": {
+          "const": "resize",
+          "description": "The step `resize`.",
+          "title": "Use",
+          "type": "string"
+        }
+      },
+      "title": "resize (step)",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Pipeline files: a source, steps (which may call models) and sinks.",
+  "properties": {
+    "summary": {
+      "default": "",
+      "description": "One line saying what the pipeline does.",
+      "title": "Summary",
+      "type": "string"
+    },
+    "source": {
+      "$ref": "#/$defs/source_slide_tiles",
+      "description": "A source: `{use: slide_tiles, …}`."
+    },
+    "steps": {
+      "default": null,
+      "description": "Steps in order: `{model: <id>}` or `{use: <step>, …}`.",
+      "items": {
+        "anyOf": [
+          {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/step_center_crop"
+              },
+              {
+                "$ref": "#/$defs/step_cls_mean_pool"
+              },
+              {
+                "$ref": "#/$defs/step_normalize"
+              },
+              {
+                "$ref": "#/$defs/step_resize"
+              }
+            ]
+          },
+          {
+            "$ref": "#/$defs/ModelStepFields"
+          }
+        ]
+      },
+      "title": "Steps",
+      "type": "array"
+    },
+    "sinks": {
+      "description": "Sinks: `[{use: score_grid, output: …}, …]`.",
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/sink_embedding_table"
+          },
+          {
+            "$ref": "#/$defs/sink_score_grid"
+          }
+        ]
+      },
+      "minItems": 1,
+      "title": "Sinks",
+      "type": "array"
+    },
+    "providers": {
+      "$ref": "#/$defs/Providers",
+      "default": null,
+      "description": "How the pipeline is offered: `{empaia: {…}}` for an app."
+    }
+  },
+  "title": "pipeline",
+  "type": "object"
+}

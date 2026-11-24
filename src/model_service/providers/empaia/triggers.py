@@ -4,7 +4,7 @@ A trigger names a portal app and a tissue and stain; EMPAIA's Workbench Daemon
 starts a preprocessing job of that app for every new slide tagged with them.
 Triggers live in the Medical Data Service (`/v3/preprocessing-triggers`), which
 model-service calls with its own client credentials. Those it creates carry
-its owner ID as `creator_id`: it creates the ones the analyses list that
+its owner ID as `creator_id`: it creates the ones the pipelines list that
 no trigger covers yet, deletes its own that they no longer list, and never
 touches triggers someone else created.
 """
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from model_service.providers.empaia.credentials import OutgoingCredentials
-    from model_service.providers.empaia.ead.apps import AnalysisApp
+    from model_service.providers.empaia.ead.apps import PipelineApp
 
 
 logger = logging.getLogger(__name__)
@@ -58,7 +58,7 @@ class PreprocessingTriggers:
         self._timeout = timeout
         self._transport = transport
 
-    async def ensure(self, apps: Sequence[AnalysisApp]) -> None:
+    async def ensure(self, apps: Sequence[PipelineApp]) -> None:
         """Create the apps' missing triggers and delete owned ones they no longer list.
 
         A listed pair counts as present when someone else's trigger already

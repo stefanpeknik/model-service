@@ -12,9 +12,9 @@ from unittest.mock import AsyncMock
 from model_service.contracts.json_values import JsonValue
 from model_service.contracts.result import RunResult, SharedArtifact
 from model_service.control_plane.scheduler.public import (
-    AnalysisScheduleRequest,
     ExecutionError,
     InvalidScheduleRequestError,
+    PipelineScheduleRequest,
     ProviderFailure,
     ProviderFinishFailureError,
     ProviderSuccess,
@@ -76,8 +76,8 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
                 self.assertRaises(InvalidScheduleRequestError),
             ):
                 await provider.prepare(
-                    AnalysisScheduleRequest(
-                        analysis_id="prostate-heatmap",
+                    PipelineScheduleRequest(
+                        pipeline_id="prostate-heatmap",
                         provider="empaia",
                         body={
                             "installation_id": "installation-1",
@@ -94,8 +94,8 @@ class ProviderSafetyTests(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(InvalidScheduleRequestError):
             await provider.prepare(
-                AnalysisScheduleRequest(
-                    analysis_id="prostate-heatmap",
+                PipelineScheduleRequest(
+                    pipeline_id="prostate-heatmap",
                     provider="empaia",
                     body={
                         "installation_id": "https://empaia.example/app-api",

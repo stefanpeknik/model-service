@@ -5,7 +5,7 @@ its files when a Helm upgrade changes the catalog, without restarting the
 control plane. `MountedCatalog` notices the change, reads the new files (see
 `catalog_files.py`) and swaps them in only if they load. On failure it keeps
 the catalog it has, logs why, and reports it under `/healthz/catalog` until a
-later version loads. Executions carry the analysis document resolved at
+later version loads. Executions carry the pipeline document resolved at
 admission, so a swap does not touch them.
 """
 
@@ -93,9 +93,9 @@ class MountedCatalog:
             return False
         self._current, self._fingerprint, self._error = catalog, seen, None
         logger.info(
-            "model catalog reloaded: %s; analyses: %s",
-            ", ".join(catalog.served_models) or "no models",
-            ", ".join(catalog.analyses) or "none",
+            "model catalog reloaded: %s; pipelines: %s",
+            ", ".join(catalog.models) or "no models",
+            ", ".join(catalog.pipelines) or "none",
         )
         return True
 
@@ -150,7 +150,7 @@ class MountedCatalog:
 
     @property
     def resolved(self) -> Catalog:
-        """The served models and analyses in use, as the catalog loader resolved them."""
+        """The models and pipelines in use, as the catalog loader resolved them."""
         return self._current
 
 

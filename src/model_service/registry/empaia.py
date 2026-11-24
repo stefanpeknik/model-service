@@ -2,7 +2,7 @@
 
 The components live in `components/providers/empaia/`. An input's declared EAD type
 picks its converter; an output's EAD type and its sink's data format pick its
-publisher. The catalog picks them when an analysis loads, and the EMPAIA
+publisher. The catalog picks them when a pipeline loads, and the EMPAIA
 provider picks the same ones again from what admission recorded,
 `{"type": <EAD type>, **options}` per input or output.
 """

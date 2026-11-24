@@ -14,7 +14,7 @@ import pytest
 from model_service.catalog import load_catalog
 from model_service.control_plane.catalog_files import CatalogError
 from model_service.control_plane.catalog_mount import MountedCatalog
-from tests.support.model_documents import served_document
+from tests.support.model_documents import model_document
 from tests.support.paths import RATIONAI_TEST
 
 
@@ -23,32 +23,32 @@ if TYPE_CHECKING:
 
 
 CATALOG = Path(__file__).resolve().parents[2] / "catalog"
-SMALL = served_document()
+SMALL = model_document()
 
 
 def heatmap() -> dict[str, Any]:
-    return load_catalog(CATALOG).analyses["prostate-heatmap"].declaration
+    return load_catalog(CATALOG).pipelines["prostate-heatmap"].declaration
 
 
 def prostate() -> dict[str, Any]:
-    entry = load_catalog(CATALOG, RATIONAI_TEST).served_models["prostate-classifier-1"]
+    entry = load_catalog(CATALOG, RATIONAI_TEST).models["prostate-classifier-1"]
     return entry.declaration
 
 
 def mount(
     directory: Path,
     served: dict[str, Any],
-    analyses: dict[str, Any] | None = None,
+    pipelines: dict[str, Any] | None = None,
 ) -> Path:
     """Write the file the chart's catalog ConfigMap holds."""
     directory.mkdir(exist_ok=True)
-    content = {"served-models": served, "analyses": analyses or {}}
+    content = {"models": served, "pipelines": pipelines or {}}
     (directory / "catalog.json").write_text(json.dumps(content), encoding="utf-8")
     return directory
 
 
-def served_ids(catalog: MountedCatalog) -> list[str]:
-    return list(catalog.resolved.served_models)
+def model_ids(catalog: MountedCatalog) -> list[str]:
+    return list(catalog.resolved.models)
 
 
 def test_a_changed_catalog_is_picked_up_in_place(tmp_path: Path) -> None:
@@ -60,7 +60,7 @@ def test_a_changed_catalog_is_picked_up_in_place(tmp_path: Path) -> None:
     changed = catalog.refresh()
 
     assert (unchanged, changed) == (False, True)
-    assert served_ids(catalog) == ["prostate-classifier-1", "small"]
+    assert model_ids(catalog) == ["prostate-classifier-1", "small"]
     assert catalog.status().status == "loaded"
 
 
@@ -70,7 +70,7 @@ def test_an_invalid_catalog_keeps_the_old_one_and_reports_why(
     directory = mount(tmp_path / "mount", {"small": SMALL})
     catalog = MountedCatalog(directory)
 
-    mount(directory, {"small": served_document(tile_size=0)})
+    mount(directory, {"small": model_document(tile_size=0)})
     with caplog.at_level(logging.ERROR):
         catalog.refresh()
     failed = catalog.status()
@@ -79,9 +79,9 @@ def test_an_invalid_catalog_keeps_the_old_one_and_reports_why(
 
     assert failed.status == "reload_failed"
     assert failed.error is not None
-    assert "catalog/served-models/small.yaml:input.tile_size" in failed.error
-    assert "catalog/served-models/small.yaml:input.tile_size" in caplog.text
-    assert served_ids(catalog) == ["other"]
+    assert "catalog/models/small.yaml:input.tile_size" in failed.error
+    assert "catalog/models/small.yaml:input.tile_size" in caplog.text
+    assert model_ids(catalog) == ["other"]
     assert catalog.status().status == "loaded"
 
 
@@ -96,43 +96,43 @@ def test_a_catalog_that_does_not_load_at_startup_stops_the_control_plane(
         MountedCatalog(tmp_path / "missing")
 
 
-def test_analyses_load_beside_the_served_models_they_call(tmp_path: Path) -> None:
+def test_pipelines_load_beside_the_models_they_call(tmp_path: Path) -> None:
     directory = mount(
         tmp_path / "mount",
         {"prostate-classifier-1": prostate()},
-        analyses={"prostate-heatmap": heatmap()},
+        pipelines={"prostate-heatmap": heatmap()},
     )
 
     catalog = MountedCatalog(directory)
 
-    (analysis,) = catalog.resolved.analyses.values()
-    assert analysis.id == "prostate-heatmap"
-    assert list(analysis.models) == ["prostate-classifier-1"]
+    (pipeline,) = catalog.resolved.pipelines.values()
+    assert pipeline.id == "prostate-heatmap"
+    assert list(pipeline.models) == ["prostate-classifier-1"]
 
 
-def test_an_analysis_naming_an_undeployed_served_model_names_it(
+def test_an_pipeline_naming_an_undeployed_model_names_it(
     tmp_path: Path,
 ) -> None:
     directory = mount(
-        tmp_path / "mount", {"small": SMALL}, analyses={"prostate-heatmap": heatmap()}
+        tmp_path / "mount", {"small": SMALL}, pipelines={"prostate-heatmap": heatmap()}
     )
 
-    with pytest.raises(CatalogError, match="no served model `prostate-classifier-1`"):
+    with pytest.raises(CatalogError, match="no model `prostate-classifier-1`"):
         MountedCatalog(directory)
 
 
-def test_a_reload_brings_new_analyses(tmp_path: Path) -> None:
+def test_a_reload_brings_new_pipelines(tmp_path: Path) -> None:
     directory = mount(tmp_path / "mount", {"prostate-classifier-1": prostate()})
     catalog = MountedCatalog(directory)
 
     mount(
         directory,
         {"prostate-classifier-1": prostate()},
-        analyses={"prostate-heatmap": heatmap()},
+        pipelines={"prostate-heatmap": heatmap()},
     )
     catalog.refresh()
 
-    assert list(catalog.resolved.analyses) == ["prostate-heatmap"]
+    assert list(catalog.resolved.pipelines) == ["prostate-heatmap"]
 
 
 async def until(condition: Callable[[], bool]) -> None:
@@ -156,7 +156,7 @@ async def test_the_watcher_survives_a_failing_reload_and_reports_it(
         mount(directory, {"other": SMALL})
         await until(lambda: catalog.status().status == "reload_failed")
         failed = catalog.status()
-        kept = served_ids(catalog)
+        kept = model_ids(catalog)
         monkeypatch.setattr(tempfile, "tempdir", None)
         await until(lambda: catalog.status().status == "loaded")
     finally:
@@ -164,7 +164,7 @@ async def test_the_watcher_survives_a_failing_reload_and_reports_it(
 
     assert failed.error
     assert kept == ["small"]
-    assert served_ids(catalog) == ["other"]
+    assert model_ids(catalog) == ["other"]
 
 
 @pytest.mark.anyio

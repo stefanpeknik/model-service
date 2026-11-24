@@ -9,7 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any
 
-from model_service.contracts.failures import UnknownAnalysisError
+from model_service.contracts.failures import UnknownPipelineError
 from model_service.contracts.invocation import (
     ExecutionContext,
     InputAccessContext,
@@ -32,8 +32,8 @@ from model_service.control_plane.scheduler.internal_state import (
     WorkKind,
 )
 from model_service.control_plane.scheduler.public import (
-    AnalysisScheduleRequest,
     InvalidScheduleRequestError,
+    PipelineScheduleRequest,
     PreparedInvocation,
     ProviderCancellation,
     ProviderFailure,
@@ -54,7 +54,7 @@ from tests.support.memory_repository import FakeDispatch, InMemoryExecutionRepos
 from tests.support.scheduling import (
     MutableClock,
     StandaloneProvider,
-    resolve_test_analysis,
+    resolve_test_pipeline,
     stored_target,
 )
 
@@ -85,7 +85,7 @@ class RecordingProvider(StandaloneProvider):
 
     async def prepare(
         self,
-        request: AnalysisScheduleRequest,
+        request: PipelineScheduleRequest,
         deadline_at: datetime,
     ) -> PreparedInvocation:
         """Attach configured protected context to the minimal prepared invocation."""
@@ -361,8 +361,8 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             fake,
             max_concurrent=2,
         )
-        first = await scheduler.schedule(self._request("a", analysis_id="a1"))
-        second = await scheduler.schedule(self._request("b", analysis_id="a2"))
+        first = await scheduler.schedule(self._request("a", pipeline_id="a1"))
+        second = await scheduler.schedule(self._request("b", pipeline_id="a2"))
         self._start_worker(worker)
 
         await asyncio.wait_for(both_started.wait(), timeout=1)
@@ -373,16 +373,16 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         await self._wait_for_status(
             scheduler, second.execution.id, ExecutionStatus.SUCCEEDED
         )
-        self.assertEqual({r.analysis["id"] for r in fake.analyses}, {"a1", "a2"})
+        self.assertEqual({r.pipeline["id"] for r in fake.pipelines}, {"a1", "a2"})
 
-    async def test_admission_rejects_an_analysis_that_is_not_deployed(self) -> None:
+    async def test_admission_rejects_an_pipeline_that_is_not_deployed(self) -> None:
         repository = InMemoryExecutionRepository()
         scheduler, _ = self._scheduler_and_worker(
             repository, StandaloneProvider(), FakeDispatch({})
         )
 
-        with self.assertRaises(UnknownAnalysisError):
-            await scheduler.schedule(self._request(analysis_id="missing"))
+        with self.assertRaises(UnknownPipelineError):
+            await scheduler.schedule(self._request(pipeline_id="missing"))
         self.assertIsNone(
             await repository.find_submission(
                 SubmissionIdentity("standalone", "request-1", "same-request")
@@ -651,7 +651,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             repository=repository,
             dispatch=FakeDispatch({}),
             providers={provider.name: provider},
-            resolve_analysis=resolve_test_analysis,
+            resolve_pipeline=resolve_test_pipeline,
             default_timeout=timedelta(hours=1),
             maximum_timeout=timedelta(hours=6),
             clock=lambda: now,
@@ -667,8 +667,8 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             lease_duration=timedelta(minutes=1),
         )
         admitted = await scheduler.schedule(
-            AnalysisScheduleRequest(
-                analysis_id="a1",
+            PipelineScheduleRequest(
+                pipeline_id="a1",
                 provider="standalone",
                 body={},
                 idempotency_key="request-1",
@@ -715,7 +715,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             repository=repository,
             dispatch=FakeDispatch({}),
             providers={provider.name: provider},
-            resolve_analysis=resolve_test_analysis,
+            resolve_pipeline=resolve_test_pipeline,
             default_timeout=timedelta(hours=1),
             maximum_timeout=timedelta(hours=6),
             clock=clock,
@@ -729,8 +729,8 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             lease_duration=timedelta(minutes=1),
         )
         admitted = await scheduler.schedule(
-            AnalysisScheduleRequest(
-                analysis_id="a1",
+            PipelineScheduleRequest(
+                pipeline_id="a1",
                 provider="standalone",
                 body={},
                 idempotency_key="request-1",
@@ -774,7 +774,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             repository=repository,
             dispatch=FakeDispatch({}),
             providers={provider.name: provider},
-            resolve_analysis=resolve_test_analysis,
+            resolve_pipeline=resolve_test_pipeline,
             default_timeout=timedelta(hours=1),
             maximum_timeout=timedelta(hours=6),
             clock=clock,
@@ -788,8 +788,8 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             lease_duration=timedelta(minutes=1),
         )
         admitted = await scheduler.schedule(
-            AnalysisScheduleRequest(
-                analysis_id="a1",
+            PipelineScheduleRequest(
+                pipeline_id="a1",
                 provider="standalone",
                 body={},
                 idempotency_key="request-1",
@@ -829,7 +829,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             repository=repository,
             dispatch=FakeDispatch({"a1": dispatch}),
             providers={provider.name: provider},
-            resolve_analysis=resolve_test_analysis,
+            resolve_pipeline=resolve_test_pipeline,
             default_timeout=timedelta(hours=1),
             maximum_timeout=timedelta(hours=6),
             clock=clock,
@@ -837,8 +837,8 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             poll_interval=0.01,
         )
         admitted = await scheduler.schedule(
-            AnalysisScheduleRequest(
-                analysis_id="a1",
+            PipelineScheduleRequest(
+                pipeline_id="a1",
                 provider="standalone",
                 body={},
                 idempotency_key="request-1",
@@ -877,7 +877,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             repository=repository,
             dispatch=FakeDispatch({}),
             providers={provider.name: provider},
-            resolve_analysis=resolve_test_analysis,
+            resolve_pipeline=resolve_test_pipeline,
             default_timeout=timedelta(hours=1),
             maximum_timeout=timedelta(hours=6),
         )
@@ -899,8 +899,8 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             lease_duration=timedelta(milliseconds=60),
         )
         await scheduler.schedule(
-            AnalysisScheduleRequest(
-                analysis_id="a1",
+            PipelineScheduleRequest(
+                pipeline_id="a1",
                 provider="standalone",
                 body={},
                 idempotency_key="request-1",
@@ -937,7 +937,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
                 repository=repository,
                 dispatch=FakeDispatch({}),
                 providers={provider.name: provider},
-                resolve_analysis=resolve_test_analysis,
+                resolve_pipeline=resolve_test_pipeline,
                 default_timeout=timedelta(hours=1),
                 maximum_timeout=timedelta(hours=6),
                 clock=clock,
@@ -956,8 +956,8 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             conflicting_body["output_path"] = "outputs/other.tiff"
             with self.assertRaises(ScheduleConflictError):
                 await scheduler.schedule(
-                    AnalysisScheduleRequest(
-                        analysis_id=request.analysis_id,
+                    PipelineScheduleRequest(
+                        pipeline_id=request.pipeline_id,
                         provider=request.provider,
                         body=conflicting_body,
                         idempotency_key=request.idempotency_key,
@@ -975,7 +975,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
                 repository=repository,
                 dispatch=FakeDispatch({}),
                 providers={provider.name: provider},
-                resolve_analysis=resolve_test_analysis,
+                resolve_pipeline=resolve_test_pipeline,
                 default_timeout=timedelta(hours=1),
                 maximum_timeout=timedelta(hours=6),
                 clock=clock,
@@ -1001,7 +1001,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
                 repository=repository,
                 dispatch=FakeDispatch({}),
                 providers={provider.name: provider},
-                resolve_analysis=resolve_test_analysis,
+                resolve_pipeline=resolve_test_pipeline,
                 default_timeout=timedelta(hours=1),
                 maximum_timeout=timedelta(hours=6),
                 clock=clock,
@@ -1009,8 +1009,8 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             valid_request = self._standalone_request(root)
             invalid_body = dict(valid_request.body)
             invalid_body["configuration"] = {"output_path": "heatmap.tiff"}
-            invalid_request = AnalysisScheduleRequest(
-                analysis_id=valid_request.analysis_id,
+            invalid_request = PipelineScheduleRequest(
+                pipeline_id=valid_request.pipeline_id,
                 provider=valid_request.provider,
                 body=invalid_body,
                 idempotency_key=valid_request.idempotency_key,
@@ -1026,10 +1026,10 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
     def _request(
         key: str = "request-1",
         *,
-        analysis_id: str = "a1",
-    ) -> AnalysisScheduleRequest:
-        return AnalysisScheduleRequest(
-            analysis_id=analysis_id,
+        pipeline_id: str = "a1",
+    ) -> PipelineScheduleRequest:
+        return PipelineScheduleRequest(
+            pipeline_id=pipeline_id,
             provider="standalone",
             body={},
             idempotency_key=key,
@@ -1049,7 +1049,7 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             repository=repository,
             dispatch=FakeDispatch({}),
             providers={provider.name: provider},
-            resolve_analysis=resolve_test_analysis,
+            resolve_pipeline=resolve_test_pipeline,
             default_timeout=timedelta(hours=1),
             maximum_timeout=timedelta(hours=6),
             clock=clock,
@@ -1066,10 +1066,10 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         return scheduler, worker
 
     @staticmethod
-    def _standalone_request(root: Path) -> AnalysisScheduleRequest:
+    def _standalone_request(root: Path) -> PipelineScheduleRequest:
         """Build a complete shared-storage schedule request rooted at the fixture directory."""
-        return AnalysisScheduleRequest(
-            analysis_id="a1",
+        return PipelineScheduleRequest(
+            pipeline_id="a1",
             provider="standalone",
             body={
                 "inputs": {

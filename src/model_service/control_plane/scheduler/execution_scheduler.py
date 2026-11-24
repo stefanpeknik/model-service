@@ -15,7 +15,7 @@ from uuid import uuid4
 
 from model_service.contracts.failures import InvalidInvocation
 from model_service.contracts.log_context import EXECUTION_ID
-from model_service.control_plane.analysis_requests import check_invocation
+from model_service.control_plane.pipeline_requests import check_invocation
 from model_service.control_plane.scheduler.internal_state import (
     Admission,
     ExecutionRecord,
@@ -40,10 +40,10 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 
     from model_service.contracts.invocation import Invocation
-    from model_service.control_plane.scheduler.protocols import AnalysisDispatch
+    from model_service.control_plane.scheduler.protocols import PipelineDispatch
     from model_service.control_plane.scheduler.public import (
-        AnalysisResolver,
-        AnalysisScheduleRequest,
+        PipelineResolver,
+        PipelineScheduleRequest,
         ProviderName,
         SubmissionIdentity,
     )
@@ -80,9 +80,9 @@ class ExecutionScheduler:
         self,
         *,
         repository: ExecutionRepository,
-        dispatch: AnalysisDispatch,
+        dispatch: PipelineDispatch,
         providers: Mapping[ProviderName, ProviderAdapter],
-        resolve_analysis: AnalysisResolver,
+        resolve_pipeline: PipelineResolver,
         default_timeout: timedelta,
         maximum_timeout: timedelta,
         clock: Callable[[], datetime] | None = None,
@@ -96,9 +96,9 @@ class ExecutionScheduler:
 
         Args:
             repository: Durable execution store.
-            dispatch: Client that runs analyses on the runner.
+            dispatch: Client that runs pipelines on the runner.
             providers: Provider adapters by provider name.
-            resolve_analysis: Resolver of a deployed analysis with a run's
+            resolve_pipeline: Resolver of a deployed pipeline with a run's
                 settings.
             default_timeout: Execution timeout when the request gives none.
             maximum_timeout: Upper bound on a requested timeout.
@@ -116,7 +116,7 @@ class ExecutionScheduler:
             raise ValueError("poll_interval must be positive")
         self._repository = repository
         self._providers = dict(providers)
-        self._resolve_analysis = resolve_analysis
+        self._resolve_pipeline = resolve_pipeline
         self._default_timeout = default_timeout
         self._maximum_timeout = maximum_timeout
         self._clock = clock or (lambda: datetime.now(UTC))
@@ -179,12 +179,12 @@ class ExecutionScheduler:
         with _unavailable_as_scheduling():
             await self._repository.check_ready()
 
-    async def schedule(self, request: AnalysisScheduleRequest) -> ScheduleResult:
+    async def schedule(self, request: PipelineScheduleRequest) -> ScheduleResult:
         """Identify and replay a submission, prepare new inputs, then admit the complete execution.
 
         A replayed submission returns the existing execution without preparing again.
         The deadline is the requested timeout, shortened to the provider's deadline cap.
-        An analysis is resolved with the prepared invocation's settings, and
+        A pipeline is resolved with the prepared invocation's settings, and
         the execution stores the resolved document every attempt sends.
 
         Args:
@@ -194,12 +194,12 @@ class ExecutionScheduler:
             The execution view and whether this call created it.
 
         Raises:
-            UnknownAnalysisError: No deployed analysis has the ID.
-            InvalidScheduleRequestError: The provider is unknown, the timeout is not positive, the effective deadline has already passed, or the analysis refuses the settings or inputs.
+            UnknownPipelineError: No deployed pipeline has the ID.
+            InvalidScheduleRequestError: The provider is unknown, the timeout is not positive, the effective deadline has already passed, or the pipeline refuses the settings or inputs.
             ScheduleConflictError: The idempotency key was used for a different request.
             SchedulingUnavailableError: The execution repository is unavailable.
         """
-        self._resolve_analysis(request.analysis_id, None)
+        self._resolve_pipeline(request.pipeline_id, None)
         try:
             provider = self._providers[request.provider]
         except KeyError as error:
@@ -220,7 +220,7 @@ class ExecutionScheduler:
                 "effective execution deadline has expired"
             )
         invocation = replace(prepared.invocation, deadline_at=deadline_at)
-        target, invocation = self._resolved(request.analysis_id, invocation)
+        target, invocation = self._resolved(request.pipeline_id, invocation)
         return await self._admit(
             Admission(
                 identity=identity,
@@ -234,12 +234,12 @@ class ExecutionScheduler:
         )
 
     def _resolved(
-        self, analysis_id: str, invocation: Invocation
+        self, pipeline_id: str, invocation: Invocation
     ) -> tuple[ExecutionTarget, Invocation]:
-        """Resolve the analysis with the invocation's settings and check the invocation.
+        """Resolve the pipeline with the invocation's settings and check the invocation.
 
         Args:
-            analysis_id: The analysis to run.
+            pipeline_id: The pipeline to run.
             invocation: The prepared invocation; its configuration holds the
                 caller's settings.
 
@@ -248,14 +248,14 @@ class ExecutionScheduler:
             recording every setting the run uses.
 
         Raises:
-            UnknownAnalysisError: The analysis is no longer deployed.
-            InvalidScheduleRequestError: The analysis refuses the settings,
+            UnknownPipelineError: The pipeline is no longer deployed.
+            InvalidScheduleRequestError: The pipeline refuses the settings,
                 inputs or output path.
         """
         try:
-            resolved = self._resolve_analysis(analysis_id, invocation.configuration)
-            invocation = replace(invocation, configuration=resolved.analysis.settings())
-            check_invocation(resolved.analysis, invocation)
+            resolved = self._resolve_pipeline(pipeline_id, invocation.configuration)
+            invocation = replace(invocation, configuration=resolved.pipeline.settings())
+            check_invocation(resolved.pipeline, invocation)
         except InvalidInvocation as error:
             raise InvalidScheduleRequestError(str(error)) from error
         return ExecutionTarget.of(resolved), invocation
@@ -378,9 +378,9 @@ class ExecutionScheduler:
         """
         return ExecutionView(
             id=execution.id,
-            analysis_id=execution.target.analysis_id,
+            pipeline_id=execution.target.pipeline_id,
             models=list(execution.target.models),
-            analysis_digest=execution.target.analysis_digest,
+            pipeline_digest=execution.target.pipeline_digest,
             status=execution.status,
             configuration=execution.invocation.configuration,
             result=(

@@ -130,10 +130,10 @@ class ExecutionRow(Base):
     provider: Mapped[str] = mapped_column(Text)
     submission_key: Mapped[str] = mapped_column(Text)
     request_fingerprint: Mapped[str] = mapped_column(Text)
-    analysis_id: Mapped[str] = mapped_column(Text)
+    pipeline_id: Mapped[str] = mapped_column(Text)
     models: Mapped[list[str]] = mapped_column(ARRAY(Text))
-    analysis_digest: Mapped[str] = mapped_column(Text)
-    analysis: Mapped[dict[str, JsonValue]] = mapped_column(JSONB)
+    pipeline_digest: Mapped[str] = mapped_column(Text)
+    pipeline: Mapped[dict[str, JsonValue]] = mapped_column(JSONB)
     status: Mapped[ExecutionStatus] = mapped_column(
         Enum(
             ExecutionStatus,

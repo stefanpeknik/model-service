@@ -9,7 +9,7 @@
 # Hand-applied objects: k8s/ beside this file (the TensorRT and Hugging Face
 # cache claims the workers mount). EMPAIA is off here.
 environment: sensitive-cluster
-servedModelSettings:
+modelSettings:
   env:
     MLFLOW_TRACKING_URI: http://mlflow.rationai-mlflow:5000
 

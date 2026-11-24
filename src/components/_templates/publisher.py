@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 class MyComponent(Publisher):
     """<One sentence: what it publishes, as which EMPAIA type>.
 
-    `outputs: {<output>: {type: string}}` under `expose.empaia`.
+    `outputs: {<output>: {type: string}}` under `providers.empaia`.
     """
 
     name = "my_component"

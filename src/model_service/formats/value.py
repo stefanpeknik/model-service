@@ -2,8 +2,8 @@
 
 Media type `application/vnd.rationai.value+json; version=1`. A JSON object
 `{"value": <scalar>}`, where the scalar is a bool, a number or a string. The
-EMPAIA `primitive` publisher posts it as the primitive type the analysis's
-`expose.empaia` names.
+EMPAIA `primitive` publisher posts it as the primitive type the pipeline's
+`providers.empaia` names.
 """
 
 from __future__ import annotations

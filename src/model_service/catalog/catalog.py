@@ -1,4 +1,4 @@
-"""A resolved catalog: every served model and analysis, checked."""
+"""A resolved catalog: every model and pipeline, checked."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from model_service.catalog.analyses import Analysis
-    from model_service.catalog.served_models import ServedModel
+    from model_service.catalog.models import Model
+    from model_service.catalog.pipelines import Pipeline
 
 
 @dataclass(frozen=True)
@@ -21,9 +21,9 @@ class Catalog:
     environment's patch.
 
     Attributes:
-        served_models: Served models by ID.
-        analyses: Analyses by ID.
+        models: Models by ID.
+        pipelines: Pipelines by ID.
     """
 
-    served_models: Mapping[str, ServedModel] = field(default_factory=dict)
-    analyses: Mapping[str, Analysis] = field(default_factory=dict)
+    models: Mapping[str, Model] = field(default_factory=dict)
+    pipelines: Mapping[str, Pipeline] = field(default_factory=dict)

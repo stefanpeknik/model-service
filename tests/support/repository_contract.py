@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from model_service.contracts.invocation import InputAccessContext, Invocation
-from model_service.contracts.result import RunResult, ServedModelRun, SharedArtifact
+from model_service.contracts.result import ModelRun, RunResult, SharedArtifact
 from model_service.control_plane.scheduler.internal_state import (
     Admission,
     ProcessingRejected,
@@ -39,7 +39,7 @@ class ExecutionRepositoryContract:
         self,
         key: str,
         model_id: str = "model-a",
-        analysis_id: str = "analysis-a",
+        pipeline_id: str = "pipeline-a",
         priority: int = Priority.NORMAL,
         *,
         models: tuple[str, ...] | None = None,
@@ -49,7 +49,7 @@ class ExecutionRepositoryContract:
             Admission(
                 identity=SubmissionIdentity("standalone", key, key),
                 target=stored_target(
-                    analysis_id, (model_id,) if models is None else models
+                    pipeline_id, (model_id,) if models is None else models
                 ),
                 invocation=Invocation(
                     inputs={},
@@ -201,12 +201,12 @@ class ExecutionRepositoryContract:
         assert selected is not None
         assert selected.execution_id == available_id, selected
 
-    async def test_analyses_sharing_a_model_share_its_capacity(self) -> None:
-        await self._admit_execution("active", analysis_id="first")
+    async def test_pipelines_sharing_a_model_share_its_capacity(self) -> None:
+        await self._admit_execution("active", pipeline_id="first")
         active = await self.repository.claim_due("worker", timedelta(seconds=30))
         assert active is not None
         await self._advance_time(timedelta(milliseconds=10))
-        await self._admit_execution("other-analysis", analysis_id="second")
+        await self._admit_execution("other-pipeline", pipeline_id="second")
 
         selected = await self.repository.claim_due("worker", timedelta(seconds=30))
 
@@ -235,15 +235,15 @@ class ExecutionRepositoryContract:
 
         assert selected is None, selected
 
-    async def test_model_free_runs_are_counted_by_their_analysis(self) -> None:
-        await self._admit_execution("active", analysis_id="free", models=())
+    async def test_model_free_runs_are_counted_by_their_pipeline(self) -> None:
+        await self._admit_execution("active", pipeline_id="free", models=())
         assert await self.repository.claim_due("worker", timedelta(seconds=30))
         await self._advance_time(timedelta(milliseconds=10))
-        await self._admit_execution("same", analysis_id="free", models=())
+        await self._admit_execution("same", pipeline_id="free", models=())
         await self._advance_time(timedelta(milliseconds=10))
-        other_id = await self._admit_execution("other", analysis_id="also", models=())
+        other_id = await self._admit_execution("other", pipeline_id="also", models=())
         await self._advance_time(timedelta(milliseconds=10))
-        model_id = await self._admit_execution("model", analysis_id="free")
+        model_id = await self._admit_execution("model", pipeline_id="free")
 
         first = await self.repository.claim_due("worker", timedelta(seconds=30))
         second = await self.repository.claim_due("worker", timedelta(seconds=30))
@@ -381,9 +381,9 @@ class ExecutionRepositoryContract:
             "provider_finish_outcome_unknown",
         )
 
-    async def test_what_the_served_models_ran_outlives_a_moved_result(self) -> None:
+    async def test_what_the_models_ran_outlives_a_moved_result(self) -> None:
         execution_id = await self._admit_execution("provenance")
-        ran = ServedModelRun(
+        ran = ModelRun(
             digest="d" * 64,
             weights_revision="paige-ai/Virchow2@abc123",
             execution_providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
@@ -396,7 +396,7 @@ class ExecutionRepositoryContract:
             ProcessingSucceeded(
                 RunResult(
                     {"heatmap": SharedArtifact("/shared/.attempts/1/heatmap.npz")},
-                    served_models={"model-a": ran},
+                    models={"model-a": ran},
                 )
             ),
         )
@@ -413,7 +413,7 @@ class ExecutionRepositoryContract:
         assert execution.status == "succeeded"
         assert execution.result == RunResult(
             {"heatmap": SharedArtifact("/shared/heatmap.npz")},
-            served_models={"model-a": ran},
+            models={"model-a": ran},
         )
 
     async def test_get_many_keeps_order_and_skips_unknown_ids(self) -> None:

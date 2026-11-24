@@ -19,10 +19,10 @@ See also: **[Request lifecycle](request-lifecycle.md)**.
 
 In plain Ray Serve code, batching is enabled by decorating an **async** method
 with `@serve.batch` and its `max_batch_size` and `batch_wait_timeout_s`.
-Served models don't need that code: the generic host batches with its own
-batcher (`src/model_service/served_model/batching.py`), which behaves the
+Models don't need that code: the generic host batches with its own
+batcher (`src/model_service/model_host/batching.py`), which behaves the
 same way and runs off Serve too, so the host can be tested without Ray. A
-served-model file sets it:
+model file sets it:
 
 - `batching.max_size`: the most tiles in one batch (`max_batch_size`);
 - `batching.wait_s`: how long the first tile waits for more before a smaller
@@ -85,4 +85,4 @@ Quick tips:
 
 - Request flow including queue points: [Request lifecycle](request-lifecycle.md)
 - Queueing and rejection controls: [Queues and backpressure](queues-and-backpressure.md)
-- What each block of a served-model file sets: [How the chart deploys the catalog](deployment.md)
+- What each block of a model file sets: [How the chart deploys the catalog](deployment.md)

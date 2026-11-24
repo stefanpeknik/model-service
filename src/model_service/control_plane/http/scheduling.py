@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Annotated
 
 from fastapi import Header
 
-from model_service.contracts.failures import UnknownAnalysisError
+from model_service.contracts.failures import UnknownPipelineError
 from model_service.control_plane.http.errors import (
     ApiErrorCode,
     http_error,
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
     from model_service.control_plane.scheduler.protocols import Scheduler
     from model_service.control_plane.scheduler.public import (
-        AnalysisScheduleRequest,
+        PipelineScheduleRequest,
         ScheduleResult,
     )
 
@@ -57,16 +57,16 @@ def require_idempotency_key(
 
 async def submit(
     scheduler: Scheduler,
-    request: AnalysisScheduleRequest,
+    request: PipelineScheduleRequest,
     response: Response,
 ) -> ScheduleResult:
-    """Admit an analysis execution and map refusals to API errors.
+    """Admit a pipeline execution and map refusals to API errors.
 
     Refusals are logged, since callers may not log the response body.
 
     Args:
         scheduler: Admits the execution.
-        request: The analysis schedule request.
+        request: The pipeline schedule request.
         response: The outgoing response; its status becomes 202 when the
             execution is created and 200 when an existing one is returned.
 
@@ -74,13 +74,13 @@ async def submit(
         The execution and whether it was created.
 
     Raises:
-        HTTPException: 404 for an unknown analysis, 409 for an idempotency
+        HTTPException: 404 for an unknown pipeline, 409 for an idempotency
             conflict, 422 for an invalid request, 503 if scheduling is
             unavailable.
     """
     try:
         result = await scheduler.schedule(request)
-    except UnknownAnalysisError as error:
+    except UnknownPipelineError as error:
         _log_refusal(request, error)
         raise lookup_error(error) from error
     except ScheduleConflictError as error:
@@ -96,11 +96,11 @@ async def submit(
     return result
 
 
-def _log_refusal(request: AnalysisScheduleRequest, error: Exception) -> None:
+def _log_refusal(request: PipelineScheduleRequest, error: Exception) -> None:
     """Log why a schedule request was refused; error messages are the safe public ones.
 
     Args:
         request: The refused request.
         error: Why it was refused.
     """
-    logger.warning("Refused %s %s: %s", request.provider, request.analysis_id, error)
+    logger.warning("Refused %s %s: %s", request.provider, request.pipeline_id, error)

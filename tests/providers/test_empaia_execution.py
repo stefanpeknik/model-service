@@ -1,7 +1,7 @@
 """Check EMPAIA admission, publication retry boundaries, and credential-limited deadlines.
 
-Jobs run analysis `a1` (`slide_tiles` → served model `m1` → `score_grid`,
-exposed as a continuous pixelmap) on the analysis-runner core, over a fake
+Jobs run pipeline `a1` (`slide_tiles` → model `m1` → `score_grid`,
+exposed as a continuous pixelmap) on the pipeline-runner core, over a fake
 App Service whose slide is `fake_slide()`.
 """
 
@@ -22,27 +22,27 @@ import httpx
 import jwt
 from fastapi import FastAPI
 
-from model_service.analysis_runner.http_errors import answer_http
-from model_service.analysis_runner.replica import AnalysisReplica
-from model_service.analysis_runner.settings import ReplicaSettings
 from model_service.catalog import load_catalog
-from model_service.catalog.analyses import resolve_run
-from model_service.contracts.analysis_http import AnalysisRunRequest
+from model_service.catalog.pipelines import resolve_run
+from model_service.contracts.pipeline_http import PipelineRunRequest
 from model_service.control_plane.scheduler.dispatch import (
-    HTTPAnalysisDispatch,
+    HTTPPipelineDispatch,
     RemoteFailureError,
 )
 from model_service.control_plane.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.control_plane.scheduler.internal_state import RetryPolicy
 from model_service.control_plane.scheduler.public import (
-    AnalysisScheduleRequest,
     InvalidScheduleRequestError,
+    PipelineScheduleRequest,
     Priority,
     ScheduleConflictError,
     SchedulingUnavailableError,
 )
 from model_service.control_plane.scheduler.running_work import ActiveWorkRegistry
 from model_service.control_plane.scheduler.worker import ExecutionWorker
+from model_service.pipeline_runner.http_errors import answer_http
+from model_service.pipeline_runner.replica import PipelineReplica
+from model_service.pipeline_runner.settings import ReplicaSettings
 from model_service.providers.empaia.app_service.gateway import (
     EmpaiaGatewayError,
     EmpaiaInputState,
@@ -53,9 +53,9 @@ from model_service.providers.empaia.app_service.types import DirectAccess
 from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
 from model_service.providers.empaia.jobs.inputs import EmpaiaInputAccessFactory
 from tests.components.helpers import fake_model, fake_slide
-from tests.support.analysis_catalog import REGISTRY, served_model, write
 from tests.support.empaia_fixtures import StrictGateway, slide_info
 from tests.support.memory_repository import InMemoryExecutionRepository
+from tests.support.pipeline_catalog import REGISTRY, model_file, write
 
 
 if TYPE_CHECKING:
@@ -66,16 +66,16 @@ if TYPE_CHECKING:
     from model_service.catalog import Catalog
     from model_service.contracts.json_values import JsonValue
     from model_service.contracts.result import RunResult
-    from model_service.control_plane.scheduler.protocols import AnalysisDispatch
+    from model_service.control_plane.scheduler.protocols import PipelineDispatch
     from model_service.control_plane.scheduler.public import ExecutionView
     from model_service.providers.empaia.app_service.gateway import MutationGuard
 
 
-ANALYSIS = """
+PIPELINE = """
     source: {use: slide_tiles}
     steps: [{model: m1}]
     sinks: [{use: score_grid, output: heatmap}]
-    expose:
+    providers:
       empaia:
         name: Test heatmap
         name_short: TestHM
@@ -86,7 +86,7 @@ ANALYSIS = """
         outputs:
           heatmap: {type: continuous_pixelmap}
 """
-# The analysis's settings: what a job without configuration runs with.
+# The pipeline's settings: what a job without configuration runs with.
 DEFAULT_CONFIGURATION: dict[str, JsonValue] = {
     "stride_fraction": 0.5,
     "skip_background": True,
@@ -97,11 +97,11 @@ API_URL = "https://empaia.invalid"
 
 @functools.cache
 def catalog() -> Catalog:
-    """The deployed catalog: served model `m1` and analysis `a1`."""
+    """The deployed catalog: model `m1` and pipeline `a1`."""
     with TemporaryDirectory() as directory:
         root = Path(directory)
-        write(root, "served-models/m1.yaml", served_model())
-        write(root, "analyses/a1.yaml", ANALYSIS)
+        write(root, "models/m1.yaml", model_file())
+        write(root, "pipelines/a1.yaml", PIPELINE)
         return load_catalog(root, registry=REGISTRY)
 
 
@@ -120,7 +120,7 @@ def scheduler_for(
         repository=repository,
         dispatch=Runs(),
         providers={provider.name: provider},
-        resolve_analysis=lambda i, s: resolve_run(catalog(), i, s),
+        resolve_pipeline=lambda i, s: resolve_run(catalog(), i, s),
         default_timeout=timedelta(hours=1),
         maximum_timeout=timedelta(hours=6),
         clock=lambda: now,
@@ -130,7 +130,7 @@ def scheduler_for(
 def worker_for(
     repository: InMemoryExecutionRepository,
     provider: EmpaiaProviderAdapter,
-    dispatch: AnalysisDispatch,
+    dispatch: PipelineDispatch,
 ) -> ExecutionWorker:
     return ExecutionWorker(
         repository=repository,
@@ -143,7 +143,7 @@ def worker_for(
 
 
 class Handle:
-    """Served model `m1`: the fake model, reporting the catalog's digest."""
+    """Model `m1`: the fake model, reporting the catalog's digest."""
 
     def __init__(self) -> None:
         self.model = fake_model(tile_size=64, mpp=0.5)
@@ -160,9 +160,9 @@ class Handle:
         return await self.model.infer(tile)
 
 
-def replica(service: ControlledEmpaiaService, directory: str) -> AnalysisReplica:
-    """The analysis-runner core, reading the job's inputs through the fake App Service."""
-    return AnalysisReplica(
+def replica(service: ControlledEmpaiaService, directory: str) -> PipelineReplica:
+    """The pipeline-runner core, reading the job's inputs through the fake App Service."""
+    return PipelineReplica(
         ReplicaSettings(),
         models=lambda _id: Handle(),
         access={"empaia": EmpaiaInputAccessFactory(service.gateway, Path(directory))},
@@ -173,28 +173,28 @@ def replica(service: ControlledEmpaiaService, directory: str) -> AnalysisReplica
 class Runs:
     """The runner in this process, counting the runs; none by default."""
 
-    def __init__(self, core: AnalysisReplica | None = None) -> None:
+    def __init__(self, core: PipelineReplica | None = None) -> None:
         self.core = core
         self.count = 0
 
-    async def run_analysis(self, request: AnalysisRunRequest) -> RunResult:
+    async def run_pipeline(self, request: PipelineRunRequest) -> RunResult:
         assert self.core is not None, "nothing runs here"
         self.count += 1
         return await self.core.run(request)
 
 
-def over_http(core: AnalysisReplica) -> HTTPAnalysisDispatch:
+def over_http(core: PipelineReplica) -> HTTPPipelineDispatch:
     """Dispatch to the runner through its HTTP error envelope, as in production."""
     runner = FastAPI()
 
-    @runner.post("/analyses/", response_model=None)
-    async def run(body: AnalysisRunRequest):  # type: ignore[no-untyped-def]
+    @runner.post("/pipelines/", response_model=None)
+    async def run(body: PipelineRunRequest):  # type: ignore[no-untyped-def]
         return await answer_http(core.run(body))
 
     client = httpx.AsyncClient(
         transport=httpx.ASGITransport(app=runner), base_url="http://ray"
     )
-    return HTTPAnalysisDispatch(client, origin="http://ray")
+    return HTTPPipelineDispatch(client, origin="http://ray")
 
 
 class Failing:
@@ -203,7 +203,7 @@ class Failing:
     def __init__(self, message: str) -> None:
         self.message = message
 
-    async def run_analysis(self, request: AnalysisRunRequest) -> RunResult:
+    async def run_pipeline(self, request: PipelineRunRequest) -> RunResult:
         raise RemoteFailureError(
             code="invalid_run_request",
             safe_message=self.message,
@@ -350,14 +350,14 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         scheduled = await scheduler.schedule(self._request(now, "credential"))
         execution = await repository.get(scheduled.execution.id)
 
-        # Provenance: the analysis's settings, fixed when the job is accepted.
+        # Provenance: the pipeline's settings, fixed when the job is accepted.
         self.assertEqual(execution.invocation.configuration, DEFAULT_CONFIGURATION)
         self.assertEqual(
-            (execution.target.analysis_id, execution.target.models), ("a1", ("m1",))
+            (execution.target.pipeline_id, execution.target.models), ("a1", ("m1",))
         )
-        self.assertIsNotNone(execution.target.analysis)
+        self.assertIsNotNone(execution.target.pipeline)
 
-    async def test_configuration_keys_the_analysis_does_not_take_are_ignored(
+    async def test_configuration_keys_the_pipeline_does_not_take_are_ignored(
         self,
     ) -> None:
         now = datetime.now(UTC)
@@ -613,7 +613,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_a_job_whose_progress_empaia_refuses_still_succeeds(self) -> None:
         with self.assertLogs(
-            "model_service.analysis_runner.progress", "WARNING"
+            "model_service.pipeline_runner.progress", "WARNING"
         ) as logs:
             completed, service = await self._run_job(reject_progress=True)
 
@@ -719,10 +719,10 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
         *,
         expiry: datetime | None = None,
         job_id: str = "job-1",
-    ) -> AnalysisScheduleRequest:
+    ) -> PipelineScheduleRequest:
         """Build a provider request for the selected fixture identity and deadline settings."""
-        return AnalysisScheduleRequest(
-            analysis_id="a1",
+        return PipelineScheduleRequest(
+            pipeline_id="a1",
             provider="empaia",
             body={
                 "installation_id": "installation-1",
@@ -869,10 +869,10 @@ class EmpaiaCredentialTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(token, str(raised.exception))
 
     @staticmethod
-    def _request(token: str) -> AnalysisScheduleRequest:
+    def _request(token: str) -> PipelineScheduleRequest:
         """Build a synthetic job request without contacting an external AppService."""
-        return AnalysisScheduleRequest(
-            analysis_id="a1",
+        return PipelineScheduleRequest(
+            pipeline_id="a1",
             provider="empaia",
             body={
                 "installation_id": "test-installation",

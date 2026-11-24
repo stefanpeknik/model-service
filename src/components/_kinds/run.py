@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from components._kinds.columns import Col
-    from model_service.catalog.served_models.declaration import ServedModel
+    from model_service.catalog.models.declaration import Model
 
 
 @dataclass(frozen=True)
@@ -22,12 +22,12 @@ class Run:
         work_dir: Where a sink writes its artifact. Each sink gets its own
             directory; the runner moves the artifact to its destination only
             when the whole run succeeded.
-        model: The served-model declaration of the analysis's last model step,
-            or None for a model-free analysis.
+        model: The model declaration of the pipeline's last model step,
+            or None for a model-free pipeline.
         columns: The columns that reach the sinks, with every dimension the
             catalog knows filled in, e.g. `scores: float32[1,1,1]`.
     """
 
     work_dir: Path
-    model: ServedModel | None = None
+    model: Model | None = None
     columns: Mapping[str, Col] = field(default_factory=dict)

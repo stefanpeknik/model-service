@@ -1,7 +1,7 @@
 # Architecture Overview
 
-This page describes the Ray Serve layer that served models and the analysis
-runner run on. For analyses, the control plane and the durable scheduler, see
+This page describes the Ray Serve layer that models and the pipeline
+runner run on. For pipelines, the control plane and the durable scheduler, see
 [How model-service is put together](core.md).
 
 This section provides a structured overview of Model Service's architecture.
@@ -69,7 +69,7 @@ The main components are:
 3. **Infrastructure Actors**:
    - **Controller**: Ray Serve's own management actor: applications, deployments and autoscaling (does not handle requests).
    - **HTTP Proxy**: Ingress point that routes requests to applications.
-4. **Serve Application (The Service Boundary)**: A standalone version of your code, including all its deployments and logic. Defined by an import path (e.g., `model_service.served_model.serve:app`, which every served model uses).
+4. **Serve Application (The Service Boundary)**: A standalone version of your code, including all its deployments and logic. Defined by an import path (e.g., `model_service.model_host.serve:app`, which every model uses).
 5. **Serve Deployment (The Functional Unit)**: A managed group of replicas. It defines scaling rules (`num_replicas`, `num_cpus`) and versioning.
 6. **Replica (The Execution Unit)**: A single Ray actor process running the deployment code inside a Worker Node.
 
@@ -120,12 +120,12 @@ i.e., `Pod CPU >= Replicas × num_cpus + Overhead`.
 ### Placement (CPU vs GPU Workers)
 
 Ray places a replica on any node with enough free resources, so a CPU-only
-replica could take a GPU worker's free CPUs and leave its served model
+replica could take a GPU worker's free CPUs and leave its model
 unschedulable. The chart prevents this with a custom resource
 (`cpuWorkerResource` in `values.yaml`): CPU worker groups advertise
-`cpu_worker` through `rayStartParams.resources`, and the analysis runner
-requests a unit of it in `ray_actor_options.resources`. Served
-models don't request it and go wherever their GPU fits.
+`cpu_worker` through `rayStartParams.resources`, and the pipeline runner
+requests a unit of it in `ray_actor_options.resources`.
+Models don't request it and go wherever their GPU fits.
 
 ## Autoscaling Architecture
 
@@ -146,7 +146,7 @@ Ray Serve is designed to be resilient to failures:
 
 ## Design Principles
 
-1. **Declarative configuration**: served models and analyses are catalog files; Helm renders them into Serve applications.
+1. **Declarative configuration**: models and pipelines are catalog files; Helm renders them into Serve applications.
 2. **Separation of concerns**: components hold the code, catalog files the models and jobs, the chart the infrastructure.
 3. **Elastic scaling**: scale to zero when idle, scale up on demand.
 

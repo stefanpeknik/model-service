@@ -1,5 +1,5 @@
 site_name: Model Service Documentation
-site_description: RationAI's served models and whole-slide analyses on Ray Serve
+site_description: RationAI's models and whole-slide pipelines on Ray Serve
 repo_url: https://github.com/RationAI/model-service
 edit_uri: edit/main/docs/
 
@@ -22,13 +22,13 @@ nav:
   - Documentation map: README.md
   - Guides:
       - Add a model: guides/add-a-model.md
-      - Add an analysis: guides/add-an-analysis.md
+      - Add a pipeline: guides/add-a-pipeline.md
       - Write a component: guides/write-a-component.md
       - Raw inference: available-models.md
   - Reference:
       - Components: reference/components.md
-      - Served models: reference/served-models.md
-      - Analyses: reference/analyses.md
+      - Models: reference/models.md
+      - Pipelines: reference/pipelines.md
       - Data formats: reference/formats.md
       - Glossary: glossary.md
   - Architecture:

@@ -5,12 +5,12 @@ A component is a class deriving from its kind, imported from here
 (`from components import Step, Options, Col`), with a `name`, in the folder
 that says where it may be used:
 
-- `steps/`: a served model's `pre:`/`post:` and an analysis's `steps:`;
-- `loaders/`: a served model's `loader:` (and an analysis step's own loader);
-- `runtimes/`: inside a served model only;
-- `sources/`, `sinks/`: inside an analysis only;
-- `providers/empaia/converters/`, `providers/empaia/publishers/`: an
-  analysis's EMPAIA settings under `providers.empaia`.
+- `steps/`: a model's `pre:`/`post:` and a pipeline's `steps:`;
+- `loaders/`: a model's `loader:` (and a pipeline step's own loader);
+- `runtimes/`: inside a model only;
+- `sources/`, `sinks/`: inside a pipeline only;
+- `providers/empaia/converters/`, `providers/empaia/publishers/`: a
+  pipeline's EMPAIA settings under `providers.empaia`.
 
 Also here: `_kinds/`, the kind base classes and the types they use (import
 them from this package, not from there); `_templates/`, one file per kind to

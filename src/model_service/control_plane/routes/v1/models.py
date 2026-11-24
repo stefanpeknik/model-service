@@ -1,7 +1,7 @@
-"""`/v1/models`: the read-only catalog of served models.
+"""`/v1/models`: the read-only catalog of models.
 
-Each served model is listed with its declaration (the file after the
-environment's patch), its digest and the analyses that call it. Raw tiles go
+Each model is listed with its declaration (the file after the
+environment's patch), its digest and the pipelines that call it. Raw tiles go
 straight to the model's Ray Serve ingress (`POST /<model-id>/`).
 """
 
@@ -26,45 +26,45 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class ModelView:
-    """A served model, as the catalog lists it.
+    """A model, as the catalog lists it.
 
     Attributes:
         id: The model's id.
-        declaration: Its served-model file after the environment's patch.
-        digest: What decides its outputs, as the analysis runner checks it.
-        analyses: IDs of the deployed analyses that call it.
+        declaration: Its model file after the environment's patch.
+        digest: What decides its outputs, as the pipeline runner checks it.
+        pipelines: IDs of the deployed pipelines that call it.
     """
 
     id: str
     declaration: dict[str, JsonValue]
     digest: str
-    analyses: list[str]
+    pipelines: list[str]
 
 
 def model_view(model_id: str, catalog: Catalog) -> ModelView:
-    """Describe a served model for the public catalog.
+    """Describe a model for the public catalog.
 
     Args:
-        model_id: The served model's ID.
-        catalog: The resolved served models and analyses.
+        model_id: The model's ID.
+        catalog: The resolved models and pipelines.
 
     Returns:
-        The model's ID, declaration, digest and the analyses calling it.
+        The model's ID, declaration, digest and the pipelines calling it.
 
     Raises:
-        UnknownModelError: If no deployed served model has this ID.
+        UnknownModelError: If no deployed model has this ID.
     """
-    model = catalog.served_models.get(model_id)
+    model = catalog.models.get(model_id)
     if model is None:
         raise UnknownModelError(model_id)
     return ModelView(
         id=model_id,
         declaration=model.declaration,
         digest=model.digest,
-        analyses=[
-            analysis.id
-            for analysis in catalog.analyses.values()
-            if model_id in analysis.models
+        pipelines=[
+            pipeline.id
+            for pipeline in catalog.pipelines.values()
+            if model_id in pipeline.models
         ],
     )
 
@@ -86,13 +86,13 @@ def create_router(catalog: Callable[[], Catalog], access: Access) -> APIRouter:
         dependencies=[access.require(Action.READ_CATALOG)],
     )
     async def list_models() -> list[ModelView]:
-        """List the deployed served models.
+        """List the deployed models.
 
         Returns:
-            Every served model in the catalog.
+            Every model in the catalog.
         """
         current = catalog()
-        return [model_view(i, current) for i in current.served_models]
+        return [model_view(i, current) for i in current.models]
 
     @router.get(
         "/{model_id}",
@@ -100,7 +100,7 @@ def create_router(catalog: Callable[[], Catalog], access: Access) -> APIRouter:
         dependencies=[access.require(Action.READ_CATALOG)],
     )
     async def get_model(model_id: str) -> ModelView:
-        """Get one deployed served model.
+        """Get one deployed model.
 
         Args:
             model_id: The model's id.

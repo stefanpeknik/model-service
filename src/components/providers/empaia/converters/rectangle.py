@@ -19,7 +19,7 @@ MASK_FILE = "mask.tiff"
 
 
 class Rectangle(InputConverter):
-    """A rectangle on the app's slide, given to the analysis as a region-of-interest mask.
+    """A rectangle on the app's slide, given to the pipeline as a region-of-interest mask.
 
     The rectangle, clipped to the slide, becomes a pyramidal 8-bit TIFF of
     the slide's size and pixel size: 255 inside, 0 outside. EMPAIA offers it

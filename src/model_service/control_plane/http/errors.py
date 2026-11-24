@@ -20,12 +20,12 @@ class ApiErrorCode(StrEnum):
 
     INVALID_REQUEST = "invalid_request"
     UNKNOWN_MODEL = "unknown_model"
-    UNKNOWN_ANALYSIS = "unknown_analysis"
+    UNKNOWN_PIPELINE = "unknown_pipeline"
     SCHEDULE_CONFLICT = "schedule_conflict"
     SCHEDULING_UNAVAILABLE = "scheduling_unavailable"
     UNKNOWN_EXECUTION = "unknown_execution"
-    RUNNER_BACKPRESSURE = "analysis_runner_backpressure"
-    RUNNER_UNAVAILABLE = "analysis_runner_unavailable"
+    RUNNER_BACKPRESSURE = "pipeline_runner_backpressure"
+    RUNNER_UNAVAILABLE = "pipeline_runner_unavailable"
     UNAUTHENTICATED = "unauthenticated"
     FORBIDDEN = "forbidden"
 
@@ -76,17 +76,17 @@ def unavailable(error: SchedulingUnavailableError) -> HTTPException:
 
 
 def lookup_error(error: Exception) -> HTTPException:
-    """Map a model or analysis lookup failure to a 404.
+    """Map a model or pipeline lookup failure to a 404.
 
     Args:
-        error: An `UnknownModelError` or `UnknownAnalysisError`.
+        error: An `UnknownModelError` or `UnknownPipelineError`.
 
     Returns:
         404 naming what is not deployed.
     """
     if isinstance(error, UnknownModelError):
         return http_error(404, ApiErrorCode.UNKNOWN_MODEL, "model is not deployed")
-    return http_error(404, ApiErrorCode.UNKNOWN_ANALYSIS, "analysis is not deployed")
+    return http_error(404, ApiErrorCode.UNKNOWN_PIPELINE, "pipeline is not deployed")
 
 
 def http_error(

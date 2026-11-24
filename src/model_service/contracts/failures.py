@@ -36,8 +36,8 @@ class UnknownModelError(KeyError):
     """No model has the requested id."""
 
 
-class UnknownAnalysisError(KeyError):
-    """No deployed analysis has the requested id."""
+class UnknownPipelineError(KeyError):
+    """No deployed pipeline has the requested id."""
 
 
 class RunFailure(RuntimeError):

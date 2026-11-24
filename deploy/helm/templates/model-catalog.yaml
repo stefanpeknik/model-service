@@ -3,7 +3,7 @@ The control plane's catalog, rendered from the same files as the Serve config. T
 mounts it as a directory and reloads it when kubelet updates the files, so a
 catalog change does not restart the control plane.
 
-- catalog.json: the deployed served models and analyses after the
+- catalog.json: the deployed models and pipelines after the
   environment's patches.
 */}}
 apiVersion: v1
@@ -13,4 +13,4 @@ metadata:
   namespace: {{ .Release.Namespace }}
 data:
   catalog.json: |
-    {{- dict "served-models" (include "model-service.servedModels" . | fromJson) "analyses" (include "model-service.analyses" . | fromJson) | toJson | nindent 4 }}
+    {{- dict "models" (include "model-service.models" . | fromJson) "pipelines" (include "model-service.pipelines" . | fromJson) | toJson | nindent 4 }}

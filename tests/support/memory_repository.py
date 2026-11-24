@@ -40,7 +40,7 @@ from model_service.control_plane.scheduler.transitions.execution_transitions imp
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Mapping
 
-    from model_service.contracts.analysis_http import AnalysisRunRequest
+    from model_service.contracts.pipeline_http import PipelineRunRequest
     from model_service.control_plane.scheduler.public import SubmissionIdentity
     from model_service.control_plane.scheduler.targets import (
         CapacityKey,
@@ -345,9 +345,9 @@ class InMemoryExecutionRepository(ExecutionRepository):
 
 
 def _group(execution: ExecutionRecord) -> object:
-    """Processing rows compete as groups: by served models, a model-free one by ID."""
+    """Processing rows compete as groups: by models, a model-free one by ID."""
     target = execution.target
-    return (target.models, target.analysis_id if not target.models else None)
+    return (target.models, target.pipeline_id if not target.models else None)
 
 
 type Handler = Callable[
@@ -356,15 +356,15 @@ type Handler = Callable[
 
 
 class FakeDispatch:
-    """Run in-process handlers by analysis ID and record what they received."""
+    """Run in-process handlers by pipeline ID and record what they received."""
 
     def __init__(self, handlers: Mapping[str, Handler]) -> None:
         self._handlers = dict(handlers)
-        self.analyses: list[AnalysisRunRequest] = []
+        self.pipelines: list[PipelineRunRequest] = []
 
-    async def run_analysis(self, request: AnalysisRunRequest) -> RunResult:
-        self.analyses.append(request)
-        value = self._handlers[str(request.analysis["id"])](
+    async def run_pipeline(self, request: PipelineRunRequest) -> RunResult:
+        self.pipelines.append(request)
+        value = self._handlers[str(request.pipeline["id"])](
             request.invocation, request.execution_context
         )
         if inspect.isawaitable(value):

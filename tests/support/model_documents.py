@@ -1,12 +1,12 @@
-"""Served-model documents as the chart puts them in the control plane's `catalog.json`."""
+"""Model documents as the chart puts them in the control plane's `catalog.json`."""
 
 from __future__ import annotations
 
 from typing import Any
 
 
-def served_document(tile_size: int = 64) -> dict[str, Any]:
-    """A small served-model document that resolves without weights on disk."""
+def model_document(tile_size: int = 64) -> dict[str, Any]:
+    """A small model document that resolves without weights on disk."""
     return {
         "loader": {"use": "local", "path": "/weights/model.onnx"},
         "runtime": {"use": "onnx"},

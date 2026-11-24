@@ -1,7 +1,7 @@
-"""What the control plane's and providers' routes need from the scheduler, and what it runs analyses through.
+"""What the control plane's and providers' routes need from the scheduler, and what it runs pipelines through.
 
-ExecutionScheduler implements `Scheduler` and HTTPAnalysisDispatch implements
-`AnalysisDispatch`; each documents its methods. Tests pass fakes.
+ExecutionScheduler implements `Scheduler` and HTTPPipelineDispatch implements
+`PipelineDispatch`; each documents its methods. Tests pass fakes.
 """
 
 from __future__ import annotations
@@ -10,11 +10,11 @@ from typing import TYPE_CHECKING, Protocol
 
 
 if TYPE_CHECKING:
-    from model_service.contracts.analysis_http import AnalysisRunRequest
+    from model_service.contracts.pipeline_http import PipelineRunRequest
     from model_service.contracts.result import RunResult
     from model_service.control_plane.scheduler.public import (
-        AnalysisScheduleRequest,
         ExecutionView,
+        PipelineScheduleRequest,
         ScheduleResult,
     )
 
@@ -31,8 +31,8 @@ class Scheduler(Protocol):
         """Check that durable storage is reachable."""
         ...
 
-    async def schedule(self, request: AnalysisScheduleRequest) -> ScheduleResult:
-        """Admit a durable analysis execution, or return the one its idempotency key names.
+    async def schedule(self, request: PipelineScheduleRequest) -> ScheduleResult:
+        """Admit a durable pipeline execution, or return the one its idempotency key names.
 
         Args:
             request: The schedule request.
@@ -55,14 +55,14 @@ class Scheduler(Protocol):
         ...
 
 
-class AnalysisDispatch(Protocol):
-    """How the control plane runs a resolved analysis on the analysis runner."""
+class PipelineDispatch(Protocol):
+    """How the control plane runs a resolved pipeline on the pipeline runner."""
 
-    async def run_analysis(self, request: AnalysisRunRequest) -> RunResult:
-        """Run one resolved analysis and return its result.
+    async def run_pipeline(self, request: PipelineRunRequest) -> RunResult:
+        """Run one resolved pipeline and return its result.
 
         Args:
-            request: The resolved analysis, invocation and execution context.
+            request: The resolved pipeline, invocation and execution context.
 
         Returns:
             The run's result.

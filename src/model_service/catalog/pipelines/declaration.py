@@ -1,0 +1,157 @@
+"""A resolved pipeline: its components, models, inputs, settings and columns."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field, replace
+from typing import TYPE_CHECKING, Any, cast
+
+from pydantic import ConfigDict, create_model
+from pydantic.fields import FieldInfo
+
+from components import per_run_fields, with_overrides
+from model_service.catalog.pipelines.model_step import ModelStep
+
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from components import Col, Component, Sink, Source, Step
+    from model_service.catalog.models import Model
+    from model_service.catalog.pipelines.providers import EmpaiaPipelineSettings
+
+
+type PipelineStep = Step | ModelStep
+
+
+@dataclass(frozen=True)
+class Pipeline:
+    """One pipeline file, resolved and checked.
+
+    Attributes:
+        id: The pipeline ID, the file name.
+        summary: One line saying what it does.
+        source: The source, with its tile geometry filled in.
+        steps: Component steps and model steps, in order.
+        sinks: The sinks.
+        inputs: Input name to whether a run must give it; the union of what
+            the components read.
+        columns: The columns that reach the sinks, with every dimension known.
+        declaration: The file after the environment's patch.
+        empaia: The EMPAIA app it becomes, from `providers.empaia`; None if
+            it is not offered in EMPAIA.
+    """
+
+    id: str
+    summary: str
+    source: Source
+    steps: tuple[PipelineStep, ...]
+    sinks: tuple[Sink, ...]
+    inputs: Mapping[str, bool]
+    columns: Mapping[str, Col]
+    declaration: dict[str, Any] = field(compare=False, repr=False)
+    empaia: EmpaiaPipelineSettings | None = None
+
+    @property
+    def models(self) -> dict[str, Model]:
+        """The models the model steps call, by ID, in step order."""
+        return {s.model.id: s.model for s in self.steps if isinstance(s, ModelStep)}
+
+    @property
+    def last_model(self) -> Model | None:
+        """The last model step's model, which sinks are told about."""
+        models = list(self.models.values())
+        return models[-1] if models else None
+
+    def settings(self) -> dict[str, Any]:
+        """The per-run settings and their values from the file.
+
+        Returns:
+            Setting name to value: the `PerRun` options of every component,
+            under their own names.
+        """
+        return {
+            name: getattr(component.options, name)
+            for component in self._components()
+            for name in sorted(per_run_fields(type(component.options)))
+        }
+
+    def settings_schema(self) -> dict[str, Any]:
+        """The JSON Schema of the settings a run may send.
+
+        Returns:
+            An object schema with one property per setting: the option's
+            type, limits and description, and the file's value as default.
+        """
+        fields: dict[str, Any] = {}
+        for component in self._components():
+            options = type(component.options)
+            for name in sorted(per_run_fields(options)):
+                info = options.model_fields[name]
+                fields[name] = (
+                    info.annotation,
+                    FieldInfo.merge_field_infos(
+                        info, default=getattr(component.options, name)
+                    ),
+                )
+        model = create_model(
+            f"{self.id} settings", __config__=ConfigDict(extra="forbid"), **fields
+        )
+        return model.model_json_schema()
+
+    def with_settings(self, values: Mapping[str, Any]) -> Pipeline:
+        """The pipeline with a caller's per-run settings applied.
+
+        Args:
+            values: Setting name to value.
+
+        Returns:
+            A new pipeline; this one is unchanged.
+
+        Raises:
+            ValueError: For a name that is not a setting.
+            pydantic.ValidationError: For an invalid value.
+        """
+        unknown = sorted(set(values) - set(self.settings()))
+        if unknown:
+            raise ValueError(
+                f"{', '.join(unknown)}: not settings of {self.id}; settings: "
+                f"{', '.join(sorted(self.settings())) or 'none'}"
+            )
+
+        def tuned[C: Component](component: C) -> C:
+            """The component with the settings meant for its per-run options.
+
+            Args:
+                component: A source, step or sink.
+
+            Returns:
+                A copy with the overrides, or the component itself if none apply.
+            """
+            mine = {
+                k: v
+                for k, v in values.items()
+                if k in per_run_fields(type(component.options))
+            }
+            if not mine:
+                return component
+            return type(component)(with_overrides(component.options, mine))
+
+        return replace(
+            self,
+            source=tuned(self.source),
+            steps=tuple(
+                s if isinstance(s, ModelStep) else tuned(s) for s in self.steps
+            ),
+            sinks=tuple(tuned(s) for s in self.sinks),
+        )
+
+    def _components(self) -> list[Component]:
+        """The source, the component steps and the sinks, in file order.
+
+        Returns:
+            The components whose per-run options become settings.
+        """
+        steps = [
+            cast("Component", s) for s in self.steps if not isinstance(s, ModelStep)
+        ]
+        return [self.source, *steps, *self.sinks]

@@ -30,7 +30,7 @@ class MyComponentOptions(Options):
 class MyComponent(Step):
     """<One sentence: what it does and where to use it>.
 
-    `post: [{use: my_component}]` in a served model, or a step of an analysis.
+    `post: [{use: my_component}]` in a model, or a step of a pipeline.
     """
 
     name = "my_component"

@@ -71,24 +71,24 @@ spec:
     logging_config:
       encoding: JSON
       enable_access_log: false
-{{- $served := include "model-service.servedModels" . | fromJson }}
-{{- $analyses := include "model-service.analyses" . | fromJson }}
+{{- $served := include "model-service.models" . | fromJson }}
+{{- $pipelines := include "model-service.pipelines" . | fromJson }}
     {{- /* Serve needs a list, even an empty one. */}}
-    applications:{{ if not (or $served $analyses) }} []{{ end }}
+    applications:{{ if not (or $served $pipelines) }} []{{ end }}
 {{- range $id, $document := $served }}
-      - {{ include "model-service.servedModelApplication" (dict "id" $id "document" $document "settings" $.Values.servedModelSettings) | nindent 8 | trim }}
+      - {{ include "model-service.modelApplication" (dict "id" $id "document" $document "settings" $.Values.modelSettings) | nindent 8 | trim }}
 {{- end }}
-{{- /* One analysis runner executes every deployed analysis; none without analyses. */}}
-{{- if $analyses }}
-      - name: analysis-runner
-        route_prefix: /analyses
-        import_path: model_service.analysis_runner.serve:app
+{{- /* One pipeline runner executes every deployed pipeline; none without pipelines. */}}
+{{- if $pipelines }}
+      - name: pipeline-runner
+        route_prefix: /pipelines
+        import_path: model_service.pipeline_runner.serve:app
         deployments:
-          - name: AnalysisRunner
-            {{- include "model-service.cpuOnlyDeployment" (dict "root" $ "deployment" .Values.analysisRunner.deployment) | nindent 12 }}
+          - name: PipelineRunner
+            {{- include "model-service.cpuOnlyDeployment" (dict "root" $ "deployment" .Values.pipelineRunner.deployment) | nindent 12 }}
             user_config:
               shared_storage_roots: {{ toJson .Values.sharedStorageRoots }}
-              {{- with .Values.analysisRunner.userConfig }}
+              {{- with .Values.pipelineRunner.userConfig }}
               {{- toYaml . | nindent 14 }}
               {{- end }}
 {{- end }}

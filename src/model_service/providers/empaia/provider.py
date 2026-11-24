@@ -1,8 +1,8 @@
-"""The EMPAIA provider, composed for the control plane and for the analysis runner.
+"""The EMPAIA provider, composed for the control plane and for the pipeline runner.
 
 It serves JES's remote execution routes, runs App Service jobs, and registers
-apps, with their preprocessing triggers, for the analyses with an
-`expose.empaia` section. Its settings come from `EMPAIA_*` (`EmpaiaSettings`).
+apps, with their preprocessing triggers, for the pipelines with an
+`providers.empaia` section. Its settings come from `EMPAIA_*` (`EmpaiaSettings`).
 """
 
 from __future__ import annotations
@@ -19,9 +19,9 @@ from model_service.providers.provider import ControlPlaneContribution, Provider
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
-    from model_service.analysis_runner.settings import ReplicaSettings
     from model_service.catalog import Catalog
     from model_service.control_plane.scheduler.settings import SchedulerSettings
+    from model_service.pipeline_runner.settings import ReplicaSettings
     from model_service.providers.empaia.credentials import OutgoingCredentials
     from model_service.providers.empaia.registration import Marketplace
     from model_service.providers.empaia.triggers import PreprocessingTriggers
@@ -32,22 +32,22 @@ logger = logging.getLogger(__name__)
 
 
 class EmpaiaProvider(Provider):
-    """Runs EMPAIA jobs and registers the deployed analyses' EMPAIA apps."""
+    """Runs EMPAIA jobs and registers the deployed pipelines' EMPAIA apps."""
 
     def control_plane(
         self, catalog: Callable[[], Catalog], settings: SchedulerSettings
     ) -> ControlPlaneContribution:
         """Contribute the EMPAIA scheduler adapter, JES routes and app registration.
 
-        Apps come from the deployed analyses with `expose.empaia`, as the
+        Apps come from the deployed pipelines with `providers.empaia`, as the
         catalog is when the control plane starts; admission reads the catalog in use.
         Registration runs in the background, and only when a marketplace is
         configured, so the control plane serves while the marketplace is down; it
         aligns the preprocessing triggers too when a Medical Data Service is
-        configured, then deletes the apps it owns that no analysis has.
+        configured, then deletes the apps it owns that no pipeline has.
 
         Args:
-            catalog: Gives the deployed served models and analyses.
+            catalog: Gives the deployed models and pipelines.
             settings: Unused; EMPAIA reads its own `EMPAIA_*` settings.
 
         Returns:
@@ -57,14 +57,14 @@ class EmpaiaProvider(Provider):
             pydantic.ValidationError: If the `EMPAIA_*` settings are invalid.
             jsonschema.ValidationError: If a generated EAD fails the EAD v3 schema.
         """
-        from model_service.providers.empaia.ead.apps import analysis_apps
+        from model_service.providers.empaia.ead.apps import pipeline_apps
         from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
         from model_service.providers.empaia.jobs.routes import create_router
         from model_service.providers.empaia.registration import register_until_done
 
         del settings
         empaia = EmpaiaSettings()
-        apps = analysis_apps(catalog())
+        apps = pipeline_apps(catalog())
         credentials = _credentials(empaia)
         marketplace = _marketplace(empaia, credentials)
         triggers = _triggers(empaia, credentials)
@@ -92,7 +92,7 @@ class EmpaiaProvider(Provider):
     def input_access(
         self, settings: ReplicaSettings
     ) -> Mapping[str, InputAccessFactory]:
-        """Give the analysis runner access to EMPAIA job inputs through the App Service.
+        """Give the pipeline runner access to EMPAIA job inputs through the App Service.
 
         Args:
             settings: Unused; EMPAIA reads its own `EMPAIA_*` settings.

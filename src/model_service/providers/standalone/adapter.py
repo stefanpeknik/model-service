@@ -4,7 +4,7 @@ The caller's idempotency key identifies a submission. Scheduled attempts write
 below `.attempts/<execution>/` in the shared-storage root; finish moves the
 accepted attempt's artifacts to their requested paths and removes that
 directory, including failed and superseded attempts. Only the control plane
-imports this module; the analysis runner loads provider.py alone.
+imports this module; the pipeline runner loads provider.py alone.
 """
 
 from __future__ import annotations
@@ -30,8 +30,8 @@ from model_service.contracts.invocation import (
 )
 from model_service.contracts.result import RunResult, SharedArtifact
 from model_service.control_plane.scheduler.public import (
-    AnalysisScheduleRequest,
     InvalidScheduleRequestError,
+    PipelineScheduleRequest,
     PreparedInvocation,
     ProviderFinishFailureError,
     ProviderSuccess,
@@ -72,10 +72,10 @@ class StandaloneProviderAdapter(ProviderAdapter):
         """
         self._shared_storage = shared_storage
 
-    def identify(self, request: AnalysisScheduleRequest) -> SubmissionIdentity:
+    def identify(self, request: PipelineScheduleRequest) -> SubmissionIdentity:
         """Identify a submission by its idempotency key and a fingerprint of the request.
 
-        The fingerprint hashes the canonical JSON of the analysis, body and
+        The fingerprint hashes the canonical JSON of the pipeline, body and
         requested timeout, so reusing a key for a different request is
         detected.
 
@@ -96,7 +96,7 @@ class StandaloneProviderAdapter(ProviderAdapter):
         try:
             canonical = json.dumps(
                 {
-                    "analysis_id": request.analysis_id,
+                    "pipeline_id": request.pipeline_id,
                     "body": request.body,
                     "requested_timeout_seconds": request.requested_timeout_seconds,
                 },
@@ -115,12 +115,12 @@ class StandaloneProviderAdapter(ProviderAdapter):
         )
 
     async def prepare(
-        self, request: AnalysisScheduleRequest, deadline_at: datetime
+        self, request: PipelineScheduleRequest, deadline_at: datetime
     ) -> PreparedInvocation:
         """Check the request's access and shared inputs.
 
         The invocation keeps the caller's settings: the scheduler resolves
-        the analysis with them and checks the inputs against it.
+        the pipeline with them and checks the inputs against it.
 
         Args:
             request: The schedule request; its body is a `RunRequest`.

@@ -2,7 +2,7 @@
 
 Lines are JSON objects. Entry points set the execution a coroutine works for
 in `EXECUTION_ID`: the control plane's scheduler where it admits, claims and finishes an
-execution, the analysis runner once per run. `ExecutionIdFilter` adds it to each
+execution, the pipeline runner once per run. `ExecutionIdFilter` adds it to each
 record, so no function passes ids around. The control plane also adds the HTTP request's
 id, as `request_id`.
 """

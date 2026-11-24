@@ -25,7 +25,7 @@ HDF5 file (`.h5`), whose `schema_version` attribute is 2:
   with no tile (every tile was background) is (0, 0) or (0, summaries, 0);
 - file attributes, the header:
   - `schema_version`: 2;
-  - `model_id`: the served model that computed the features;
+  - `model_id`: the model that computed the features;
   - `summary_names`: the names of its summaries, e.g. `global`,
     `local_mean` (strings);
   - `coordinate_space`: `slide_level`, as `coordinates` are given;
@@ -86,5 +86,5 @@ it itself. Written by the `score_grid` sink.
 
 Media type `application/vnd.rationai.value+json; version=1`. A JSON object
 `{"value": <scalar>}`, where the scalar is a bool, a number or a string. The
-EMPAIA `primitive` publisher posts it as the primitive type the analysis's
-`expose.empaia` names.
+EMPAIA `primitive` publisher posts it as the primitive type the pipeline's
+`providers.empaia` names.

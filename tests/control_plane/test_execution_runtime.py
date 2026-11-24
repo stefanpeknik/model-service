@@ -17,10 +17,10 @@ from model_service.control_plane.app_factory import build_control_plane
 from model_service.control_plane.catalog_files import CatalogError
 from model_service.control_plane.scheduler.settings import SchedulerSettings
 from tests.support.memory_repository import InMemoryExecutionRepository
-from tests.support.model_documents import served_document
+from tests.support.model_documents import model_document
 
 
-DEPLOYED = {"prostate-classifier-1": served_document(), "virchow2": served_document()}
+DEPLOYED = {"prostate-classifier-1": model_document(), "virchow2": model_document()}
 
 
 class RuntimeTestCase(unittest.IsolatedAsyncioTestCase):
@@ -31,11 +31,11 @@ class RuntimeTestCase(unittest.IsolatedAsyncioTestCase):
         self.catalog_dir = self.directory / "catalog-mount"
         self.catalog_dir.mkdir()
         self.catalog_path = self.catalog_dir / "catalog.json"
-        self.write_served(DEPLOYED)
+        self.write_model(DEPLOYED)
 
-    def write_served(self, documents: dict[str, object]) -> None:
+    def write_model(self, documents: dict[str, object]) -> None:
         (self.catalog_dir / "catalog.json").write_text(
-            json.dumps({"served-models": documents}), encoding="utf-8"
+            json.dumps({"models": documents}), encoding="utf-8"
         )
 
     def settings(self, **environment: str) -> SchedulerSettings:
@@ -70,7 +70,7 @@ class ExecutionRuntimeTests(RuntimeTestCase):
         self.catalog_path.write_text("{not json", encoding="utf-8")
         with self.assertRaises(CatalogError):
             build_control_plane(self.settings())
-        self.write_served({"small": served_document(tile_size=0)})
+        self.write_model({"small": model_document(tile_size=0)})
         with self.assertRaises(CatalogError):
             build_control_plane(self.settings())
         self.catalog_path.unlink()
@@ -159,10 +159,10 @@ class ExecutionRuntimeTests(RuntimeTestCase):
                     transport=ASGITransport(app=app), base_url="http://model-service"
                 ) as client,
             ):
-                self.write_served({**DEPLOYED, "small": served_document()})
+                self.write_model({**DEPLOYED, "small": model_document()})
                 added = await until(client, "/v1/models", lambda r: "small" in ids(r))
                 deployments = await client.get("/healthz/deployments")
-                self.write_served({**DEPLOYED, "small": served_document(tile_size=0)})
+                self.write_model({**DEPLOYED, "small": model_document(tile_size=0)})
                 failed = await until(
                     client, "/healthz/catalog", lambda r: r.status_code == 503
                 )
@@ -174,11 +174,11 @@ class ExecutionRuntimeTests(RuntimeTestCase):
         self.assertEqual(deployments.json()["missing_routes"], ["/small"])
         self.assertEqual(failed.json()["status"], "reload_failed")
         self.assertIn(
-            "catalog/served-models/small.yaml:input.tile_size", failed.json()["error"]
+            "catalog/models/small.yaml:input.tile_size", failed.json()["error"]
         )
         self.assertEqual(ids(kept), ids(added))
 
-    async def test_health_expects_every_deployed_served_model(self) -> None:
+    async def test_health_expects_every_deployed_model(self) -> None:
         def serve(request: Request) -> Response:
             return Response(
                 200, json={"/prostate-classifier-1": "prostate-classifier-1"}

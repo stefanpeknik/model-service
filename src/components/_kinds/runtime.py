@@ -24,7 +24,7 @@ type BatchFunction = Callable[[np.ndarray], np.ndarray]
 
 @dataclass(frozen=True)
 class RuntimeContext:
-    """What the served model tells its runtime when loading.
+    """What the model tells its runtime when loading.
 
     Attributes:
         cache_dir: A directory for compiled artifacts (e.g. TensorRT engines),
@@ -40,7 +40,7 @@ class RuntimeContext:
 
 
 class Runtime(Component):
-    """Runs a model's weights (ONNX Runtime, timm, ...) inside a served model."""
+    """Runs a model's weights (ONNX Runtime, timm, ...) inside the model host."""
 
     kind: ClassVar[str] = "runtime"
     folder: ClassVar[str] = "runtimes"
@@ -48,7 +48,7 @@ class Runtime(Component):
 
     @abstractmethod
     def load(self, path: Path, context: RuntimeContext) -> BatchFunction:
-        """Load the weights fetched by the served model's loader.
+        """Load the weights fetched by the model's loader.
 
         Args:
             path: The local path the loader returned.

@@ -49,7 +49,7 @@ def test_every_catalog_file_fits_the_schema_it_names(path: Path) -> None:
     ("schema", "document"),
     [
         (
-            "served-models.schema.json",
+            "models.schema.json",
             {
                 "loader": {"use": "mlflow", "uri": "mlflow-artifacts:/1/a/model.onnx"},
                 "runtime": {"use": "onnx", "thread": 4},
@@ -59,16 +59,16 @@ def test_every_catalog_file_fits_the_schema_it_names(path: Path) -> None:
                 "resources": {"memory_gib": 4},
             },
         ),
-        ("served-models.patch.schema.json", {"runtime": {"thread": 4}}),
+        ("models.patch.schema.json", {"runtime": {"thread": 4}}),
         (
-            "analyses.schema.json",
+            "pipelines.schema.json",
             {
                 "source": {"use": "slide_tiles", "stride": 0.5},
                 "sinks": [{"use": "score_grid", "output": "heatmap"}],
             },
         ),
     ],
-    ids=["served model", "patch", "analysis"],
+    ids=["model", "patch", "pipeline"],
 )
 def test_a_misspelt_option_is_flagged(schema: str, document: dict[str, Any]) -> None:
     assert list(SCHEMAS[schema].iter_errors(document)) != []

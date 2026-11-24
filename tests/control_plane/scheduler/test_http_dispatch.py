@@ -1,4 +1,4 @@
-"""Check analysis dispatch over HTTP: request shape and outcome classification."""
+"""Check pipeline dispatch over HTTP: request shape and outcome classification."""
 
 from __future__ import annotations
 
@@ -9,17 +9,17 @@ from typing import TYPE_CHECKING
 
 import httpx
 
-from model_service.contracts.analysis_http import AnalysisRunRequest
 from model_service.contracts.invocation import (
     ExecutionContext,
     InputAccessContext,
     Invocation,
     SharedPathInput,
 )
+from model_service.contracts.pipeline_http import PipelineRunRequest
 from model_service.contracts.result import InlineOutput, RunResult
 from model_service.control_plane.scheduler.dispatch import (
     ConfirmedRejectionError,
-    HTTPAnalysisDispatch,
+    HTTPPipelineDispatch,
     RemoteFailureError,
     UnknownOutcomeError,
 )
@@ -33,17 +33,17 @@ def respond(response: httpx.Response) -> Callable[[httpx.Request], httpx.Respons
     return lambda _request: response
 
 
-class HttpAnalysisDispatchTests(unittest.IsolatedAsyncioTestCase):
+class HttpPipelineDispatchTests(unittest.IsolatedAsyncioTestCase):
     async def dispatch(
         self,
         handler: Callable[[httpx.Request], httpx.Response],
         context: ExecutionContext | None = None,
     ) -> RunResult:
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            return await HTTPAnalysisDispatch(
+            return await HTTPPipelineDispatch(
                 client, origin="http://ray:8000/"
-            ).run_analysis(
-                AnalysisRunRequest(
+            ).run_pipeline(
+                PipelineRunRequest(
                     invocation=Invocation(
                         inputs={"slide": SharedPathInput(path="slide.svs")},
                         configuration={"stride_fraction": 1.0},
@@ -52,7 +52,7 @@ class HttpAnalysisDispatchTests(unittest.IsolatedAsyncioTestCase):
                         ),
                         deadline_at=datetime.now(UTC) + timedelta(minutes=1),
                     ),
-                    analysis={"id": "prostate-heatmap", "digest": "abc"},
+                    pipeline={"id": "prostate-heatmap", "digest": "abc"},
                     execution_context=context or ExecutionContext(),
                 )
             )
@@ -79,9 +79,9 @@ class HttpAnalysisDispatchTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, RunResult(outputs={"score": InlineOutput(0.9)}))
         [request] = requests
-        self.assertEqual(request.url, "http://ray:8000/analyses/")
+        self.assertEqual(request.url, "http://ray:8000/pipelines/")
         body = json.loads(request.content)
-        self.assertEqual(body["analysis"], {"id": "prostate-heatmap", "digest": "abc"})
+        self.assertEqual(body["pipeline"], {"id": "prostate-heatmap", "digest": "abc"})
         self.assertEqual(body["invocation"]["inputs"]["slide"]["path"], "slide.svs")
         self.assertEqual(
             body["execution_context"],

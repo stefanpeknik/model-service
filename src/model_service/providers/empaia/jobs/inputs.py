@@ -2,7 +2,7 @@
 
 The public job identity must match protected dispatch context. Each input's
 EAD type, recorded at admission, picks the converter that makes its file;
-the analysis receives local paths.
+the pipeline receives local paths.
 """
 
 from __future__ import annotations

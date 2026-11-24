@@ -1,6 +1,6 @@
 """JSON Schemas of catalog files, built from the component classes.
 
-`served_model_schema` and `analysis_schema` give a pydantic model of their
+`model_schema` and `pipeline_schema` give a pydantic model of their
 file in which every component slot is a union of the components usable there, each
 a `{use: <name>, …options}` object. Editors read the generated schemas for
 autocompletion and inline errors; the catalog loader stays the authority, so

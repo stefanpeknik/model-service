@@ -1,18 +1,18 @@
 # Project context
 
-Model-service runs **served models** and whole-slide **analyses**, both YAML
+Model-service runs **models** and whole-slide **pipelines**, both YAML
 files in `catalog/` built from **components** in `src/components/`.
 `src/model_service/` is the plumbing that loads, checks and runs them. Start at
 [docs/architecture/core.md](docs/architecture/core.md); terms are in
 [docs/glossary.md](docs/glossary.md).
 
-- Adding or changing a served-model file: follow
+- Adding or changing a model file: follow
   [docs/guides/add-a-model.md](docs/guides/add-a-model.md).
-- Adding or changing an analysis file, or its `expose.empaia`: follow
-  [docs/guides/add-an-analysis.md](docs/guides/add-an-analysis.md).
+- Adding or changing a pipeline file, or its `providers.empaia`: follow
+  [docs/guides/add-a-pipeline.md](docs/guides/add-a-pipeline.md).
 - Writing or changing a component or a data format: follow
   [docs/guides/write-a-component.md](docs/guides/write-a-component.md).
-- Looking up a component's options, a served model, an analysis or a format:
+- Looking up a component's options, a model, a pipeline or a format:
   read `docs/reference/`. It is generated; after changing components,
   `src/model_service/formats/` or `catalog/`, run
   `PYTHONPATH=src uv run tools/generate.py` and commit what it writes

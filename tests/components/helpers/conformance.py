@@ -202,7 +202,7 @@ def _sink_with(component: type[Sink], work_dir: Path, model: Any) -> list[str]:
     Args:
         component: The sink class.
         work_dir: A directory to create the runs' directories in.
-        model: The fake served model the run gets.
+        model: The fake model the run gets.
 
     Returns:
         What failed.

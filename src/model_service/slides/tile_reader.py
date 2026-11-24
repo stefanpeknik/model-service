@@ -3,7 +3,7 @@
 With a mask, a tile is read only when its mask window contains a nonzero pixel;
 with a tissue mask, only when more than `min_tissue_fraction` of its window is
 tissue (any tissue at 0). Reads are synchronous
-and run in the analysis runner's read threads; x/y are coordinates at the selected slide
+and run in the pipeline runner's read threads; x/y are coordinates at the selected slide
 level.
 """
 

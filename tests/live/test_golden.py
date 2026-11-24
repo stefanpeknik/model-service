@@ -11,7 +11,7 @@ Environment:
 - `MODEL_SERVICE_LIVE_MODELS` / `MODEL_SERVICE_LIVE_RUNS`: comma-separated
   subsets to check (default: all recorded).
 
-Runs go through `/v1/analyses/{id}/run`.
+Runs go through `/v1/pipelines/{id}/run`.
 """
 
 from __future__ import annotations
@@ -119,23 +119,23 @@ def test_raw_route_matches_references(model: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "analysis", selected("MODEL_SERVICE_LIVE_RUNS", recorded("runs"))
+    "pipeline", selected("MODEL_SERVICE_LIVE_RUNS", recorded("runs"))
 )
-def test_run_matches_references(analysis: str) -> None:
+def test_run_matches_references(pipeline: str) -> None:
     """A synchronous run on each reference slide writes the recorded output."""
     import httpx
 
-    case = RUN_CASES[analysis]
+    case = RUN_CASES[pipeline]
     namespace = os.environ.get("MODEL_SERVICE_LIVE_NAMESPACE", "rationai-infra-test-ns")
     prefix = f"live/{uuid.uuid4().hex[:8]}"
     problems = []
     with httpx.Client(
         base_url=require("MODEL_SERVICE_CONTROL_PLANE_URL"), timeout=7300
     ) as client:
-        for reference in sorted((GOLDEN / "runs" / analysis).iterdir()):
-            output = f"{prefix}/{analysis}/{reference.name}"
+        for reference in sorted((GOLDEN / "runs" / pipeline).iterdir()):
+            output = f"{prefix}/{pipeline}/{reference.name}"
             response = client.post(
-                f"/v1/analyses/{case.analysis}/run",
+                f"/v1/pipelines/{case.pipeline}/run",
                 json={
                     "inputs": {
                         "slide": {

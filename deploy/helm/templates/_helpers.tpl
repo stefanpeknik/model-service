@@ -83,7 +83,7 @@ off to once a day. Not -1: Ray 2.58's GCS then dumps in a tight loop
 {{- end -}}
 
 {{/*
-A CPU-only Serve deployment (the analysis runner): `deployment`
+A CPU-only Serve deployment (the pipeline runner): `deployment`
 with cpuWorkerResource.perReplica of the cpuWorkerResource.name Ray resource
 added to its ray_actor_options.resources, so Ray places its replicas only on
 CPU worker groups. Takes dict "root" ($) and "deployment". Renders YAML.
@@ -164,45 +164,45 @@ patch merged in. Takes dict "root" ($), "folder" and "key".
 {{- end }}
 
 {{/*
-The served models this release deploys, as JSON {id: document}: the
-catalog/served-models/ files `servedModels` selects, patched for `environment`.
+The models this release deploys, as JSON {id: document}: the
+catalog/models/ files `models` selects, patched for `environment`.
 */}}
-{{- define "model-service.servedModels" -}}
-{{- include "model-service.catalogDocuments" (dict "root" . "folder" "served-models" "key" "servedModels") }}
+{{- define "model-service.models" -}}
+{{- include "model-service.catalogDocuments" (dict "root" . "folder" "models" "key" "models") }}
 {{- end }}
 
 {{/*
-The analyses this release deploys, as JSON {id: document}: the
-catalog/analyses/ files `analyses` selects, patched for `environment`. An
-analysis whose `{model: <id>}` step names a served model this release does not
+The pipelines this release deploys, as JSON {id: document}: the
+catalog/pipelines/ files `pipelines` selects, patched for `environment`. An
+pipeline whose `{model: <id>}` step names a model this release does not
 deploy fails the render, naming both.
 */}}
-{{- define "model-service.analyses" -}}
-{{- $analyses := include "model-service.catalogDocuments" (dict "root" . "folder" "analyses" "key" "analyses") | fromJson }}
-{{- $models := include "model-service.servedModels" . | fromJson }}
-{{- range $id, $analysis := $analyses }}
-{{- range $analysis.steps | default list }}
+{{- define "model-service.pipelines" -}}
+{{- $pipelines := include "model-service.catalogDocuments" (dict "root" . "folder" "pipelines" "key" "pipelines") | fromJson }}
+{{- $models := include "model-service.models" . | fromJson }}
+{{- range $id, $pipeline := $pipelines }}
+{{- range $pipeline.steps | default list }}
 {{- if and (kindIs "map" .) (hasKey . "model") (not (hasKey $models (toString .model))) }}
-{{- fail (printf "analysis %s calls served model %s, which this release does not deploy: add it to servedModels or leave %s out of analyses" $id .model $id) }}
+{{- fail (printf "pipeline %s calls model %s, which this release does not deploy: add it to models or leave %s out of pipelines" $id .model $id) }}
 {{- end }}
 {{- end }}
 {{- end }}
-{{- toJson $analyses }}
+{{- toJson $pipelines }}
 {{- end }}
 
 {{/*
-One served model's Serve application (the contract in
-model_service/served_model/__init__.py), plus the environment's env vars (servedModelSettings.env) as the replica's runtime_env.
-servedModelSettings.setupTimeoutSeconds, when set, goes to the application's
+One model's Serve application (the contract in
+model_service/model_host/__init__.py), plus the environment's env vars (modelSettings.env) as the replica's runtime_env.
+modelSettings.setupTimeoutSeconds, when set, goes to the application's
 runtime_env.config. Takes dict "id", "document" and "settings".
 */}}
-{{- define "model-service.servedModelApplication" -}}
+{{- define "model-service.modelApplication" -}}
 {{- $id := .id }}
 {{- $model := .document }}
-{{- $batch := int64 (required (printf "served model %s needs batching.max_size" $id) (dig "batching" "max_size" nil $model)) }}
+{{- $batch := int64 (required (printf "model %s needs batching.max_size" $id) (dig "batching" "max_size" nil $model)) }}
 {{- $serving := $model.serving | default dict }}
 {{- $resources := $model.resources | default dict }}
-{{- $memory := required (printf "served model %s needs resources.memory_gib" $id) $resources.memory_gib }}
+{{- $memory := required (printf "model %s needs resources.memory_gib" $id) $resources.memory_gib }}
 {{- $actor := dict "num_cpus" ($resources.cpus | default 1) "num_gpus" ($resources.gpus | default 0) "memory" (mulf $memory 1073741824 | int64) }}
 {{- with .settings.env }}
 {{- $_ := set $actor "runtime_env" (dict "env_vars" .) }}
@@ -211,9 +211,9 @@ runtime_env.config. Takes dict "id", "document" and "settings".
 {{- if not (kindIs "invalid" $serving.downscale_delay_s) }}
 {{- $_ := set $autoscaling "downscale_delay_s" $serving.downscale_delay_s }}
 {{- end }}
-{{- $userConfig := dict "id" $id "declaration" $model "cache_root" (required "servedModelSettings.cacheRoot is required" .settings.cacheRoot) }}
-{{- $deployment := dict "name" "ServedModel" "max_ongoing_requests" ($serving.max_ongoing_requests | default (mul 2 $batch)) "max_queued_requests" ($serving.max_queued_requests | default (mul 16 $batch)) "autoscaling_config" $autoscaling "ray_actor_options" $actor "user_config" $userConfig }}
-{{- $application := dict "name" $id "route_prefix" (printf "/%s" $id) "import_path" "model_service.served_model.serve:app" "deployments" (list $deployment) }}
+{{- $userConfig := dict "id" $id "declaration" $model "cache_root" (required "modelSettings.cacheRoot is required" .settings.cacheRoot) }}
+{{- $deployment := dict "name" "Model" "max_ongoing_requests" ($serving.max_ongoing_requests | default (mul 2 $batch)) "max_queued_requests" ($serving.max_queued_requests | default (mul 16 $batch)) "autoscaling_config" $autoscaling "ray_actor_options" $actor "user_config" $userConfig }}
+{{- $application := dict "name" $id "route_prefix" (printf "/%s" $id) "import_path" "model_service.model_host.serve:app" "deployments" (list $deployment) }}
 {{- with .settings.setupTimeoutSeconds }}
 {{- $_ := set $application "runtime_env" (dict "config" (dict "setup_timeout_seconds" (int64 .))) }}
 {{- end }}

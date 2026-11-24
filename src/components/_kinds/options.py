@@ -1,7 +1,7 @@
 """A component's options and the per-run marker.
 
 Options come from the catalog file. A field marked `PerRun[...]` may also be
-overridden by a caller for one run; those fields are the analysis's API
+overridden by a caller for one run; those fields are the pipeline's API
 settings and EMPAIA parameters. Every other field is fixed by the file.
 """
 

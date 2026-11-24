@@ -40,7 +40,7 @@ def primitive_of(setting: dict[str, Any]) -> PrimitiveType | None:
 
 
 class Primitive(InputConverter):
-    """An analysis setting offered as an EMPAIA primitive input in standalone mode.
+    """A pipeline setting offered as an EMPAIA primitive input in standalone mode.
 
     Its type and description come from the setting; the user's value is
     read when the job is admitted and overrides the file's.

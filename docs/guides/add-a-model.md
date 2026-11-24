@@ -1,7 +1,7 @@
 # Add a model
 
 A trained model that an existing runtime can run is one YAML file in
-`catalog/served-models/`. You write no Python and rebuild no image. The
+`catalog/models/`. You write no Python and rebuild no image. The
 runtimes today are `onnx` for an ONNX graph and `timm` for a timm or
 Hugging Face encoder; [Components](../reference/components.md) lists them with
 every option. If your model needs a runtime, loader or step that doesn't exist
@@ -9,7 +9,7 @@ yet, write it first: [Write a component](write-a-component.md).
 
 ## 1. Copy the closest file
 
-Start from the served model most like yours:
+Start from the model most like yours:
 
 | Your model | Copy |
 | --- | --- |
@@ -18,7 +18,7 @@ Start from the served model most like yours:
 | Encoder on the Hugging Face Hub | `virchow2.yaml`, or `prov-gigapath.yaml` if it needs its own resize and normalisation |
 
 ```sh
-cp catalog/served-models/prostate-classifier-1.yaml catalog/served-models/my-classifier.yaml
+cp catalog/models/prostate-classifier-1.yaml catalog/models/my-classifier.yaml
 ```
 
 The file name is the model's ID and its route, so use lowercase letters,
@@ -29,7 +29,7 @@ extension, for one) completes keys and underlines mistakes as you type.
 ## 2. Describe your model
 
 ```yaml
-# yaml-language-server: $schema=../.schemas/served-models.schema.json
+# yaml-language-server: $schema=../.schemas/models.schema.json
 loader: {use: mlflow, uri: "mlflow-artifacts:/65/<run>/artifacts/model.onnx"}
 runtime: {use: onnx, tensorrt: true, workspace_gib: 8, optimization_level: 3, threads: 4}
 input: {tile_size: 512, mpp: 0.468}
@@ -43,7 +43,7 @@ resources: {gpus: 1, cpus: 4, memory_gib: 12}
   refused instead of served. A Hugging Face repository needs the full commit
   hash as `revision`, so the weights can't change under the same file.
 - `input` is the tile edge in pixels and the microns per pixel the model was
-  trained at. Get `mpp` right: analyses read the slide level closest to it.
+  trained at. Get `mpp` right: pipelines read the slide level closest to it.
 - `output` is `{kind: scores, channels, size}` for a score map of
   `channels × size × size` per tile, or `{kind: embedding, summaries: [...]}`
   for an encoder. Declare `range` whenever you know it. A model that returns
@@ -52,7 +52,7 @@ resources: {gpus: 1, cpus: 4, memory_gib: 12}
 - `pre` and `post` are steps run on each tile before and after the runtime,
   such as `resize`, `center_crop`, `normalize` or `cls_mean_pool`.
 - `batching`, `resources` and the optional `serving` block size the Ray Serve
-  deployment. [Served models](../reference/served-models.md) shows what every
+  deployment. [Models](../reference/models.md) shows what every
   key means and what the four existing models use.
 
 ## 3. Check it
@@ -66,7 +66,7 @@ and lists every mistake in one run. Each error names the file, the YAML path,
 what's wrong, what would fit and how to fix it:
 
 ```text
-catalog/served-models/my-classifier.yaml:runtime.thread: unknown option `thread`. Options of `onnx`: fp16, optimization_level, output_dtype, tensorrt, threads, workspace_gib. Hint: did you mean `threads`?
+catalog/models/my-classifier.yaml:runtime.thread: unknown option `thread`. Options of `onnx`: fp16, optimization_level, output_dtype, tensorrt, threads, workspace_gib. Hint: did you mean `threads`?
 ```
 
 Then regenerate the reference docs, which list your model, and commit them
@@ -95,11 +95,11 @@ loads it.
 
 ## 5. Deploy it
 
-A values file deploys every served model, or the IDs it names in
-`servedModels`. `deploy/helm/environments/rationai-test/values.yaml` names them, so add yours there. If
+A values file deploys every model, or the IDs it names in
+`models`. `deploy/helm/environments/rationai-test/values.yaml` names them, so add yours there. If
 the model differs on one cluster, say a smaller batch or another MLflow
 server, put only the difference in
-`deploy/helm/environments/<environment>/served-models/my-classifier.yaml`. The
+`deploy/helm/environments/<environment>/models/my-classifier.yaml`. The
 test cluster's `prostate-classifier-1.yaml` patch is one line. Then run
 `helm upgrade`. A catalog change needs no image rebuild, and the control plane picks up
 the new catalog without restarting. Running `helm upgrade` against a shared
@@ -122,5 +122,5 @@ size, a NaN or a score outside `range` fails that request with the reason.
 If the model sits in `UPSCALING`, the cluster has no free GPU for
 `resources`.
 
-To run your model over whole slides, give it an analysis:
-[Add an analysis](add-an-analysis.md).
+To run your model over whole slides, give it a pipeline:
+[Add a pipeline](add-a-pipeline.md).

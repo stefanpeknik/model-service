@@ -167,8 +167,8 @@ class ClaimOperations:
     ) -> ExecutionRow | None:
         """Lock the oldest eligible processing row with a free slot in every pool it uses.
 
-        Rows are grouped by the served models they call (a model-free
-        analysis by its ID). For each group, a transaction-scoped advisory
+        Rows are grouped by the models they call (a model-free
+        pipeline by its ID). For each group, a transaction-scoped advisory
         lock per capacity key is tried in sorted order, so two claims never
         wait on each other; a group with a key locked elsewhere or full is
         skipped.
@@ -187,8 +187,8 @@ class ClaimOperations:
             ExecutionRow.deadline_at > now,
         )
         model_free = func.cardinality(ExecutionRow.models) == 0
-        # The analysis ID only tells model-free groups apart.
-        model_free_id = case((model_free, ExecutionRow.analysis_id))
+        # The pipeline ID only tells model-free groups apart.
+        model_free_id = case((model_free, ExecutionRow.pipeline_id))
         groups = await session.execute(
             select(ExecutionRow.models, model_free_id)
             .where(*eligible)
@@ -199,8 +199,8 @@ class ClaimOperations:
             )
         )
         unavailable: set[CapacityKey] = set()
-        for models, analysis_id in groups.all():
-            keys = capacity_keys(analysis_id or "", tuple(models))
+        for models, pipeline_id in groups.all():
+            keys = capacity_keys(pipeline_id or "", tuple(models))
             if unavailable.intersection(keys) or not await self._reserve(
                 session, keys, now, unavailable
             ):
@@ -209,7 +209,7 @@ class ClaimOperations:
                 select(ExecutionRow)
                 .where(
                     ExecutionRow.models == list(models),
-                    *([ExecutionRow.analysis_id == analysis_id] if not models else []),
+                    *([ExecutionRow.pipeline_id == pipeline_id] if not models else []),
                     *eligible,
                 )
                 .order_by(
@@ -259,7 +259,7 @@ class ClaimOperations:
                 if key.kind is CapacityKind.MODEL
                 else and_(
                     func.cardinality(ExecutionRow.models) == 0,
-                    ExecutionRow.analysis_id == key.id,
+                    ExecutionRow.pipeline_id == key.id,
                 )
             )
             active = (

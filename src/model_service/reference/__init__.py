@@ -5,9 +5,9 @@ the format modules and `catalog/`; `tools/generate.py` writes them and a
 test fails when the committed copies differ. The generated files are:
 
 - `catalog/.schemas/<folder>.schema.json` and `<folder>.patch.schema.json`
-  for served-model and analysis files;
+  for model and pipeline files;
 - the `# yaml-language-server: $schema=…` first line of each catalog file;
-- `docs/reference/components.md`, `served-models.md`, `analyses.md` and
+- `docs/reference/components.md`, `models.md`, `pipelines.md` and
   `formats.md`.
 """
 
@@ -16,11 +16,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from model_service.catalog import load_catalog
-from model_service.reference.analyses_page import analyses_page
 from model_service.reference.components_page import components_page
 from model_service.reference.formats_page import formats_page
+from model_service.reference.models_page import models_page
+from model_service.reference.pipelines_page import pipelines_page
 from model_service.reference.schemas import linked_files, schema_files
-from model_service.reference.served_models_page import served_models_page
 from model_service.registry import default_registry
 
 
@@ -47,10 +47,8 @@ def generated(repo: Path) -> dict[Path, str]:
         **schema_files(registry, CATALOG),
         **linked_files(repo, CATALOG, ENVIRONMENTS),
         REFERENCE / "components.md": components_page(registry, catalog),
-        REFERENCE / "served-models.md": served_models_page(
-            catalog, repo / ENVIRONMENTS
-        ),
-        REFERENCE / "analyses.md": analyses_page(catalog),
+        REFERENCE / "models.md": models_page(catalog, repo / ENVIRONMENTS),
+        REFERENCE / "pipelines.md": pipelines_page(catalog),
         REFERENCE / "formats.md": formats_page(registry),
     }
 

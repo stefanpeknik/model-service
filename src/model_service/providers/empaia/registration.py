@@ -1,4 +1,4 @@
-"""Make a marketplace's apps match the deployed analyses when the control plane starts.
+"""Make a marketplace's apps match the deployed pipelines when the control plane starts.
 
 It posts to the routes of the marketplace mock EMPAIA test installations run
 (`/v1/custom-mock/portal-apps`, then the app's global configuration, such as
@@ -6,8 +6,8 @@ the case browser's viewer settings); a production marketplace lists apps through
 portal's review instead. App IDs derive from the EAD namespace, so registering
 again replaces an app and every control-plane replica may do it. With a Medical Data
 Service configured, the apps' preprocessing triggers follow (triggers.py).
-Last, it deletes the apps it owns that no deployed analysis has any more, such
-as one whose analysis was renamed: those with a `NAMESPACE_PREFIX` namespace
+Last, it deletes the apps it owns that no deployed pipeline has any more, such
+as one whose pipeline was renamed: those with a `NAMESPACE_PREFIX` namespace
 and an image on this deployment's JES target.
 """
 
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from model_service.providers.empaia.credentials import OutgoingCredentials
-    from model_service.providers.empaia.ead.apps import AnalysisApp
+    from model_service.providers.empaia.ead.apps import PipelineApp
     from model_service.providers.empaia.triggers import PreprocessingTriggers
 
 
@@ -72,7 +72,7 @@ class Marketplace:
         self._timeout = timeout
         self._transport = transport
 
-    async def register(self, apps: Sequence[AnalysisApp]) -> None:
+    async def register(self, apps: Sequence[PipelineApp]) -> None:
         """Post each app as a portal app, then its global configuration if it has one.
 
         Registering again replaces an app.
@@ -103,13 +103,13 @@ class Marketplace:
                     )
                     response.raise_for_status()
                 logger.info(
-                    "registered EMPAIA app %s (%s) of analysis %s",
+                    "registered EMPAIA app %s (%s) of pipeline %s",
                     app.app_id,
                     ", ".join(app.modes),
-                    app.analysis_id,
+                    app.pipeline_id,
                 )
 
-    async def retire_absent(self, apps: Sequence[AnalysisApp]) -> None:
+    async def retire_absent(self, apps: Sequence[PipelineApp]) -> None:
         """Delete the owned portal apps that are not among the given apps.
 
         model-service owns a portal app when its namespace starts with
@@ -148,7 +148,7 @@ class Marketplace:
                     continue
                 deleted.raise_for_status()
                 logger.info(
-                    "retired EMPAIA portal app %s (%s): no deployed analysis has it",
+                    "retired EMPAIA portal app %s (%s): no deployed pipeline has it",
                     portal_app["id"],
                     namespace,
                 )
@@ -180,7 +180,7 @@ class Marketplace:
 
 async def register_until_done(
     marketplace: Marketplace,
-    apps: Sequence[AnalysisApp],
+    apps: Sequence[PipelineApp],
     triggers: PreprocessingTriggers | None = None,
     *,
     retry_seconds: float = RETRY_SECONDS,
