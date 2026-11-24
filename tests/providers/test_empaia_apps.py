@@ -75,39 +75,15 @@ def tmp_app(tmp_path: Path, expose: str) -> AnalysisApp:
     return analysis_app(analyses["a1"])
 
 
-PARAMETERS = ("stride_fraction", "skip_background", "min_tissue_fraction")
-
-
-def without_parameters(app: AnalysisApp) -> tuple[dict[str, object], object]:
-    """The app's EAD and viewer settings with its standalone parameters left out."""
-    ead = json.loads(json.dumps(app.ead))
-    for name in PARAMETERS:
-        del ead["io"][name]
-    standalone = ead["modes"]["standalone"]
-    standalone["inputs"] = [i for i in standalone["inputs"] if i not in PARAMETERS]
-    viewer = json.loads(app.global_configuration[VIEWER_CONFIG_KEY])
-    for name in PARAMETERS:
-        del viewer["inputs"][name]
-    return ead, viewer
-
-
 @pytest.mark.parametrize("environment", [None, "rationai-test"])
 def test_the_prostate_app_matches_its_recording_apart_from_its_namespace(
     environment: str | None,
 ) -> None:
     app = prostate_app(environment)
-    ead, viewer = without_parameters(app)
 
     assert app.ead["namespace"] == NEW_NAMESPACE
-    assert {**ead, "namespace": OLD_NAMESPACE} == BEFORE["ead"]
-    assert viewer == json.loads(BEFORE["global_configuration"][VIEWER_CONFIG_KEY])
-    # The standalone parameters, added since the recording: one form field each.
-    assert {p: app.ead["io"][p]["type"] for p in PARAMETERS} == {
-        "stride_fraction": "float",
-        "skip_background": "bool",
-        "min_tissue_fraction": "float",
-    }
-    assert app.ead["modes"]["standalone"]["inputs"][-3:] == list(PARAMETERS)
+    assert {**app.ead, "namespace": OLD_NAMESPACE} == BEFORE["ead"]
+    assert app.global_configuration == BEFORE["global_configuration"]
     assert app.modes == (AppMode.STANDALONE, AppMode.PREPROCESSING)
     assert app.image("model-service") == (
         "http::model-service/analyses/prostate-heatmap"
