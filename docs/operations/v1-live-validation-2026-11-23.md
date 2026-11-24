@@ -16,6 +16,7 @@ pre-rebuild deployment (`golden-references-2026-11-22.md`).
 | 11 | `unit-984bed7` | builders and transitional code removed (analyses only) |
 | 12 | `unit-aeed9eb` | code-review fixes (`GET /<model>/describe`, MLflow checksum, renames) |
 | 15 | `unit-9037eb7` | final v1: EPISeg applies its session options, untestable EMPAIA primitive pieces removed, core trims |
+| 16 | `unit-28531d4` | the API process renamed the control plane: `<release>-control-plane` Deployment and Service, `controlPlane:` values |
 | 14 | `unit-7247440` | persona-review fixes: validation, destination checks, sigmoid/softmax, provenance on results |
 | 13 | `unit-2646342` | builder-era names removed, `src/components` split, one fresh migration on a dropped database |
 
@@ -38,6 +39,22 @@ always the same six model-service objects, changes as listed above.
 - EMPAIA: preprocessing job via `scripts/request_preprocessing.py` on slide
   `7a072fd9`; execution `e6efffba` (`prostate-heatmap`, digest `bccb915a…`)
   succeeded with one processing and one finish attempt.
+
+## Results on revision 16 (control-plane rename, 2026-11-24)
+
+- The upgrade replaced `model-service-api` with `model-service-control-plane`
+  (Deployment and Service); the catalog ConfigMap was unchanged, so every
+  served model kept its digest and TensorRT engine. Health, deployments and
+  catalog: ok, ready, loaded; the EMPAIA app registered at start.
+- The `test-jobs-jes` `JES_HTTP_TARGETS` entry `model-service` was pointed at
+  `model-service-control-plane`.
+- `pytest -m live tests/live` per model: all three 3 passed
+  (prostate 2 min, Virchow2 13 min, Prov-GigaPath 7 min, GPU swaps included).
+- SDK integration test (default URL now `<release>-control-plane`) passed:
+  synchronous and scheduled prostate-heatmap give equal results.
+- EMPAIA preprocessing job `ee2d585d` on slide `7a072fd9`: execution
+  `90030d85` succeeded, the heatmap was published and JES ended the job with
+  exit code 0.
 
 ## Results on revision 15 (final v1 state)
 
