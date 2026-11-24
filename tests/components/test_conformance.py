@@ -157,7 +157,7 @@ class PostsTooEarly(Publisher):
     """Broken publisher: posts during prepare, so a later failure can't undo it."""
 
     name = "posts_too_early"
-    reads_format = "score_grid"
+    reads_format = "value"
     emits = frozenset({"float"})
     example_options: ClassVar[dict[str, Any]] = {"type": "float"}
 

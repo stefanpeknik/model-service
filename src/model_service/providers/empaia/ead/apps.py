@@ -231,11 +231,16 @@ def generate_ead(analysis: Analysis) -> dict[str, Any]:
         for name, publisher in exposure.outputs.items()
     }
     parameters = exposure.parameters
-    if (offer := exposure.parameter_converter) is not None:
+    if parameters:
+        from components.empaia.converters.primitive import (
+            Primitive,
+        )
+
         schema = analysis.settings_schema()["properties"]
+        primitive = Primitive(Primitive.Options())
         io |= {
-            name: offer.io_fragment(EmpaiaInput(name, setting=schema[name]))
-            for name in exposure.parameters
+            name: primitive.io_fragment(EmpaiaInput(name, setting=schema[name]))
+            for name in parameters
         }
     ead: dict[str, Any] = {
         "$schema": EAD_SCHEMA_URL,

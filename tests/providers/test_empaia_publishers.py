@@ -23,7 +23,7 @@ from model_service.control_plane.scheduler.public import (
     ProviderSuccess,
 )
 from model_service.control_plane.scheduler.targets import ExecutionTarget
-from model_service.formats import score_grid
+from model_service.formats import score_grid, value
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
 from model_service.providers.empaia.jobs.adapter import EmpaiaProviderAdapter
 from model_service.registry.empaia import publisher
@@ -36,13 +36,14 @@ CONTEXT = {"api_url": "https://empaia.invalid", "job_id": "j", "credential": "c"
 
 
 class PyramidGateway:
-    """Serves one slide and records each pixelmap."""
+    """Serves one slide and records each pixelmap and each posted body."""
 
     job_id = "job-1"
 
     def __init__(self, slide: SlideInfo | None = None) -> None:
         self.slide = slide or slide_info()
         self.published: list[tuple[str, str, tuple[Any, ...]]] = []
+        self.posted: list[tuple[str, Any]] = []
         self.slides_read: list[str] = []
 
     async def slide_info(self, name: str) -> SlideInfo:
@@ -53,6 +54,9 @@ class PyramidGateway:
         self, name: str, slide_id: str, tile_sets: tuple[Any, ...]
     ) -> None:
         self.published.append((name, slide_id, tile_sets))
+
+    async def post_output(self, name: str, body: Any) -> None:
+        self.posted.append((name, body))
 
 
 def grid(values: np.ndarray, scored: np.ndarray) -> score_grid.ScoreGrid:
@@ -164,6 +168,54 @@ class ContinuousPixelmapTests(unittest.IsolatedAsyncioTestCase):
                 assert gateway.published == []
 
 
+class PrimitiveTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_value_is_posted_as_the_named_primitive_created_by_the_job(
+        self,
+    ) -> None:
+        gateway = PyramidGateway()
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "score.json"
+            value.write(path, 1)
+            primitive = publisher({"type": "float"}, "value")
+            commit = await primitive.prepare(
+                gateway, EmpaiaOutput("score"), path, value.MEDIA_TYPE
+            )
+            assert gateway.posted == []
+            await commit()
+
+        [(name, body)] = gateway.posted
+        assert name == "score"
+        assert {k: v for k, v in body.model_dump().items() if v is not None} == {
+            "name": "score",
+            "type": "float",
+            "value": 1,
+            "creator_id": "job-1",
+            "creator_type": "job",
+        }
+
+    async def test_a_value_of_another_type_is_rejected_before_any_write(self) -> None:
+        for output_type, scalar in (
+            ("integer", True),
+            ("integer", 0.5),
+            ("float", False),
+            ("bool", 1),
+            ("string", ""),
+        ):
+            gateway = PyramidGateway()
+            with (
+                self.subTest(output_type=output_type, value=scalar),
+                TemporaryDirectory() as directory,
+            ):
+                path = Path(directory) / "score.json"
+                value.write(path, scalar)
+                with self.assertRaises(EmpaiaGatewayError) as raised:
+                    await publisher({"type": output_type}, "value").prepare(
+                        gateway, EmpaiaOutput("score"), path, value.MEDIA_TYPE
+                    )
+                assert not raised.exception.retryable
+                assert gateway.posted == []
+
+
 def analysis_success(
     outputs: dict[str, SharedArtifact], sinks: list[str]
 ) -> ProviderSuccess:
@@ -263,31 +315,30 @@ class FinishTests(unittest.IsolatedAsyncioTestCase):
         gateway = AsyncMock()
         gateway.slide_info.return_value = slide_info()
         with TemporaryDirectory() as directory:
-            broken = Path(directory) / "broken.npz"
-            broken.write_bytes(b"truncated")
+            score = Path(directory) / "score.json"
+            value.write(score, "high")
 
             with self.assertRaises(ProviderFinishFailureError) as raised:
                 await self.provider(gateway).finish(
                     admitted(
                         heatmap={"type": "continuous_pixelmap"},
-                        broken={"type": "continuous_pixelmap"},
+                        score={"type": "float"},
                     ),
                     analysis_success(
                         {
                             "heatmap": SharedArtifact(
                                 str(heatmap_file(directory)), score_grid.MEDIA_TYPE
                             ),
-                            "broken": SharedArtifact(
-                                str(broken), score_grid.MEDIA_TYPE
-                            ),
+                            "score": SharedArtifact(str(score), value.MEDIA_TYPE),
                         },
-                        ["heatmap", "broken"],
+                        ["heatmap", "score"],
                     ),
                 )
 
         # The heatmap was prepared, but its write never ran.
         gateway.slide_info.assert_awaited_once()
         gateway.publish_pixelmap.assert_not_awaited()
+        gateway.post_output.assert_not_awaited()
         assert not raised.exception.outcome_unknown
 
 

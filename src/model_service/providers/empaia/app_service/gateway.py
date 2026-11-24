@@ -29,6 +29,38 @@ PROVIDER_NAME = "empaia"
 INPUT_ACCESS_KIND = "empaia"
 
 
+class PrimitiveType(StrEnum):
+    """An EMPAIA primitive output type."""
+
+    BOOL = "bool"
+    INTEGER = "integer"
+    FLOAT = "float"
+    STRING = "string"
+
+    def fits(self, value: object) -> bool:
+        """Whether EMPAIA takes this value as a primitive of this type.
+
+        A bool is an int in Python, so it is told apart; a float takes whole
+        numbers; an empty string is refused.
+
+        Args:
+            value: The output's value.
+
+        Returns:
+            Whether the value fits.
+        """
+        if isinstance(value, bool):
+            return self is PrimitiveType.BOOL
+        match self:
+            case PrimitiveType.INTEGER:
+                return isinstance(value, int)
+            case PrimitiveType.FLOAT:
+                return isinstance(value, int | float)
+            case PrimitiveType.STRING:
+                return isinstance(value, str) and bool(value)
+        return False
+
+
 class EmpaiaGatewayError(RuntimeError):
     """Carry safe integration failure metadata, including retry permission and uncertain remote mutations."""
 
@@ -227,7 +259,7 @@ class EmpaiaGateway(ABC):
 
     @abstractmethod
     async def post_output(self, name: str, body: Any) -> None:
-        """Post one output's body.
+        """Post one output's body, e.g. a primitive.
 
         Args:
             name: The EMPAIA output key.

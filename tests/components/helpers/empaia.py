@@ -227,6 +227,17 @@ class FakeGateway(EmpaiaGateway):
         """Nothing to release."""
 
 
+def _value(path: Path) -> None:
+    """Write a `value` file holding one probability.
+
+    Args:
+        path: Where to write it.
+    """
+    from model_service.formats import value
+
+    value.write(path, 0.5)
+
+
 def _score_grid(path: Path) -> None:
     """Write a one-channel `score_grid` over level 0 of the fake job's slide.
 
@@ -250,6 +261,7 @@ def _score_grid(path: Path) -> None:
 
 
 SAMPLES: dict[str, Callable[[Path], None]] = {
+    "value": _value,
     "score_grid": _score_grid,
 }
 """A writer of a small file per data format, for publishers to read."""

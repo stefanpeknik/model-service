@@ -30,25 +30,6 @@ PIXELMAP_ID = "11111111-1111-4111-8111-111111111111"
 SLIDE_ID = "22222222-2222-4222-8222-222222222222"
 
 
-def score_body() -> Any:
-    """A float primitive output named `score`, as the SDK posts it.
-
-    Returns:
-        The SDK's request model, created by job `job-1`.
-    """
-    from rationai.empaia.typing import primitives
-
-    return primitives.PostFloatPrimitive.model_validate(
-        {
-            "name": "score",
-            "type": "float",
-            "value": 0.75,
-            "creator_id": "job-1",
-            "creator_type": "job",
-        }
-    )
-
-
 def pixelmap_body(**overrides: object) -> dict[str, object]:
     """A valid description of a continuous pixelmap, as the gateway sends it."""
     return {

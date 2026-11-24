@@ -75,7 +75,7 @@ from model_service.providers.empaia.jobs.payload import (
     schedule_payload,
 )
 from model_service.providers.provider import ProviderAdapter
-from model_service.registry.empaia import publisher
+from model_service.registry.empaia import converter, publisher
 
 
 if TYPE_CHECKING:
@@ -403,12 +403,12 @@ async def _admit_analysis(
     settings = known_settings(
         analysis.settings(), f"analysis {analysis.id}", configuration, job_id
     )
-    read = app.parameter_converter
-    if mode is EmpaiaJobMode.STANDALONE and read is not None:
+    if mode is EmpaiaJobMode.STANDALONE:
         schema = analysis.settings_schema()["properties"]
+        primitive = converter({"type": "primitive"})
         for name in app.parameters:
             item = EmpaiaInput(name, app.slide, schema[name])
-            settings[name] = await read.materialize(gateway, item, Path())  # type: ignore[assignment]
+            settings[name] = await primitive.materialize(gateway, item, Path())  # type: ignore[assignment]
     names = await job_inputs(
         {name: analysis.inputs[name] for name in app.inputs}, gateway
     )

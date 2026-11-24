@@ -21,7 +21,7 @@ writing Python or rebuilding an image.
 | Catalog | Served-model and analysis files with per-cluster patches, checked before deployment with errors naming the file, the YAML path and a fix; the control plane reloads it without restarting | `catalog/`, `src/model_service/catalog/` |
 | Served models | One generic Ray Serve host for every trained model, checking each batch against the file's declaration and reporting a digest of what it computes | `src/model_service/served_model/` |
 | Analyses | One generic runner for every whole-slide job: heatmaps (score grids) and tile embeddings (HDF5) today, in versioned data formats | `src/model_service/analysis_runner/`, `src/model_service/formats/` |
-| EMPAIA provider | Self-registration of each exposed analysis as an EMPAIA app, JES job execution in STANDALONE and PREPROCESSING modes, publication of continuous pixelmaps through the EMPAIA SDK | `providers/empaia/`, [EMPAIA integration](architecture/empaia.md) |
+| EMPAIA provider | Self-registration of each exposed analysis as an EMPAIA app, JES job execution in STANDALONE and PREPROCESSING modes, publication of primitives and pixelmaps through the EMPAIA SDK | `providers/empaia/`, [EMPAIA integration](architecture/empaia.md) |
 | Newcomer tooling | Three guides, reference docs and JSON Schemas generated from the code, a catalog test | `docs/guides/`, `docs/reference/`, `tools/generate.py` |
 | Tests | About 500 unit, catalog, chart and PostgreSQL tests, plus live checks against golden references recorded on the cluster | `tests/` |
 

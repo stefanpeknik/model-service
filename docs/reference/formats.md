@@ -73,3 +73,18 @@ reach past the level's edge. Reading it needs only NumPy (`numpy.load`), and an
 image of the slide's size is the grid scaled by `cell_size`. Several channels
 are allowed; a consumer that needs one (an EMPAIA continuous pixelmap) checks
 it itself. Written by the `score_grid` sink.
+
+## `value`
+
+- **Media type:** `application/vnd.rationai.value+json; version=1`
+- **File suffix:** `.json`
+- **Written by:** no sink yet
+- **Published to EMPAIA by:** [`primitive`](components.md#primitive-publisher) as `bool`, `float`, `integer`, `string`
+- **Code:** [`src/model_service/formats/value.py`](../../src/model_service/formats/value.py)
+
+`value` v1: one scalar result per slide, e.g. a probability or a class name.
+
+Media type `application/vnd.rationai.value+json; version=1`. A JSON object
+`{"value": <scalar>}`, where the scalar is a bool, a number or a string. The
+EMPAIA `primitive` publisher posts it as the primitive type the analysis's
+`expose.empaia` names.

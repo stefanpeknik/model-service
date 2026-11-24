@@ -122,7 +122,7 @@ expose:
     name_short: ProstHM
     description: Classifies prostate tissue and shows the scores as a heatmap over the slide.
     modes:
-      standalone:
+      standalone: {parameters: [stride_fraction]}
       preprocessing:
         triggers:
           - {tissue: PROSTATE, stain: H_AND_E}
@@ -131,9 +131,7 @@ expose:
 ```
 
 Each output's `type` picks the publisher that carries it to EMPAIA.
-A standalone mode may also list `parameters`, settings a pathologist changes
-per job. They reach EMPAIA through a converter of EAD type `primitive`, and
-none ships yet, so the loader refuses `parameters` until someone writes one.
+`parameters` are the settings a pathologist may change in a standalone job.
 The loader checks what EMPAIA would refuse later. A continuous pixelmap needs
 one score channel, preprocessing can't start an analysis that requires a
 region of interest, and the app name has at most 30 characters.

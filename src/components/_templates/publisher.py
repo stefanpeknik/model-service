@@ -12,7 +12,7 @@ import asyncio
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from components.base import Commit, EmpaiaOutput, Publisher
-from model_service.formats import score_grid
+from model_service.formats import value
 
 
 if TYPE_CHECKING:
@@ -24,12 +24,11 @@ if TYPE_CHECKING:
 class MyComponent(Publisher):
     """<One sentence: what it publishes, as which EMPAIA type>.
 
-    `outputs: {<output>: {type: string}}` under `expose.empaia`. As written,
-    it posts a score grid's mean score as a string.
+    `outputs: {<output>: {type: string}}` under `expose.empaia`.
     """
 
     name = "my_component"
-    reads_format = score_grid.NAME
+    reads_format = value.NAME
     emits = frozenset({"string"})
     example_options: ClassVar[dict[str, Any]] = {"type": "string"}
 
@@ -62,11 +61,9 @@ class MyComponent(Publisher):
         Returns:
             The commit that writes it.
         """
-        grid = await asyncio.to_thread(score_grid.read, artifact, media_type)
-        scored = grid.values[:, grid.scored]
-        mean = float(scored.mean()) if scored.size else 0.0
+        scalar = await asyncio.to_thread(value.read, artifact, media_type)
 
         async def commit() -> None:
-            await gateway.post_output(item.name, {"value": f"{mean:.3f}"})
+            await gateway.post_output(item.name, {"value": str(scalar)})
 
         return commit

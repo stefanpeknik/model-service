@@ -37,7 +37,7 @@ sequenceDiagram
 | Module | Role |
 | --- | --- |
 | `catalog/analyses/exposure/` | `expose.empaia`: its keys (`fields.py`), its schema (`schema.py`), and picking converters and publishers with the load-time checks in `resolution.py`: EMPAIA's name limit, preprocessing without required inputs, parameters, bound shapes |
-| `src/components/empaia/` | Converters (`wsi`, `rectangle`) and publishers (`continuous_pixelmap`), one per EAD type |
+| `src/components/empaia/` | Converters (`wsi`, `rectangle`, `primitive`) and publishers (`primitive`, `continuous_pixelmap`), one per EAD type |
 | `registry/empaia.py` | Picks the one converter or publisher that takes a declared EAD type, for the catalog at load time and for the provider from what admission recorded |
 | `providers/empaia/provider.py` | The provider: what EMPAIA adds to the control plane and to replicas |
 | `providers/empaia/ead/` | `apps.py` merges the components' fragments into each app's EAD v3; `vocabulary.py` holds modes, triggers and viewer settings |
@@ -51,13 +51,10 @@ sequenceDiagram
   parameters; the job gets every input and runs at high priority.
 - **PREPROCESSING:** the job gets the required inputs (the slide) only and
   runs at normal priority.
-- **Types:** inputs `wsi` and `rectangle`; outputs one-channel continuous
-  pixelmaps (from `score_grid`). A new EMPAIA type is a new converter or
-  publisher in `src/components/empaia/` once the SDK can carry it. The
-  primitive converter and publisher were removed because nothing deployed used
-  them and no live test covered them, so standalone `parameters` and primitive
-  outputs are refused at load time, naming the missing converter or publisher,
-  until someone writes one.
+- **Types:** inputs `wsi`, `rectangle` and primitive parameters; outputs
+  primitives (from the `value` format) and one-channel continuous pixelmaps
+  (from `score_grid`). A new EMPAIA type is a new converter or publisher in
+  `src/components/empaia/` once the SDK can carry it.
 
 ## SDK use
 
