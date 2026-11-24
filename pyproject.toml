@@ -85,12 +85,8 @@ docs = ["mkdocs>=1.6.0", "mkdocs-material>=9.6.0", "pymdown-extensions>=10.0"]
 conflicts = [[{ extra = "cpu" }, { extra = "gpu" }]]
 
 [tool.uv.sources]
-# The SDK's `models` submodule points at a GitHub repository we cannot read;
-# the same commit is on GitLab. Lock, sync and image builds rewrite its URL:
-#   GIT_CONFIG_COUNT=1
-#   GIT_CONFIG_KEY_0=url.git@gitlab.ics.muni.cz:rationai/digital-pathology/production/services/models.git.insteadOf
-#   GIT_CONFIG_VALUE_0=https://github.com/AigoPath/EMPAIA-Models.git
-rationai-empaia = { git = "ssh://git@gitlab.ics.muni.cz/524810/empaia.git", rev = "94de5d033685aaa26157174b148cbe46388324e7" }
+# Our fork of the EMPAIA SDK, with EMPAIA-Models vendored in (no submodule).
+rationai-empaia = { git = "ssh://git@gitlab.ics.muni.cz/524810/empaia.git", rev = "828833088ac24a0eab659456613c2d56ff4e9944" }
 # PyPI only has a download stub for this package.
 tensorrt-cu12-libs = { index = "nvidia" }
 # PyPI's Linux torch is the CUDA build; the CPU one is a fraction of its size.

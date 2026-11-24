@@ -121,10 +121,6 @@ tools/                    generate.py for the reference; warm_model.py, request_
 ## Develop
 
 ```sh
-# The SDK's models submodule is read from GitLab; see [tool.uv.sources].
-export GIT_CONFIG_COUNT=1 \
-  GIT_CONFIG_KEY_0=url.git@gitlab.ics.muni.cz:rationai/digital-pathology/production/services/models.git.insteadOf \
-  GIT_CONFIG_VALUE_0=https://github.com/AigoPath/EMPAIA-Models.git
 export UV_CACHE_DIR=.cache/uv
 uv sync --extra control-plane --extra analysis-runner --extra served-models --extra cpu
 podman run -d --name ms-test-pg -p 127.0.0.1:55432:5432 \

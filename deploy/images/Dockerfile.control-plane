@@ -8,10 +8,7 @@ COPY --from=uv /uv /usr/local/bin/uv
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git openssh-client \
     && rm -rf /var/lib/apt/lists/*
-ENV GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new" \
-    GIT_CONFIG_COUNT=1 \
-    GIT_CONFIG_KEY_0=url.git@gitlab.ics.muni.cz:rationai/digital-pathology/production/services/models.git.insteadOf \
-    GIT_CONFIG_VALUE_0=https://github.com/AigoPath/EMPAIA-Models.git
+ENV GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new"
 COPY pyproject.toml uv.lock /tmp/project/
 RUN --mount=type=ssh cd /tmp/project \
     && uv export --frozen --no-dev --extra control-plane --no-emit-project --prune ray \

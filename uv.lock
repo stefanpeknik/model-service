@@ -2200,8 +2200,8 @@ requires-dist = [
     { name = "python-json-logger", marker = "extra == 'control-plane'", specifier = ">=3.2,<5" },
     { name = "pyvips", extras = ["binary"], marker = "extra == 'analysis-runner'", specifier = ">=3.0.0,<4" },
     { name = "pyyaml", specifier = ">=6.0.2" },
-    { name = "rationai-empaia", marker = "extra == 'analysis-runner'", git = "ssh://git@gitlab.ics.muni.cz/524810/empaia.git?rev=94de5d033685aaa26157174b148cbe46388324e7" },
-    { name = "rationai-empaia", marker = "extra == 'control-plane'", git = "ssh://git@gitlab.ics.muni.cz/524810/empaia.git?rev=94de5d033685aaa26157174b148cbe46388324e7" },
+    { name = "rationai-empaia", marker = "extra == 'analysis-runner'", git = "ssh://git@gitlab.ics.muni.cz/524810/empaia.git?rev=828833088ac24a0eab659456613c2d56ff4e9944" },
+    { name = "rationai-empaia", marker = "extra == 'control-plane'", git = "ssh://git@gitlab.ics.muni.cz/524810/empaia.git?rev=828833088ac24a0eab659456613c2d56ff4e9944" },
     { name = "ratiopath", marker = "extra == 'analysis-runner'", specifier = ">=1.4.0" },
     { name = "ray", extras = ["serve"], marker = "extra == 'analysis-runner'", specifier = ">=2.58.0" },
     { name = "ray", extras = ["serve"], marker = "extra == 'served-models'", specifier = ">=2.58.0" },
@@ -3792,7 +3792,7 @@ wheels = [
 [[package]]
 name = "rationai-empaia"
 version = "0.1.2"
-source = { git = "ssh://git@gitlab.ics.muni.cz/524810/empaia.git?rev=94de5d033685aaa26157174b148cbe46388324e7#94de5d033685aaa26157174b148cbe46388324e7" }
+source = { git = "ssh://git@gitlab.ics.muni.cz/524810/empaia.git?rev=828833088ac24a0eab659456613c2d56ff4e9944#828833088ac24a0eab659456613c2d56ff4e9944" }
 dependencies = [
     { name = "aiohttp" },
     { name = "h5py" },
