@@ -20,6 +20,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from jsonschema import Draft7Validator
 
 from components import EmpaiaInput, EmpaiaOutput
+from model_service.providers.empaia.ead.viewer import VIEWER_SCHEMA, viewer_config
 from model_service.providers.empaia.ead.vocabulary import (
     VIEWER_CONFIG_KEY,
     AppMode,
@@ -163,7 +164,8 @@ def pipeline_apps(catalog: Catalog) -> list[PipelineApp]:
         One app per exposed pipeline, by pipeline ID.
 
     Raises:
-        jsonschema.ValidationError: If a generated EAD fails the EAD v3 schema.
+        jsonschema.ValidationError: If a generated EAD fails the EAD v3 schema,
+            or a viewer configuration the case browser's schema.
     """
     return [
         pipeline_app(pipeline)
@@ -183,7 +185,8 @@ def pipeline_app(pipeline: Pipeline) -> PipelineApp:
 
     Raises:
         ValueError: If the pipeline has no `providers.empaia`.
-        jsonschema.ValidationError: If the EAD fails the EAD v3 schema.
+        jsonschema.ValidationError: If the EAD fails the EAD v3 schema, or
+            the viewer configuration the case browser's schema.
     """
     empaia = pipeline.empaia
     if empaia is None:
@@ -192,10 +195,14 @@ def pipeline_app(pipeline: Pipeline) -> PipelineApp:
     configuration = {}
     if VIEWER_CONFIG_KEY in ead.get("configuration", {}).get("global", {}):
         settings = pipeline.settings()
-        viewer = empaia.viewer.with_input_defaults(
-            {name: settings[name] for name in empaia.parameters}
+        schema = pipeline.settings_schema()["properties"]
+        viewer = viewer_config(
+            empaia.viewer,
+            ead["io"],
+            {name: (schema[name], settings[name]) for name in empaia.parameters},
         )
-        configuration[VIEWER_CONFIG_KEY] = viewer.for_io(ead["io"])
+        VIEWER_SCHEMA.validate(viewer)
+        configuration[VIEWER_CONFIG_KEY] = json.dumps(viewer)
     return PipelineApp(
         pipeline.id, empaia.modes, ead, configuration, empaia.triggers
     )

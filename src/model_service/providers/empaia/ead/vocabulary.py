@@ -6,18 +6,13 @@ models, and the EMPAIA provider builds EADs from them.
 
 from __future__ import annotations
 
-import json
 import math
 from enum import StrEnum
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
 from model_service.providers.empaia.tags import STAINS, TISSUES
-
-
-if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
 
 
 class AppMode(StrEnum):
@@ -40,10 +35,14 @@ VIEWER_CONFIG_KEY = "aigopath_viewer"
 
 
 class _ViewerEntry(BaseModel):
-    """Base of the case browser's viewer settings; unknown fields pass through to xOpat."""
+    """Base of the case browser's settings for one io key; unknown fields are refused."""
 
-    # The case browser passes fields it doesn't know on to xOpat.
-    model_config = ConfigDict(frozen=True, extra="allow")
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    label: str | None = Field(
+        None, min_length=1, description="Name shown instead of the io key."
+    )
+    description: str | None = Field(None, description="Help text; replaces the EAD's.")
 
 
 def _plain(value: JsonValue) -> bool:
@@ -60,7 +59,7 @@ def _plain(value: JsonValue) -> bool:
     return isinstance(value, (bool, int, str))
 
 
-class ViewerShader(_ViewerEntry):
+class ViewerShader(BaseModel):
     """An xOpat shader for an output.
 
     Attributes:
@@ -68,7 +67,8 @@ class ViewerShader(_ViewerEntry):
         params: The shader's parameters.
     """
 
-    # An xOpat shader, e.g. `heatmap` or `colormap`, with its parameters.
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     type: str = Field(min_length=1)
     params: dict[str, JsonValue] | None = Field(
         None,
@@ -107,87 +107,56 @@ class ViewerShader(_ViewerEntry):
 
 
 class ViewerInput(_ViewerEntry):
-    """How the viewer shows an app input; a parameter's entry also has its `default`.
+    """How the case browser shows an app input; each setting fits some input types only.
+
+    A parameter's default and bounds come from its setting, so they are not
+    written here. Which settings an input type takes is the case browser's
+    schema (`aigopath-viewer.schema.json`), checked when the app is built.
 
     Attributes:
-        target: The input the entry applies to.
-        lossless: Whether the viewer loads it without lossy compression.
-        label: Label shown in the viewer.
+        prompt: Parameters: show the field (true) or send the default unseen.
+        step: Numbers: the stepper's increment.
+        unit: Numbers: the unit shown beside the field.
+        multiline: Strings: a text area instead of one line.
+        max_length: Strings: the longest accepted text.
+        keep_visible: Drawn shapes: keep them on the slide after submitting.
+        render: Slides: `background` or `none`.
     """
 
-    target: str | None = None
-    lossless: bool | None = None
-    label: str | None = None
+    prompt: bool | None = None
+    step: float | None = Field(None, gt=0)
+    unit: str | None = Field(None, min_length=1)
+    multiline: bool | None = None
+    max_length: int | None = Field(None, ge=1, le=200)
+    keep_visible: bool | None = None
+    render: Literal["background", "none"] | None = None
 
 
 class ViewerOutput(_ViewerEntry):
-    """How the viewer shows an app output.
+    """How the case browser shows an app output.
 
     Attributes:
-        render: How the output is drawn.
-        label: Label shown in the viewer.
-        visible: Whether it is shown by default.
-        shader: The shader used when `render` is `shader`.
+        render: How the output is drawn: `shader`, `background`, `metric` or
+            `none`, as its type allows.
+        visible: Whether an overlay is on when first shown.
+        shader: The overlay's xOpat shader.
     """
 
     render: Literal["shader", "background", "metric", "none"] | None = None
-    label: str | None = None
     visible: bool | None = None
     shader: ViewerShader | None = None
 
 
 class ViewerConfig(BaseModel):
-    """How the AigoPath case browser shows an app's inputs and outputs, by io key."""
+    """How the AigoPath case browser shows an app's inputs and outputs, by io key.
+
+    Outputs are layered in the order written, the first at the bottom.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     inputs: dict[str, ViewerInput] = Field(default_factory=dict)
     outputs: dict[str, ViewerOutput] = Field(default_factory=dict)
-
-    def with_input_defaults(self, defaults: Mapping[str, JsonValue]) -> ViewerConfig:
-        """Add a `default` to the entries of inputs the user fills in, e.g. parameters.
-
-        The case browser may pre-fill its job form from them; the job still
-        sends every value explicitly.
-
-        Args:
-            defaults: The default value of each input, by io key.
-
-        Returns:
-            A copy with the defaults set; other entries are unchanged.
-        """
-        inputs = dict(self.inputs)
-        for key, value in defaults.items():
-            entry = inputs.get(key, ViewerInput()).model_dump(exclude_none=True)
-            inputs[key] = ViewerInput.model_validate({**entry, "default": value})
-        return self.model_copy(update={"inputs": inputs})
-
-    def for_io(self, keys: Iterable[str]) -> str:
-        """Serialize the configuration value for an app with these io keys.
-
-        Entries for io keys the app lacks are left out.
-
-        Args:
-            keys: The app's EAD io keys.
-
-        Returns:
-            A JSON string with `inputs` and `outputs`, unset fields omitted.
-        """
-        keys = set(keys)
-        return json.dumps(
-            {
-                "inputs": {
-                    k: v.model_dump(exclude_none=True)
-                    for k, v in self.inputs.items()
-                    if k in keys
-                },
-                "outputs": {
-                    k: v.model_dump(exclude_none=True)
-                    for k, v in self.outputs.items()
-                    if k in keys
-                },
-            }
-        )
 
 
 class Trigger(BaseModel):

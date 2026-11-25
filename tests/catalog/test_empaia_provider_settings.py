@@ -158,7 +158,7 @@ PREFIX = "catalog/pipelines/a1.yaml:providers.empaia"
         pytest.param(
             (
                 "outputs:\n",
-                "viewer: {inputs: {slid: {lossless: true}}}\n        outputs:\n",
+                "viewer: {inputs: {slid: {render: none}}}\n        outputs:\n",
             ),
             [
                 f"{PREFIX}.viewer.inputs.slid: the viewer names input `slid`, "

@@ -24,8 +24,6 @@ providers:
       heatmap: {type: continuous_pixelmap}
     # The AigoPath case browser's display settings (xOpat shader and its params).
     viewer:
-      inputs:
-        slide: {target: xopat, lossless: false}
       outputs:
         heatmap:
           render: shader

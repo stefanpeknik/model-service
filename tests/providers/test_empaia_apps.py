@@ -10,6 +10,7 @@ import unittest
 from pathlib import Path
 
 import httpx
+import jsonschema
 import jwt
 import pytest
 from pydantic import ValidationError as SettingsError
@@ -24,6 +25,7 @@ from model_service.providers.empaia.ead.apps import (
     pipeline_app,
     pipeline_apps,
 )
+from model_service.providers.empaia.ead.viewer import VIEWER_SCHEMA
 from model_service.providers.empaia.ead.vocabulary import VIEWER_CONFIG_KEY, AppMode
 from model_service.providers.empaia.registration import (
     Marketplace,
@@ -83,7 +85,24 @@ def test_the_prostate_app_matches_its_recording_apart_from_its_namespace(
 
     assert app.ead["namespace"] == NEW_NAMESPACE
     assert {**app.ead, "namespace": OLD_NAMESPACE} == BEFORE["ead"]
-    assert app.global_configuration == BEFORE["global_configuration"]
+    # The viewer settings moved to the case browser's syntax version 2.
+    assert json.loads(app.global_configuration[VIEWER_CONFIG_KEY]) == {
+        "version": 2,
+        "inputs": {},
+        "outputs": {
+            "heatmap": {
+                "label": "Prostate Heatmap",
+                "pixelmap": {
+                    "render": "shader",
+                    "visible": True,
+                    "shader": {
+                        "type": "heatmap",
+                        "params": {"threshold": 65, "opacity": 0.5, "color": "#ffff00"},
+                    },
+                },
+            }
+        },
+    }
     assert app.modes == (AppMode.STANDALONE, AppMode.PREPROCESSING)
     assert app.image("model-service") == (
         "http::model-service/pipelines/prostate-heatmap"
@@ -102,6 +121,11 @@ def test_every_exposed_pipeline_yields_a_valid_app_in_every_environment() -> Non
     for environment in (None, RATIONAI_TEST):
         catalog = load_catalog(CATALOG, environment)
         apps = pipeline_apps(catalog)
+        for app in apps:
+            if VIEWER_CONFIG_KEY in app.global_configuration:
+                VIEWER_SCHEMA.validate(
+                    json.loads(app.global_configuration[VIEWER_CONFIG_KEY])
+                )
 
         offered = [i for i, e in catalog.pipelines.items() if e.empaia]
         assert [app.pipeline_id for app in apps] == offered
@@ -143,13 +167,53 @@ def test_parameters_become_standalone_inputs_described_by_their_settings(
         "skip_background",
     ]
     assert app.ead["modes"]["preprocessing"]["inputs"] == ["slide"]
-    # The case browser may pre-fill its form from the file's values.
+    # The case browser pre-fills its form from the file's values and bounds;
+    # an exclusive bound (`lt=1`) has no place there.
     assert VIEWER_CONFIG_KEY in app.ead["configuration"]["global"]
     viewer = json.loads(app.global_configuration[VIEWER_CONFIG_KEY])
     assert viewer["inputs"] == {
-        "min_tissue_fraction": {"default": 0.0},
-        "skip_background": {"default": True},
+        "min_tissue_fraction": {"number": {"value": 0.0, "min": 0}},
+        "skip_background": {"bool": {"value": True}},
     }
+
+
+def test_display_settings_land_in_the_block_of_the_inputs_type(
+    tmp_path: Path,
+) -> None:
+    app = tmp_app(
+        tmp_path,
+        "modes:\n"
+        "  standalone: {parameters: [stride_fraction]}\n"
+        "viewer:\n"
+        "  inputs:\n"
+        "    stride_fraction: {label: Stride, step: 0.05, unit: tiles}\n"
+        "    region_of_interest: {keep_visible: false}",
+    )
+
+    viewer = json.loads(app.global_configuration[VIEWER_CONFIG_KEY])
+    assert viewer["inputs"] == {
+        "stride_fraction": {
+            "label": "Stride",
+            "number": {
+                "value": 0.5,
+                "min": 0.05,
+                "max": 1,
+                "step": 0.05,
+                "unit": "tiles",
+            },
+        },
+        "region_of_interest": {"annotation": {"keep_visible": False}},
+    }
+
+
+def test_a_display_setting_the_inputs_type_lacks_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(jsonschema.ValidationError):
+        tmp_app(
+            tmp_path,
+            "modes:\n"
+            "  standalone: {parameters: [skip_background]}\n"
+            "viewer: {inputs: {skip_background: {unit: px}}}",
+        )
 
 
 def test_viewer_entries_for_io_an_app_lacks_are_left_out(tmp_path: Path) -> None:
@@ -162,8 +226,9 @@ def test_viewer_entries_for_io_an_app_lacks_are_left_out(tmp_path: Path) -> None
     )
 
     assert json.loads(app.global_configuration[VIEWER_CONFIG_KEY]) == {
+        "version": 2,
         "inputs": {},
-        "outputs": {"heatmap": {"render": "shader"}},
+        "outputs": {"heatmap": {"pixelmap": {"render": "shader"}}},
     }
 
 

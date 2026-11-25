@@ -252,7 +252,7 @@
     },
     "ViewerConfig": {
       "additionalProperties": false,
-      "description": "How the AigoPath case browser shows an app's inputs and outputs, by io key.",
+      "description": "How the AigoPath case browser shows an app's inputs and outputs, by io key.\n\nOutputs are layered in the order written, the first at the bottom.",
       "properties": {
         "inputs": {
           "additionalProperties": {
@@ -273,10 +273,24 @@
       "type": "object"
     },
     "ViewerInput": {
-      "additionalProperties": true,
-      "description": "How the viewer shows an app input; a parameter's entry also has its `default`.",
+      "additionalProperties": false,
+      "description": "How the case browser shows an app input; each setting fits some input types only.\n\nA parameter's default and bounds come from its setting, so they are not\nwritten here. Which settings an input type takes is the case browser's\nschema (`aigopath-viewer.schema.json`), checked when the app is built.",
       "properties": {
-        "target": {
+        "label": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Name shown instead of the io key.",
+          "title": "Label"
+        },
+        "description": {
           "anyOf": [
             {
               "type": "string"
@@ -286,9 +300,10 @@
             }
           ],
           "default": null,
-          "title": "Target"
+          "description": "Help text; replaces the EAD's.",
+          "title": "Description"
         },
-        "lossless": {
+        "prompt": {
           "anyOf": [
             {
               "type": "boolean"
@@ -298,9 +313,111 @@
             }
           ],
           "default": null,
-          "title": "Lossless"
+          "title": "Prompt"
         },
+        "step": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        },
+        "multiline": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Multiline"
+        },
+        "max_length": {
+          "anyOf": [
+            {
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Length"
+        },
+        "keep_visible": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Keep Visible"
+        },
+        "render": {
+          "anyOf": [
+            {
+              "enum": [
+                "background",
+                "none"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Render"
+        }
+      },
+      "title": "ViewerInput",
+      "type": "object"
+    },
+    "ViewerOutput": {
+      "additionalProperties": false,
+      "description": "How the case browser shows an app output.",
+      "properties": {
         "label": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Name shown instead of the io key.",
+          "title": "Label"
+        },
+        "description": {
           "anyOf": [
             {
               "type": "string"
@@ -310,16 +427,9 @@
             }
           ],
           "default": null,
-          "title": "Label"
-        }
-      },
-      "title": "ViewerInput",
-      "type": "object"
-    },
-    "ViewerOutput": {
-      "additionalProperties": true,
-      "description": "How the viewer shows an app output.",
-      "properties": {
+          "description": "Help text; replaces the EAD's.",
+          "title": "Description"
+        },
         "render": {
           "anyOf": [
             {
@@ -337,18 +447,6 @@
           ],
           "default": null,
           "title": "Render"
-        },
-        "label": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Label"
         },
         "visible": {
           "anyOf": [
@@ -378,7 +476,7 @@
       "type": "object"
     },
     "ViewerShader": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "description": "An xOpat shader for an output.",
       "properties": {
         "type": {

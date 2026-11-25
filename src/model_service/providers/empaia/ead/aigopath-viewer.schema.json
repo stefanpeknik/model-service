@@ -1,0 +1,345 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/AigoPath/EmpationAPI/main/src/v3/extensions/viewer-config/aigopath-viewer.schema.json",
+  "title": "aigopath_viewer",
+  "description": "How the viewer treats the inputs and outputs of one EMPAIA app. The EAD stays the source of truth for structure: the type of every input and output, which input a value is bound to (`reference`), the allowed classes and the class colours (`rendering`). This config never repeats those; it only adds viewer behaviour on top, keyed by the same `io` keys as the EAD.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "URL of this schema. Gives editors autocompletion and validation while writing the config."
+    },
+    "version": {
+      "enum": [2],
+      "description": "Syntax version. Must be `2`. A config without `version` is read as the old syntax and upgraded automatically."
+    },
+    "defaults": {
+      "$ref": "#/definitions/defaults",
+      "description": "Settings shared by every input or output of one EAD type."
+    },
+    "inputs": {
+      "type": "object",
+      "description": "Settings per input, keyed by EAD `io` key.",
+      "additionalProperties": { "$ref": "#/definitions/inputEntry" }
+    },
+    "outputs": {
+      "type": "object",
+      "description": "Settings per output, keyed by EAD `io` key. The order of the keys is the order of the layers: the first key is the bottom layer. Outputs that are not listed come after the listed ones.",
+      "additionalProperties": { "$ref": "#/definitions/outputEntry" }
+    },
+    "modes": {
+      "type": "object",
+      "description": "Overrides that apply to one EAD job mode only. Everything outside `modes` applies to all modes.",
+      "additionalProperties": false,
+      "properties": {
+        "standalone": { "$ref": "#/definitions/modeOverride", "description": "Overrides for jobs the user starts from the viewer." },
+        "preprocessing": { "$ref": "#/definitions/modeOverride", "description": "Overrides for jobs that run automatically on a new slide." },
+        "postprocessing": { "$ref": "#/definitions/modeOverride", "description": "Overrides for jobs that run after other jobs." }
+      }
+    }
+  },
+  "definitions": {
+    "modeOverride": {
+      "title": "Mode override",
+      "description": "Same three blocks as the top level, applied to one job mode.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "defaults": { "$ref": "#/definitions/defaults", "description": "Per-type settings for this mode." },
+        "inputs": {
+          "type": "object",
+          "description": "Per-input settings for this mode.",
+          "additionalProperties": { "$ref": "#/definitions/inputEntry" }
+        },
+        "outputs": {
+          "type": "object",
+          "description": "Per-output settings for this mode.",
+          "additionalProperties": { "$ref": "#/definitions/outputEntry" }
+        }
+      }
+    },
+    "defaults": {
+      "title": "Type defaults",
+      "description": "Settings keyed by EAD type name, for example `float`, `rectangle` or `continuous_pixelmap`. The kind block must be the one that belongs to that type.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "inputs": {
+          "type": "object",
+          "description": "Settings for every input of an EAD type.",
+          "additionalProperties": { "$ref": "#/definitions/inputDefault" }
+        },
+        "outputs": {
+          "type": "object",
+          "description": "Settings for every output of an EAD type.",
+          "additionalProperties": { "$ref": "#/definitions/outputDefault" }
+        }
+      }
+    },
+    "inputEntry": {
+      "title": "Input entry",
+      "description": "One input. Holds the common fields and exactly one kind block. Which kind block is allowed is decided by the EAD type of this key. For a `collection` input the entry describes the items of the collection.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string", "minLength": 1, "description": "Name shown to the user instead of the `io` key." },
+        "description": { "type": "string", "description": "Help text shown under the field. Replaces the EAD description." },
+        "number": { "$ref": "#/definitions/numberInput" },
+        "string": { "$ref": "#/definitions/stringInput" },
+        "bool": { "$ref": "#/definitions/boolInput" },
+        "annotation": { "$ref": "#/definitions/annotationInput" },
+        "wsi": { "$ref": "#/definitions/wsiInput" },
+        "pixelmap": { "$ref": "#/definitions/pixelmapInput" },
+        "class": { "$ref": "#/definitions/classInput" }
+      },
+      "oneOf": [
+        { "required": ["number"] },
+        { "required": ["string"] },
+        { "required": ["bool"] },
+        { "required": ["annotation"] },
+        { "required": ["wsi"] },
+        { "required": ["pixelmap"] },
+        { "required": ["class"] }
+      ],
+      "x-oneOfMessage": "must contain exactly one kind block: number, string, bool, annotation, wsi, pixelmap or class"
+    },
+    "inputDefault": {
+      "title": "Input type default",
+      "description": "Exactly one kind block, without `label` or `description`.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "number": { "$ref": "#/definitions/numberInput" },
+        "string": { "$ref": "#/definitions/stringInput" },
+        "bool": { "$ref": "#/definitions/boolInput" },
+        "annotation": { "$ref": "#/definitions/annotationInput" },
+        "wsi": { "$ref": "#/definitions/wsiInput" },
+        "pixelmap": { "$ref": "#/definitions/pixelmapInput" },
+        "class": { "$ref": "#/definitions/classInput" }
+      },
+      "oneOf": [
+        { "required": ["number"] },
+        { "required": ["string"] },
+        { "required": ["bool"] },
+        { "required": ["annotation"] },
+        { "required": ["wsi"] },
+        { "required": ["pixelmap"] },
+        { "required": ["class"] }
+      ],
+      "x-oneOfMessage": "must contain exactly one kind block: number, string, bool, annotation, wsi, pixelmap or class"
+    },
+    "outputEntry": {
+      "title": "Output entry",
+      "description": "One output. Holds the common fields and exactly one kind block. Which kind block is allowed is decided by the EAD type of this key. For a `collection` output the entry describes the items of the collection.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string", "minLength": 1, "description": "Name shown to the user instead of the `io` key." },
+        "description": { "type": "string", "description": "Help text for this output." },
+        "pixelmap": { "$ref": "#/definitions/pixelmapOutput" },
+        "wsi": { "$ref": "#/definitions/wsiOutput" },
+        "number": { "$ref": "#/definitions/numberOutput" },
+        "string": { "$ref": "#/definitions/stringOutput" },
+        "bool": { "$ref": "#/definitions/boolOutput" },
+        "annotation": { "$ref": "#/definitions/annotationOutput" }
+      },
+      "oneOf": [
+        { "required": ["pixelmap"] },
+        { "required": ["wsi"] },
+        { "required": ["number"] },
+        { "required": ["string"] },
+        { "required": ["bool"] },
+        { "required": ["annotation"] }
+      ],
+      "x-oneOfMessage": "must contain exactly one kind block: pixelmap, wsi, number, string, bool or annotation"
+    },
+    "outputDefault": {
+      "title": "Output type default",
+      "description": "Exactly one kind block, without `label` or `description`.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pixelmap": { "$ref": "#/definitions/pixelmapOutput" },
+        "wsi": { "$ref": "#/definitions/wsiOutput" },
+        "number": { "$ref": "#/definitions/numberOutput" },
+        "string": { "$ref": "#/definitions/stringOutput" },
+        "bool": { "$ref": "#/definitions/boolOutput" },
+        "annotation": { "$ref": "#/definitions/annotationOutput" }
+      },
+      "oneOf": [
+        { "required": ["pixelmap"] },
+        { "required": ["wsi"] },
+        { "required": ["number"] },
+        { "required": ["string"] },
+        { "required": ["bool"] },
+        { "required": ["annotation"] }
+      ],
+      "x-oneOfMessage": "must contain exactly one kind block: pixelmap, wsi, number, string, bool or annotation"
+    },
+    "numberInput": {
+      "title": "number (input)",
+      "description": "A numeric job parameter. For an EAD `integer` the value must be a whole number.",
+      "x-eadTypes": ["integer", "float"],
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": { "type": "number", "description": "Default value. Must lie within `min` and `max`.", "examples": [0.5] },
+        "prompt": { "type": "boolean", "default": true, "description": "`true`: the field is shown in the form, prefilled with `value`, and the user confirms before the job runs. `false`: the field is hidden and `value` is sent as is; `value` is then required." },
+        "min": { "type": "number", "description": "Smallest accepted value." },
+        "max": { "type": "number", "description": "Largest accepted value." },
+        "step": { "type": "number", "exclusiveMinimum": 0, "description": "Increment of the field's stepper." },
+        "unit": { "type": "string", "minLength": 1, "description": "Unit shown next to the field, for example `µm` or `%`." }
+      }
+    },
+    "stringInput": {
+      "title": "string (input)",
+      "description": "A text job parameter.",
+      "x-eadTypes": ["string"],
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": { "type": "string", "minLength": 1, "description": "Default value. With `options` it must be one of them.", "examples": ["v2"] },
+        "prompt": { "type": "boolean", "default": true, "description": "`true`: the field is shown in the form, prefilled with `value`, and the user confirms before the job runs. `false`: the field is hidden and `value` is sent as is; `value` is then required." },
+        "options": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Closed list of accepted values. The field becomes a select.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["value"],
+            "properties": {
+              "value": { "type": "string", "minLength": 1, "description": "Value sent to the app." },
+              "label": { "type": "string", "minLength": 1, "description": "Text shown to the user. Defaults to `value`." }
+            }
+          }
+        },
+        "max_length": { "type": "integer", "minimum": 1, "maximum": 200, "description": "Longest accepted text. The viewer never accepts more than 200 characters." },
+        "multiline": { "type": "boolean", "default": false, "description": "Show a multi-line text area instead of a one-line field." }
+      }
+    },
+    "boolInput": {
+      "title": "bool (input)",
+      "description": "A yes/no job parameter.",
+      "x-eadTypes": ["bool"],
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": { "type": "boolean", "description": "Default value." },
+        "prompt": { "type": "boolean", "default": true, "description": "`true`: the field is shown in the form, prefilled with `value`, and the user confirms before the job runs. `false`: the field is hidden and `value` is sent as is; `value` is then required." }
+      }
+    },
+    "annotationInput": {
+      "title": "annotation (input)",
+      "description": "A region the user draws as job input. Its colour and class names come from the EAD.",
+      "x-eadTypes": ["point", "line", "arrow", "rectangle", "polygon", "circle"],
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "keep_visible": { "type": "boolean", "default": true, "description": "`true`: the region stays on the slide after the job is submitted. `false`: it is hidden once the job is submitted." }
+      }
+    },
+    "wsiInput": {
+      "title": "wsi (input)",
+      "description": "A slide input.",
+      "x-eadTypes": ["wsi"],
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "render": { "enum": ["background", "none"], "default": "background", "description": "`background`: the slide is the background when the job is opened for viewing. `none`: it is not shown." }
+      }
+    },
+    "pixelmapInput": {
+      "title": "pixelmap (input)",
+      "description": "A pixel map chosen as job input. No settings yet; use it to give the input a `label`.",
+      "x-eadTypes": ["continuous_pixelmap", "discrete_pixelmap", "nominal_pixelmap"],
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "classInput": {
+      "title": "class (input)",
+      "description": "A class chosen as job input. No settings yet; use it to give the input a `label`.",
+      "x-eadTypes": ["class"],
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "shader": {
+      "title": "shader",
+      "description": "An xOpat shader layer.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "minLength": 1, "description": "xOpat shader id, for example `heatmap`, `colormap` or `identity`.", "examples": ["heatmap"] },
+        "params": { "type": "object", "description": "Parameters of that shader, as xOpat defines them.", "examples": [{ "opacity": 0.5 }] }
+      }
+    },
+    "pixelmapOutput": {
+      "title": "pixelmap (output)",
+      "description": "A pixel map result drawn over the slide. Class colours of a nominal pixel map come from the EAD.",
+      "x-eadTypes": ["continuous_pixelmap", "discrete_pixelmap", "nominal_pixelmap"],
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "render": { "enum": ["shader", "none"], "default": "shader", "description": "`shader`: draw the map as an overlay. `none`: never show it." },
+        "visible": { "type": "boolean", "default": true, "description": "Whether the overlay is switched on when it is first shown." },
+        "shader": { "$ref": "#/definitions/shader", "description": "Shader used for the overlay. Replaces the viewer's default as a whole." }
+      }
+    },
+    "wsiOutput": {
+      "title": "wsi (output)",
+      "description": "A slide-like result: an EAD `wsi` output, or a `string` output with a `reference` whose value is the id of a registered mask slide.",
+      "x-eadTypes": ["wsi"],
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "render": { "enum": ["shader", "background", "none"], "default": "shader", "description": "`shader`: draw it as an overlay. `background`: offer it as a background. `none`: never show it." },
+        "visible": { "type": "boolean", "default": true, "description": "Whether the overlay is switched on when it is first shown." },
+        "shader": { "$ref": "#/definitions/shader", "description": "Shader used for the overlay. Replaces the viewer's default as a whole." }
+      }
+    },
+    "numberOutput": {
+      "title": "number (output)",
+      "description": "A numeric result.",
+      "x-eadTypes": ["integer", "float"],
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "render": { "enum": ["metric", "none"], "default": "metric", "description": "`metric`: list the value among the job's results and offer it for sorting. `none`: hide it." }
+      }
+    },
+    "stringOutput": {
+      "title": "string (output)",
+      "description": "A text result.",
+      "x-eadTypes": ["string"],
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "render": { "enum": ["metric", "none"], "default": "metric", "description": "`metric`: list the value among the job's results. `none`: hide it." }
+      }
+    },
+    "boolOutput": {
+      "title": "bool (output)",
+      "description": "A yes/no result.",
+      "x-eadTypes": ["bool"],
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "render": { "enum": ["metric", "none"], "default": "metric", "description": "`metric`: list the value among the job's results. `none`: hide it." }
+      }
+    },
+    "annotationOutput": {
+      "title": "annotation (output)",
+      "description": "Annotations produced by the job. Reserved: the block is accepted so the output can carry a `label`, but it has no settings yet and the viewer reports it as not supported.",
+      "x-eadTypes": ["point", "line", "arrow", "rectangle", "polygon", "circle"],
+      "x-status": "reserved",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    }
+  }
+}
