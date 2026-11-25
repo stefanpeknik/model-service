@@ -112,7 +112,7 @@ src/model_service/        the plumbing
   contracts/              data shapes processes hand each other
   reference/              what tools/generate.py writes
 deploy/helm/              the chart (`model-service`); reads catalog/ through a symlink
-  environments/<env>/     one cluster: values.yaml, models/ patches, workers/, k8s/ (applied by hand)
+  environments/<env>/     one cluster: values.yaml, models/ patches, workers/, secrets.yaml (untracked)
 deploy/images/            the Dockerfiles
 docs/                     guides, generated reference, architecture, dated operations records
 tests/                    unit, catalog, chart and PostgreSQL tests; tests/live/ for the cluster

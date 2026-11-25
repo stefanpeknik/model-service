@@ -1,25 +1,26 @@
-# PostgreSQL for the model-service release in rationai-infra-test-ns, as in
-# peknik-ns. The model-service-db Secret holds postgres-password (and the
-# control plane's database-url and provider-context-key).
+{{- /* The scheduler's database: every release runs one. Its claim survives an uninstall. */}}
+{{- $name := printf "%s-postgres" .Release.Name }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: model-service-postgres-data
-  namespace: rationai-infra-test-ns
+  name: {{ $name }}-data
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/resource-policy: keep
 spec:
   accessModes: [ReadWriteOnce]
-  storageClassName: nfs-csi
+  storageClassName: {{ required "storage.storageClassName is required" .Values.storage.storageClassName | quote }}
   resources:
     requests:
-      storage: 2Gi
+      storage: {{ .Values.postgres.size }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: model-service-postgres
-  namespace: rationai-infra-test-ns
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: model-service-postgres
+    app.kubernetes.io/name: {{ $name }}
     app.kubernetes.io/part-of: model-service
 spec:
   replicas: 1
@@ -27,11 +28,11 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      app.kubernetes.io/name: model-service-postgres
+      app.kubernetes.io/name: {{ $name }}
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: model-service-postgres
+        app.kubernetes.io/name: {{ $name }}
         app.kubernetes.io/part-of: model-service
     spec:
       automountServiceAccountToken: false
@@ -44,7 +45,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: postgres
-          image: docker.io/library/postgres:16-alpine
+          image: {{ .Values.postgres.image | quote }}
           imagePullPolicy: IfNotPresent
           env:
             - name: POSTGRES_DB
@@ -54,7 +55,7 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: model-service-db
+                  name: {{ .Release.Name }}-db
                   key: postgres-password
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
@@ -67,12 +68,7 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 3
           resources:
-            requests:
-              cpu: 100m
-              memory: 256Mi
-            limits:
-              cpu: 1
-              memory: 1Gi
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -83,16 +79,16 @@ spec:
       volumes:
         - name: database
           persistentVolumeClaim:
-            claimName: model-service-postgres-data
+            claimName: {{ $name }}-data
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: model-service-postgres
-  namespace: rationai-infra-test-ns
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
 spec:
   selector:
-    app.kubernetes.io/name: model-service-postgres
+    app.kubernetes.io/name: {{ $name }}
   ports:
     - name: postgres
       port: 5432

@@ -1,8 +1,8 @@
 # rationai-infra-test-ns, beside the EMPAIA test instance, as release
 # `model-service`. Same workers and images as peknik-ns;
 # slides come from the instance's slide volume instead of the App API.
-# Other objects it needs: k8s/ beside this file and the Secrets
-# model-service-db, mlflow-public-credentials and huggingface-secret.
+# Secret values: secrets.yaml beside this file (untracked), passed as a
+# second -f.
 environment: rationai-test
 # Named, not ["*"]: EPISeg's weights sit on an MLflow this cluster can't reach.
 models: [prostate-classifier-1, virchow2, prov-gigapath]
@@ -60,12 +60,6 @@ controlPlane:
     repository: cerit.io/stefanpeknik/model-service-control-plane
     tag: unit-51a62a0
     pullPolicy: IfNotPresent
-  database:
-    existingSecret: model-service-db
-    urlKey: database-url
-  encryption:
-    existingSecret: model-service-db
-    keyKey: provider-context-key
   sharedStorage:
     existingClaim: model-service-full-wsi-outputs
     mountPath: /mnt/shared

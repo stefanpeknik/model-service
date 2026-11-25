@@ -217,7 +217,7 @@ def test_a_patch_outside_the_patch_folders_is_an_error(root: Path) -> None:
 
     assert errors(root, "test-env") == [
         "environments/test-env/model/m1.yaml: not a patch folder. Patch "
-        "folders: models/, pipelines/, beside values.yaml, workers/, k8s/. "
+        "folders: models/, pipelines/, beside values.yaml, secrets.yaml, workers/. "
         "Hint: move the file into one of them",
     ]
 

@@ -34,20 +34,21 @@ template:
         env:
           {{- include "model-service.rayLogEnv" . | nindent 10 }}
           {{- include "peknik.proxyEnv" . | nindent 10 }}
+          {{- $_ := required "secrets.mlflow.username is required: the GPU workers read weights from the public MLflow with it" .Values.secrets.mlflow.username }}
           - name: MLFLOW_TRACKING_USERNAME
             valueFrom:
               secretKeyRef:
-                name: mlflow-public-credentials
+                name: {{ .Release.Name }}-mlflow
                 key: username
           - name: MLFLOW_TRACKING_PASSWORD
             valueFrom:
               secretKeyRef:
-                name: mlflow-public-credentials
+                name: {{ .Release.Name }}-mlflow
                 key: token
           - name: HF_TOKEN
             valueFrom:
               secretKeyRef:
-                name: huggingface-secret
+                name: {{ .Release.Name }}-huggingface
                 key: token
           # Working files (score sums, libvips spills) stay on the node's disk.
           - name: TMPDIR

@@ -1,4 +1,4 @@
 # Generated editor schemas: tools read them from catalog/, the chart never does.
 catalog/.schemas/
-# Hand-applied manifests of each environment: `oc apply`, never Helm.
-environments/*/k8s/
+# Each environment's secret values: passed with -f, never packaged.
+environments/*/secrets.yaml

@@ -1,0 +1,18 @@
+{{- /* The model workers' caches: TensorRT engines and Hugging Face downloads. They
+survive an uninstall, since rebuilding an engine takes about 16 minutes. */}}
+{{- range $cache := list (dict "name" "trt-cache" "size" .Values.storage.tensorrtCacheSize) (dict "name" "hf-cache" "size" .Values.storage.huggingfaceCacheSize) }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $.Release.Name }}-{{ $cache.name }}
+  namespace: {{ $.Release.Namespace }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: {{ required "storage.storageClassName is required" $.Values.storage.storageClassName | quote }}
+  resources:
+    requests:
+      storage: {{ $cache.size }}
+{{- end }}

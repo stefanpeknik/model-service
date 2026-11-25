@@ -1,4 +1,5 @@
-{{- if .Values.storage }}
+{{- /* Shared outputs and scratch for runs, when the environment has no claim of its own. */}}
+{{- if .Values.storage.outputSize }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

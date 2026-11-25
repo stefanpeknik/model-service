@@ -30,11 +30,16 @@ Release `model-service`, values `deploy/helm/environments/rationai-test/values.y
 - No marketplace registration: the instance's marketplace needs credentials
   model-service doesn't have yet.
 
-Objects outside the chart, in `deploy/helm/environments/rationai-test/k8s/`: PostgreSQL
-and its claim, and the TensorRT and Hugging Face cache claims. Secrets: `model-service-db` (`postgres-password`, `database-url`,
-`provider-context-key`, generated at install), `huggingface-secret` (the
-namespace's own), `mlflow-public-credentials` (GPU workers, for MLflow
-weights).
+The chart creates everything the release needs: PostgreSQL and its claim
+(`model-service-postgres`, `model-service-postgres-data`), the TensorRT and
+Hugging Face cache claims (`model-service-trt-cache`, `model-service-hf-cache`)
+and the Secrets `model-service-db` (generated: `postgres-password`,
+`database-url`, `provider-context-key`), `model-service-huggingface` and
+`model-service-mlflow`. Claims and the database Secret survive `helm
+uninstall`. The Hugging Face token and the public MLflow's credentials come
+from `deploy/helm/environments/rationai-test/secrets.yaml`, which git ignores
+(keys in `environments/secrets.example.yaml`). Only `mds-secret`, the EMPAIA
+instance's own client secret, stays the instance's.
 
 Namespace quota is 64 GiB of memory requests; the deployment uses about 31 GiB
 idle and 49 GiB with the GPU worker. A RayService image or worker change starts
@@ -43,12 +48,26 @@ a second Ray cluster (about 4.5 GiB more) before removing the old one.
 ## Install
 
 ```sh
-oc apply -f deploy/helm/environments/rationai-test/k8s/storage.yaml -f deploy/helm/environments/rationai-test/k8s/postgres.yaml
-helm install model-service deploy/helm -n rationai-infra-test-ns \
-  -f deploy/helm/environments/rationai-test/values.yaml
+helm upgrade --install model-service deploy/helm -n rationai-infra-test-ns \
+  -f deploy/helm/environments/rationai-test/values.yaml \
+  -f deploy/helm/environments/rationai-test/secrets.yaml
 ```
 
-Upgrades use `helm upgrade` with the same arguments.
+Every upgrade uses the same arguments. Preview one with `--dry-run=server`;
+never apply `helm template` output, which can't read the stored database
+Secret and so shows new credentials.
+
+Before 2026-11-25 PostgreSQL, the cache claims and `model-service-db` were
+applied by hand. They were adopted into the release once, keeping their data:
+
+```sh
+objects="deploy/model-service-postgres svc/model-service-postgres pvc/model-service-postgres-data pvc/model-service-trt-cache pvc/model-service-hf-cache secret/model-service-db"
+oc -n rationai-infra-test-ns annotate $objects meta.helm.sh/release-name=model-service meta.helm.sh/release-namespace=rationai-infra-test-ns
+oc -n rationai-infra-test-ns label $objects app.kubernetes.io/managed-by=Helm
+```
+
+The first upgrade after that needed `--force-conflicts`: `oc apply` still
+owned the PostgreSQL Deployment's fields, and Helm 4 applies server-side.
 
 Models and pipelines come from `catalog/`: the values deploy the IDs
 named in `models` (`prostate-classifier-1`, `virchow2` and

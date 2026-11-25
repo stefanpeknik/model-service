@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import shutil
 import subprocess
@@ -21,13 +22,13 @@ CHART = REPO / "deploy" / "helm"
 CATALOG = REPO / "catalog"
 TEST_VALUES = CHART / "environments" / "rationai-test" / "values.yaml"
 SENSITIVE_VALUES = CHART / "environments" / "sensitive-cluster" / "values.yaml"
+FAKE_SECRETS = Path(__file__).parent / "fake-secrets.yaml"
 # What sensitive-cluster leaves for whoever installs it to fill in.
 SENSITIVE_PLACEHOLDERS = {
     "rayImage.tag": "t",
     "rayGpuImage.tag": "t",
     "controlPlane.image.tag": "t",
-    "controlPlane.database.existingSecret": "model-service-db",
-    "controlPlane.encryption.existingSecret": "model-service-db",
+    "secrets.huggingface.token": "hf",
 }
 TEST_PIPELINES = ("prostate-heatmap", "virchow2-embeddings", "prov-gigapath-embeddings")
 BASE_VALUES = CHART / "values.yaml"
@@ -48,6 +49,8 @@ def render(*values: Path, **settings: object) -> dict[tuple[str, str], Any]:
     command = ["helm", "template", "model-service", str(CHART)]
     for path in values:
         command += ["-f", str(path)]
+    if TEST_VALUES in values:
+        command += ["-f", str(FAKE_SECRETS)]
     for key, value in settings.items():
         command += ["--set-json", f"{key}={json.dumps(value)}"]
     result = subprocess.run(command, capture_output=True, text=True, check=True)
@@ -293,3 +296,35 @@ def test_cpu_only_apps_can_only_be_placed_on_cpu_workers(environment: str) -> No
     )
     assert not any(name in resources for resources in gpu_groups.values())
     assert not any(name in d["ray_actor_options"].get("resources", {}) for d in served)
+
+
+def test_the_release_owns_its_database_caches_and_secrets() -> None:
+    objects = render(TEST_VALUES)
+
+    assert {
+        ("PersistentVolumeClaim", "model-service-postgres-data"),
+        ("Deployment", "model-service-postgres"),
+        ("Service", "model-service-postgres"),
+        ("PersistentVolumeClaim", "model-service-trt-cache"),
+        ("PersistentVolumeClaim", "model-service-hf-cache"),
+        ("Secret", "model-service-db"),
+        ("Secret", "model-service-huggingface"),
+        ("Secret", "model-service-mlflow"),
+    } <= set(objects)
+    # Uninstalling or renaming never deletes data or the generated credentials.
+    for key in [k for k in objects if k[0] == "PersistentVolumeClaim"] + [
+        ("Secret", "model-service-db")
+    ]:
+        annotations = objects[key]["metadata"].get("annotations", {})
+        assert annotations.get("helm.sh/resource-policy") == "keep", key
+
+
+def test_generated_database_values_fit_what_the_control_plane_reads() -> None:
+    data = render(TEST_VALUES)[("Secret", "model-service-db")]["stringData"]
+
+    key = base64.b64decode(data["provider-context-key"], altchars=b"-_", validate=True)
+    assert len(key) == 32
+    assert data["database-url"] == (
+        f"postgresql://model_service:{data['postgres-password']}"
+        "@model-service-postgres:5432/model_service"
+    )

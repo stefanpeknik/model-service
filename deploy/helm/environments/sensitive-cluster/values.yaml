@@ -2,18 +2,20 @@
 # (upstream main: Serve applications only). It deploys the whole platform; the
 # render fails until these are filled in, each named by its error:
 # - rayImage.tag, rayGpuImage.tag, controlPlane.image.tag: the images to run;
-# - controlPlane.database.existingSecret, controlPlane.encryption.existingSecret:
-#   a Secret with `database-url` (PostgreSQL) and `provider-context-key`.
+# - secrets.huggingface.token, in secrets.yaml beside this file (untracked).
 # Runs write their outputs under /mnt/projects: `projects-rw`, the writable
 # claim the workers mount there too (/mnt/data is the read-only `data-ro`).
-# Hand-applied objects: k8s/ beside this file (the TensorRT and Hugging Face
-# cache claims the workers mount). EMPAIA is off here.
+# The chart creates PostgreSQL, its database Secret and the cache claims.
+# EMPAIA is off here.
 environment: sensitive-cluster
 modelSettings:
   env:
     MLFLOW_TRACKING_URI: http://mlflow.rationai-mlflow:5000
 
 sharedStorageRoots: [/mnt/data, /mnt/projects]
+
+storage:
+  storageClassName: nfs-csi
 
 workers: [cpu, gpu]
 
@@ -31,10 +33,6 @@ controlPlane:
   enabled: true
   image:
     tag: ""
-  database:
-    existingSecret: ""
-  encryption:
-    existingSecret: ""
   sharedStorage:
     existingClaim: projects-rw
     mountPath: /mnt/projects

@@ -220,3 +220,11 @@ runtime_env.config. Takes dict "id", "document" and "settings".
 {{- toYaml $application }}
 {{- end }}
 
+
+{{/*
+The environment a release deploys; every template that needs one calls this
+first, so a missing environment is the error a render reports.
+*/}}
+{{- define "model-service.environment" -}}
+{{- required "environment is required: the folder in environments/ this release deploys" .Values.environment -}}
+{{- end }}

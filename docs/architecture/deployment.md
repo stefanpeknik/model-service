@@ -17,19 +17,30 @@ pipelines: it globs the catalog folders and the values pick from them.
 | `cpuWorkerResource` | A Ray custom resource only CPU worker groups advertise. The pipeline runner requests it, so Ray never places it on a GPU worker's free CPUs. |
 | `sharedStorageRoots` | The roots callers may name in shared-storage requests. |
 | `workers`, `rayImage`, `rayGpuImage` | The worker groups, from `deploy/helm/environments/<environment>/workers/<name>.yaml`, and their images. |
+| `storage` | The storage class of the claims the chart creates, the cache sizes, and with `outputSize` the shared outputs and scratch claims. |
+| `postgres` | The scheduler's database, one per release: image, size, resources. |
+| `secrets` | Secret values: the Hugging Face token, MLflow credentials, optionally the database password and provider-context key (generated otherwise). Never in a committed file. |
 | `controlPlane`, `empaia` | The control-plane Deployment and the EMPAIA provider's settings. |
 
 `values.yaml` holds cluster-neutral defaults. Each cluster has a folder in
-`environments/` with its `values.yaml` (installed with
-`-f environments/<env>/values.yaml`), its model patches, its worker
-groups and, in `k8s/`, the objects applied by hand before the first install
-(`.helmignore` keeps them out of the chart):
+`environments/` with its `values.yaml`, its model patches, its worker groups
+and its `secrets.yaml`, which git ignores (the keys are in
+`environments/secrets.example.yaml`). A release installs with both:
+`helm upgrade --install model-service deploy/helm -f environments/<env>/values.yaml
+-f environments/<env>/secrets.yaml`. The chart creates everything else the
+release needs, PostgreSQL, the cache claims and the Secrets; the claims and
+the generated database Secret survive `helm uninstall`
+(`helm.sh/resource-policy: keep`). The database password and provider-context key
+are generated on the first install and read back from the cluster on every
+upgrade, so preview with `--dry-run=server`: `helm template` can't read them
+and shows new ones.
 
 - `rationai-test`: the test namespace beside the EMPAIA test instance
   ([runbook](../operations/rationai-test-ns.md));
 - `sensitive-cluster`: `rationai-jobs-ns`, where model-service ran before this
-  platform. Its values leave the image tags and the database and encryption
-  Secrets empty, so the render fails naming each until they are filled in.
+  platform. Its values leave the image tags empty and its
+  `secrets.yaml` needs the Hugging Face token, so the render fails naming each
+  until they are filled in.
 
 ## From a model file to a Serve application
 

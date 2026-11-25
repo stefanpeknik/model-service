@@ -1,4 +1,4 @@
-{{- $environment := required "environment is required: the folder in environments/ this release deploys" .Values.environment }}
+{{- $environment := include "model-service.environment" . }}
 apiVersion: ray.io/v1
 kind: RayService
 metadata:

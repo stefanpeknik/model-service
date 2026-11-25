@@ -1,7 +1,5 @@
 {{- if .Values.controlPlane.enabled }}
 {{- $imageTag := required "controlPlane.image.tag is required" .Values.controlPlane.image.tag }}
-{{- $databaseSecret := required "controlPlane.database.existingSecret is required" .Values.controlPlane.database.existingSecret }}
-{{- $encryptionSecret := required "controlPlane.encryption.existingSecret is required" .Values.controlPlane.encryption.existingSecret }}
 {{- /* Standalone runs deliver their outputs there; without it no run can finish. */}}
 {{- $sharedClaim := required "controlPlane.sharedStorage.existingClaim is required" .Values.controlPlane.sharedStorage.existingClaim }}
 {{- $empaia := .Values.empaia.apiUrls }}
@@ -58,13 +56,13 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ $databaseSecret }}
-                  key: {{ .Values.controlPlane.database.urlKey }}
+                  name: {{ .Release.Name }}-db
+                  key: database-url
             - name: PROVIDER_CONTEXT_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ $encryptionSecret }}
-                  key: {{ .Values.controlPlane.encryption.keyKey }}
+                  name: {{ .Release.Name }}-db
+                  key: provider-context-key
             - name: RAY_SERVE_ORIGIN
               value: {{ default (printf "http://%s-serve-svc.%s.svc.cluster.local:8000" .Release.Name (.Release.Namespace | default "rationai-jobs-ns")) .Values.controlPlane.rayServeOrigin | quote }}
             - name: MODEL_CATALOG_DIR

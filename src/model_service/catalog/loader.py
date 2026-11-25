@@ -41,7 +41,7 @@ ID = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 MAPPING = "A mapping of keys to values"
 FOLDERS = (model_files.FOLDER, pipelines.FOLDER)
 # What else an environment folder holds, which the loader leaves to Helm.
-ENVIRONMENT_FILES = ("values.yaml", "workers/", "k8s/")
+ENVIRONMENT_FILES = ("values.yaml", "secrets.yaml", "workers/")
 
 
 def environments(folder: Path) -> list[Path]:
@@ -231,7 +231,7 @@ class _Loader:
                     continue
                 if len(parts) == 2 and parts[0] in FOLDERS and path.suffix == ".yaml":
                     patches[(parts[0], path.stem)] = path
-                elif parts[0] not in ("values.yaml", "workers", "k8s"):
+                elif parts[0] not in ("values.yaml", "secrets.yaml", "workers"):
                     folders = [f"{f}/" for f in sorted(FOLDERS)]
                     self.file_error(
                         path,

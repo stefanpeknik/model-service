@@ -79,6 +79,34 @@ rayGpuImage:
   tag: ""
   pullPolicy: IfNotPresent
 
+# Volumes the chart creates (every claim survives an uninstall): PostgreSQL's
+# data, the model workers' TensorRT and Hugging Face caches, and, when
+# `outputSize` is set, shared outputs and scratch for runs.
+storage:
+  storageClassName: ""
+  tensorrtCacheSize: 20Gi
+  huggingfaceCacheSize: 15Gi
+
+# The scheduler's database, one per release.
+postgres:
+  image: docker.io/library/postgres:16-alpine
+  size: 2Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1
+      memory: 1Gi
+
+# Secret values. Never set them here or in a committed values file: each
+# environment keeps them in its untracked secrets.yaml, passed as a second -f
+# (keys in environments/secrets.example.yaml).
+secrets:
+  database: {}
+  huggingface: {}
+  mlflow: {}
+
 controlPlane:
   enabled: false
   replicas: 2
@@ -86,12 +114,6 @@ controlPlane:
     repository: cerit.io/rationai/model-service-control-plane
     tag: ""
     pullPolicy: IfNotPresent
-  database:
-    existingSecret: ""
-    urlKey: database-url
-  encryption:
-    existingSecret: ""
-    keyKey: provider-context-key
   sharedStorage:
     existingClaim: ""
     mountPath: /mnt/data

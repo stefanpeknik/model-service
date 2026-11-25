@@ -70,10 +70,10 @@ template:
           claimName: bioptictree-ro
       - name: trt-cache-volume
         persistentVolumeClaim:
-          claimName: tensorrt-cache-pvc
+          claimName: {{ .Release.Name }}-trt-cache
       - name: huggingface-cache
         persistentVolumeClaim:
-          claimName: huggingface-cache-pvc
+          claimName: {{ .Release.Name }}-hf-cache
 {{- if and .Values.empaia.apiUrls .Values.empaia.workspaceClaim }}
       - name: empaia-workspace
         persistentVolumeClaim:
