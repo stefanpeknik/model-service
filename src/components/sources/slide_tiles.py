@@ -124,6 +124,8 @@ class SlideTiles(Source):
         "mpp_x": Col("float64"),
         "mpp_y": Col("float64"),
         "downsample": Col("float64"),
+        # The run's regions of interest in level-0 pixels, or None for the whole slide.
+        "regions": Col("object"),
     }
     options: SlideTilesOptions
 
@@ -208,6 +210,7 @@ class SlideTiles(Source):
                 "mpp_x": float(mpp_x),
                 "mpp_y": float(mpp_y),
                 "downsample": float(slide.level_downsamples[reader.level]),
+                "regions": reader.regions,
             }
             keys = list(
                 grid_tiles(

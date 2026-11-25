@@ -246,7 +246,7 @@ than a tile.
 - **Usable in:** pipeline `source:`
 - **Example:** `{use: slide_tiles, tile_size: 64, mpp: 0.5, skip_background: false}`
 - **Inputs (example options):** `slide` (required), `region_of_interest` (optional)
-- **Frame:** `extent_x` `int64`, `extent_y` `int64`, `tile_extent_x` `int64`, `tile_extent_y` `int64`, `stride_x` `int64`, `stride_y` `int64`, `level` `int64`, `mpp_x` `float64`, `mpp_y` `float64`, `downsample` `float64`
+- **Frame:** `extent_x` `int64`, `extent_y` `int64`, `tile_extent_x` `int64`, `tile_extent_y` `int64`, `stride_x` `int64`, `stride_y` `int64`, `level` `int64`, `mpp_x` `float64`, `mpp_y` `float64`, `downsample` `float64`, `regions` `object`
 - **Adds:** `tile_x` `int64`, `tile_y` `int64`, `tile` `uint8[3,tile_size,tile_size]`
 - **Used in:** [`episeg-heatmap`](pipelines.md#episeg-heatmap), [`prostate-heatmap`](pipelines.md#prostate-heatmap), [`prov-gigapath-embeddings`](pipelines.md#prov-gigapath-embeddings), [`virchow2-embeddings`](pipelines.md#virchow2-embeddings)
 - **Code:** [`src/components/sources/slide_tiles.py`](../../src/components/sources/slide_tiles.py)
@@ -285,6 +285,31 @@ skipped all of them, the table is empty.
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `output` | string | required | The output name callers and providers refer to. |
+
+### `region_fraction` (sink)
+
+The share of each region's scored pixels whose score reaches the threshold.
+
+Writes `<output>.json` in the `region_values` format, one value per region
+in the regions' order. A pixel counts when its centre lies in the region,
+and only tiles the source read are scored, so background the source
+skipped is left out of both counts. Where tiles overlap, a pixel counts
+once per tile, so the share is weighted by overlap, evenly inside the
+grid. Without regions the whole slide is one region, `slide`.
+
+- **Usable in:** pipeline `sinks:`
+- **Example:** `{use: region_fraction, output: purity}`
+- **Reads:** `tile_x` `int64`, `tile_y` `int64`, `scores` `float32[1,?,?]`
+- **Writes:** [`region_values`](formats.md#region_values)
+- **Frame fields read:** `downsample`, `regions`, `tile_extent_x`, `tile_extent_y`
+- **Rows in order:** no
+- **Used in:** no catalog file yet
+- **Code:** [`src/components/sinks/region_fraction.py`](../../src/components/sinks/region_fraction.py)
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `output` | string | required | The output name callers and providers refer to. |
+| `threshold` | number ≥ 0, ≤ 1 | `0.5` | **Per run.** The score at or above which a pixel counts, from 0 to 1. |
 
 ### `score_grid` (sink)
 

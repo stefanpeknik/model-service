@@ -79,6 +79,7 @@ def fake_frame(**overrides: Any) -> dict[str, Any]:
         "mpp_x": 0.5,
         "mpp_y": 0.5,
         "downsample": 1.0,
+        "regions": None,
     } | overrides
 
 

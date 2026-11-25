@@ -17,7 +17,7 @@ from shapely import box
 
 from model_service.catalog import load_catalog
 from model_service.contracts.failures import InvalidInvocation
-from model_service.formats import regions, score_grid
+from model_service.formats import region_values, regions, score_grid
 from model_service.pipeline_runner import run_pipeline
 from tests.components.helpers import fake_slide
 from tests.support.pipeline_catalog import REGISTRY, model_file, write
@@ -318,3 +318,47 @@ def test_a_region_file_that_is_not_geojson_is_an_invalid_input(tmp_path: Path) -
                 {"landmark": Landmark()},
             )
         )
+
+
+def test_the_regions_reach_the_sinks_with_their_ids(tmp_path: Path) -> None:
+    catalog = tmp_path / "catalog-regions"
+    write(
+        catalog,
+        "models/landmark.yaml",
+        model_file(tile_size=32, output="kind: scores, size: 2"),
+    )
+    write(
+        catalog,
+        "pipelines/a1.yaml",
+        """
+        source: {use: slide_tiles, skip_background: false}
+        steps: [{model: landmark}]
+        sinks: [{use: region_fraction, output: purity, threshold: 0.5}]
+        """,
+    )
+    slide = fake_slide(tmp_path / "slide.tiff", checkerboard(112, 80))
+    roi = tmp_path / "regions.geojson"
+    # Two tiles overlap the box, each with one 16 px score pixel in it: the
+    # tile at x 0 scores 0 (its origin is black), the one at x 16 scores 1.
+    regions.write(
+        roi,
+        (
+            regions.Region("box", box(16, 0, 32, 16)),
+            regions.Region("outside", box(200, 200, 210, 210)),
+        ),
+    )
+    output = tmp_path / "purity.json"
+
+    asyncio.run(
+        run_pipeline(
+            load_catalog(catalog, registry=REGISTRY).pipelines["a1"],
+            {"slide": slide, "region_of_interest": roi},
+            {"purity": output},
+            {"landmark": Landmark(size=2)},
+        )
+    )
+
+    assert [(r.id, r.value) for r in region_values.read(output)] == [
+        ("box", 0.5),
+        ("outside", None),
+    ]

@@ -46,6 +46,22 @@ filter or the region of interest dropped get no row. Reading it needs only
 `h5py` (`h5py.File(path)["features"][()]`). Written by the `embedding_table`
 sink; `TableWriter` appends rows as they come.
 
+## `region_values`
+
+- **Media type:** `application/vnd.rationai.region-values+json; version=1`
+- **File suffix:** `.json`
+- **Written by:** [`region_fraction`](components.md#region_fraction-sink)
+- **Published to EMPAIA by:** no publisher yet
+- **Code:** [`src/model_service/formats/region_values.py`](../../src/model_service/formats/region_values.py)
+
+`region_values` v1: one number per region, e.g. the share of tumour in each drawn area.
+
+Media type `application/vnd.rationai.region-values+json; version=1`. A JSON
+object `{"regions": [{"id": <string>, "value": <number or null>}, ...]}`,
+one entry per region of the run's `regions` input, in its order; `id` is the
+region's. `value` is null where the run had nothing to measure, e.g. a region
+over glass. A run without regions has one entry, `slide`.
+
 ## `regions`
 
 - **Media type:** `application/vnd.rationai.regions+json; version=1`
