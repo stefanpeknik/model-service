@@ -17,6 +17,7 @@ pre-rebuild deployment (`golden-references-2026-11-22.md`).
 | 12 | `unit-aeed9eb` | code-review fixes (`GET /<model>/describe`, MLflow checksum, renames) |
 | 15 | `unit-9037eb7` | final v1: EPISeg applies its session options, untestable EMPAIA primitive pieces removed, core trims |
 | 16 | `unit-28531d4` | the API process renamed the control plane: `<release>-control-plane` Deployment and Service, `controlPlane:` values |
+| 19 | `unit-51a62a0` | layout (chart at `deploy/helm`, environment folders) and the rename: models, pipelines, `providers:` |
 | 14 | `unit-7247440` | persona-review fixes: validation, destination checks, sigmoid/softmax, provenance on results |
 | 13 | `unit-2646342` | builder-era names removed, `src/components` split, one fresh migration on a dropped database |
 
@@ -39,6 +40,22 @@ always the same six model-service objects, changes as listed above.
 - EMPAIA: preprocessing job via `scripts/request_preprocessing.py` on slide
   `7a072fd9`; execution `e6efffba` (`prostate-heatmap`, digest `bccb915a…`)
   succeeded with one processing and one finish attempt.
+
+## Results on revision 19 (layout and rename, 2026-11-24/25)
+
+- The `model_service` schema was dumped
+  (`model-service-pre-rename-20261124-2341.sql`) and dropped; the control
+  plane recreated it from the rewritten `0001` migration.
+- Health, deployments and catalog: loaded, ready, no missing routes.
+  `GET /v1/pipelines` lists the pipelines and `/v1/analyses` answers 404. The
+  EMPAIA app re-registered under its ID (`d3560de0`) for pipeline
+  `prostate-heatmap`, with images `http::model-service/pipelines/<id>`.
+- Not validated live: the golden tests, the SDK integration test and an
+  EMPAIA job. The GPU worker stayed `Pending` for over 8 hours ("cannot
+  allocate all claims": no free `mig-2g.20gb` slice on the shared cluster),
+  so every model call timed out after 2.5 hours. Digests are unchanged
+  (`4d68c49caf25`, `93df152b6d03`, `0394c8a44dd9`); rerun the round once a
+  slice is free.
 
 ## Results on revision 16 (control-plane rename, 2026-11-24)
 
