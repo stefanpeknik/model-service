@@ -6,13 +6,11 @@ checked before data reaches input preparation or image publication.
 
 from __future__ import annotations
 
-import math
 from typing import Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 
 from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
-from model_service.providers.empaia.app_service.types import Rectangle
 
 
 type FiniteNumber = Annotated[float, Field(allow_inf_nan=False)]
@@ -67,32 +65,3 @@ class ConfigurationResponse(EmpaiaResponse):
                 "EMPAIA configuration contains ambiguous values", retryable=False
             )
         return self.global_values | self.customer_values
-
-
-class RectangleResponse(EmpaiaResponse):
-    """Validate a finite two-coordinate origin and positive rectangle dimensions."""
-
-    upper_left: Annotated[list[FiniteNumber], Field(min_length=2, max_length=2)]
-    width: PositiveNumber
-    height: PositiveNumber
-
-
-def rectangle(value: object) -> Rectangle:
-    """Floor rectangle origins and ceil dimensions when converting provider geometry to integer pixels.
-
-    Args:
-        value: The decoded rectangle input data.
-
-    Returns:
-        The rectangle in integer pixels.
-
-    Raises:
-        EmpaiaGatewayError: Not retryable if the data is not a valid rectangle.
-    """
-    parsed = RectangleResponse.parse(value)
-    return Rectangle(
-        x=math.floor(parsed.upper_left[0]),
-        y=math.floor(parsed.upper_left[1]),
-        width=math.ceil(parsed.width),
-        height=math.ceil(parsed.height),
-    )

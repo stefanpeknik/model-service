@@ -279,13 +279,12 @@ async def test_a_standalone_job_runs_the_pipeline_and_publishes_its_heatmap(
         "slide": {"type": "wsi"},
         "region_of_interest": {"type": "rectangle"},
     }
-    # The run: the slide linked, the rectangle made a mask, progress reported.
-    # The slide's info is read for the rectangle's mask and again to publish.
+    # The run: the slide linked, the rectangle made a region, progress reported.
+    # The slide's info is read to publish.
     assert service.reads == [
         "stride_fraction",
         "slide (direct access)",
         "region_of_interest",
-        "slide (info)",
         "slide (info)",
     ]
     assert service.progress

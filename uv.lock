@@ -2156,6 +2156,7 @@ pipeline-runner = [
     { name = "rationai-empaia" },
     { name = "ratiopath" },
     { name = "ray", extra = ["serve"] },
+    { name = "shapely" },
 ]
 
 [package.dev-dependencies]
@@ -2205,6 +2206,7 @@ requires-dist = [
     { name = "ratiopath", marker = "extra == 'pipeline-runner'", specifier = ">=1.4.0" },
     { name = "ray", extras = ["serve"], marker = "extra == 'models'", specifier = ">=2.58.0" },
     { name = "ray", extras = ["serve"], marker = "extra == 'pipeline-runner'", specifier = ">=2.58.0" },
+    { name = "shapely", marker = "extra == 'pipeline-runner'", specifier = ">=2.0" },
     { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'control-plane'", specifier = ">=2.0.36,<2.1" },
     { name = "tensorrt-cu12-libs", marker = "extra == 'gpu'", specifier = "==10.9.0.34", index = "https://pypi.nvidia.com/" },
     { name = "timm", marker = "extra == 'models'", specifier = ">=1.0,<2" },

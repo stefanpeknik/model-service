@@ -1,4 +1,4 @@
-"""Input files: slides keep the names readers rely on, rectangles become clipped masks."""
+"""Input files: slides keep the names readers rely on."""
 
 from __future__ import annotations
 
@@ -6,13 +6,8 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from model_service.providers.empaia.app_service.gateway import EmpaiaGatewayError
-from model_service.providers.empaia.app_service.input_files import (
-    link_direct_input,
-    write_rectangle_mask,
-)
-from model_service.providers.empaia.app_service.types import DirectAccess, Rectangle
-from tests.support.empaia_fixtures import slide_info
+from model_service.providers.empaia.app_service.input_files import link_direct_input
+from model_service.providers.empaia.app_service.types import DirectAccess
 
 
 class LinkDirectInputTests(unittest.TestCase):
@@ -47,44 +42,3 @@ class LinkDirectInputTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
-class RectangleMaskTests(unittest.TestCase):
-    SLIDE = slide_info(width=1100, height=900, levels=1)
-
-    def test_a_rectangle_is_clipped_to_the_slide(self) -> None:
-        import pyvips
-
-        with TemporaryDirectory() as directory:
-            path = Path(directory) / "mask.tiff"
-            write_rectangle_mask(path, self.SLIDE, Rectangle(-500, 800, 1000, 1000))
-            mask = pyvips.Image.new_from_file(str(path))
-
-            self.assertEqual((mask.width, mask.height), (1100, 900))
-            self.assertEqual(mask.getpoint(0, 800), [255.0])
-            self.assertEqual(mask.getpoint(499, 899), [255.0])
-            self.assertEqual(mask.getpoint(500, 899), [0.0])
-            self.assertEqual(mask.getpoint(0, 799), [0.0])
-
-    def test_a_slide_without_a_positive_pixel_size_is_refused_for_good(self) -> None:
-        slide = self.SLIDE.model_copy(
-            update={
-                "pixel_size_nm": self.SLIDE.pixel_size_nm.model_copy(update={"x": 0.0})
-            }
-        )
-        with TemporaryDirectory() as directory:
-            path = Path(directory) / "mask.tiff"
-            with self.assertRaises(EmpaiaGatewayError) as raised:
-                write_rectangle_mask(path, slide, Rectangle(0, 0, 100, 100))
-
-            self.assertFalse(raised.exception.retryable)
-            self.assertFalse(path.exists())
-
-    def test_a_rectangle_beside_the_slide_is_refused(self) -> None:
-        with TemporaryDirectory() as directory:
-            path = Path(directory) / "mask.tiff"
-            with self.assertRaises(EmpaiaGatewayError) as raised:
-                write_rectangle_mask(path, self.SLIDE, Rectangle(-500, 0, 400, 100))
-
-            self.assertFalse(raised.exception.retryable)
-            self.assertFalse(path.exists())

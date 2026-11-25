@@ -1,8 +1,7 @@
-"""`rectangle`: a region of interest drawn on the slide, as a mask the size of the slide."""
+"""`rectangle`: a rectangle drawn on the slide, as a region in the `regions` format."""
 
 from __future__ import annotations
 
-import asyncio
 from typing import TYPE_CHECKING, Any
 
 from components import EmpaiaInput, InputConverter
@@ -15,15 +14,14 @@ if TYPE_CHECKING:
 
 
 ROI_CLASS = "org.empaia.global.v1.classes.roi"
-MASK_FILE = "mask.tiff"
 
 
 class Rectangle(InputConverter):
-    """A rectangle on the app's slide, given to the pipeline as a region-of-interest mask.
+    """A rectangle on the app's slide, given to the pipeline as one region.
 
-    The rectangle, clipped to the slide, becomes a pyramidal 8-bit TIFF of
-    the slide's size and pixel size: 255 inside, 0 outside. EMPAIA offers it
-    with the region-of-interest class, so the viewer lets a user draw it.
+    It becomes a `regions` file with one rectangle in level-0 pixels, keeping
+    the annotation's ID. EMPAIA offers it with the region-of-interest class,
+    so the viewer lets a user draw it.
     """
 
     name = "rectangle"
@@ -47,28 +45,22 @@ class Rectangle(InputConverter):
     async def materialize(
         self, gateway: EmpaiaGateway, item: EmpaiaInput, directory: Path
     ) -> Path:
-        """Read the rectangle and its slide, and write the mask into `directory`.
+        """Read the rectangle and write it as a region into `directory`.
 
         Args:
             gateway: The job's gateway.
-            item: The input; `slide` names the slide it lies on.
-            directory: Where to write `mask.tiff`.
+            item: The input.
+            directory: Where to write `regions.geojson`.
 
         Returns:
-            The mask.
+            The regions file.
 
         Raises:
-            EmpaiaGatewayError: Not retryable if the rectangle or slide data is
-                invalid or the rectangle misses the slide; retryable if writing
-                the mask fails.
+            EmpaiaGatewayError: Not retryable if the rectangle is invalid;
+                retryable if writing fails.
         """
-        from model_service.providers.empaia.app_service.input_files import (
-            write_rectangle_mask,
+        from model_service.providers.empaia.app_service.regions import (
+            materialize_regions,
         )
-        from model_service.providers.empaia.app_service.responses import rectangle
 
-        region = rectangle(await gateway.get_input_data(item.name))
-        slide = await gateway.slide_info(item.slide or "slide")
-        target = directory / MASK_FILE
-        await asyncio.to_thread(write_rectangle_mask, target, slide, region)
-        return target
+        return await materialize_regions(gateway, item.name, self.ead_type, directory)

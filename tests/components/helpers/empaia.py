@@ -40,6 +40,15 @@ SLIDE_LEVELS = 4
 
 EXAMPLE_INPUTS: dict[str, JsonValue] = {
     "rectangle": {"upper_left": [32, 32], "width": 64, "height": 64},
+    "polygon": {"id": "p1", "coordinates": [[32, 32], [96, 32], [64, 96]]},
+    "circle": {"id": "c1", "center": [128, 128], "radius": 32},
+    "collection": {
+        "item_type": "polygon",
+        "items": [
+            {"id": "p1", "coordinates": [[32, 32], [96, 32], [64, 96]]},
+            {"id": "p2", "coordinates": [[128, 128], [192, 128], [160, 192]]},
+        ],
+    },
     "primitive": {"type": "float", "value": 0.5},
     "string": "text",
 }

@@ -71,6 +71,9 @@
         "type": {
           "description": "The EAD type.",
           "enum": [
+            "circle",
+            "collection",
+            "polygon",
             "primitive",
             "rectangle",
             "wsi"
@@ -486,7 +489,7 @@
         },
         "region_of_interest": {
           "default": "optional",
-          "description": "Whether a run must give a region-of-interest mask (`required`), may (`optional`) or may not (`ignored`); only tiles the mask covers are read.",
+          "description": "Whether a run must give regions of interest (`required`), may (`optional`) or may not (`ignored`), as a `regions` file; only tiles that overlap a region are read.",
           "enum": [
             "required",
             "optional",

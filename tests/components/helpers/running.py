@@ -98,7 +98,7 @@ def run_component(
             options) or instance.
         data: A step's batch, a sink's batch or list of batches, or a
             source's inputs by name. By default: random data for the declared
-            reads, or a fake slide for each input.
+            reads, or a fake slide for each required input.
         options: Options when `component` is a class.
         model: The model declaration a sink or source gets as
             `run.model`.
@@ -136,7 +136,11 @@ def run_component(
             built.add(dict(batch))
         return built.close()
     if data is None:
-        data = {name: fake_slide(work_dir / f"{name}.tiff") for name in built.inputs()}
+        data = {
+            name: fake_slide(work_dir / f"{name}.tiff")
+            for name, required in built.inputs().items()
+            if required
+        }
     with built.open(data, Run(work_dir, model)) as opened:
         keys = list(opened.keys)
         return SourceRun(opened.frame, keys, opened.load(keys))

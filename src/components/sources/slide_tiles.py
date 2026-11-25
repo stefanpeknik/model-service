@@ -2,7 +2,7 @@
 
 The geometry is the team's code: `ratiopath.tiling.grid_tiles` places the
 tiles, and `model_service.slides.tile_reader.TileReader` picks the level and drops tiles
-outside the tissue or the region of interest. Frame fields follow ratiopath's
+outside the tissue or the regions of interest (a `regions` file). Frame fields follow ratiopath's
 slide rows; `tile` is channels-first, as models take it.
 """
 
@@ -83,9 +83,9 @@ class SlideTilesOptions(TileGeometryOptions):
     region_of_interest: Literal["required", "optional", "ignored"] = Field(
         "optional",
         description=(
-            "Whether a run must give a region-of-interest mask (`required`), "
-            "may (`optional`) or may not (`ignored`); only tiles the mask "
-            "covers are read."
+            "Whether a run must give regions of interest (`required`), may "
+            "(`optional`) or may not (`ignored`), as a `regions` file; only "
+            "tiles that overlap a region are read."
         ),
     )
     stride_fraction: PerRun[StrideFraction] = 0.5
@@ -157,7 +157,7 @@ class SlideTiles(Source):
 
     @contextmanager
     def open(self, inputs: dict[str, Path], run: Run) -> Iterator[Opened]:
-        """Open the slide (and mask), find tissue, and lay out the grid.
+        """Open the slide (and regions), find tissue, and lay out the grid.
 
         Args:
             inputs: `slide`, and `region_of_interest` if the run gives one.
@@ -167,7 +167,7 @@ class SlideTiles(Source):
             The frame, one key `(x, y)` per grid position, and the loader.
 
         Raises:
-            InvalidInvocation: The slide or mask is unreadable, or tissue
+            InvalidInvocation: The slide or regions file is unreadable, or tissue
                 detection cannot run on the slide.
             ValueError: If `tile_size` or `mpp` was never filled in.
         """

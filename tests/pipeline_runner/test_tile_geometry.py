@@ -13,10 +13,11 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
+from shapely import box
 
 from model_service.catalog import load_catalog
 from model_service.contracts.failures import InvalidInvocation
-from model_service.formats import score_grid
+from model_service.formats import regions, score_grid
 from model_service.pipeline_runner import run_pipeline
 from tests.components.helpers import fake_slide
 from tests.support.pipeline_catalog import REGISTRY, model_file, write
@@ -68,8 +69,8 @@ def checkerboard(width: int, height: int) -> np.ndarray:
     return pixels
 
 
-# Rows 40-59 and columns 50-89 of a 112 x 80 slide.
-REGION = (slice(40, 60), slice(50, 90))
+# Rows 40-59 and columns 50-89 of a 112 x 80 slide, in level-0 pixels.
+REGION = box(50, 40, 90, 60)
 
 
 def heatmap(
@@ -79,22 +80,24 @@ def heatmap(
     *,
     model: Landmark | None = None,
     stride: float = 0.5,
-    mask: str = "none",
-    mask_pixels: np.ndarray | None = None,
+    roi: str = "none",
 ) -> score_grid.ScoreGrid:
     """Run the pipeline on a checkerboard slide and read the grid it wrote."""
     model = model or Landmark()
-    directory = root / f"{width}-{height}-{stride}-{model.size}-{mask}"
+    directory = root / f"{width}-{height}-{stride}-{model.size}-{roi}"
     directory.mkdir()
     pixels = checkerboard(width, height)
     inputs = {"slide": fake_slide(directory / "slide.tiff", pixels)}
-    if mask != "none" or mask_pixels is not None:
-        selected = np.full_like(pixels, 0 if mask == "empty" else 255)
-        if mask == "region":
-            selected[:] = 0
-            selected[REGION] = 255
-        inputs["region_of_interest"] = fake_slide(
-            directory / "mask.tiff", selected if mask_pixels is None else mask_pixels
+    if roi != "none":
+        shapes = {
+            "empty": [],
+            "full": [box(0, 0, width, height)],
+            "region": [REGION],
+        }[roi]
+        inputs["region_of_interest"] = directory / "regions.geojson"
+        regions.write(
+            inputs["region_of_interest"],
+            tuple(regions.Region(f"r{i}", shape) for i, shape in enumerate(shapes)),
         )
     output = directory / "heatmap.npz"
     asyncio.run(
@@ -142,9 +145,9 @@ def test_padding_does_not_move_tile_placement(
 
 def test_cells_record_whether_any_tile_scored_them(tmp_path: Path) -> None:
     scored = heatmap(tmp_path, 112, 80, model=Landmark(constant=0.5))
-    unscored = heatmap(tmp_path, 112, 80, model=Landmark(constant=0.5), mask="empty")
+    unscored = heatmap(tmp_path, 112, 80, model=Landmark(constant=0.5), roi="empty")
 
-    # A tile every 16 px yields one score per 16 px; the empty mask scores none.
+    # A tile every 16 px yields one score per 16 px; an empty region list scores none.
     assert scored.cell_size == 16.0
     assert scored.scored.any()
     np.testing.assert_allclose(scored.values[0][scored.scored], 0.5)
@@ -173,10 +176,10 @@ def test_constant_scores_remain_constant_through_overlap_and_padding(
     np.testing.assert_array_equal(pixels, np.full((75, 107), 0.375))
 
 
-def test_a_full_mask_scores_like_no_mask(tmp_path: Path) -> None:
+def test_a_region_over_the_whole_slide_scores_like_none(tmp_path: Path) -> None:
     masked, unmasked = Landmark(), Landmark()
 
-    with_mask = heatmap(tmp_path, 107, 75, model=masked, mask="full")
+    with_mask = heatmap(tmp_path, 107, 75, model=masked, roi="full")
     without_mask = heatmap(tmp_path, 107, 75, model=unmasked)
 
     assert (masked.calls, unmasked.calls) == (24, 24)
@@ -187,7 +190,7 @@ def test_a_region_of_interest_limits_which_tiles_are_scored(tmp_path: Path) -> N
     whole_model, region_model = Landmark(), Landmark()
 
     whole = heatmap(tmp_path, 112, 80, model=whole_model)
-    region = heatmap(tmp_path, 112, 80, model=region_model, mask="region")
+    region = heatmap(tmp_path, 112, 80, model=region_model, roi="region")
 
     assert region.values.shape == whole.values.shape
     assert region_model.calls < whole_model.calls
@@ -197,24 +200,10 @@ def test_a_region_of_interest_limits_which_tiles_are_scored(tmp_path: Path) -> N
     assert not region.scored[:, 0].any()
 
 
-def test_a_coarser_mask_selects_tiles_by_its_truncated_window(tmp_path: Path) -> None:
-    # A mask at a third of the slide's size: a 32 px tile at x covers mask
-    # columns int(x / 3) to int(x / 3) + int(32 / 3), as in the original
-    # model-service tiling. Mask pixel (15, 15) is in the window of the tile
-    # at (32, 32) only; the tile at 16 covers columns 5 to 14.
-    mask_pixels = np.zeros((32, 32, 3), dtype=np.uint8)
-    mask_pixels[15, 15] = 255
+def test_an_empty_region_list_scores_nothing(tmp_path: Path) -> None:
     model = Landmark()
 
-    heatmap(tmp_path, 96, 96, model=model, mask_pixels=mask_pixels)
-
-    assert model.calls == 1
-
-
-def test_an_empty_mask_scores_nothing(tmp_path: Path) -> None:
-    model = Landmark()
-
-    grid = heatmap(tmp_path, 107, 75, model=model, mask="empty")
+    grid = heatmap(tmp_path, 107, 75, model=model, roi="empty")
 
     assert model.calls == 0
     assert not grid.values.any()
@@ -251,6 +240,80 @@ def test_a_file_that_is_not_a_slide_is_an_invalid_input(tmp_path: Path) -> None:
             run_pipeline(
                 pipeline(tmp_path),
                 {"slide": notes},
+                {"heatmap": tmp_path / "heatmap.npz"},
+                {"landmark": Landmark()},
+            )
+        )
+
+
+def test_tiles_of_every_region_are_scored_and_none_between(tmp_path: Path) -> None:
+    directory = tmp_path / "two"
+    directory.mkdir()
+    slide = fake_slide(directory / "slide.tiff", checkerboard(112, 80))
+    roi = directory / "regions.geojson"
+    regions.write(
+        roi,
+        (
+            regions.Region("left", box(0, 0, 16, 16)),
+            regions.Region("right", box(96, 64, 112, 80)),
+        ),
+    )
+    output = directory / "heatmap.npz"
+    model = Landmark(constant=0.5)
+
+    asyncio.run(
+        run_pipeline(
+            pipeline(tmp_path),
+            {"slide": slide, "region_of_interest": roi},
+            {"heatmap": output},
+            {"landmark": model},
+        )
+    )
+
+    grid = score_grid.read(output)
+    # 32 px tiles every 16 px: one tile covers each corner box.
+    assert model.calls == 2
+    assert grid.scored[0, 0] and grid.scored[4, 6]
+    assert not grid.scored[2, 3]
+
+
+def test_regions_are_in_level_zero_pixels_when_a_coarser_level_is_read(
+    tmp_path: Path,
+) -> None:
+    slide = fake_slide(
+        tmp_path / "slide.tiff", checkerboard(256, 192), mpp=0.25, pyramid=True
+    )
+    roi = tmp_path / "regions.geojson"
+    # The left half of level 0 is the left half of level 1 too: the tile at
+    # x 48 overlaps it and scores cells 3 and 4; the one at 64 only touches it.
+    regions.write(roi, (regions.Region("half", box(0, 0, 128, 192)),))
+    output = tmp_path / "heatmap.npz"
+
+    asyncio.run(
+        run_pipeline(
+            pipeline(tmp_path),
+            {"slide": slide, "region_of_interest": roi},
+            {"heatmap": output},
+            {"landmark": Landmark(constant=0.5)},
+        )
+    )
+
+    grid = score_grid.read(output)
+    assert grid.level == 1
+    assert grid.scored[:, :5].all()
+    assert not grid.scored[:, 5:].any()
+
+
+def test_a_region_file_that_is_not_geojson_is_an_invalid_input(tmp_path: Path) -> None:
+    slide = fake_slide(tmp_path / "slide.tiff", checkerboard(112, 80))
+    roi = tmp_path / "regions.geojson"
+    roi.write_text("not json")
+
+    with pytest.raises(InvalidInvocation):
+        asyncio.run(
+            run_pipeline(
+                pipeline(tmp_path),
+                {"slide": slide, "region_of_interest": roi},
                 {"heatmap": tmp_path / "heatmap.npz"},
                 {"landmark": Landmark()},
             )

@@ -46,6 +46,24 @@ filter or the region of interest dropped get no row. Reading it needs only
 `h5py` (`h5py.File(path)["features"][()]`). Written by the `embedding_table`
 sink; `TableWriter` appends rows as they come.
 
+## `regions`
+
+- **Media type:** `application/vnd.rationai.regions+json; version=1`
+- **File suffix:** `.geojson`
+- **Written by:** no sink yet
+- **Published to EMPAIA by:** no publisher yet
+- **Code:** [`src/model_service/formats/regions.py`](../../src/model_service/formats/regions.py)
+
+`regions` v1: named areas on a slide, such as regions of interest a user drew.
+
+Media type `application/vnd.rationai.regions+json; version=1`. A GeoJSON
+`FeatureCollection` whose coordinates are pixels of the slide's level 0,
+x to the right and y down. Each feature is one region: its `id` is a
+string, unique in the file, and its geometry a `Polygon` or `MultiPolygon`.
+An empty collection selects nothing. A pipeline takes it as an input, e.g.
+`region_of_interest`; the EMPAIA rectangle, polygon, circle and collection
+converters write it from the annotations a user drew.
+
 ## `score_grid`
 
 - **Media type:** `application/vnd.rationai.score-grid+npz; version=1`

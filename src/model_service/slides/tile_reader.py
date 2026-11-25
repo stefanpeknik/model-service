@@ -1,10 +1,10 @@
 """Read model tiles at the slide level closest to a model's resolution.
 
-With a mask, a tile is read only when its mask window contains a nonzero pixel;
-with a tissue mask, only when more than `min_tissue_fraction` of its window is
-tissue (any tissue at 0). Reads are synchronous
-and run in the pipeline runner's read threads; x/y are coordinates at the selected slide
-level.
+With regions, a tile is read only when it overlaps one of them by some area:
+ratiopath's `tile_annotations` intersects the tile with the level-0 regions.
+With a tissue mask, only when more than `min_tissue_fraction` of its window is
+tissue (any tissue at 0). Reads are synchronous and run in the pipeline
+runner's read threads; x/y are coordinates at the selected slide level.
 """
 
 from __future__ import annotations
@@ -13,10 +13,11 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
 import numpy as np
-from openslide import PROPERTY_NAME_MPP_X, PROPERTY_NAME_MPP_Y, OpenSlideError
+from openslide import OpenSlideError
 from ratiopath.openslide import OpenSlide
 
 from model_service.contracts.failures import InvalidInvocation
+from model_service.formats import regions as regions_format
 from model_service.slides.tissue import find_tissue
 
 
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
 
     from numpy.typing import NDArray
 
+    from model_service.formats.regions import Region
     from model_service.slides.tissue import TissueMask
 
 
@@ -51,40 +53,22 @@ def open_slide(path: Path, name: str) -> Iterator[OpenSlide]:
         yield slide
 
 
-def select_mask_level(mask: OpenSlide, target_mpp: float | tuple[float, float]) -> int:
-    """Use the mask's resolution when it has one; otherwise its finest level.
-
-    Args:
-        mask: Open mask slide.
-        target_mpp: Resolution to match.
-
-    Returns:
-        The mask level to read.
-    """
-    if (
-        PROPERTY_NAME_MPP_X in mask.properties
-        and PROPERTY_NAME_MPP_Y in mask.properties
-    ):
-        return mask.closest_level(target_mpp)
-    return 0
-
-
 class TileReader:
-    """Reads model-sized tiles from one slide level, skipping masked-out and background tiles."""
+    """Reads model-sized tiles from one slide level, skipping tiles outside the regions and background."""
 
     def __init__(
         self,
         slide: OpenSlide,
-        mask: OpenSlide | None,
+        regions: tuple[Region, ...] | None,
         mpp: float,
         tissue: TissueMask | None = None,
         min_tissue_fraction: float = 0.0,
     ) -> None:
-        """Pick the slide level for the model and scale mask and tissue to it.
+        """Pick the slide level for the model and scale tissue to it.
 
         Args:
             slide: Open slide to read tiles from.
-            mask: Open region-of-interest mask, if any.
+            regions: Regions of interest in level-0 pixels, if any.
             mpp: Model resolution; the closest slide level is read.
             tissue: Tissue mask for skipping background, if any.
             min_tissue_fraction: Share of a tile's tissue window that must be
@@ -92,56 +76,48 @@ class TileReader:
         """
         self.slide = slide
         self.level = slide.closest_level(mpp)
+        self.downsample = float(slide.level_downsamples[self.level])
+        self.regions = regions
         self.tissue = tissue
         self._min_tissue_fraction = min_tissue_fraction
-        self._mask = mask
         if tissue is not None:
             width, height = slide.level_dimensions[self.level]
             self._tissue_scale_x = tissue.pixels.shape[1] / width
             self._tissue_scale_y = tissue.pixels.shape[0] / height
-        if mask is not None:
-            self._mask_level = select_mask_level(mask, mpp)
-            width, height = slide.level_dimensions[self.level]
-            mask_width, mask_height = mask.level_dimensions[self._mask_level]
-            self._scale_x = mask_width / width
-            self._scale_y = mask_height / height
 
     @classmethod
     @contextmanager
     def open(
         cls,
         slide: OpenSlide,
-        mask_path: Path | None,
+        regions_path: Path | None,
         mpp: float,
         *,
         skip_background: bool = False,
         min_tissue_fraction: float = 0.0,
     ) -> Iterator[TileReader]:
-        """Open a reader, with the mask file and tissue detection when requested.
+        """Open a reader, with the regions file and tissue detection when requested.
 
         Args:
             slide: Open slide to read tiles from.
-            mask_path: Region-of-interest mask file, if any.
+            regions_path: Regions-of-interest file in the `regions` format, if any.
             mpp: Model resolution.
             skip_background: Detect tissue and skip tiles without it.
             min_tissue_fraction: Share of a tile's window that must be tissue.
 
         Yields:
-            The reader; the mask is closed on exit.
+            The reader.
 
         Raises:
-            InvalidInvocation: The mask is not a readable slide, or the slide
-                has no level coarse enough for tissue detection.
+            InvalidInvocation: The regions file is not readable regions, or the
+                slide has no level coarse enough for tissue detection.
         """
+        regions = None if regions_path is None else read_regions(regions_path)
         tissue = find_tissue(slide) if skip_background else None
-        if mask_path is None:
-            yield cls(slide, None, mpp, tissue, min_tissue_fraction)
-            return
-        with open_slide(mask_path, "region_of_interest") as mask:
-            yield cls(slide, mask, mpp, tissue, min_tissue_fraction)
+        yield cls(slide, regions, mpp, tissue, min_tissue_fraction)
 
     def read(self, x: int, y: int, tile_size: int) -> NDArray[np.uint8] | None:
-        """Read one tile unless the tissue or mask window excludes it.
+        """Read one tile unless the tissue window or the regions exclude it.
 
         Args:
             x: Tile origin x at the selected level.
@@ -149,15 +125,15 @@ class TileReader:
             tile_size: Tile width and height in pixels.
 
         Returns:
-            A CHW uint8 tile, or None when the tissue or mask window is empty.
+            A CHW uint8 tile, or None when the tile has no tissue or lies
+            outside every region.
         """
-        # The tissue check is an array lookup; the mask check reads the mask file.
         if self.tissue is not None and not self._has_tissue(
             self.tissue, x, y, tile_size
         ):
             return None
-        if self._mask is not None and not self._mask_selects(
-            self._mask, x, y, tile_size
+        if self.regions is not None and not self._in_regions(
+            self.regions, x, y, tile_size
         ):
             return None
         tile = self.slide.read_tile(
@@ -184,25 +160,54 @@ class TileReader:
         window = tissue.pixels[top : top + height, left : left + width]
         return window.size > 0 and float(window.mean()) > self._min_tissue_fraction
 
-    def _mask_selects(self, mask: OpenSlide, x: int, y: int, tile_size: int) -> bool:
-        """Check whether the tile's window in the mask has a nonzero pixel.
+    def _in_regions(
+        self, regions: tuple[Region, ...], x: int, y: int, tile_size: int
+    ) -> bool:
+        """Check whether the tile overlaps a region by some area; touching is not enough.
 
         Args:
-            mask: The region-of-interest mask.
+            regions: The regions, in level-0 pixels.
             x: Tile origin x at the selected level.
             y: Tile origin y at the selected level.
             tile_size: Tile width and height in pixels.
 
         Returns:
-            True when the window contains a nonzero mask pixel.
+            True when the tile and the regions share some area.
         """
-        left, top, width, height = _window(
-            x, y, tile_size, self._scale_x, self._scale_y
+        from ratiopath.tiling.annotations import tile_annotations
+        from shapely import box
+
+        overlap = next(
+            tile_annotations(
+                [r.geometry for r in regions],
+                box(0, 0, tile_size, tile_size),
+                [np.array([x, y])],
+                self.downsample,
+            )
         )
-        window = mask.read_region_relative(
-            (left, top), self._mask_level, (width, height)
-        )
-        return bool(np.asarray(window.convert("L")).any())
+        return overlap.area > 0
+
+
+def read_regions(path: Path) -> tuple[Region, ...]:
+    """Read a regions-of-interest file; a malformed one is the caller's error.
+
+    Args:
+        path: The file, in the `regions` format.
+
+    Returns:
+        The regions.
+
+    Raises:
+        InvalidInvocation: The file is not readable regions.
+    """
+    from shapely.errors import ShapelyError
+
+    try:
+        return regions_format.read(path)
+    except (OSError, ValueError, TypeError, KeyError, ShapelyError) as error:
+        raise InvalidInvocation(
+            "input 'region_of_interest' is not a GeoJSON feature collection of polygons"
+        ) from error
 
 
 def _window(

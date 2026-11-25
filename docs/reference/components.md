@@ -255,7 +255,7 @@ than a tile.
 | --- | --- | --- | --- |
 | `tile_size` | integer > 0 | not set | Tile edge in pixels; the first model step's when left out. |
 | `mpp` | number > 0 | not set | Microns per pixel to read at (the closest slide level); the first model step's when left out. |
-| `region_of_interest` | `required` or `optional` or `ignored` | `optional` | Whether a run must give a region-of-interest mask (`required`), may (`optional`) or may not (`ignored`); only tiles the mask covers are read. |
+| `region_of_interest` | `required` or `optional` or `ignored` | `optional` | Whether a run must give regions of interest (`required`), may (`optional`) or may not (`ignored`), as a `regions` file; only tiles that overlap a region are read. |
 | `stride_fraction` | number ≥ 0.05, ≤ 1 | `0.5` | **Per run.** How far apart tiles are, as a share of the tile size: from 0.05 up to 1. 1 places tiles side by side; 0.5 overlaps them by half, for a finer result that takes about four times as long. |
 | `skip_background` | boolean | `true` | **Per run.** Whether tiles without tissue are skipped; they get no result. Skipping is faster and leaves empty glass out. On by default. |
 | `min_tissue_fraction` | number ≥ 0, < 1 | `0.0` | **Per run.** How much of a tile must be tissue for it to be analysed, when background is skipped: from 0 up to but not including 1. 0 analyses every tile with any tissue; 0.5 needs at least half. |
@@ -315,6 +315,55 @@ picks the converter, so nothing is guessed from the data. A converter
 contributes the input's EAD io entry and materialises it for a run: a
 file in the attempt's workspace, or a value read at admission.
 
+### `circle` (converter)
+
+A circle on the app's slide, given to the pipeline as one region.
+
+It becomes a `regions` file with a 64-sided polygon in level-0 pixels, keeping
+the annotation's ID. EMPAIA offers it with the region-of-interest class,
+so the viewer lets a user draw it.
+
+- **Usable in:** EMPAIA provider settings `inputs:`
+- **Example:** `{inputs: {<name>: {type: circle}}}`
+- **EAD input type:** `circle`
+- **Gives:** a file
+- **Used in:** no catalog file yet
+- **Code:** [`src/components/providers/empaia/converters/circle.py`](../../src/components/providers/empaia/converters/circle.py)
+
+### `collection` (converter)
+
+Any number of one drawn shape on the app's slide, given to the pipeline as regions.
+
+It becomes a `regions` file with one region per item, in the
+collection's order, each keeping its annotation's ID; a circle becomes a
+64-sided polygon. Each item carries the region-of-interest class.
+
+- **Usable in:** EMPAIA provider settings `inputs:`
+- **Example:** `{inputs: {<name>: {type: collection, items: polygon}}}`
+- **EAD input type:** `collection`
+- **Gives:** a file
+- **Used in:** no catalog file yet
+- **Code:** [`src/components/providers/empaia/converters/collection.py`](../../src/components/providers/empaia/converters/collection.py)
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `items` | `rectangle` or `polygon` or `circle` | required | The shape users draw, as many times as they like. |
+
+### `polygon` (converter)
+
+A polygon on the app's slide, given to the pipeline as one region.
+
+It becomes a `regions` file with one polygon in level-0 pixels, keeping
+the annotation's ID. EMPAIA offers it with the region-of-interest class,
+so the viewer lets a user draw it.
+
+- **Usable in:** EMPAIA provider settings `inputs:`
+- **Example:** `{inputs: {<name>: {type: polygon}}}`
+- **EAD input type:** `polygon`
+- **Gives:** a file
+- **Used in:** no catalog file yet
+- **Code:** [`src/components/providers/empaia/converters/polygon.py`](../../src/components/providers/empaia/converters/polygon.py)
+
 ### `primitive` (converter)
 
 A pipeline setting offered as an EMPAIA primitive input in standalone mode.
@@ -331,11 +380,11 @@ read when the job is admitted and overrides the file's.
 
 ### `rectangle` (converter)
 
-A rectangle on the app's slide, given to the pipeline as a region-of-interest mask.
+A rectangle on the app's slide, given to the pipeline as one region.
 
-The rectangle, clipped to the slide, becomes a pyramidal 8-bit TIFF of
-the slide's size and pixel size: 255 inside, 0 outside. EMPAIA offers it
-with the region-of-interest class, so the viewer lets a user draw it.
+It becomes a `regions` file with one rectangle in level-0 pixels, keeping
+the annotation's ID. EMPAIA offers it with the region-of-interest class,
+so the viewer lets a user draw it.
 
 - **Usable in:** EMPAIA provider settings `inputs:`
 - **Example:** `{inputs: {<name>: {type: rectangle}}}`

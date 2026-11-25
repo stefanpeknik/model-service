@@ -20,6 +20,7 @@ from components.providers.empaia.publishers.continuous_pixelmap import (
     ContinuousPixelmap,
 )
 from components.providers.empaia.publishers.primitive import primitive_body
+from model_service.formats import regions
 from model_service.formats.score_grid import FORMAT, ScoreGrid
 from model_service.formats.score_grid import write as write_score_grid
 from model_service.providers.empaia.app_service.gateway import (
@@ -310,10 +311,10 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await gateway.close()
 
-    async def test_a_rectangle_becomes_a_mask_and_a_slide_needs_the_slide_volume(
+    async def test_a_rectangle_becomes_a_region_and_a_slide_needs_the_slide_volume(
         self,
     ) -> None:
-        """A rectangle is a mask of the slide's size; a slide is never downloaded."""
+        """A rectangle is a region in level-0 pixels; a slide is never downloaded."""
 
         def handle(request: httpx.Request) -> httpx.Response:
             """Return scenario-specific mock HTTP responses and record or assert requests for this gateway test."""
@@ -343,16 +344,11 @@ class HttpEmpaiaGatewayTests(unittest.IsolatedAsyncioTestCase):
                 gateway, EmpaiaInput("region_of_interest", "slide"), Path(directory)
             )
 
-            import pyvips
-
-            mask = pyvips.Image.new_from_file(str(destination))
-            self.assertEqual(destination, Path(directory) / "mask.tiff")
-            self.assertEqual((mask.width, mask.height), (1200, 600))
-            # Origins floor and sizes ceil: x 10..109, y 20..69.
-            self.assertEqual(mask.getpoint(10, 20), [255.0])
-            self.assertEqual(mask.getpoint(109, 69), [255.0])
-            self.assertEqual(mask.getpoint(110, 20), [0.0])
-            self.assertEqual(mask.getpoint(10, 19), [0.0])
+            (region,) = regions.read(destination)
+            self.assertEqual(destination, Path(directory) / "regions.geojson")
+            # Without an annotation ID, the region is named after the input.
+            self.assertEqual(region.id, "region_of_interest")
+            self.assertEqual(region.geometry.bounds, (10.2, 20.8, 110.2, 70.8))
 
             # A slide must be on the slide volume; there is no download.
             with self.assertRaises(EmpaiaGatewayError) as raised:
