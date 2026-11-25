@@ -20,7 +20,7 @@ are stale.
 | [Components](reference/components.md) | Every component: where it may be used, its options, its columns |
 | [Models](reference/models.md) | Every model file in `catalog/` |
 | [Pipelines](reference/pipelines.md) | Every pipeline file, with its inputs, outputs, settings and EMPAIA app |
-| [Data formats](reference/formats.md) | The files pipelines write, by media type and version |
+| [Data formats](reference/formats.md) | The files pipelines read and write, by media type and version |
 
 ## Design
 

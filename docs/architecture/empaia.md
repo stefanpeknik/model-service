@@ -24,7 +24,7 @@ sequenceDiagram
   A->>AS: read configuration, mode, parameters, which inputs exist
   A-->>S: PreparedInvocation (input types, publishers), priority HIGH or NORMAL
   S->>N: run the resolved pipeline document
-  N->>AS: inputs through their converters (slide link, rectangle mask), progress
+  N->>AS: inputs through their converters (slide link, drawn shapes as regions), progress
   N-->>S: outputs in the job's workspace
   S->>A: finish(outcome)
   A->>AS: prepare every output, commit in order, finalize or report failure
@@ -37,10 +37,10 @@ sequenceDiagram
 | Module | Role |
 | --- | --- |
 | `catalog/pipelines/providers/` | `providers.empaia`: its keys (`fields.py`), its schema (`schema.py`), and picking converters and publishers with the load-time checks in `resolution.py`: EMPAIA's name limit, preprocessing without required inputs, parameters, bound shapes |
-| `src/components/providers/empaia/` | Converters (`wsi`, `rectangle`, `primitive`) and publishers (`primitive`, `continuous_pixelmap`), one per EAD type |
+| `src/components/providers/empaia/` | Converters (`wsi`, `rectangle`, `polygon`, `circle`, `collection`, `primitive`) and publishers (`primitive`, `continuous_pixelmap`), one per EAD type |
 | `registry/empaia.py` | Picks the one converter or publisher that takes a declared EAD type, for the catalog at load time and for the provider from what admission recorded |
 | `providers/empaia/provider.py` | The provider: what EMPAIA adds to the control plane and to replicas |
-| `providers/empaia/ead/` | `apps.py` merges the components' fragments into each app's EAD v3; `vocabulary.py` holds modes, triggers and viewer settings |
+| `providers/empaia/ead/` | `apps.py` merges the components' fragments into each app's EAD v3; `vocabulary.py` holds modes, triggers and viewer settings; `viewer.py` builds the case browser's config (syntax version 2, checked against its vendored `aigopath-viewer.schema.json`) |
 | `providers/empaia/registration.py`, `triggers.py` | At startup, retried: register the apps, align the preprocessing triggers, delete owned apps no pipeline has (namespace `org.empaia.rationai.…` and image on this JES target) |
 | `providers/empaia/jobs/` | The JES-facing routes, payload parsing, the scheduler adapter (`adapter.py`, which also runs the publication loop), input access |
 | `providers/empaia/app_service/` | The App Service gateway, one method per SDK call family, over the `rationai.empaia` SDK client |
@@ -51,10 +51,20 @@ sequenceDiagram
   parameters; the job gets every input and runs at high priority.
 - **PREPROCESSING:** the job gets the required inputs (the slide) only and
   runs at normal priority.
-- **Types:** inputs `wsi`, `rectangle` and primitive parameters; outputs
-  primitives (from the `value` format) and one-channel continuous pixelmaps
-  (from `score_grid`). A new EMPAIA type is a new converter or publisher in
-  `src/components/providers/empaia/` once the SDK can carry it.
+- **Types:** inputs `wsi`, primitive parameters, and drawn `rectangle`,
+  `polygon` and `circle` shapes or a `collection` of one of them, which all
+  reach the pipeline as one [`regions`](../reference/formats.md#regions)
+  file; outputs primitives (from the `value` format) and one-channel
+  continuous pixelmaps (from `score_grid`). A new EMPAIA type is a new
+  converter or publisher in `src/components/providers/empaia/` once the SDK
+  can carry it.
+- **Not yet publishable:** the SDK's `post_output` takes primitives and
+  pixelmaps only, and its pyramid upload makes continuous pixelmaps only. So
+  there is no publisher for a collection of floats (`region_values`, one
+  number per drawn region), for annotation outputs (polygons), or for a
+  thresholded nominal pixelmap. Those wait for the SDK; until then
+  `tumor-purity` publishes its heatmap and keeps its per-region numbers on
+  the public API.
 
 ## SDK use
 

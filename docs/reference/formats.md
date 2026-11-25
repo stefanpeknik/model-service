@@ -2,7 +2,7 @@
 
 # Data formats
 
-A data format is a named, versioned file shape. Sinks write one, publishers read one, and callers open them with the same module under `src/model_service/formats/` or the RationAI SDK's `rationai.formats`. A stored output carries its media type; a reader refuses a version it doesn't know.
+A data format is a named, versioned file shape. Sinks write one, publishers read one, and callers open them with the same module under `src/model_service/formats/` or the RationAI SDK's `rationai.formats`. A stored output carries its media type; a reader refuses a version it doesn't know. `regions` goes the other way: callers send it as an input.
 
 ## `embedding_table`
 

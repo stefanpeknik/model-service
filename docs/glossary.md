@@ -227,8 +227,11 @@ The physical pixel resolution a model expects, from its training data.
 Pipelines read the slide level closest to it.
 
 **Region of interest**:
-A mask limiting a pipeline to part of a slide. A pipeline requires it,
-accepts it, or ignores it.
+One or more named areas limiting a pipeline to part of a slide, sent as a
+[`regions`](reference/formats.md#regions) file: GeoJSON polygons in level-0
+pixels, each with an ID. A pipeline requires it, accepts it, or ignores it.
+Per-region sinks such as `region_fraction` report one number per ID.
+_Avoid_: ROI mask
 
 **Tissue mask**:
 A mask separating tissue from background, so a pipeline can skip empty

@@ -32,7 +32,9 @@ change what differs:
   model expects.
 - `source` options set the defaults of the run's settings.
   `stride_fraction: 1.0` places tiles side by side, 0.5 overlaps them by half.
-  `region_of_interest: required` makes callers send a mask.
+  `region_of_interest: required` makes callers send regions: a
+  [`regions`](../reference/formats.md#regions) GeoJSON file of polygons
+  with IDs. The source reads only tiles that overlap one.
 - `sinks` names what the run writes. `score_grid` averages each tile's
   scores into a grid over the slide; `embedding_table` writes one feature row
   per tile and needs an encoder, a model with `output: {kind: embedding}`.
@@ -135,5 +137,9 @@ Each output's `type` picks the publisher that carries it to EMPAIA.
 The loader checks what EMPAIA would refuse later. A continuous pixelmap needs
 one score channel, preprocessing can't start a pipeline that requires a
 region of interest, and the app name has at most 30 characters.
-`prostate-heatmap.yaml` shows the viewer settings too, and
+A region input is `rectangle` by default; `{type: collection, items: polygon}`
+lets users draw several polygons (or `rectangle`, `circle`), as in
+`tumor-purity.yaml`. `viewer:` holds the case browser's display settings
+(labels, shaders, a parameter's `step` and `unit`); a parameter's default and
+bounds come from its setting. `prostate-heatmap.yaml` shows them, and
 [EMPAIA integration](../architecture/empaia.md) explains how jobs flow.

@@ -30,7 +30,7 @@ def formats_page(registry: Registry) -> str:
         "publishers read one, and callers open them with the same module under "
         "`src/model_service/formats/` or the RationAI SDK's `rationai.formats`. "
         "A stored output carries its media type; a reader refuses a version it "
-        "doesn't know.",
+        "doesn't know. `regions` goes the other way: callers send it as an input.",
     ]
     for name, found in sorted(FORMATS.items()):
         module = importlib.import_module(found.module)
