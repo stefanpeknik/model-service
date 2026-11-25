@@ -29,7 +29,7 @@ Each file in `catalog/models/` is one trained model behind the generic host. The
 - **Raw reply:** LZ4-compressed float16 bytes
 - **Batching:** up to 8 tiles, waiting 0.1 s to fill
 - **Resources:** `{gpus: 1, cpus: 4, memory_gib: 12}`
-- **Called by:** [`episeg-heatmap`](pipelines.md#episeg-heatmap)
+- **Called by:** [`episeg-heatmap`](pipelines.md#episeg-heatmap), [`tumor-purity`](pipelines.md#tumor-purity)
 - **Patched in:** no environment
 - **File:** [`catalog/models/episeg-1.yaml`](../../catalog/models/episeg-1.yaml)
 

@@ -12,7 +12,7 @@ modelSettings:
     # The public MLflow; the test cluster can't reach the internal one.
     MLFLOW_TRACKING_URI: https://mlflow.rationai.cloud.e-infra.cz
 
-# EPISeg's weights are out of reach here, so not its heatmap.
+# EPISeg's weights are out of reach here, so neither its heatmap nor tumor-purity.
 pipelines: [prostate-heatmap, virchow2-embeddings, prov-gigapath-embeddings]
 # One run per replica and two waiting; idle replicas scale to zero.
 pipelineRunner:

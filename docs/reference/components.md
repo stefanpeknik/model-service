@@ -248,7 +248,7 @@ than a tile.
 - **Inputs (example options):** `slide` (required), `region_of_interest` (optional)
 - **Frame:** `extent_x` `int64`, `extent_y` `int64`, `tile_extent_x` `int64`, `tile_extent_y` `int64`, `stride_x` `int64`, `stride_y` `int64`, `level` `int64`, `mpp_x` `float64`, `mpp_y` `float64`, `downsample` `float64`, `regions` `object`
 - **Adds:** `tile_x` `int64`, `tile_y` `int64`, `tile` `uint8[3,tile_size,tile_size]`
-- **Used in:** [`episeg-heatmap`](pipelines.md#episeg-heatmap), [`prostate-heatmap`](pipelines.md#prostate-heatmap), [`prov-gigapath-embeddings`](pipelines.md#prov-gigapath-embeddings), [`virchow2-embeddings`](pipelines.md#virchow2-embeddings)
+- **Used in:** [`episeg-heatmap`](pipelines.md#episeg-heatmap), [`prostate-heatmap`](pipelines.md#prostate-heatmap), [`prov-gigapath-embeddings`](pipelines.md#prov-gigapath-embeddings), [`tumor-purity`](pipelines.md#tumor-purity), [`virchow2-embeddings`](pipelines.md#virchow2-embeddings)
 - **Code:** [`src/components/sources/slide_tiles.py`](../../src/components/sources/slide_tiles.py)
 
 | Option | Type | Default | Description |
@@ -303,7 +303,7 @@ grid. Without regions the whole slide is one region, `slide`.
 - **Writes:** [`region_values`](formats.md#region_values)
 - **Frame fields read:** `downsample`, `regions`, `tile_extent_x`, `tile_extent_y`
 - **Rows in order:** no
-- **Used in:** no catalog file yet
+- **Used in:** [`tumor-purity`](pipelines.md#tumor-purity)
 - **Code:** [`src/components/sinks/region_fraction.py`](../../src/components/sinks/region_fraction.py)
 
 | Option | Type | Default | Description |
@@ -324,7 +324,7 @@ of shape (channels, rows, columns), with which cells any tile covered.
 - **Writes:** [`score_grid`](formats.md#score_grid)
 - **Frame fields read:** `extent_x`, `extent_y`, `level`, `mpp_x`, `mpp_y`, `stride_x`, `stride_y`, `tile_extent_x`, `tile_extent_y`
 - **Rows in order:** no
-- **Used in:** [`episeg-heatmap`](pipelines.md#episeg-heatmap), [`prostate-heatmap`](pipelines.md#prostate-heatmap)
+- **Used in:** [`episeg-heatmap`](pipelines.md#episeg-heatmap), [`prostate-heatmap`](pipelines.md#prostate-heatmap), [`tumor-purity`](pipelines.md#tumor-purity)
 - **Code:** [`src/components/sinks/score_grid.py`](../../src/components/sinks/score_grid.py)
 
 | Option | Type | Default | Description |
@@ -367,7 +367,7 @@ collection's order, each keeping its annotation's ID; a circle becomes a
 - **Example:** `{inputs: {<name>: {type: collection, items: polygon}}}`
 - **EAD input type:** `collection`
 - **Gives:** a file
-- **Used in:** no catalog file yet
+- **Used in:** [`tumor-purity`](pipelines.md#tumor-purity)
 - **Code:** [`src/components/providers/empaia/converters/collection.py`](../../src/components/providers/empaia/converters/collection.py)
 
 | Option | Type | Default | Description |
@@ -431,7 +431,7 @@ is refused: model-service does not download slides.
 - **Example:** `{inputs: {<name>: {type: wsi}}}`
 - **EAD input type:** `wsi`
 - **Gives:** a file
-- **Used in:** [`prostate-heatmap`](pipelines.md#prostate-heatmap)
+- **Used in:** [`prostate-heatmap`](pipelines.md#prostate-heatmap), [`tumor-purity`](pipelines.md#tumor-purity)
 - **Code:** [`src/components/providers/empaia/converters/wsi.py`](../../src/components/providers/empaia/converters/wsi.py)
 
 ## Publishers
@@ -456,7 +456,7 @@ a multi-channel grid is refused when the pipeline loads.
 - **Example:** `{outputs: {<output>: {type: continuous_pixelmap}}}`
 - **Reads:** [`score_grid`](formats.md#score_grid)
 - **EAD output types:** `continuous_pixelmap`
-- **Used in:** [`prostate-heatmap`](pipelines.md#prostate-heatmap)
+- **Used in:** [`prostate-heatmap`](pipelines.md#prostate-heatmap), [`tumor-purity`](pipelines.md#tumor-purity)
 - **Code:** [`src/components/providers/empaia/publishers/continuous_pixelmap.py`](../../src/components/providers/empaia/publishers/continuous_pixelmap.py)
 
 | Option | Type | Default | Description |

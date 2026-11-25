@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=../.schemas/pipelines.schema.json
+# EPISeg's 1024 px tiles at 0.468 µm/px, half a tile apart, only where the
+# user drew. Each region's share of epithelium is measured on EPISeg's
+# per-pixel scores, before any averaging into the heatmap's grid.
+summary: Measures the share of epithelium in each region a user draws.
+source: {use: slide_tiles, stride_fraction: 0.5, skip_background: true, min_tissue_fraction: 0.0, region_of_interest: required}
+steps:
+  - {model: episeg-1}
+sinks:
+  - {use: region_fraction, output: purity, threshold: 0.5}
+  - {use: score_grid, output: heatmap}
+# The per-region numbers stay on the public API for now: the EMPAIA SDK cannot
+# post a collection of floats yet, so the app publishes the heatmap only.
+providers:
+  empaia:
+    name: Tumor purity
+    name_short: TumPurity
+    description: Measures epithelium in the polygons you draw and shows it as a heatmap.
+    modes:
+      standalone:
+    inputs:
+      region_of_interest: {type: collection, items: polygon}
+    outputs:
+      heatmap: {type: continuous_pixelmap}
+    viewer:
+      outputs:
+        heatmap:
+          label: Epithelium
+          render: shader
+          visible: true
+          shader:
+            type: heatmap
+            params: {threshold: 50, opacity: 0.5, color: "#ff00ff"}
