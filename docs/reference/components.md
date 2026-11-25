@@ -342,11 +342,10 @@ file in the attempt's workspace, or a value read at admission.
 
 ### `circle` (converter)
 
-A circle on the app's slide, given to the pipeline as one region.
+A circle, by its centre and radius, as a 64-sided polygon.
 
-It becomes a `regions` file with a 64-sided polygon in level-0 pixels, keeping
-the annotation's ID. EMPAIA offers it with the region-of-interest class,
-so the viewer lets a user draw it.
+The pipeline gets it as one region in level-0 pixels, keeping the
+annotation's ID.
 
 - **Usable in:** EMPAIA provider settings `inputs:`
 - **Example:** `{inputs: {<name>: {type: circle}}}`
@@ -376,11 +375,10 @@ collection's order, each keeping its annotation's ID; a circle becomes a
 
 ### `polygon` (converter)
 
-A polygon on the app's slide, given to the pipeline as one region.
+A polygon, by its corners; one that crosses itself is made valid.
 
-It becomes a `regions` file with one polygon in level-0 pixels, keeping
-the annotation's ID. EMPAIA offers it with the region-of-interest class,
-so the viewer lets a user draw it.
+The pipeline gets it as one region in level-0 pixels, keeping the
+annotation's ID.
 
 - **Usable in:** EMPAIA provider settings `inputs:`
 - **Example:** `{inputs: {<name>: {type: polygon}}}`
@@ -405,11 +403,10 @@ read when the job is admitted and overrides the file's.
 
 ### `rectangle` (converter)
 
-A rectangle on the app's slide, given to the pipeline as one region.
+A rectangle, by its upper-left corner and size.
 
-It becomes a `regions` file with one rectangle in level-0 pixels, keeping
-the annotation's ID. EMPAIA offers it with the region-of-interest class,
-so the viewer lets a user draw it.
+The pipeline gets it as one region in level-0 pixels, keeping the
+annotation's ID.
 
 - **Usable in:** EMPAIA provider settings `inputs:`
 - **Example:** `{inputs: {<name>: {type: rectangle}}}`

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from pydantic import Field
 
 from components import EmpaiaInput, InputConverter, Options
-from components.providers.empaia.converters.rectangle import ROI_CLASS
+from components.providers.empaia.converters._drawn import ROI_CLASS
 
 
 if TYPE_CHECKING:
@@ -74,9 +74,9 @@ class Collection(InputConverter):
                 if writing fails.
         """
         from model_service.providers.empaia.app_service.regions import (
-            materialize_regions,
+            materialize_collection,
         )
 
-        return await materialize_regions(
-            gateway, item.name, self.ead_type, directory, self.options.items
+        return await materialize_collection(
+            gateway, item.name, self.options.items, directory
         )

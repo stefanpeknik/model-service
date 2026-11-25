@@ -34,6 +34,8 @@ if TYPE_CHECKING:
 REGION_TYPES = ("rectangle", "polygon", "circle")
 """The EAD annotation types that enclose an area."""
 
+REGIONS_FILE = "regions.geojson"
+
 type Point = Annotated[list[FiniteNumber], Field(min_length=2, max_length=2)]
 
 
@@ -51,7 +53,11 @@ class _Rectangle(_Annotation):
     height: PositiveNumber
 
     def geometry(self) -> BaseGeometry:
-        """The rectangle as a polygon."""
+        """The rectangle as a polygon.
+
+        Returns:
+            A polygon in level-0 pixels.
+        """
         from shapely import box
 
         x, y = self.upper_left
@@ -64,7 +70,11 @@ class _Polygon(_Annotation):
     coordinates: Annotated[list[Point], Field(min_length=3)]
 
     def geometry(self) -> BaseGeometry:
-        """The polygon, made valid if it crosses itself."""
+        """The polygon, made valid if it crosses itself.
+
+        Returns:
+            A polygon or multipolygon in level-0 pixels.
+        """
         from shapely import Polygon, make_valid
 
         return make_valid(Polygon(self.coordinates))
@@ -77,7 +87,11 @@ class _Circle(_Annotation):
     radius: PositiveNumber
 
     def geometry(self) -> BaseGeometry:
-        """The circle as a 64-sided polygon."""
+        """The circle as a 64-sided polygon.
+
+        Returns:
+            A polygon in level-0 pixels.
+        """
         from shapely import Point as ShapelyPoint
 
         return ShapelyPoint(self.center).buffer(self.radius, quad_segs=16)
@@ -155,24 +169,16 @@ def write_regions(destination: Path, regions: tuple[Region, ...]) -> None:
         ) from error
 
 
-REGIONS_FILE = "regions.geojson"
-
-
-async def materialize_regions(
-    gateway: EmpaiaGateway,
-    name: str,
-    ead_type: str,
-    directory: Path,
-    item_type: str | None = None,
+async def materialize_shape(
+    gateway: EmpaiaGateway, name: str, ead_type: str, directory: Path
 ) -> Path:
-    """Read a drawn annotation or a collection of them and write its regions.
+    """Read one drawn shape and write it as a region.
 
     Args:
         gateway: The job's gateway.
         name: The input's name.
-        ead_type: `rectangle`, `polygon`, `circle` or `collection`.
+        ead_type: `rectangle`, `polygon` or `circle`.
         directory: Where to write `regions.geojson`.
-        item_type: A collection's item type, one of the other three.
 
     Returns:
         The regions file.
@@ -181,13 +187,44 @@ async def materialize_regions(
         EmpaiaGatewayError: Not retryable if the data is invalid; retryable if
             writing fails.
     """
+    data = await gateway.get_input_data(name)
+    return await _write(directory, (region(data, ead_type, name),))
+
+
+async def materialize_collection(
+    gateway: EmpaiaGateway, name: str, item_type: str, directory: Path
+) -> Path:
+    """Read a collection of drawn shapes and write them as regions.
+
+    Args:
+        gateway: The job's gateway.
+        name: The input's name.
+        item_type: The items' type: `rectangle`, `polygon` or `circle`.
+        directory: Where to write `regions.geojson`.
+
+    Returns:
+        The regions file.
+
+    Raises:
+        EmpaiaGatewayError: Not retryable if the data is invalid; retryable if
+            writing fails.
+    """
+    data = await gateway.get_input_data(name)
+    return await _write(directory, collection_regions(data, item_type, name))
+
+
+async def _write(directory: Path, found: tuple[Region, ...]) -> Path:
+    """Write regions into `directory` on a thread.
+
+    Args:
+        directory: Where to write `regions.geojson`.
+        found: The regions.
+
+    Returns:
+        The regions file.
+    """
     import asyncio
 
-    data = await gateway.get_input_data(name)
-    if ead_type in REGION_TYPES:
-        found: tuple[Region, ...] = (region(data, ead_type, name),)
-    else:
-        found = collection_regions(data, item_type or "", name)
     target = directory / REGIONS_FILE
     await asyncio.to_thread(write_regions, target, found)
     return target

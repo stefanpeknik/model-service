@@ -1,7 +1,7 @@
 """`region_fraction`: per region, the share of scored pixels at or above a threshold.
 
-Ratiopath's `tile_annotations` cuts each region to each tile it overlaps;
-shapely tells which pixels of the tile's score map have their centre inside.
+`model_service.slides.regions` cuts each region to each tile with ratiopath's
+`tile_annotations` and finds the score map's pixels inside with rasterio.
 Regions come from the source's frame, in level-0 pixels.
 """
 
@@ -18,7 +18,6 @@ from model_service.formats import region_values
 if TYPE_CHECKING:
     from pathlib import Path
 
-    import numpy as np
     from shapely.geometry.base import BaseGeometry
 
     from components import Batch, Run
@@ -73,17 +72,13 @@ class RegionFraction(Sink):
             frame: The source's frame row.
             run: The run's `Run`.
         """
-        from shapely import STRtree, box
-
         regions = frame.get("regions")
         self._ids = [WHOLE_SLIDE] if regions is None else [r.id for r in regions]
         self._shapes: list[BaseGeometry] | None = (
             None if regions is None else [r.geometry for r in regions]
         )
-        self._tree = None if self._shapes is None else STRtree(self._shapes)
         self._tile = (int(frame["tile_extent_x"]), int(frame["tile_extent_y"]))
         self._downsample = float(frame["downsample"])
-        self._tile_box = box(0, 0, *self._tile)
         self._inside = [0] * len(self._ids)
         self._positive = [0] * len(self._ids)
         self._path: Path = (
@@ -96,6 +91,8 @@ class RegionFraction(Sink):
         Args:
             batch: `tile_x`, `tile_y` and `scores`.
         """
+        from model_service.slides.regions import tile_part, tile_pixels
+
         for x, y, scores in zip(
             batch["tile_x"], batch["tile_y"], batch["scores"], strict=True
         ):
@@ -104,53 +101,13 @@ class RegionFraction(Sink):
                 self._inside[0] += positive.size
                 self._positive[0] += int(positive.sum())
                 continue
-            for index, inside in self._regions_in_tile(int(x), int(y), positive.shape):
+            for index, shape in enumerate(self._shapes):
+                part = tile_part([shape], int(x), int(y), self._tile, self._downsample)
+                if part.area <= 0:
+                    continue
+                inside = tile_pixels(part, int(x), int(y), self._tile, positive.shape)
                 self._inside[index] += int(inside.sum())
                 self._positive[index] += int((positive & inside).sum())
-
-    def _regions_in_tile(
-        self, x: int, y: int, shape: tuple[int, ...]
-    ) -> list[tuple[int, np.ndarray]]:
-        """Which pixels of a tile's score map lie in each region overlapping the tile.
-
-        Args:
-            x: Tile origin x at the level read.
-            y: Tile origin y at the level read.
-            shape: The score map's rows and columns.
-
-        Returns:
-            Region index and boolean pixel mask, for each overlapping region.
-        """
-        import numpy as np
-        import shapely
-        from ratiopath.tiling.annotations import tile_annotations
-
-        assert self._shapes is not None and self._tree is not None
-        width, height = self._tile
-        level0 = shapely.box(
-            x * self._downsample,
-            y * self._downsample,
-            (x + width) * self._downsample,
-            (y + height) * self._downsample,
-        )
-        rows, columns = shape
-        # Pixel centres of the score map, in the level's pixels.
-        centre_x = x + (np.arange(columns) + 0.5) * width / columns
-        centre_y = y + (np.arange(rows) + 0.5) * height / rows
-        grid_x, grid_y = np.meshgrid(centre_x, centre_y)
-        found = []
-        for index in self._tree.query(level0, predicate="intersects"):
-            part = next(
-                tile_annotations(
-                    [self._shapes[int(index)]],
-                    self._tile_box,
-                    [np.array([x, y])],
-                    self._downsample,
-                )
-            )
-            if part.area > 0:
-                found.append((int(index), shapely.contains_xy(part, grid_x, grid_y)))
-        return found
 
     def close(self) -> Path:
         """Write each region's share; a region without scored pixels gets none.

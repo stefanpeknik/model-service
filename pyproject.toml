@@ -48,6 +48,7 @@ pipeline-runner = [
     "pyvips[binary]>=3.0.0,<4",
     "rationai-empaia>=0.1.2",
     "ratiopath>=1.4.0",
+    "rasterio>=1.4",
     "ray[serve]>=2.58.0",
     "shapely>=2.0",
 ]

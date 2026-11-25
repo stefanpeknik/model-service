@@ -1,7 +1,7 @@
 """Read model tiles at the slide level closest to a model's resolution.
 
-With regions, a tile is read only when it overlaps one of them by some area:
-ratiopath's `tile_annotations` intersects the tile with the level-0 regions.
+With regions, a tile is read only when it overlaps one of them by some area
+(`slides.regions.tile_part`, ratiopath's `tile_annotations`).
 With a tissue mask, only when more than `min_tissue_fraction` of its window is
 tissue (any tissue at 0). Reads are synchronous and run in the pipeline
 runner's read threads; x/y are coordinates at the selected slide level.
@@ -174,16 +174,10 @@ class TileReader:
         Returns:
             True when the tile and the regions share some area.
         """
-        from ratiopath.tiling.annotations import tile_annotations
-        from shapely import box
+        from model_service.slides.regions import tile_part
 
-        overlap = next(
-            tile_annotations(
-                [r.geometry for r in regions],
-                box(0, 0, tile_size, tile_size),
-                [np.array([x, y])],
-                self.downsample,
-            )
+        overlap = tile_part(
+            [r.geometry for r in regions], x, y, (tile_size, tile_size), self.downsample
         )
         return overlap.area > 0
 

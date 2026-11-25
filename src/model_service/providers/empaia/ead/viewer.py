@@ -71,6 +71,20 @@ def _ead_type(io_entry: Mapping[str, Any]) -> str:
     return str(io_entry["type"])
 
 
+def _kind(kinds: Mapping[str, str], io_entry: Mapping[str, Any]) -> str:
+    """The kind block of an io entry; an unknown type stays as is, which the schema refuses.
+
+    Args:
+        kinds: `INPUT_KINDS` or `OUTPUT_KINDS`.
+        io_entry: The EAD io entry.
+
+    Returns:
+        The kind, e.g. `number`.
+    """
+    ead_type = _ead_type(io_entry)
+    return kinds.get(ead_type, ead_type)
+
+
 def _parameter_block(setting: Mapping[str, Any], value: JsonValue) -> dict[str, Any]:
     """A parameter's default, inclusive bounds and choices, from its setting.
 
@@ -136,10 +150,10 @@ def viewer_config(
             continue
         setting, value = parameters.get(key, ({}, None))
         block = _parameter_block(setting, value) if key in parameters else {}
-        kind = INPUT_KINDS.get(_ead_type(io[key]), _ead_type(io[key]))
+        kind = _kind(INPUT_KINDS, io[key])
         inputs[key] = _entry(viewer.inputs.get(key), kind, block)
     outputs = {
-        key: _entry(entry, OUTPUT_KINDS.get(_ead_type(io[key]), _ead_type(io[key])), {})
+        key: _entry(entry, _kind(OUTPUT_KINDS, io[key]), {})
         for key, entry in viewer.outputs.items()
         if key in io
     }
