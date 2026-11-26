@@ -5,13 +5,13 @@ Test-only components stand in for the real ones.
 
 from __future__ import annotations
 
-import textwrap
 from typing import TYPE_CHECKING
 
 import pytest
 
 from model_service.catalog import Catalog, CatalogInvalid, environments, load_catalog
 from model_service.registry import Registry
+from tests.support.pipeline_catalog import write
 
 
 if TYPE_CHECKING:
@@ -40,12 +40,6 @@ def root(tmp_path: Path) -> Path:
     (catalog / "pipelines").mkdir()
     (tmp_path / "environments" / "test-env").mkdir(parents=True)
     return catalog
-
-
-def write(root: Path, name: str, text: str) -> None:
-    path = root / name
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(textwrap.dedent(text))
 
 
 def load(root: Path, environment: str | None = None) -> Catalog:

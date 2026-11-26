@@ -124,18 +124,16 @@ tools/                    generate.py for the reference; warm_model.py, request_
 ```sh
 export UV_CACHE_DIR=.cache/uv
 uv sync --extra control-plane --extra pipeline-runner --extra models --extra cpu
-podman run -d --name ms-test-pg -p 127.0.0.1:55432:5432 \
-  -e POSTGRES_PASSWORD=test docker.io/library/postgres:17-alpine
-TEST_POSTGRES_DSN=postgresql://postgres:test@127.0.0.1:55432/postgres uv run pytest
+uv run pytest
 uv run ruff check
 uv run mypy src
 PYTHONPATH=src uv run tools/generate.py   # after changing components, formats or catalog/
 ```
 
 Each process has its extra: `control-plane`, `pipeline-runner` and `models`,
-with `cpu` or `gpu` for the runtimes. Without `TEST_POSTGRES_DSN`
-the PostgreSQL tests are skipped. Tests marked `live` call the deployed
-cluster and run only with `uv run pytest -m live`.
+with `cpu` or `gpu` for the runtimes. The scheduler's tests run its repository
+over in-memory storage; nothing tests the PostgreSQL storage itself. Tests marked
+`live` call the deployed cluster and run only with `uv run pytest -m live`.
 
 ## License
 

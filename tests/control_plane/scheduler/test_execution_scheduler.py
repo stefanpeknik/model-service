@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, Any
 from model_service.contracts.failures import UnknownPipelineError
 from model_service.contracts.invocation import (
     ExecutionContext,
-    InputAccessContext,
     Invocation,
 )
 from model_service.contracts.result import RunResult, SharedArtifact
@@ -23,12 +22,8 @@ from model_service.control_plane.scheduler.dispatch import (
 )
 from model_service.control_plane.scheduler.execution_scheduler import ExecutionScheduler
 from model_service.control_plane.scheduler.internal_state import (
-    Admission,
-    ProcessingSucceeded,
-    ProviderFinishSucceeded,
     RenewDirective,
     RetryPolicy,
-    StaleWorkClaimError,
     WorkKind,
 )
 from model_service.control_plane.scheduler.public import (
@@ -44,7 +39,7 @@ from model_service.control_plane.scheduler.public import (
 )
 from model_service.control_plane.scheduler.running_work import ActiveWorkRegistry
 from model_service.control_plane.scheduler.status import ExecutionStatus
-from model_service.control_plane.scheduler.store.repository import (
+from model_service.control_plane.scheduler.store.storage import (
     ExecutionRepositoryUnavailableError,
 )
 from model_service.control_plane.scheduler.worker import ExecutionWorker
@@ -55,7 +50,6 @@ from tests.support.scheduling import (
     MutableClock,
     StandaloneProvider,
     resolve_test_pipeline,
-    stored_target,
 )
 
 
@@ -296,28 +290,6 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
             RunResult(outputs={}),
         )
 
-    async def test_expired_lease_rejects_settlement_before_recovery(self) -> None:
-        clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
-        repository = InMemoryExecutionRepository(clock=clock)
-        scheduler, _worker = self._scheduler_and_worker(
-            repository,
-            StandaloneProvider(),
-            FakeDispatch({}),
-            clock=clock,
-        )
-        admitted = await scheduler.schedule(self._request())
-        claim = await repository.claim_due("worker-1", timedelta(seconds=1))
-        assert claim is not None
-        clock.advance(timedelta(seconds=2))
-
-        with self.assertRaises(StaleWorkClaimError):
-            await repository.settle(
-                claim.execution_id,
-                claim.fencing_token,
-                ProcessingSucceeded(RunResult(outputs={})),
-            )
-        self.assertIsNone((await repository.get(admitted.execution.id)).result)
-
     def _start_worker(self, worker: ExecutionWorker) -> asyncio.Task[None]:
         """Start the worker polling loop and register async cleanup that cancels and joins it."""
         stop = asyncio.Event()
@@ -388,49 +360,6 @@ class ExecutionSchedulerTests(unittest.IsolatedAsyncioTestCase):
                 SubmissionIdentity("standalone", "request-1", "same-request")
             )
         )
-
-    async def test_deadline_failure_is_reported_until_provider_deadline(self) -> None:
-        clock = MutableClock(datetime(2026, 9, 17, 8, tzinfo=UTC))
-        repository = InMemoryExecutionRepository(clock=clock)
-        execution_deadline = clock() + timedelta(minutes=5)
-        report_deadline = clock() + timedelta(hours=1)
-        admission = Admission(
-            identity=SubmissionIdentity("external", "job-1", "fingerprint"),
-            target=stored_target("prostate-heatmap", ("prostate-classifier-1",)),
-            invocation=Invocation(
-                inputs={},
-                configuration={},
-                input_access=InputAccessContext(kind="external", state={}),
-                deadline_at=execution_deadline,
-            ),
-            protected_context={"credential": "secret"},
-            deadline_at=execution_deadline,
-            terminal_report_deadline_at=report_deadline,
-        )
-        await repository.admit(admission)
-        processing = await repository.claim_due("worker-1", timedelta(hours=1))
-        assert processing is not None
-        clock.advance(timedelta(minutes=6))
-
-        directive = await repository.renew(
-            processing.execution_id,
-            processing.fencing_token,
-            timedelta(minutes=1),
-        )
-        report = await repository.claim_due("worker-2", timedelta(minutes=1))
-
-        self.assertEqual(directive, "deadline_exceeded")
-        assert report is not None
-        self.assertEqual(report.kind, WorkKind.PROVIDER_FAILURE_REPORT)
-        assert report.error is not None
-        self.assertEqual(report.error.code, "execution_deadline_exceeded")
-        failed = await repository.settle(
-            report.execution_id,
-            report.fencing_token,
-            ProviderFinishSucceeded(),
-        )
-        self.assertEqual(failed.status, "failed")
-        self.assertIsNone(failed.work_kind)
 
     async def test_provider_finish_retry_uses_stored_result_without_redispatch(
         self,

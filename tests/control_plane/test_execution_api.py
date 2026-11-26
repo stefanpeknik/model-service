@@ -32,7 +32,7 @@ from model_service.control_plane.scheduler.public import (
     SchedulingUnavailableError,
 )
 from model_service.control_plane.scheduler.status import ExecutionStatus
-from model_service.control_plane.scheduler.store.repository import (
+from model_service.control_plane.scheduler.store.storage import (
     ExecutionRepositoryUnavailableError,
 )
 from model_service.control_plane.synchronous_runs import SynchronousPipelineService

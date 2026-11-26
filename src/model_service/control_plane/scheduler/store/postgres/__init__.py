@@ -1,10 +1,5 @@
-"""Persist executions in PostgreSQL through operation-scoped SQLAlchemy transactions.
+"""Executions in PostgreSQL: PostgresStorage (storage.py) reads and writes rows.
 
-Row locks protect record changes; per-model advisory locks serialize capacity checks.
-Each operation runs in its own transaction on a pooled connection, and database time
-governs leases.
-
-PostgresExecutionRepository (repository.py) delegates to one operations object
-per concern (admission, claims, settlement, maintenance), each built over the
-shared PostgresDatabase (base.py).
+Row locks guard each record's changes, one advisory lock serializes claims, and
+database time governs leases. The rules live in the shared ExecutionRepository.
 """

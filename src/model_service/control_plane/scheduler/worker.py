@@ -40,7 +40,7 @@ from model_service.control_plane.scheduler.public import (
     ProviderSuccess,
 )
 from model_service.control_plane.scheduler.status import ExecutionErrorCode
-from model_service.control_plane.scheduler.store.repository import (
+from model_service.control_plane.scheduler.store.storage import (
     ExecutionRepositoryUnavailableError,
 )
 

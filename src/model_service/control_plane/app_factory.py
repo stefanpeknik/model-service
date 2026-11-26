@@ -35,12 +35,13 @@ from model_service.control_plane.scheduler.execution_scheduler import ExecutionS
 from model_service.control_plane.scheduler.internal_state import RetryPolicy
 from model_service.control_plane.scheduler.public import SchedulingUnavailableError
 from model_service.control_plane.scheduler.settings import SchedulerSettings
-from model_service.control_plane.scheduler.store.postgres.repository import (
-    PostgresExecutionRepository,
+from model_service.control_plane.scheduler.store.postgres.storage import (
+    PostgresStorage,
 )
 from model_service.control_plane.scheduler.store.protected_context import (
     ProtectedContextCipher,
 )
+from model_service.control_plane.scheduler.store.repository import ExecutionRepository
 from model_service.control_plane.scheduler.targets import CapacityKind
 from model_service.control_plane.synchronous_runs import SynchronousPipelineService
 from model_service.providers.registry import PROVIDERS
@@ -296,10 +297,9 @@ def build_control_plane(settings: SchedulerSettings | None = None) -> FastAPI:
         return mounted.resolved
 
     cipher = ProtectedContextCipher.from_base64(config.provider_context_key)
-    repository = PostgresExecutionRepository(
-        config.database_url,
+    repository = ExecutionRepository(
+        PostgresStorage(config.database_url, pool_size=config.database_pool_size),
         cipher=cipher,
-        pool_size=config.database_pool_size,
         capacity_limits=capacity_limits(catalog, config.per_model_limit),
         processing_policy=RetryPolicy(
             max_attempts=config.processing_attempts,

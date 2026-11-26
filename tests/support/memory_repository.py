@@ -1,51 +1,46 @@
-"""Implement the execution repository in memory for deterministic local tests.
+"""The execution repository over in-memory storage, for deterministic local tests.
 
-One asyncio lock serializes operations; an injected clock permits deadline and recovery
-tests without real waiting. This adapter does not survive process exit.
+`MemoryStorage` keeps records in dictionaries behind one asyncio lock, so units
+never interleave; an injected clock permits deadline and recovery tests without
+real waiting. A unit's writes apply when it ends without an error.
 """
 
 from __future__ import annotations
 
 import asyncio
+import base64
 import inspect
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
-from uuid import uuid4
 
-from model_service.contracts.invocation import ExecutionContext, Invocation
-from model_service.contracts.result import RunResult
-from model_service.control_plane.scheduler.internal_state import (
-    Admission,
-    AdmissionResult,
-    ExecutionRecord,
-    RenewDirective,
-    RetryPolicy,
-    Settlement,
-    WorkClaim,
-    WorkKind,
+from model_service.control_plane.scheduler.internal_state import RetryPolicy
+from model_service.control_plane.scheduler.public import UnknownExecutionError
+from model_service.control_plane.scheduler.store.protected_context import (
+    ProtectedContextCipher,
 )
-from model_service.control_plane.scheduler.public import (
-    ScheduleConflictError,
-    UnknownExecutionError,
-)
-from model_service.control_plane.scheduler.status import ExecutionStatus
 from model_service.control_plane.scheduler.store.repository import ExecutionRepository
-from model_service.control_plane.scheduler.transitions.common import work_deadline_at
-from model_service.control_plane.scheduler.transitions.execution_transitions import (
-    ExecutionTransitions,
+from model_service.control_plane.scheduler.store.storage import (
+    ExecutionStorage,
+    StorageUnit,
 )
 
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Mapping
 
+    from model_service.contracts.invocation import ExecutionContext, Invocation
     from model_service.contracts.pipeline_http import PipelineRunRequest
+    from model_service.contracts.result import RunResult
+    from model_service.control_plane.scheduler.internal_state import ExecutionRecord
     from model_service.control_plane.scheduler.public import SubmissionIdentity
-    from model_service.control_plane.scheduler.targets import (
-        CapacityKey,
-        CapacityLimits,
-    )
+    from model_service.control_plane.scheduler.targets import CapacityLimits
+
+
+TEST_CIPHER = ProtectedContextCipher.from_base64(
+    base64.urlsafe_b64encode(bytes(range(32))).decode()
+)
 
 
 def utc_now() -> datetime:
@@ -53,8 +48,129 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+class MemoryStorage(ExecutionStorage):
+    """Executions and their sealed contexts in dictionaries.
+
+    Attributes:
+        executions: Records by ID, without their contexts.
+        contexts: Sealed provider contexts by execution ID.
+    """
+
+    def __init__(self, clock: Callable[[], datetime] = utc_now) -> None:
+        """Start empty.
+
+        Args:
+            clock: The storage's clock.
+        """
+        self._clock = clock
+        self._lock = asyncio.Lock()
+        self.executions: dict[str, ExecutionRecord] = {}
+        self.contexts: dict[str, bytes] = {}
+
+    @asynccontextmanager
+    async def unit(self) -> AsyncIterator[StorageUnit]:
+        """Hold the lock for the unit and apply its writes if it ends without an error.
+
+        Yields:
+            The unit.
+        """
+        async with self._lock:
+            unit = _MemoryUnit(self, self._clock)
+            yield unit
+            self.executions.update(unit.executions)
+            self.contexts.update(unit.contexts)
+
+    async def check_ready(self) -> None:
+        """Wait for the lock, as a storage that answers would."""
+        async with self._lock:
+            return
+
+
+class _MemoryUnit(StorageUnit):
+    """Reads see the storage plus this unit's writes; the storage applies them on success."""
+
+    def __init__(self, storage: MemoryStorage, clock: Callable[[], datetime]) -> None:
+        """Start with no writes.
+
+        Args:
+            storage: The storage the unit reads and, on success, writes.
+            clock: The storage's clock.
+        """
+        self._storage = storage
+        self._clock = clock
+        self.executions: dict[str, ExecutionRecord] = {}
+        self.contexts: dict[str, bytes] = {}
+
+    def _all(self) -> dict[str, ExecutionRecord]:
+        """Stored records overlaid with this unit's writes."""
+        return self._storage.executions | self.executions
+
+    async def now(self) -> datetime:
+        """Read the injected clock."""
+        return self._clock()
+
+    async def lock_claims(self) -> None:
+        """Do nothing: units never interleave."""
+        return None  # The storage lock already serializes every unit.
+
+    async def insert(self, execution: ExecutionRecord, sealed_context: bytes) -> bool:
+        """Add the execution unless its provider and key are taken."""
+        if await self.find(execution.identity) is not None:
+            return False
+        await self.save(execution, sealed_context=sealed_context)
+        return True
+
+    async def find(self, identity: SubmissionIdentity) -> ExecutionRecord | None:
+        """Return the execution with this provider and key, if any."""
+        return next(
+            (
+                e
+                for e in self._all().values()
+                if (e.identity.provider, e.identity.key)
+                == (identity.provider, identity.key)
+            ),
+            None,
+        )
+
+    async def get(self, execution_id: str, *, lock: bool = False) -> ExecutionRecord:
+        """Return one execution; `lock` changes nothing, as units never interleave."""
+        try:
+            return self._all()[execution_id]
+        except KeyError as error:
+            raise UnknownExecutionError(execution_id) from error
+
+    async def get_many(self, execution_ids: Collection[str]) -> list[ExecutionRecord]:
+        """Return the executions that exist, in the order requested."""
+        found = self._all()
+        return [found[i] for i in execution_ids if i in found]
+
+    async def with_work(self) -> list[ExecutionRecord]:
+        """Return every execution with pending work or a lease."""
+        return [
+            e
+            for e in self._all().values()
+            if e.work_kind is not None or e.fencing_token is not None
+        ]
+
+    async def sealed_context(self, execution_id: str) -> bytes:
+        """Return the execution's sealed context."""
+        return (self._storage.contexts | self.contexts)[execution_id]
+
+    async def save(
+        self, execution: ExecutionRecord, *, sealed_context: bytes | None = None
+    ) -> None:
+        """Record the new state, without its context, for the storage to apply."""
+        self.executions[execution.id] = replace(execution, protected_context={})
+        if sealed_context is not None:
+            self.contexts[execution.id] = sealed_context
+
+
 class InMemoryExecutionRepository(ExecutionRepository):
-    """Mirror durable repository semantics using dictionaries and the shared execution state machine."""
+    """The production repository over `MemoryStorage`, with test defaults.
+
+    Attributes:
+        storage: The storage, for tests that inspect what is at rest.
+    """
 
     def __init__(
         self,
@@ -65,289 +181,28 @@ class InMemoryExecutionRepository(ExecutionRepository):
         processing_policy: RetryPolicy | None = None,
         finish_policy: RetryPolicy | None = None,
     ) -> None:
-        """Set capacity and retry policies, create the state machine, and start with empty records under one async lock."""
-        self._clock = clock
-        self._capacity_limit = capacity_limits or fixed_limit(per_model_limit)
-        self._processing_policy = processing_policy or RetryPolicy(
+        """Build the repository over a new `MemoryStorage` with the test cipher.
+
+        Args:
+            clock: The storage's clock.
+            per_model_limit: Slots of every capacity key, unless `capacity_limits` is given.
+            capacity_limits: Slots per capacity key.
+            processing_policy: Processing retry policy; 3 attempts by default.
+            finish_policy: Provider finish retry policy; 3 attempts by default.
+        """
+        default_policy = RetryPolicy(
             max_attempts=3,
             initial_backoff=timedelta(seconds=5),
             maximum_backoff=timedelta(minutes=1),
         )
-        self._finish_policy = finish_policy or RetryPolicy(
-            max_attempts=3,
-            initial_backoff=timedelta(seconds=5),
-            maximum_backoff=timedelta(minutes=1),
+        self.storage = MemoryStorage(clock)
+        super().__init__(
+            self.storage,
+            cipher=TEST_CIPHER,
+            capacity_limits=capacity_limits or fixed_limit(per_model_limit),
+            processing_policy=processing_policy or default_policy,
+            finish_policy=finish_policy or default_policy,
         )
-        self._transitions = ExecutionTransitions(
-            self._processing_policy,
-            self._finish_policy,
-        )
-        self._executions: dict[str, ExecutionRecord] = {}
-        self._submissions: dict[tuple[str, str], str] = {}
-        self._lock = asyncio.Lock()
-
-    async def aclose(self) -> None:
-        return None
-
-    async def check_ready(self) -> None:
-        """Acquire the repository lock to confirm this in-process adapter is available."""
-        async with self._operation():
-            return
-
-    async def maintain(self) -> None:
-        """Expire deadlines and recover abandoned claims under the repository lock."""
-        async with self._operation():
-            now = self._clock()
-            self._expire_deadlines(now)
-            self._recover_expired_leases(now)
-
-    async def find_submission(
-        self,
-        identity: SubmissionIdentity,
-    ) -> ExecutionRecord | None:
-        """Look up the provider/key pair and reject a replay with a changed fingerprint."""
-        async with self._operation():
-            execution_id = self._submissions.get((identity.provider, identity.key))
-            if execution_id is None:
-                return None
-            execution = self._executions[execution_id]
-            self._check_fingerprint(execution, identity)
-            return execution
-
-    async def admit(self, admission: Admission) -> AdmissionResult:
-        """Create one execution per provider/key pair or return its identical replay while holding the lock."""
-        async with self._operation():
-            key = (admission.identity.provider, admission.identity.key)
-            existing_id = self._submissions.get(key)
-            if existing_id is not None:
-                existing = self._executions[existing_id]
-                self._check_fingerprint(existing, admission.identity)
-                return AdmissionResult(existing, created=False)
-            now = self._clock()
-            execution = self._transitions.admission.admit(
-                admission,
-                str(uuid4()),
-                now,
-            )
-            self._executions[execution.id] = execution
-            self._submissions[key] = execution.id
-            return AdmissionResult(execution, created=True)
-
-    async def get(self, execution_id: str) -> ExecutionRecord:
-        """Return a record under the lock, raising UnknownExecutionError if absent."""
-        async with self._operation():
-            return self._get(execution_id)
-
-    async def get_many(self, execution_ids: Collection[str]) -> list[ExecutionRecord]:
-        async with self._operation():
-            return [
-                self._executions[value]
-                for value in execution_ids
-                if value in self._executions
-            ]
-
-    async def request_cancel(self, execution_id: str) -> ExecutionRecord:
-        """Apply cancellation atomically and store the record with its previous claim invalidated."""
-        async with self._operation():
-            execution = self._get(execution_id)
-            cancelled = self._transitions.admission.cancel(execution, self._clock())
-            self._store(cancelled)
-            return cancelled
-
-    async def claim_due(
-        self,
-        owner: str,
-        lease_duration: timedelta,
-    ) -> WorkClaim | None:
-        """Lease the highest-priority due work with a free slot in every pool it uses."""
-        async with self._operation():
-            now = self._clock()
-            active = self._active_processing(now)
-            due = [
-                execution
-                for execution in self._executions.values()
-                if execution.work_kind is not None
-                and execution.next_attempt_at is not None
-                and execution.next_attempt_at <= now
-                and execution.fencing_token is None
-            ]
-            first_created: dict[object, datetime] = {}
-            top_priority: dict[object, int] = {}
-            for execution in due:
-                if execution.work_kind is WorkKind.PROCESSING:
-                    group = _group(execution)
-                    first_created[group] = min(
-                        first_created.get(group, execution.created_at),
-                        execution.created_at,
-                    )
-                    top_priority[group] = max(
-                        top_priority.get(group, execution.priority),
-                        execution.priority,
-                    )
-
-            def order(item: ExecutionRecord) -> tuple[object, ...]:
-                rank: tuple[object, ...]
-                if item.work_kind is WorkKind.PROCESSING:
-                    group = _group(item)
-                    rank = (-top_priority[group], first_created[group])
-                else:
-                    rank = (-item.priority, item.next_attempt_at)
-                return (
-                    item.work_kind is WorkKind.PROCESSING,
-                    *rank,
-                    -item.priority,
-                    item.next_attempt_at,
-                    item.created_at,
-                )
-
-            for execution in sorted(due, key=order):
-                keys = execution.target.capacity_keys
-                if execution.work_kind is WorkKind.PROCESSING and any(
-                    active.get(key, 0) >= self._capacity_limit(key) for key in keys
-                ):
-                    continue
-                token = str(uuid4())
-                if execution.work_kind is WorkKind.PROCESSING:
-                    for key in keys:
-                        active[key] = active.get(key, 0) + 1
-                claimed = self._transitions.leases.claim(
-                    execution,
-                    owner=owner,
-                    fencing_token=token,
-                    lease_duration=lease_duration,
-                    now=now,
-                )
-                self._executions[execution.id] = claimed.execution
-                return claimed.claim
-            return None
-
-    async def renew(
-        self,
-        execution_id: str,
-        fencing_token: str,
-        lease_duration: timedelta,
-    ) -> RenewDirective:
-        """Apply the shared renewal decision and persist any state change before returning its directive."""
-        async with self._operation():
-            execution = self._get(execution_id)
-            now = self._clock()
-            decision = self._transitions.leases.decide_renewal(
-                execution,
-                fencing_token=fencing_token,
-                lease_duration=lease_duration,
-                now=now,
-            )
-            if decision.execution is not None:
-                self._store(decision.execution)
-            return decision.directive
-
-    async def settle(
-        self,
-        execution_id: str,
-        fencing_token: str,
-        settlement: Settlement,
-    ) -> ExecutionRecord:
-        """Apply a token-checked settlement; persist deadline changes before raising a rejection."""
-        async with self._operation():
-            execution = self._get(execution_id)
-            now = self._clock()
-            decision = self._transitions.outcomes.decide_settlement(
-                execution,
-                fencing_token,
-                settlement,
-                now,
-            )
-            if decision.execution is not None:
-                self._store(decision.execution)
-            return decision.accepted_execution()
-
-    async def mark_finish_mutation_started(
-        self,
-        execution_id: str,
-        fencing_token: str,
-    ) -> None:
-        """Atomically validate and mark the boundary before a provider's external mutation."""
-        async with self._operation():
-            execution = self._get(execution_id)
-            self._executions[execution_id] = (
-                self._transitions.outcomes.mark_finish_mutation_started(
-                    execution,
-                    fencing_token,
-                    self._clock(),
-                )
-            )
-
-    def _recover_expired_leases(self, now: datetime) -> None:
-        """Replace each abandoned leased record with its shared recovery decision."""
-        for execution in tuple(self._executions.values()):
-            if (
-                execution.fencing_token is None
-                or execution.lease_expires_at is None
-                or execution.lease_expires_at > now
-            ):
-                continue
-            self._store(self._transitions.expiry.recover_expired(execution, now))
-
-    @asynccontextmanager
-    async def _operation(self) -> AsyncIterator[None]:
-        async with self._lock:
-            yield
-
-    def _store(self, execution: ExecutionRecord) -> None:
-        self._executions[execution.id] = execution
-
-    def _active_processing(self, now: datetime) -> dict[CapacityKey, int]:
-        """Count only processing claims with an unexpired lease per capacity key."""
-        counts: dict[CapacityKey, int] = {}
-        for execution in self._executions.values():
-            if (
-                execution.work_kind is WorkKind.PROCESSING
-                and execution.fencing_token is not None
-                and execution.lease_expires_at is not None
-                and execution.lease_expires_at > now
-            ):
-                for key in execution.target.capacity_keys:
-                    counts[key] = counts.get(key, 0) + 1
-        return counts
-
-    def _expire_deadlines(self, now: datetime) -> None:
-        """Apply the appropriate execution or reporting deadline to records that still have work."""
-        for execution in tuple(self._executions.values()):
-            deadline_at = work_deadline_at(execution)
-            if deadline_at <= now and (
-                execution.status
-                not in {
-                    ExecutionStatus.SUCCEEDED,
-                    ExecutionStatus.FAILED,
-                    ExecutionStatus.CANCELLED,
-                }
-                or execution.work_kind is not None
-            ):
-                self._store(self._transitions.expiry.deadline(execution, now))
-
-    @staticmethod
-    def _check_fingerprint(
-        execution: ExecutionRecord,
-        identity: SubmissionIdentity,
-    ) -> None:
-        """Reject different request contents under the same provider submission key."""
-        if execution.identity.fingerprint != identity.fingerprint:
-            raise ScheduleConflictError(
-                "submission identity was reused with a different request"
-            )
-
-    def _get(self, execution_id: str) -> ExecutionRecord:
-        """Resolve an execution ID or translate a dictionary miss into UnknownExecutionError."""
-        try:
-            return self._executions[execution_id]
-        except KeyError as error:
-            raise UnknownExecutionError(execution_id) from error
-
-
-def _group(execution: ExecutionRecord) -> object:
-    """Processing rows compete as groups: by models, a model-free one by ID."""
-    target = execution.target
-    return (target.models, target.pipeline_id if not target.models else None)
 
 
 type Handler = Callable[

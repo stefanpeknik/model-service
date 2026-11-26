@@ -13,10 +13,10 @@ from psycopg.conninfo import conninfo_to_dict
 from yoyo import get_backend, read_migrations
 from yoyo.exceptions import BadMigration, LockTimeout, MigrationConflict
 
-from model_service.control_plane.scheduler.store.repository import (
+from model_service.control_plane.scheduler.store.rows import DEFAULT_SCHEMA
+from model_service.control_plane.scheduler.store.storage import (
     ExecutionRepositoryUnavailableError,
 )
-from model_service.control_plane.scheduler.store.rows import DEFAULT_SCHEMA
 
 
 MIGRATIONS_DIRECTORY = Path(__file__).with_name("migrations")

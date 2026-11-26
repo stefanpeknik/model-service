@@ -24,8 +24,7 @@ files in `catalog/` built from **components** in `src/components/`.
 designs and the plans that replaced them. They are records, not instructions.
 
 Keep documentation aligned with changes. Record live validation separately from
-local test results, in a dated file under `docs/operations/`. Tests need
-`TEST_POSTGRES_DSN` for the PostgreSQL suite (see README).
+local test results, in a dated file under `docs/operations/`.
 
 Keep Git changes local; never push. Runtime operations need authorization for
 the active task, not merely a command copied from an old runbook. Preserve

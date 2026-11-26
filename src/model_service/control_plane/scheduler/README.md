@@ -16,9 +16,11 @@ moves it through processing and provider finish.
 | `transitions/` | Every state change: admit, claim, renew, settle, cancel, lease recovery, deadlines. `ExecutionTransitions` holds one object per concern (`admission`, `leases`, `outcomes`, `expiry`); leases and outcomes get the expiry object for deadline checks |
 | `public.py`, `internal_state.py`, `status.py` | Public request/view types, internal records, statuses |
 | `protocols.py` | The `Scheduler` interface the control plane uses |
-| `store/repository.py` | The persistence interface |
+| `queue.py` | Which work is due, which attempt is claimed next (provider work first, then processing with a free slot in each pool), what maintenance fixes |
+| `store/repository.py` | `ExecutionRepository`: every operation (admit, claim, renew, settle, cancel, maintain) as one transaction over a storage, applying `queue.py` and `transitions/`; encrypts provider contexts and drops them once work ends |
+| `store/storage.py` | What a storage must do: read and write records in transactions, and serialize claims |
 | `targets.py` | What an execution runs, and its capacity keys |
-| `store/postgres/` | PostgreSQL implementation; an advisory lock per capacity key (model, or a model-free pipeline), tried in sorted order, serializes capacity checks. `PostgresExecutionRepository` delegates to one operations class per concern (admission, claims, settlement, maintenance), each built over `PostgresDatabase` (pool, transactions, row mapping) |
+| `store/postgres/` | `PostgresStorage`: rows over a pooled connection; row locks guard each record's changes and one transaction-scoped advisory lock serializes claims |
 | `store/migrations/` | Yoyo migrations, applied at startup ([guide](store/migrations/README.md)) |
 | `store/protected_context.py` | AES-GCM encryption of provider secrets at rest |
 
@@ -47,7 +49,7 @@ cancel ────────────────────────�
   maintenance pass (every poll interval) recovers it. Every write checks the
   fencing token, so a stale worker cannot overwrite a newer attempt.
 
-Tests: `tests/control_plane/scheduler/test_execution_scheduler.py` (behaviour, in-memory repository),
-`tests/support/repository_contract.py` (shared by both repositories) and
-`tests/control_plane/scheduler/test_postgres_execution_repository.py` (PostgreSQL concurrency and
-migrations; set `TEST_POSTGRES_DSN`).
+Tests: `tests/control_plane/scheduler/test_execution_scheduler.py` (scheduler and worker behaviour)
+and `tests/control_plane/scheduler/test_execution_repository.py` (claim order, capacity, leases,
+deadlines, credentials), both on `ExecutionRepository` over the in-memory storage in
+`tests/support/memory_repository.py`. No test runs `PostgresStorage` or the migrations.

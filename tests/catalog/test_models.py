@@ -2,21 +2,19 @@
 
 from __future__ import annotations
 
-import textwrap
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
 from model_service.catalog import CatalogInvalid, load_catalog
+from tests.support.pipeline_catalog import write
 
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from model_service.catalog.models import Model
 
-
-REPO = Path(__file__).resolve().parents[2]
-CATALOG = REPO / "catalog"
 
 MODEL = """
     loader: {use: local, path: /weights/model.onnx}
@@ -31,12 +29,6 @@ MODEL = """
 @pytest.fixture
 def root(tmp_path: Path) -> Path:
     return tmp_path / "catalog"
-
-
-def write(root: Path, name: str, text: str) -> None:
-    path = root / name
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(textwrap.dedent(text))
 
 
 def served(root: Path, model_id: str = "m1") -> Model:

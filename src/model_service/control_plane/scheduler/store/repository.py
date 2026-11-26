@@ -1,13 +1,23 @@
-"""Specify atomic persistence operations used by the scheduler and worker.
+"""The execution repository: atomic admission, claims, settlement and maintenance.
 
-The PostgreSQL and in-memory adapters apply the same ExecutionTransitions rules.
-Adapters translate storage failures into ExecutionRepositoryUnavailableError.
+Every rule lives here and in `transitions/` and `queue.py`; a storage only reads and
+writes records. Provider contexts are encrypted here, so storage never holds them
+in plain text, and dropped once an execution has no work left.
 """
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+import logging
+from dataclasses import replace
 from typing import TYPE_CHECKING
+from uuid import uuid4
+
+from model_service.control_plane.scheduler.internal_state import AdmissionResult
+from model_service.control_plane.scheduler.public import ScheduleConflictError
+from model_service.control_plane.scheduler.queue import WorkQueue
+from model_service.control_plane.scheduler.transitions.execution_transitions import (
+    ExecutionTransitions,
+)
 
 
 if TYPE_CHECKING:
@@ -16,37 +26,91 @@ if TYPE_CHECKING:
 
     from model_service.control_plane.scheduler.internal_state import (
         Admission,
-        AdmissionResult,
         ExecutionRecord,
         RenewDirective,
+        RetryPolicy,
         Settlement,
         WorkClaim,
     )
     from model_service.control_plane.scheduler.public import SubmissionIdentity
+    from model_service.control_plane.scheduler.store.protected_context import (
+        ProtectedContextCipher,
+    )
+    from model_service.control_plane.scheduler.store.storage import (
+        ExecutionStorage,
+        StorageUnit,
+    )
+    from model_service.control_plane.scheduler.targets import CapacityLimits
 
 
-class ExecutionRepository(ABC):
-    """Provide replay-safe admission, leased claims, settlement, and maintenance of durable executions."""
+logger = logging.getLogger(__name__)
 
-    @abstractmethod
+
+class ExecutionRepository:
+    """Replay-safe admission, leased claims, settlement and maintenance over a storage."""
+
+    def __init__(
+        self,
+        storage: ExecutionStorage,
+        *,
+        cipher: ProtectedContextCipher,
+        capacity_limits: CapacityLimits,
+        processing_policy: RetryPolicy,
+        finish_policy: RetryPolicy,
+    ) -> None:
+        """Keep the storage and build the state machine over the retry policies.
+
+        Args:
+            storage: Where executions live.
+            cipher: Cipher for provider contexts at rest.
+            capacity_limits: Attempts allowed at once per capacity key (a model,
+                or a model-free pipeline).
+            processing_policy: Processing retry policy.
+            finish_policy: Provider finish retry policy.
+        """
+        self._storage = storage
+        self._cipher = cipher
+        self._transitions = ExecutionTransitions(processing_policy, finish_policy)
+        self._queue = WorkQueue(capacity_limits, self._transitions.expiry)
+
+    async def initialize(self) -> None:
+        """Prepare the storage before first use."""
+        await self._storage.initialize()
+
+    async def aclose(self) -> None:
+        """Release the storage's resources."""
+        await self._storage.aclose()
+
     async def check_ready(self) -> None:
-        """Check that storage is accessible without requiring Ray.
+        """Check that the storage answers.
 
         Raises:
             ExecutionRepositoryUnavailableError: Storage is unavailable.
         """
-        ...
+        await self._storage.check_ready()
 
-    @abstractmethod
     async def maintain(self) -> None:
-        """Expire deadlines and recover abandoned leases.
+        """Expire passed deadlines and recover abandoned leases, one execution at a time.
 
         Raises:
             ExecutionRepositoryUnavailableError: Storage is unavailable.
         """
-        ...
+        async with self._storage.unit() as unit:
+            now = await unit.now()
+            stale = [
+                execution.id
+                for execution in await unit.with_work()
+                if self._queue.maintenance_change(execution, now) is not None
+            ]
+        for execution_id in stale:
+            async with self._storage.unit() as unit:
+                # Checked again under the lock: a worker may have settled it since.
+                changed = self._queue.maintenance_change(
+                    await unit.get(execution_id, lock=True), await unit.now()
+                )
+                if changed is not None:
+                    await self._save(unit, changed)
 
-    @abstractmethod
     async def find_submission(
         self,
         identity: SubmissionIdentity,
@@ -63,9 +127,12 @@ class ExecutionRepository(ABC):
             ScheduleConflictError: The key was used for a request with a different fingerprint.
             ExecutionRepositoryUnavailableError: Storage is unavailable.
         """
-        ...
+        async with self._storage.unit() as unit:
+            execution = await unit.find(identity)
+        if execution is not None:
+            _check_fingerprint(execution, identity)
+        return execution
 
-    @abstractmethod
     async def admit(self, admission: Admission) -> AdmissionResult:
         """Atomically insert a prepared execution or return the existing identical submission.
 
@@ -79,25 +146,37 @@ class ExecutionRepository(ABC):
             ScheduleConflictError: A concurrent submission used the key for a different request.
             ExecutionRepositoryUnavailableError: Storage is unavailable.
         """
-        ...
+        sealed = self._cipher.encrypt(admission.protected_context)
+        async with self._storage.unit() as unit:
+            execution = self._transitions.admission.admit(
+                admission, str(uuid4()), await unit.now()
+            )
+            if await unit.insert(execution, sealed):
+                return AdmissionResult(
+                    replace(execution, protected_context={}), created=True
+                )
+            existing = await unit.find(admission.identity)
+        if existing is None:
+            raise RuntimeError("conflicting admission disappeared")
+        _check_fingerprint(existing, admission.identity)
+        return AdmissionResult(existing, created=False)
 
-    @abstractmethod
     async def get(self, execution_id: str) -> ExecutionRecord:
-        """Return the internal record or raise UnknownExecutionError for an absent ID.
+        """Return the record, without its protected context.
 
         Args:
             execution_id: ID of the execution.
 
         Returns:
-            The record, without its protected context.
+            The record.
 
         Raises:
             UnknownExecutionError: No execution has this ID.
             ExecutionRepositoryUnavailableError: Storage is unavailable.
         """
-        ...
+        async with self._storage.unit() as unit:
+            return await unit.get(execution_id)
 
-    @abstractmethod
     async def get_many(self, execution_ids: Collection[str]) -> list[ExecutionRecord]:
         """Return the records that exist, in the order requested.
 
@@ -110,9 +189,9 @@ class ExecutionRepository(ABC):
         Raises:
             ExecutionRepositoryUnavailableError: Storage is unavailable.
         """
-        ...
+        async with self._storage.unit() as unit:
+            return await unit.get_many(execution_ids)
 
-    @abstractmethod
     async def request_cancel(self, execution_id: str) -> ExecutionRecord:
         """Record cancellation and invalidate the active claim, leaving terminal executions unchanged.
 
@@ -126,17 +205,23 @@ class ExecutionRepository(ABC):
             UnknownExecutionError: No execution has this ID.
             ExecutionRepositoryUnavailableError: Storage is unavailable.
         """
-        ...
+        async with self._storage.unit() as unit:
+            execution = await unit.get(execution_id, lock=True)
+            cancelled = self._transitions.admission.cancel(execution, await unit.now())
+            if cancelled is not execution:
+                await self._save(unit, cancelled)
+            return cancelled
 
-    @abstractmethod
     async def claim_due(
         self,
         owner: str,
         lease_duration: timedelta,
     ) -> WorkClaim | None:
-        """Lease one eligible attempt.
+        """Lease the next attempt; see `WorkQueue.pick_claim` for the order.
 
-        Provider work comes first; processing respects each model's capacity.
+        Claims take the storage's claim lock, so two never count the same free
+        slot. An execution whose context cannot be decrypted fails in place and
+        this call claims nothing.
 
         Args:
             owner: ID of the claiming worker.
@@ -148,9 +233,34 @@ class ExecutionRepository(ABC):
         Raises:
             ExecutionRepositoryUnavailableError: Storage is unavailable.
         """
-        ...
+        async with self._storage.unit() as unit:
+            await unit.lock_claims()
+            now = await unit.now()
+            chosen = self._queue.pick_claim(await unit.with_work(), now)
+            if chosen is None:
+                return None
+            execution = await unit.get(chosen.id, lock=True)
+            if not self._queue.is_due(execution, now):
+                return None
+            try:
+                context = self._cipher.decrypt(await unit.sealed_context(execution.id))
+            except ValueError:  # Includes ProtectedContextError: a bad envelope or key.
+                logger.error(
+                    "execution %s has an unreadable provider context", execution.id
+                )
+                # The stored bytes stay, in case the key was wrong.
+                await unit.save(self._transitions.outcomes.unreadable(execution, now))
+                return None
+            claimed = self._transitions.leases.claim(
+                replace(execution, protected_context=context),
+                owner=owner,
+                fencing_token=str(uuid4()),
+                lease_duration=lease_duration,
+                now=now,
+            )
+            await self._save(unit, claimed.execution)
+        return claimed.claim
 
-    @abstractmethod
     async def renew(
         self,
         execution_id: str,
@@ -171,9 +281,17 @@ class ExecutionRepository(ABC):
             UnknownExecutionError: No execution has this ID.
             ExecutionRepositoryUnavailableError: Storage is unavailable.
         """
-        ...
+        async with self._storage.unit() as unit:
+            decision = self._transitions.leases.decide_renewal(
+                await unit.get(execution_id, lock=True),
+                fencing_token=fencing_token,
+                lease_duration=lease_duration,
+                now=await unit.now(),
+            )
+            if decision.execution is not None:
+                await self._save(unit, decision.execution)
+        return decision.directive
 
-    @abstractmethod
     async def settle(
         self,
         execution_id: str,
@@ -181,6 +299,8 @@ class ExecutionRepository(ABC):
         settlement: Settlement,
     ) -> ExecutionRecord:
         """Apply an attempt's outcome only with a current token, unexpired lease, and valid deadline.
+
+        A rejection still commits the state change a passed deadline brings.
 
         Args:
             execution_id: ID of the claimed execution.
@@ -195,9 +315,17 @@ class ExecutionRepository(ABC):
             StaleWorkClaimError: The token or lease is no longer current, the deadline passed, or the work kind does not match.
             ExecutionRepositoryUnavailableError: Storage is unavailable.
         """
-        ...
+        async with self._storage.unit() as unit:
+            decision = self._transitions.outcomes.decide_settlement(
+                await unit.get(execution_id, lock=True),
+                fencing_token,
+                settlement,
+                await unit.now(),
+            )
+            if decision.execution is not None:
+                await self._save(unit, decision.execution)
+        return decision.accepted_execution()
 
-    @abstractmethod
     async def mark_finish_mutation_started(
         self,
         execution_id: str,
@@ -214,8 +342,37 @@ class ExecutionRepository(ABC):
             StaleWorkClaimError: The claim is not provider work or is no longer current.
             ExecutionRepositoryUnavailableError: Storage is unavailable.
         """
-        ...
+        async with self._storage.unit() as unit:
+            marked = self._transitions.outcomes.mark_finish_mutation_started(
+                await unit.get(execution_id, lock=True),
+                fencing_token,
+                await unit.now(),
+            )
+            await self._save(unit, marked)
+
+    async def _save(self, unit: StorageUnit, execution: ExecutionRecord) -> None:
+        """Write a record, dropping its context once no work will use the credential again."""
+        await unit.save(
+            execution,
+            sealed_context=(
+                self._cipher.encrypt({}) if execution.work_kind is None else None
+            ),
+        )
 
 
-class ExecutionRepositoryUnavailableError(RuntimeError):
-    """Hide driver-specific storage failures behind the repository's availability contract."""
+def _check_fingerprint(
+    execution: ExecutionRecord, identity: SubmissionIdentity
+) -> None:
+    """Reject reuse of a provider/key identity with different request contents.
+
+    Args:
+        execution: Stored execution with that identity.
+        identity: Identity of the new submission.
+
+    Raises:
+        ScheduleConflictError: The fingerprints differ.
+    """
+    if execution.identity.fingerprint != identity.fingerprint:
+        raise ScheduleConflictError(
+            "submission identity was reused with a different request"
+        )

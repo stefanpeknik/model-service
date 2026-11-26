@@ -87,7 +87,7 @@ class ExecutionRuntimeTests(RuntimeTestCase):
             patch.object(repository, "initialize", initialized, create=True),
             patch.object(repository, "maintain", side_effect=maintained.set),
             patch(
-                "model_service.control_plane.app_factory.PostgresExecutionRepository",
+                "model_service.control_plane.app_factory.ExecutionRepository",
                 return_value=repository,
             ),
             patch(
@@ -110,7 +110,7 @@ class ExecutionRuntimeTests(RuntimeTestCase):
         with (
             patch.object(repository, "initialize", initialized, create=True),
             patch(
-                "model_service.control_plane.app_factory.PostgresExecutionRepository",
+                "model_service.control_plane.app_factory.ExecutionRepository",
                 return_value=repository,
             ),
             patch(
@@ -144,7 +144,7 @@ class ExecutionRuntimeTests(RuntimeTestCase):
         with (
             patch.object(repository, "initialize", AsyncMock(), create=True),
             patch(
-                "model_service.control_plane.app_factory.PostgresExecutionRepository",
+                "model_service.control_plane.app_factory.ExecutionRepository",
                 return_value=repository,
             ),
             patch(

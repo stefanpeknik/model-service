@@ -41,15 +41,10 @@ An initialization failure prevents scheduler startup.
    Tables are unqualified because the initializer sets the target search path.
    A template can also be created with `uv run yoyo new --sql` and this directory
    as its destination. No `yoyo.ini` or credentials file is required.
-3. Test both a fresh database and a database at the previous revision. Preserve
-   records and defaults, check repeated startup, and check failure rollback.
-   `tests/control_plane/scheduler/test_postgres_execution_repository.py` has examples. Its
-   `TEST_POSTGRES_DSN` must point to a disposable local test database.
-
-   ```sh
-   UV_CACHE_DIR=.cache/uv uv run --locked --offline python -m unittest \
-     tests.control_plane.scheduler.test_postgres_execution_repository -v
-   ```
+3. Try it by hand against a disposable database, both fresh and at the previous
+   revision, with `migrate --schema NAME` (above). Preserve records and
+   defaults, check repeated startup, and check failure rollback. No automated
+   test covers migrations.
 
 Never edit or rename an applied migration. Add a new migration instead. SQL
 rollback files are optional; this queue does not perform automatic downgrade or

@@ -140,9 +140,8 @@ many executions at once.
   claimable only while each has one free, across all control-plane replicas. A model's
   slots are its file's `serving.max_concurrent_runs`, or `PER_MODEL_LIMIT`
   (default 1) when left out. A pipeline calling no model has its own pool,
-  keyed by its ID, with `PER_MODEL_LIMIT` slots. Claims take one PostgreSQL
-  advisory lock per pool, tried in sorted order, so overlapping claims
-  never wait on each other.
+  keyed by its ID, with `PER_MODEL_LIMIT` slots. Claims take turns under one
+  PostgreSQL advisory lock, so two replicas never count the same free slot.
 - The pipeline runner returns 429 when full; the scheduler requeues without
   spending an attempt. Ray Serve's own non-JSON 503 (replica queue full, none
   running) counts the same. Synchronous callers get 429 with `Retry-After`.

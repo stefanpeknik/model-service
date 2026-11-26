@@ -739,16 +739,7 @@ class EmpaiaExecutionTests(unittest.IsolatedAsyncioTestCase):
 
 def _credential(expiry: datetime, marker: str) -> str:
     """Build an unsigned synthetic JWT-shaped credential with an expiry claim for validation fixtures."""
-    header = _base64_json({"alg": "test"})
-    payload = _base64_json({"exp": expiry.timestamp(), "marker": marker})
-    signature = base64.urlsafe_b64encode(b"test-signature").rstrip(b"=").decode()
-    return f"{header}.{payload}.{signature}"
-
-
-def _base64_json(value: dict[str, object]) -> str:
-    """Encode JSON as unpadded URL-safe base64 for a synthetic test credential."""
-    encoded = base64.urlsafe_b64encode(json.dumps(value).encode()).decode()
-    return encoded.rstrip("=")
+    return _token({"exp": expiry.timestamp(), "marker": marker})
 
 
 class EmpaiaCredentialTests(unittest.IsolatedAsyncioTestCase):

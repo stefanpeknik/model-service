@@ -1,9 +1,11 @@
-"""Claim ordering, per-model capacity and fencing shared by both repositories."""
+"""The execution repository: claim order, per-model capacity, leases, deadlines and credentials."""
 
 from __future__ import annotations
 
+import unittest
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+
+import pytest
 
 from model_service.contracts.invocation import InputAccessContext, Invocation
 from model_service.contracts.result import ModelRun, RunResult, SharedArtifact
@@ -12,6 +14,8 @@ from model_service.control_plane.scheduler.internal_state import (
     ProcessingRejected,
     ProcessingSucceeded,
     ProviderFinishSucceeded,
+    RenewDirective,
+    RetryPolicy,
     StaleWorkClaimError,
     WorkClaim,
     WorkKind,
@@ -20,20 +24,23 @@ from model_service.control_plane.scheduler.public import (
     Priority,
     SubmissionIdentity,
 )
+from tests.support.memory_repository import TEST_CIPHER, InMemoryExecutionRepository
 from tests.support.scheduling import stored_target
 
 
-if TYPE_CHECKING:
-    from model_service.control_plane.scheduler.store.repository import (
-        ExecutionRepository,
-    )
-
-
-class ExecutionRepositoryContract:
-    repository: ExecutionRepository
+class ExecutionRepositoryTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        self.now = datetime.now(UTC)
+        policy = RetryPolicy(3, timedelta(0), timedelta(0))
+        self.repository = InMemoryExecutionRepository(
+            clock=lambda: self.now,
+            processing_policy=policy,
+            finish_policy=policy,
+        )
+        self.storage = self.repository.storage
 
     async def _advance_time(self, duration: timedelta) -> None:
-        raise NotImplementedError
+        self.now += duration
 
     async def _admit_execution(
         self,
@@ -43,8 +50,10 @@ class ExecutionRepositoryContract:
         priority: int = Priority.NORMAL,
         *,
         models: tuple[str, ...] | None = None,
+        deadline: timedelta = timedelta(minutes=5),
+        credential: str | None = None,
     ) -> str:
-        deadline = datetime.now(UTC) + timedelta(minutes=5)
+        deadline_at = self.now + deadline
         admitted = await self.repository.admit(
             Admission(
                 identity=SubmissionIdentity("standalone", key, key),
@@ -57,11 +66,13 @@ class ExecutionRepositoryContract:
                     input_access=InputAccessContext(
                         kind="shared_storage", state={"root": "/shared"}
                     ),
-                    deadline_at=deadline,
+                    deadline_at=deadline_at,
                     output_path="outputs/requested.tiff",
                 ),
-                protected_context={},
-                deadline_at=deadline,
+                protected_context={}
+                if credential is None
+                else {"credential": credential},
+                deadline_at=deadline_at,
                 priority=priority,
             )
         )
@@ -425,3 +436,111 @@ class ExecutionRepositoryContract:
         )
 
         assert [execution.id for execution in found] == [second, first]
+
+    async def test_a_settlement_after_the_lease_expired_is_refused(self) -> None:
+        execution_id = await self._admit_execution("late-result")
+        claim = await self.repository.claim_due("worker-1", timedelta(milliseconds=30))
+        assert claim is not None
+        await self._advance_time(timedelta(milliseconds=80))
+
+        with pytest.raises(StaleWorkClaimError):
+            await self.repository.settle(
+                claim.execution_id,
+                claim.fencing_token,
+                ProcessingSucceeded(RunResult(outputs={})),
+            )
+        execution = await self.repository.get(execution_id)
+        assert execution.result is None
+        assert execution.fencing_token == claim.fencing_token
+
+    async def test_a_missed_deadline_is_reported_until_the_report_deadline(
+        self,
+    ) -> None:
+        deadline = datetime.now(UTC) + timedelta(milliseconds=500)
+        await self.repository.admit(
+            Admission(
+                identity=SubmissionIdentity("external", "job-1", "job-1"),
+                target=stored_target("pipeline-a", ("model-a",)),
+                invocation=Invocation(
+                    inputs={},
+                    configuration={},
+                    input_access=InputAccessContext(kind="external", state={}),
+                    deadline_at=deadline,
+                ),
+                protected_context={"credential": "secret"},
+                deadline_at=deadline,
+                terminal_report_deadline_at=deadline + timedelta(minutes=5),
+            )
+        )
+        processing = await self.repository.claim_due("worker-1", timedelta(seconds=1))
+        assert processing is not None
+        await self._advance_time(timedelta(milliseconds=700))
+
+        directive = await self.repository.renew(
+            processing.execution_id, processing.fencing_token, timedelta(seconds=1)
+        )
+        report = await self.repository.claim_due("worker-2", timedelta(seconds=1))
+
+        assert directive == RenewDirective.DEADLINE_EXCEEDED
+        assert report is not None
+        assert report.kind == WorkKind.PROVIDER_FAILURE_REPORT
+        assert report.error is not None
+        assert report.error.code == "execution_deadline_exceeded"
+        failed = await self.repository.settle(
+            report.execution_id, report.fencing_token, ProviderFinishSucceeded()
+        )
+        assert failed.status == "failed"
+        assert failed.work_kind is None
+
+    async def test_work_past_its_deadline_is_not_claimed_but_expired(self) -> None:
+        execution_id = await self._admit_execution(
+            "late", deadline=timedelta(milliseconds=500)
+        )
+        await self._advance_time(timedelta(milliseconds=700))
+
+        assert await self.repository.claim_due("worker", timedelta(seconds=30)) is None
+        await self.repository.maintain()
+
+        execution = await self.repository.get(execution_id)
+        assert execution.status == "failed"
+        assert execution.processing_attempts == 0
+        assert execution.error is not None
+        assert execution.error.code == "execution_deadline_exceeded"
+
+    async def test_a_credential_is_sealed_at_rest_and_dropped_when_work_ends(
+        self,
+    ) -> None:
+        execution_id = await self._admit_execution("sealed", credential="job-token")
+        assert b"job-token" not in self.storage.contexts[execution_id]
+
+        processing = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert processing is not None
+        assert processing.protected_context == {"credential": "job-token"}
+        await self.repository.settle(
+            execution_id, processing.fencing_token, ProcessingSucceeded(RunResult({}))
+        )
+        finish = await self.repository.claim_due("worker", timedelta(seconds=30))
+        assert finish is not None
+        assert finish.protected_context == {"credential": "job-token"}
+        await self.repository.settle(
+            execution_id, finish.fencing_token, ProviderFinishSucceeded()
+        )
+
+        assert TEST_CIPHER.decrypt(self.storage.contexts[execution_id]) == {}
+
+    async def test_an_unreadable_credential_fails_only_its_own_execution(
+        self,
+    ) -> None:
+        bad = await self._admit_execution("unreadable", "model-a")
+        good = await self._admit_execution("readable", "model-b")
+        self.storage.contexts[bad] = b"sealed with another key"
+
+        first = await self.repository.claim_due("worker", timedelta(seconds=30))
+        second = await self.repository.claim_due("worker", timedelta(seconds=30))
+
+        assert first is None
+        assert second is not None
+        assert second.execution_id == good
+        assert (await self.repository.get(bad)).status == "failed"
+        # The bytes stay, in case the key was the problem.
+        assert self.storage.contexts[bad] == b"sealed with another key"

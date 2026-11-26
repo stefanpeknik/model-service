@@ -29,7 +29,7 @@ from model_service.control_plane.scheduler.public import (
 )
 from model_service.control_plane.scheduler.running_work import ActiveWorkRegistry
 from model_service.control_plane.scheduler.status import ExecutionStatus
-from model_service.control_plane.scheduler.store.repository import (
+from model_service.control_plane.scheduler.store.storage import (
     ExecutionRepositoryUnavailableError,
 )
 from model_service.control_plane.scheduler.targets import ExecutionTarget

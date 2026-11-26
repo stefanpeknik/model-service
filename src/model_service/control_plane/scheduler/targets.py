@@ -40,11 +40,6 @@ class CapacityKey:
     kind: CapacityKind
     id: str
 
-    @property
-    def lock_name(self) -> str:
-        """The name hashed into the key's advisory lock."""
-        return f"capacity:{self.kind}:{self.id}"
-
 
 @dataclass(frozen=True, slots=True)
 class ExecutionTarget:
@@ -82,12 +77,12 @@ class ExecutionTarget:
 
     @property
     def capacity_keys(self) -> tuple[CapacityKey, ...]:
-        """The pools an attempt takes a slot in, sorted (the lock order)."""
+        """The pools an attempt takes a slot in, sorted."""
         return capacity_keys(self.pipeline_id, self.models)
 
 
 def capacity_keys(pipeline_id: str, models: tuple[str, ...]) -> tuple[CapacityKey, ...]:
-    """The pools a run of a pipeline takes a slot in, sorted (the lock order).
+    """The pools a run of a pipeline takes a slot in, sorted.
 
     Args:
         pipeline_id: The pipeline, which counts as its own pool without models.
