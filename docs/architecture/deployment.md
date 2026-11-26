@@ -68,6 +68,29 @@ resources: {gpus: 0.5, cpus: 1}
 serving: {max_replicas: 1, target_ongoing_requests: 128, max_ongoing_requests: 256, max_queued_requests: 2048, downscale_delay_s: 300}
 ```
 
+## The caches only grow
+
+The two cache claims (`storage.tensorrtCacheSize`, `storage.huggingfaceCacheSize`)
+are written by model replicas and never pruned. Nothing in the chart or the
+host deletes an old entry.
+
+- `<cacheRoot>/<id>/<first 12 hex digits of the digest>` holds what a model's
+  replicas build or fetch: ONNX Runtime's TensorRT engines and MLflow
+  downloads. The folder is named after the model's digest, so any change the
+  digest covers (weights, runtime, `pre`, `post`, `input`, `output`,
+  `batching.max_size`, or how the digest itself is computed) starts a new
+  folder and recompiles. The old folder stays behind.
+- `HF_HOME` is the Hugging Face Hub cache, which keeps every revision it
+  downloaded. Pinning a model to a new commit adds the new weights beside the
+  old ones.
+
+A full claim shows up when a replica starts: engines or weights can't be
+written and the replica fails its setup. To free space, delete the folders
+whose digest no running model has. `GET /<id>/describe` on a model's route
+gives its full digest; the folder name is its first 12 characters. Wait
+until a rollout has finished, because replicas of the previous version still
+read their folders until they stop.
+
 ## The control plane's catalog
 
 The catalog ConfigMap carries the deployed models and pipelines after
