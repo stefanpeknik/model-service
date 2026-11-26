@@ -42,12 +42,16 @@ version 2. Local results are separate: `uv run pytest` passed (523 passed,
   That service was mid-rollout: its new replica set (149 min old) had
   restarted 33 times and was not ready. The other app the same preprocessing
   request started (`bc636862`, not model-service's) failed as well. This is
-  the EMPAIA test instance, not model-service; rerun once it is healthy.
+  the EMPAIA test instance, not model-service.
+- **EMPAIA preprocessing, rerun** after the instance's annotation service was
+  fixed (one ready replica): job `9bba4440`, execution `6969e9aa` succeeded
+  with one processing and one finish attempt in 3 min 30 s, CPU and GPU
+  worker starts included. The heatmap was published and JES ended the job
+  with exit code 0.
 
 ## Not validated live
 
 - The viewer v2 config in Jirka's case browser, and a standalone job with
-  drawn polygons: both need a person in the case browser, and the
-  publication path above was down.
+  drawn polygons: both need a person in the case browser.
 - `region_fraction` and the `tumor-purity` app: EPISeg's weights are out of
   reach on this cluster.
