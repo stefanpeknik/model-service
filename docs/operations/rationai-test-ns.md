@@ -133,6 +133,9 @@ oc exec -i deploy/model-service-control-plane -- python - virchow2 224 < tools/w
 oc exec -i deploy/model-service-control-plane -- python - SLIDE_ID 120 < tools/request_preprocessing.py
 ```
 
+`warm_model.py` needs `lz4`, which the control-plane image no longer has
+(2026-11-26): start the GPU worker with a live test or a pipeline run instead.
+
 ## Logs
 
 - Control plane: refused submissions and ignored EMPAIA configuration keys, with

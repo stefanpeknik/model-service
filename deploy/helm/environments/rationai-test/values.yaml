@@ -40,11 +40,11 @@ workers: [cpu, gpu]
 
 rayImage:
   repository: cerit.io/stefanpeknik/model-service-ray-cpu
-  tag: unit-51a62a0
+  tag: unit-ce40c96
   pullPolicy: IfNotPresent
 rayGpuImage:
   repository: cerit.io/stefanpeknik/model-service-ray
-  tag: unit-51a62a0
+  tag: unit-ce40c96
   pullPolicy: IfNotPresent
 
 storage:
@@ -58,7 +58,7 @@ controlPlane:
   replicas: 2
   image:
     repository: cerit.io/stefanpeknik/model-service-control-plane
-    tag: unit-51a62a0
+    tag: unit-ce40c96
     pullPolicy: IfNotPresent
   sharedStorage:
     existingClaim: model-service-full-wsi-outputs
