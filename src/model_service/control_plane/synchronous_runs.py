@@ -2,38 +2,35 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from model_service.catalog.pipelines import resolve_run
 from model_service.contracts.failures import InvalidInvocation
 from model_service.contracts.pipeline_http import PipelineRunRequest
-from model_service.control_plane.pipeline_requests import check_invocation
+from model_service.control_plane.pipeline_requests import prepared_run
 
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    from model_service.catalog import Catalog
     from model_service.contracts.result import RunResult
     from model_service.control_plane.routes.v1.pipelines import ImmediatePipelineRequest
     from model_service.control_plane.scheduler.protocols import PipelineDispatch
+    from model_service.control_plane.scheduler.public import PipelineResolver
 
 
 class SynchronousPipelineService:
     """Resolves a pipeline at admission and runs it on the runner while the caller waits."""
 
     def __init__(
-        self, catalog: Callable[[], Catalog], dispatch: PipelineDispatch
+        self, resolve_pipeline: PipelineResolver, dispatch: PipelineDispatch
     ) -> None:
         """Keep where the deployed pipelines come from and the dispatch to the runner.
 
         Args:
-            catalog: Gives the catalog in use (it may be reloaded between runs).
+            resolve_pipeline: Gives a deployed pipeline resolved with a run's
+                settings, from the catalog in use.
             dispatch: The HTTP client to the pipeline runner.
         """
-        self._catalog = catalog
+        self._resolve_pipeline = resolve_pipeline
         self._dispatch = dispatch
 
     async def run(
@@ -61,15 +58,13 @@ class SynchronousPipelineService:
             RemoteFailureError: If the run failed, e.g. `model_contract_mismatch`.
             UnknownOutcomeError: If it is unknown whether the run happened.
         """
-        resolved = resolve_run(self._catalog(), pipeline_id, request.configuration)
-        pipeline = resolved.pipeline
-        invocation = replace(
+        resolved, invocation = prepared_run(
+            self._resolve_pipeline,
+            pipeline_id,
             request.invocation(request.deadline_at),
-            configuration=pipeline.settings(),
         )
         if invocation.deadline_at <= datetime.now(UTC):
             raise InvalidInvocation("deadline_at must be in the future")
-        check_invocation(pipeline, invocation)
         return await self._dispatch.run_pipeline(
             PipelineRunRequest(invocation, resolved.document)
         )

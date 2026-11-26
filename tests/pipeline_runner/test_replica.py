@@ -27,6 +27,7 @@ from model_service.contracts.result import ModelRun, RunResult, SharedArtifact
 from model_service.formats import score_grid
 from model_service.pipeline_runner.replica import PipelineReplica
 from model_service.pipeline_runner.settings import ReplicaSettings
+from model_service.providers.input_access import InputAccess, InputAccessFactory
 from model_service.providers.standalone.shared_storage import SharedStorageAccessFactory
 from tests.components.helpers import fake_model, fake_slide
 from tests.support.pipeline_catalog import REGISTRY, model_file, write
@@ -39,7 +40,6 @@ if TYPE_CHECKING:
     import numpy as np
 
     from model_service.catalog.pipelines import ResolvedPipeline
-    from model_service.providers.input_access import InputAccess
 
 
 class Handle:
@@ -283,21 +283,39 @@ def test_a_run_past_its_deadline_fails_without_output(
     assert [p for p in storage.rglob("*") if p.is_file()] == [storage / "slide.tiff"]
 
 
-class Access:
+class ClosingAccess(InputAccess):
     """Shared-storage access whose close the test decides."""
+
+    def __init__(
+        self, shared: InputAccess, close: Callable[[], Awaitable[None]]
+    ) -> None:
+        self._shared = shared
+        self._close = close
+
+    def input_path(self, name: str) -> Path:
+        return self._shared.input_path(name)
+
+    def output_path(self, relative_path: str) -> Path:
+        return self._shared.output_path(relative_path)
+
+    async def aclose(self) -> None:
+        await self._close()
+
+
+class Access(InputAccessFactory):
+    """Shared-storage access factory whose accesses close as the test decides."""
 
     def __init__(self, storage: Path, close: Callable[[], Awaitable[None]]) -> None:
         self._storage = storage
         self._close = close
 
-    def create(
+    async def create(
         self, invocation: Invocation, execution_context: ExecutionContext
     ) -> InputAccess:
-        access = SharedStorageAccessFactory([self._storage]).create(
+        shared = await SharedStorageAccessFactory([self._storage]).create(
             invocation, execution_context
         )
-        access.aclose = self._close  # type: ignore[method-assign]
-        return access
+        return ClosingAccess(shared, self._close)
 
 
 def replica(storage: Path, access: Any, **options: Any) -> PipelineReplica:

@@ -159,7 +159,9 @@ class ApiTestCase(unittest.IsolatedAsyncioTestCase):
     def app(self, **kwargs: object) -> FastAPI:
         options: dict[str, object] = {
             "catalog": catalog,
-            "pipeline_runner": SynchronousPipelineService(catalog, self.dispatch),
+            "pipeline_runner": SynchronousPipelineService(
+                pipeline_resolver(catalog), self.dispatch
+            ),
         }
         options.update(kwargs)
         return create_app(self.scheduler, **options)  # type: ignore[arg-type]

@@ -35,9 +35,6 @@ from model_service.control_plane.scheduler.execution_scheduler import ExecutionS
 from model_service.control_plane.scheduler.internal_state import RetryPolicy
 from model_service.control_plane.scheduler.public import SchedulingUnavailableError
 from model_service.control_plane.scheduler.settings import SchedulerSettings
-from model_service.control_plane.scheduler.store.postgres.storage import (
-    PostgresStorage,
-)
 from model_service.control_plane.scheduler.store.protected_context import (
     ProtectedContextCipher,
 )
@@ -58,6 +55,7 @@ if TYPE_CHECKING:
     from model_service.contracts.json_values import JsonObject
     from model_service.control_plane.scheduler.protocols import Scheduler
     from model_service.control_plane.scheduler.public import PipelineResolver
+    from model_service.control_plane.scheduler.store.storage import ExecutionStorage
     from model_service.control_plane.scheduler.targets import (
         CapacityKey,
         CapacityLimits,
@@ -272,14 +270,22 @@ def create_app(
     return app
 
 
-def build_control_plane(settings: SchedulerSettings | None = None) -> FastAPI:
-    """Wire the production control plane: catalog, repository, providers, scheduler and HTTP routes.
+def build_control_plane(
+    settings: SchedulerSettings,
+    *,
+    storage: ExecutionStorage,
+    client: httpx.AsyncClient,
+) -> FastAPI:
+    """Wire the control plane: catalog, repository, providers, scheduler and HTTP routes.
 
-    The repository is initialized, provider background tasks start and the
-    scheduler runs only inside the app lifespan.
+    The storage is initialized, provider background tasks start and the
+    scheduler runs only inside the app lifespan, which also closes the client
+    and the storage.
 
     Args:
-        settings: Process settings; None reads them from the environment.
+        settings: Process settings.
+        storage: Where executions live.
+        client: The HTTP client to Ray Serve: pipeline runs and route health.
 
     Returns:
         The FastAPI application served by Uvicorn.
@@ -288,43 +294,44 @@ def build_control_plane(settings: SchedulerSettings | None = None) -> FastAPI:
         CatalogError: If the mounted catalog does not load.
         ValueError: If the provider context key is not a valid base64 key.
     """
-    config = settings or SchedulerSettings()
     providers = PROVIDERS
-    mounted = MountedCatalog(config.model_catalog_dir)
+    mounted = MountedCatalog(settings.model_catalog_dir)
 
     def catalog() -> Catalog:
         """The catalog in use; a reload swaps it."""
         return mounted.resolved
 
-    cipher = ProtectedContextCipher.from_base64(config.provider_context_key)
+    resolve_pipeline = pipeline_resolver(catalog)
+    cipher = ProtectedContextCipher.from_base64(settings.provider_context_key)
     repository = ExecutionRepository(
-        PostgresStorage(config.database_url, pool_size=config.database_pool_size),
+        storage,
         cipher=cipher,
-        capacity_limits=capacity_limits(catalog, config.per_model_limit),
+        capacity_limits=capacity_limits(catalog, settings.per_model_limit),
         processing_policy=RetryPolicy(
-            max_attempts=config.processing_attempts,
-            initial_backoff=config.initial_backoff,
-            maximum_backoff=config.maximum_backoff,
+            max_attempts=settings.processing_attempts,
+            initial_backoff=settings.initial_backoff,
+            maximum_backoff=settings.maximum_backoff,
         ),
         finish_policy=RetryPolicy(
-            max_attempts=config.provider_finish_attempts,
-            initial_backoff=config.initial_backoff,
-            maximum_backoff=config.maximum_backoff,
+            max_attempts=settings.provider_finish_attempts,
+            initial_backoff=settings.initial_backoff,
+            maximum_backoff=settings.maximum_backoff,
         ),
     )
-    contributions = [provider.control_plane(catalog, config) for provider in providers]
-    client = httpx.AsyncClient()
-    dispatch = HTTPPipelineDispatch(client, origin=config.ray_serve_origin)
+    contributions = [
+        provider.control_plane(catalog, settings) for provider in providers
+    ]
+    dispatch = HTTPPipelineDispatch(client, origin=settings.ray_serve_origin)
     scheduler = ExecutionScheduler(
         repository=repository,
         dispatch=dispatch,
         providers={c.adapter.name: c.adapter for c in contributions},
-        resolve_pipeline=pipeline_resolver(catalog),
-        default_timeout=config.default_deadline,
-        maximum_timeout=config.maximum_deadline,
-        lease_duration=config.lease_duration,
-        poll_interval=config.poll_interval,
-        max_concurrent=config.max_concurrent_executions,
+        resolve_pipeline=resolve_pipeline,
+        default_timeout=settings.default_deadline,
+        maximum_timeout=settings.maximum_deadline,
+        lease_duration=settings.lease_duration,
+        poll_interval=settings.poll_interval,
+        max_concurrent=settings.max_concurrent_executions,
     )
 
     @asynccontextmanager
@@ -349,7 +356,7 @@ def build_control_plane(settings: SchedulerSettings | None = None) -> FastAPI:
                 if c.background is not None
             ]
             background.append(
-                asyncio.create_task(mounted.watch(config.catalog_reload_seconds))
+                asyncio.create_task(mounted.watch(settings.catalog_reload_seconds))
             )
             async with scheduler.running():
                 yield
@@ -363,12 +370,12 @@ def build_control_plane(settings: SchedulerSettings | None = None) -> FastAPI:
     return create_app(
         scheduler,
         catalog=catalog,
-        pipeline_runner=SynchronousPipelineService(catalog, dispatch),
+        pipeline_runner=SynchronousPipelineService(resolve_pipeline, dispatch),
         lifespan=lifespan,
         provider_routes=[c.routes for c in contributions if c.routes is not None],
         deployment_health=DeploymentHealth(
             client,
-            origin=config.ray_serve_origin,
+            origin=settings.ray_serve_origin,
             routes=lambda: (
                 [f"/{model_id}" for model_id in catalog().models]
                 + (["/pipelines"] if catalog().pipelines else [])

@@ -11,7 +11,7 @@ from httpx import ASGITransport, AsyncClient
 from model_service.catalog import load_catalog
 from model_service.catalog.pipelines import load_resolved, resolve_run
 from model_service.contracts.result import ModelRun, RunResult, SharedArtifact
-from model_service.control_plane.app_factory import create_app
+from model_service.control_plane.app_factory import create_app, pipeline_resolver
 from model_service.control_plane.scheduler.dispatch import (
     ConfirmedRejectionError,
     RemoteFailureError,
@@ -70,7 +70,7 @@ def app(runner: FakeRunner | None) -> FastAPI:
         pipeline_runner=(
             None
             if runner is None
-            else SynchronousPipelineService(lambda: CATALOG, runner)
+            else SynchronousPipelineService(pipeline_resolver(lambda: CATALOG), runner)
         ),
     )
 

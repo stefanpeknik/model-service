@@ -68,11 +68,11 @@ class InputAccessFactory(ABC):
     """Creates the input access of one input access kind, per invocation attempt."""
 
     @abstractmethod
-    def create(
+    async def create(
         self,
         invocation: Invocation,
         execution_context: ExecutionContext,
-    ) -> InputAccess | Awaitable[InputAccess]:
+    ) -> InputAccess:
         """Create the input access for one invocation attempt.
 
         Args:
@@ -80,7 +80,7 @@ class InputAccessFactory(ABC):
             execution_context: Attempt identity and protected provider state.
 
         Returns:
-            The access, or an awaitable resolving to it.
+            The access.
         """
         ...
 

@@ -22,10 +22,9 @@ it fakes.
 from __future__ import annotations
 
 import asyncio
-import inspect
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -35,7 +34,6 @@ from model_service.contracts.failures import (
     InvalidInvocation,
     RunFailure,
 )
-from model_service.contracts.invocation import ExecutionContext
 from model_service.contracts.log_context import logging_execution
 from model_service.contracts.result import ModelRun, RunResult, SharedArtifact
 from model_service.formats.known import get_format
@@ -46,7 +44,7 @@ from model_service.providers.input_access import close_resource
 
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Mapping
+    from collections.abc import Callable, Mapping
     from pathlib import Path
 
     from model_service.catalog.pipelines import Pipeline, ResolvedPipeline
@@ -54,7 +52,7 @@ if TYPE_CHECKING:
     from model_service.contracts.pipeline_http import PipelineRunRequest
     from model_service.pipeline_runner.models import DescribedModel
     from model_service.pipeline_runner.settings import ReplicaSettings
-    from model_service.providers.input_access import InputAccess
+    from model_service.providers.input_access import InputAccess, InputAccessFactory
 
 
 logger = logging.getLogger(__name__)
@@ -62,24 +60,6 @@ logger = logging.getLogger(__name__)
 _MODEL_RUN: TypeAdapter[ModelRun] = TypeAdapter(ModelRun)
 # The `describe()` keys a run's result records, beside `id`.
 _DESCRIBED = ("digest", "weights_revision", "execution_providers")
-
-
-class AccessFactory(Protocol):
-    """Creates the input access of one attempt: shared storage or a provider's."""
-
-    def create(
-        self, invocation: Invocation, execution_context: ExecutionContext
-    ) -> InputAccess | Awaitable[InputAccess]:
-        """Create the access for one attempt.
-
-        Args:
-            invocation: Names the inputs, the root and the output path.
-            execution_context: Attempt identity, which scopes outputs.
-
-        Returns:
-            The access, or an awaitable giving it.
-        """
-        ...
 
 
 class PipelineReplica:
@@ -90,7 +70,7 @@ class PipelineReplica:
         settings: ReplicaSettings,
         *,
         models: Callable[[str], DescribedModel] = RayModel,
-        access: Mapping[InputAccessKind, AccessFactory] | None = None,
+        access: Mapping[InputAccessKind, InputAccessFactory] | None = None,
         progress_interval_seconds: float = 10,
         cleanup_timeout_seconds: float = 10,
     ) -> None:
@@ -180,8 +160,7 @@ class PipelineReplica:
         factory = self._access.get(invocation.input_access.kind)
         if factory is None:
             raise InvalidInvocation("unsupported input access kind")
-        created = factory.create(invocation, request.execution_context)
-        access = await created if inspect.isawaitable(created) else created
+        access = await factory.create(invocation, request.execution_context)
         try:
             inputs = _inputs(pipeline, invocation, access)
             outputs = _outputs(pipeline, invocation, access)
@@ -283,7 +262,7 @@ class PipelineReplica:
 
 def _provider_access(
     settings: ReplicaSettings,
-) -> dict[InputAccessKind, AccessFactory]:
+) -> dict[InputAccessKind, InputAccessFactory]:
     """Every provider's input access, by the kind each serves.
 
     Args:
@@ -294,7 +273,7 @@ def _provider_access(
     """
     from model_service.providers.registry import PROVIDERS
 
-    access: dict[InputAccessKind, AccessFactory] = {}
+    access: dict[InputAccessKind, InputAccessFactory] = {}
     for provider in PROVIDERS:
         access.update(provider.input_access(settings))
     return access

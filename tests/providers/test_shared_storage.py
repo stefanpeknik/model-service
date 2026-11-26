@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -45,7 +44,7 @@ def shared(root: str | Path, **inputs: str) -> Invocation:
     return invocation({"root": str(root)}, **inputs)
 
 
-class SharedStorageTests(unittest.TestCase):
+class SharedStorageTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self._directory = TemporaryDirectory()
         self.addCleanup(self._directory.cleanup)
@@ -57,13 +56,13 @@ class SharedStorageTests(unittest.TestCase):
         (self.outside / "secret.tiff").write_bytes(b"secret")
         self.adapter = SharedStorageAccessFactory([self.allowed])
 
-    def test_allowed_root_and_its_subdirectories_are_accepted(self) -> None:
+    async def test_allowed_root_and_its_subdirectories_are_accepted(self) -> None:
         for root, path in (
             (self.allowed, "project/slide.tiff"),
             (self.allowed / "project", "slide.tiff"),
         ):
             with self.subTest(root=root):
-                access = self.adapter.create(
+                access = await self.adapter.create(
                     shared(root, slide=path), ExecutionContext()
                 )
                 self.assertEqual(
@@ -71,7 +70,7 @@ class SharedStorageTests(unittest.TestCase):
                     (self.allowed / "project" / "slide.tiff").resolve(),
                 )
 
-    def test_roots_outside_the_allowlist_are_rejected(self) -> None:
+    async def test_roots_outside_the_allowlist_are_rejected(self) -> None:
         cases = {
             "outside": self.outside,
             "parent": self.allowed.parent,
@@ -82,26 +81,26 @@ class SharedStorageTests(unittest.TestCase):
                 self.subTest(name),
                 self.assertRaisesRegex(InvalidInvocation, "not allowed"),
             ):
-                self.adapter.create(shared(root), ExecutionContext())
+                await self.adapter.create(shared(root), ExecutionContext())
 
-    def test_symlinked_root_into_a_forbidden_tree_is_rejected(self) -> None:
+    async def test_symlinked_root_into_a_forbidden_tree_is_rejected(self) -> None:
         link = self.allowed / "link"
         link.symlink_to(self.outside, target_is_directory=True)
         with self.assertRaisesRegex(InvalidInvocation, "not allowed"):
-            self.adapter.create(shared(link), ExecutionContext())
+            await self.adapter.create(shared(link), ExecutionContext())
 
-    def test_empty_allowlist_rejects_every_root(self) -> None:
+    async def test_empty_allowlist_rejects_every_root(self) -> None:
         with self.assertRaisesRegex(InvalidInvocation, "not allowed"):
-            SharedStorageAccessFactory([]).create(
+            await SharedStorageAccessFactory([]).create(
                 shared(self.allowed), ExecutionContext()
             )
 
-    def test_missing_or_file_roots_are_rejected(self) -> None:
+    async def test_missing_or_file_roots_are_rejected(self) -> None:
         for root in (self.allowed / "missing", self.allowed / "project" / "slide.tiff"):
             with self.subTest(root=root), self.assertRaises(InvalidInvocation):
-                self.adapter.create(shared(root), ExecutionContext())
+                await self.adapter.create(shared(root), ExecutionContext())
 
-    def test_state_must_contain_only_a_non_empty_string_root(self) -> None:
+    async def test_state_must_contain_only_a_non_empty_string_root(self) -> None:
         states: list[dict[str, JsonValue]] = [
             {},
             {"root": None},
@@ -113,9 +112,9 @@ class SharedStorageTests(unittest.TestCase):
         ]
         for state in states:
             with self.subTest(state=state), self.assertRaises(InvalidInvocation):
-                self.adapter.create(invocation(state), ExecutionContext())
+                await self.adapter.create(invocation(state), ExecutionContext())
 
-    def test_input_paths_cannot_escape_the_root(self) -> None:
+    async def test_input_paths_cannot_escape_the_root(self) -> None:
         (self.allowed / "project" / "escape.tiff").symlink_to(
             self.outside / "secret.tiff"
         )
@@ -130,30 +129,40 @@ class SharedStorageTests(unittest.TestCase):
             "folder",
             "missing.tiff",
         ):
-            access = self.adapter.create(
+            access = await self.adapter.create(
                 shared(self.allowed / "project", slide=path), ExecutionContext()
             )
             with self.subTest(path=path), self.assertRaises(InvalidInvocation):
                 access.input_path("slide")
 
-    def test_provider_inputs_are_not_shared_paths(self) -> None:
-        access = self.adapter.create(shared(self.allowed), ExecutionContext())
+    async def test_provider_inputs_are_not_shared_paths(self) -> None:
+        access = await self.adapter.create(shared(self.allowed), ExecutionContext())
         with self.assertRaisesRegex(InvalidInvocation, "not a shared path"):
             access.input_path("slide")
 
-    def test_attempt_outputs_are_isolated_under_a_hash_of_the_attempt(self) -> None:
-        def access(attempt: str | None):  # type: ignore[no-untyped-def]
-            return self.adapter.create(
+    async def test_attempt_outputs_are_isolated_under_a_hash_of_the_attempt(
+        self,
+    ) -> None:
+        async def access(attempt: str | None):  # type: ignore[no-untyped-def]
+            return await self.adapter.create(
                 shared(self.allowed),
-                ExecutionContext(processing_attempt_id=attempt),
+                ExecutionContext(
+                    processing_attempt_id=attempt,
+                    protected_context={"attempts": "execution"},
+                ),
             )
 
-        old = access("old").output_path("outputs/heatmap.tiff")
-        new = access("new").output_path("outputs/heatmap.tiff")
+        old = (await access("old")).output_path("outputs/heatmap.tiff")
+        new = (await access("new")).output_path("outputs/heatmap.tiff")
         digest = hashlib.sha256(b"new").hexdigest()
         self.assertEqual(
             new,
-            self.allowed.resolve() / ".attempts" / digest / "outputs" / "heatmap.tiff",
+            self.allowed.resolve()
+            / ".attempts"
+            / "execution"
+            / digest
+            / "outputs"
+            / "heatmap.tiff",
         )
         self.assertNotEqual(old, new)
         new.parent.mkdir(parents=True)
@@ -162,13 +171,13 @@ class SharedStorageTests(unittest.TestCase):
         old.write_bytes(b"late old attempt")
         self.assertEqual(new.read_bytes(), b"accepted")
         with self.assertRaises(InvalidInvocation):
-            access("new").output_path("../escape.tiff")
+            (await access("new")).output_path("../escape.tiff")
         self.assertEqual(
-            access(None).output_path("outputs/heatmap.tiff"),
+            (await access(None)).output_path("outputs/heatmap.tiff"),
             self.allowed.resolve() / "outputs" / "heatmap.tiff",
         )
 
-    def test_finish_moves_the_accepted_artifact_and_removes_every_attempt(
+    async def test_finish_moves_the_accepted_artifact_and_removes_every_attempt(
         self,
     ) -> None:
         context: dict[str, JsonValue] = {
@@ -176,18 +185,20 @@ class SharedStorageTests(unittest.TestCase):
             "attempts": "execution",
         }
 
-        def write(attempt: str) -> Path:
-            path = self.adapter.create(
-                shared(self.allowed),
-                ExecutionContext(attempt, protected_context=context),
+        async def write(attempt: str) -> Path:
+            path = (
+                await self.adapter.create(
+                    shared(self.allowed),
+                    ExecutionContext(attempt, protected_context=context),
+                )
             ).output_path("outputs/heatmap.tiff")
             path.parent.mkdir(parents=True)
             path.write_bytes(attempt.encode())
             return path
 
-        write("failed")
+        await write("failed")
         success = ProviderSuccess(
-            RunResult({"heatmap": SharedArtifact(str(write("accepted")))}),
+            RunResult({"heatmap": SharedArtifact(str(await write("accepted")))}),
             stored_target("prostate-heatmap", ("prostate-classifier-1",)),
         )
         finish = StandaloneProviderAdapter(self.adapter).finish
@@ -195,9 +206,9 @@ class SharedStorageTests(unittest.TestCase):
         async def noop() -> None:
             return None
 
-        moved = asyncio.run(finish(context, success, before_mutation=noop))
+        moved = await finish(context, success, before_mutation=noop)
         # A retry after the move finds the file already in place.
-        retried = asyncio.run(finish(context, success, before_mutation=noop))
+        retried = await finish(context, success, before_mutation=noop)
 
         final = self.allowed.resolve() / "outputs" / "heatmap.tiff"
         self.assertEqual(moved, RunResult({"heatmap": SharedArtifact(str(final))}))
@@ -205,9 +216,9 @@ class SharedStorageTests(unittest.TestCase):
         self.assertEqual(final.read_bytes(), b"accepted")
         self.assertEqual(list((self.allowed / ".attempts").iterdir()), [])
 
-        write("failed-again")
+        await write("failed-again")
         failure = ProviderFailure(ExecutionError("failed", "failed"))
-        self.assertIsNone(asyncio.run(finish(context, failure, before_mutation=noop)))
+        self.assertIsNone(await finish(context, failure, before_mutation=noop))
         self.assertEqual(list((self.allowed / ".attempts").iterdir()), [])
 
 

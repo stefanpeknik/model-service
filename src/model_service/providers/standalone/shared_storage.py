@@ -196,7 +196,7 @@ class SharedStorageAccessFactory(InputAccessFactory):
             return root
         raise InvalidInvocation("shared-storage root is not allowed on this server")
 
-    def create(
+    async def create(
         self,
         invocation: Invocation,
         execution_context: ExecutionContext,
@@ -212,14 +212,19 @@ class SharedStorageAccessFactory(InputAccessFactory):
             Access to the invocation's inputs and outputs below the root.
 
         Raises:
-            InvalidInvocation: If the root is invalid or not allowed on this server.
+            InvalidInvocation: If the root is invalid or not allowed on this
+                server, or a scheduled attempt names no attempts directory.
         """
         attempt = execution_context.processing_attempt_id
-        group = execution_context.protected_context.get(ATTEMPTS_KEY)
         prefix = ""
         if attempt is not None:
-            prefix = ATTEMPTS_DIR + (f"/{group}" if isinstance(group, str) else "")
-            prefix += "/" + hashlib.sha256(attempt.encode()).hexdigest()
+            group = execution_context.protected_context.get(ATTEMPTS_KEY)
+            if not isinstance(group, str):
+                raise InvalidInvocation(
+                    "a scheduled attempt needs its attempts directory"
+                )
+            digest = hashlib.sha256(attempt.encode()).hexdigest()
+            prefix = f"{ATTEMPTS_DIR}/{group}/{digest}"
         return SharedStorageAccess(
             self.root(invocation.input_access.state),
             invocation.inputs,

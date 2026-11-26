@@ -68,8 +68,7 @@ class Model:
             The hex digest.
         """
         canonical = {
-            # Named for the file's old `weights:` key, so no digest changed.
-            "weights": self.loader.spelled_out(),
+            "loader": self.loader.spelled_out(),
             "runtime": self.runtime.spelled_out(),
             "pre": [step.spelled_out() for step in self.pre],
             "post": [step.spelled_out() for step in self.post],

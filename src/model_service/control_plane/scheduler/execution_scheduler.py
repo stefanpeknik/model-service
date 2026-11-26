@@ -15,7 +15,7 @@ from uuid import uuid4
 
 from model_service.contracts.failures import InvalidInvocation
 from model_service.contracts.log_context import EXECUTION_ID
-from model_service.control_plane.pipeline_requests import check_invocation
+from model_service.control_plane.pipeline_requests import prepared_run
 from model_service.control_plane.scheduler.internal_state import (
     Admission,
     ExecutionRecord,
@@ -253,9 +253,9 @@ class ExecutionScheduler:
                 inputs or output path.
         """
         try:
-            resolved = self._resolve_pipeline(pipeline_id, invocation.configuration)
-            invocation = replace(invocation, configuration=resolved.pipeline.settings())
-            check_invocation(resolved.pipeline, invocation)
+            resolved, invocation = prepared_run(
+                self._resolve_pipeline, pipeline_id, invocation
+            )
         except InvalidInvocation as error:
             raise InvalidScheduleRequestError(str(error)) from error
         return ExecutionTarget.of(resolved), invocation

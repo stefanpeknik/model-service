@@ -87,7 +87,9 @@ class ReplicaLogTests(unittest.IsolatedAsyncioTestCase):
                     ),
                     resolved.document,
                     ExecutionContext(
-                        processing_attempt_id="attempt", execution_id="e-1"
+                        processing_attempt_id="attempt",
+                        protected_context={"attempts": "execution"},
+                        execution_id="e-1",
                     ),
                 )
             )

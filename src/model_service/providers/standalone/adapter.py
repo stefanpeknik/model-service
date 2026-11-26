@@ -146,7 +146,7 @@ class StandaloneProviderAdapter(ProviderAdapter):
         try:
             if invocation.input_access.kind != SHARED_STORAGE:
                 raise InvalidInvocation("standalone scheduling requires shared storage")
-            access = self._shared_storage.create(invocation, ExecutionContext())
+            access = await self._shared_storage.create(invocation, ExecutionContext())
             for name, value in invocation.inputs.items():
                 if isinstance(value, SharedPathInput):
                     access.input_path(name)
@@ -167,8 +167,7 @@ class StandaloneProviderAdapter(ProviderAdapter):
     ) -> RunResult | None:
         """Move accepted artifacts to their requested paths and remove the attempts.
 
-        A retry after a partial move finds the moved files in place. Executions
-        admitted without an attempts directory keep their outputs where they are.
+        A retry after a partial move finds the moved files in place.
 
         Args:
             protected_context: The execution's shared-storage root and attempts group.
@@ -182,9 +181,11 @@ class StandaloneProviderAdapter(ProviderAdapter):
             ProviderFinishFailureError: An artifact could not be moved; retryable.
         """
         del before_mutation
-        root, group = protected_context.get("root"), protected_context.get(ATTEMPTS_KEY)
+        root, group = protected_context["root"], protected_context[ATTEMPTS_KEY]
         if not isinstance(root, str) or not isinstance(group, str):
-            return None
+            raise TypeError(
+                "standalone context must name its root and attempts directory"
+            )
         attempts = Path(root, ATTEMPTS_DIR, group)
         result = None
         if isinstance(outcome, ProviderSuccess):
