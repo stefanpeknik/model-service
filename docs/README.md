@@ -39,6 +39,7 @@ are stale.
 | Read | For |
 | --- | --- |
 | [rationai-infra-test-ns deployment](operations/rationai-test-ns.md) | The test deployment beside the EMPAIA test instance: images, upgrades, the GPU and quota rules |
+| [Scheduler storage refactor, 2026-11-26](operations/scheduler-storage-live-validation-2026-11-26.md) | Revision 23: scheduled runs, capacity, deadlines, cancellation and EMPAIA jobs on the new storage; golden references pass |
 | [Regions and viewer v2, 2026-11-26](operations/regions-live-validation-2026-11-26.md) | Revision 22: regions through the public API match the golden heatmap; EMPAIA preprocessing publishes |
 | [Golden references, 2026-11-22](operations/golden-references-2026-11-22.md) | Outputs recorded before the rebuild, which live tests compare against |
 | [EMPAIA app reconcile, 2026-11-22](operations/empaia-app-reconcile-2026-11-22.md) | Apps registered from pipelines; apps without one retired |
